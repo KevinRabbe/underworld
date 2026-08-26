@@ -6,6 +6,7 @@ class_name UnderworldWorldSettings
 @export var vertices_per_side: int = 65
 @export var load_radius: int = 2
 @export var collision_radius: int = 1
+@export var max_chunks_generated_per_frame: int = 1
 
 @export_group("Terrain")
 @export var macro_frequency: float = 0.0018
