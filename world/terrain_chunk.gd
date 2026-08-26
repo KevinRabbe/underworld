@@ -6,6 +6,7 @@ var _collision_heights: PackedFloat32Array = PackedFloat32Array()
 var _collision_resolution: int = 0
 var _collision_spacing: float = 1.0
 var _settings: UnderworldWorldSettings
+var _decoration_assets: Dictionary = {}
 
 # Kept with the chunk because these masks will drive deterministic vegetation,
 # rocks, resources, creatures, and later cave-surface clues.
@@ -18,6 +19,10 @@ var tree_instance_count: int = 0
 var rock_instance_count: int = 0
 var _tree_transforms: Array = []
 var _rock_transforms: Array = []
+var _destroyed_tree_indices: Dictionary = {}
+var _destroyed_rock_indices: Dictionary = {}
+var _tree_multimesh_instance: MultiMeshInstance3D
+var _rock_multimesh_instance: MultiMeshInstance3D
 var _world_object_root: Node3D
 var _active_tree_bodies: Dictionary = {}
 var _active_rock_bodies: Dictionary = {}
@@ -29,11 +34,13 @@ func build(
 	terrain_material: Material,
 	decoration_assets: Dictionary,
 	world_settings: UnderworldWorldSettings,
+	destroyed_objects: Dictionary,
 	with_collision: bool
 ) -> void:
 	chunk_coord = coord
 	name = "Chunk_%d_%d" % [coord.x, coord.y]
 	_settings = world_settings
+	_decoration_assets = decoration_assets
 
 	_collision_heights = data["collision_heights"]
 	_collision_resolution = data["resolution"]
@@ -60,39 +67,70 @@ func build(
 	_world_object_root.name = "NearWorldObjects"
 	add_child(_world_object_root)
 
-	_build_decorations(data, decoration_assets)
+	_build_decorations(data, destroyed_objects)
 	set_collision_enabled(with_collision)
 
 
-func _build_decorations(data: Dictionary, assets: Dictionary) -> void:
+func _build_decorations(data: Dictionary, destroyed_objects: Dictionary) -> void:
 	_tree_transforms = data.get("tree_transforms", [])
 	_rock_transforms = data.get("rock_transforms", [])
-	tree_instance_count = _tree_transforms.size()
-	rock_instance_count = _rock_transforms.size()
+	_destroyed_tree_indices.clear()
+	_destroyed_rock_indices.clear()
 
-	if tree_instance_count > 0:
-		_create_multimesh_instances(
+	for index in range(_tree_transforms.size()):
+		if destroyed_objects.has(_make_object_id("tree", index)):
+			_destroyed_tree_indices[index] = true
+	for index in range(_rock_transforms.size()):
+		if destroyed_objects.has(_make_object_id("rock", index)):
+			_destroyed_rock_indices[index] = true
+
+	_rebuild_visual_set("tree")
+	_rebuild_visual_set("rock")
+
+
+func _rebuild_visual_set(object_type: String) -> void:
+	var transforms: Array = _tree_transforms if object_type == "tree" else _rock_transforms
+	var destroyed: Dictionary = (
+		_destroyed_tree_indices if object_type == "tree" else _destroyed_rock_indices
+	)
+	var visible_transforms: Array = []
+	for index in range(transforms.size()):
+		if not destroyed.has(index):
+			visible_transforms.append(transforms[index])
+
+	if object_type == "tree":
+		tree_instance_count = visible_transforms.size()
+		_tree_multimesh_instance = _replace_multimesh_instance(
+			_tree_multimesh_instance,
 			"Trees",
-			assets["tree_mesh"],
-			assets["tree_material"],
-			_tree_transforms
+			_decoration_assets["tree_mesh"],
+			_decoration_assets["tree_material"],
+			visible_transforms
 		)
-
-	if rock_instance_count > 0:
-		_create_multimesh_instances(
+	else:
+		rock_instance_count = visible_transforms.size()
+		_rock_multimesh_instance = _replace_multimesh_instance(
+			_rock_multimesh_instance,
 			"Rocks",
-			assets["rock_mesh"],
-			assets["rock_material"],
-			_rock_transforms
+			_decoration_assets["rock_mesh"],
+			_decoration_assets["rock_material"],
+			visible_transforms
 		)
 
 
-func _create_multimesh_instances(
+func _replace_multimesh_instance(
+	existing: MultiMeshInstance3D,
 	node_name: String,
 	instance_mesh: Mesh,
 	instance_material: Material,
 	transforms: Array
-) -> void:
+) -> MultiMeshInstance3D:
+	if existing != null:
+		existing.queue_free()
+
+	if transforms.is_empty():
+		return null
+
 	var multi_mesh: MultiMesh = MultiMesh.new()
 	multi_mesh.transform_format = MultiMesh.TRANSFORM_3D
 	multi_mesh.mesh = instance_mesh
@@ -107,6 +145,7 @@ func _create_multimesh_instances(
 	multi_mesh_instance.multimesh = multi_mesh
 	multi_mesh_instance.material_override = instance_material
 	add_child(multi_mesh_instance)
+	return multi_mesh_instance
 
 
 func update_world_object_physics(
@@ -123,6 +162,7 @@ func update_world_object_physics(
 
 	_update_proxy_set(
 		_tree_transforms,
+		_destroyed_tree_indices,
 		_active_tree_bodies,
 		"tree",
 		player_local,
@@ -131,6 +171,7 @@ func update_world_object_physics(
 	)
 	_update_proxy_set(
 		_rock_transforms,
+		_destroyed_rock_indices,
 		_active_rock_bodies,
 		"rock",
 		player_local,
@@ -143,8 +184,33 @@ func get_active_world_object_count() -> int:
 	return _active_tree_bodies.size() + _active_rock_bodies.size()
 
 
+func destroy_world_object(object_type: String, index: int) -> bool:
+	var transforms: Array = _tree_transforms if object_type == "tree" else _rock_transforms
+	if index < 0 or index >= transforms.size():
+		return false
+
+	var destroyed: Dictionary = (
+		_destroyed_tree_indices if object_type == "tree" else _destroyed_rock_indices
+	)
+	var active_bodies: Dictionary = (
+		_active_tree_bodies if object_type == "tree" else _active_rock_bodies
+	)
+	if destroyed.has(index):
+		return false
+
+	destroyed[index] = true
+	if active_bodies.has(index):
+		var body: Node = active_bodies[index]
+		active_bodies.erase(index)
+		body.queue_free()
+
+	_rebuild_visual_set(object_type)
+	return true
+
+
 func _update_proxy_set(
 	transforms: Array,
+	destroyed: Dictionary,
 	active_bodies: Dictionary,
 	object_type: String,
 	player_local: Vector3,
@@ -155,7 +221,7 @@ func _update_proxy_set(
 	# create/destroy when the player hovers on the boundary.
 	for key in active_bodies.keys():
 		var index: int = int(key)
-		if index < 0 or index >= transforms.size():
+		if destroyed.has(index) or index < 0 or index >= transforms.size():
 			active_bodies[index].queue_free()
 			active_bodies.erase(index)
 			continue
@@ -166,7 +232,7 @@ func _update_proxy_set(
 			active_bodies.erase(index)
 
 	for index in range(transforms.size()):
-		if active_bodies.has(index):
+		if destroyed.has(index) or active_bodies.has(index):
 			continue
 
 		var instance_transform: Transform3D = transforms[index]
@@ -194,10 +260,7 @@ func _create_world_object_body(
 	body.set_meta("world_object_type", object_type)
 	body.set_meta("world_object_index", index)
 	body.set_meta("world_object_chunk", chunk_coord)
-	body.set_meta(
-		"world_object_id",
-		"%d:%d:%s:%d" % [chunk_coord.x, chunk_coord.y, object_type, index]
-	)
+	body.set_meta("world_object_id", _make_object_id(object_type, index))
 
 	var collision: CollisionShape3D = CollisionShape3D.new()
 	collision.name = "CollisionShape3D"
@@ -228,6 +291,10 @@ func _create_world_object_body(
 
 	body.add_child(collision)
 	return body
+
+
+func _make_object_id(object_type: String, index: int) -> String:
+	return "%d:%d:%s:%d" % [chunk_coord.x, chunk_coord.y, object_type, index]
 
 
 func _horizontal_distance_squared(a: Vector3, b: Vector3) -> float:
