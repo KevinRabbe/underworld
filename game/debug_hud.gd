@@ -50,6 +50,7 @@ func _refresh_text() -> void:
 	var position: Vector3 = player.global_position
 	var chunk: Vector2i = world.get_current_player_chunk()
 	var speed: float = player.get_horizontal_speed()
+	var worker_state: String = "busy" if world.is_worker_busy() else "idle"
 
 	label.text = (
 		"UNDERWORLD — prototype 0.01\n"
@@ -62,15 +63,16 @@ func _refresh_text() -> void:
 			world.get_pending_chunk_count(),
 			world.get_total_chunks_generated()
 		]
-		+ "Chunk total: %.2f ms   Max: %.2f ms\n" % [
+		+ "Worker: %s\n" % worker_state
+		+ "Chunk CPU: %.2f ms   Max: %.2f ms\n" % [
 			world.get_last_generation_ms(),
 			world.get_max_generation_ms()
 		]
-		+ "  Data: %.2f ms   Max: %.2f ms\n" % [
+		+ "  Data (worker): %.2f ms   Max: %.2f ms\n" % [
 			world.get_last_data_generation_ms(),
 			world.get_max_data_generation_ms()
 		]
-		+ "  Build: %.2f ms   Max: %.2f ms\n" % [
+		+ "  Build (main): %.2f ms   Max: %.2f ms\n" % [
 			world.get_last_chunk_build_ms(),
 			world.get_max_chunk_build_ms()
 		]
