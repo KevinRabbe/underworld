@@ -52,6 +52,7 @@ func _refresh_text() -> void:
 	var speed: float = player.get_horizontal_speed()
 	var worker_state: String = "busy" if world.is_worker_busy() else "idle"
 	var surface: Dictionary = world.get_surface_sample_at_world(position.x, position.z)
+	var decoration_counts: Vector2i = world.get_current_decoration_counts()
 
 	label.text = (
 		"UNDERWORLD — prototype 0.02\n"
@@ -73,6 +74,10 @@ func _refresh_text() -> void:
 			float(surface["forest_density"]),
 			float(surface["rockiness"]),
 			float(surface["buildability"])
+		]
+		+ "Chunk decor: %d trees   %d rocks\n" % [
+			decoration_counts.x,
+			decoration_counts.y
 		]
 		+ "Worker: %s\n" % worker_state
 		+ "Chunk CPU: %.2f ms   Max: %.2f ms\n" % [
