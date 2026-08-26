@@ -6,6 +6,13 @@ var _collision_heights: PackedFloat32Array = PackedFloat32Array()
 var _collision_resolution: int = 0
 var _collision_spacing: float = 1.0
 
+# Kept with the chunk because these masks will drive deterministic vegetation,
+# rocks, resources, creatures, and later cave-surface clues.
+var moisture: PackedFloat32Array = PackedFloat32Array()
+var forest_density: PackedFloat32Array = PackedFloat32Array()
+var rockiness: PackedFloat32Array = PackedFloat32Array()
+var buildability: PackedFloat32Array = PackedFloat32Array()
+
 
 func build(
 	coord: Vector2i,
@@ -19,12 +26,17 @@ func build(
 	_collision_heights = data["collision_heights"]
 	_collision_resolution = data["resolution"]
 	_collision_spacing = data["spacing"]
+	moisture = data["moisture"]
+	forest_density = data["forest_density"]
+	rockiness = data["rockiness"]
+	buildability = data["buildability"]
 
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = data["vertices"]
 	arrays[Mesh.ARRAY_NORMAL] = data["normals"]
 	arrays[Mesh.ARRAY_TEX_UV] = data["uvs"]
+	arrays[Mesh.ARRAY_COLOR] = data["colors"]
 	arrays[Mesh.ARRAY_INDEX] = data["indices"]
 
 	var array_mesh: ArrayMesh = ArrayMesh.new()
