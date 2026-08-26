@@ -53,9 +53,10 @@ func _refresh_text() -> void:
 	var worker_state: String = "busy" if world.is_worker_busy() else "idle"
 	var surface: Dictionary = world.get_surface_sample_at_world(position.x, position.z)
 	var decoration_counts: Vector2i = world.get_current_decoration_counts()
+	var active_world_objects: int = world.get_active_world_object_count()
 
 	label.text = (
-		"UNDERWORLD — prototype 0.02\n"
+		"UNDERWORLD — prototype 0.03\n"
 		+ "FPS: %d\n" % Engine.get_frames_per_second()
 		+ "Seed: %d   Sea: %.1f\n" % [settings.world_seed, settings.sea_level]
 		+ "Position: %.1f, %.1f, %.1f\n" % [position.x, position.y, position.z]
@@ -78,6 +79,10 @@ func _refresh_text() -> void:
 		+ "Chunk decor: %d trees   %d rocks\n" % [
 			decoration_counts.x,
 			decoration_counts.y
+		]
+		+ "Near physical: %d   Radius: %.0f m\n" % [
+			active_world_objects,
+			settings.world_object_physics_radius
 		]
 		+ "Worker: %s\n" % worker_state
 		+ "Chunk CPU: %.2f ms   Max: %.2f ms\n" % [
