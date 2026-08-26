@@ -7,6 +7,7 @@ const PlayerScript := preload("res://player/player.gd")
 var settings
 var world
 var player
+var spawn_xz := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -38,11 +39,13 @@ func _setup_environment() -> void:
 
 func _create_world() -> void:
 	settings = WorldSettingsScript.new()
+	spawn_xz = Vector3(settings.chunk_size * 0.5, 0.0, settings.chunk_size * 0.5)
+
 	world = ChunkManagerScript.new()
 	world.name = "World"
 	world.configure(settings)
 	add_child(world)
-	world.generate_initial(Vector3.ZERO)
+	world.generate_initial(spawn_xz)
 
 
 func _create_player() -> void:
@@ -50,6 +53,6 @@ func _create_player() -> void:
 	player.name = "Player"
 	add_child(player)
 
-	var spawn_height: float = world.get_height_at_world(0.0, 0.0)
-	player.global_position = Vector3(0.0, spawn_height + 3.0, 0.0)
+	var spawn_height: float = world.get_height_at_world(spawn_xz.x, spawn_xz.z)
+	player.global_position = Vector3(spawn_xz.x, spawn_height + 3.0, spawn_xz.z)
 	world.set_player(player)
