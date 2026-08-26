@@ -31,6 +31,7 @@ var worker_result_data: Dictionary = {}
 var worker_result_ms: float = 0.0
 
 var terrain_material: StandardMaterial3D = StandardMaterial3D.new()
+var decoration_assets: Dictionary = {}
 
 
 func configure(world_settings: UnderworldWorldSettings) -> void:
@@ -46,6 +47,36 @@ func configure(world_settings: UnderworldWorldSettings) -> void:
 	terrain_material.albedo_color = Color.WHITE
 	terrain_material.vertex_color_use_as_albedo = true
 	terrain_material.roughness = 1.0
+
+	_create_prototype_decoration_assets()
+
+
+func _create_prototype_decoration_assets() -> void:
+	# These are deliberately low-cost placeholder shapes. They let us judge
+	# generated forest/rock distribution before spending time on art assets.
+	var tree_mesh: CylinderMesh = CylinderMesh.new()
+	tree_mesh.top_radius = 0.0
+	tree_mesh.bottom_radius = 1.25
+	tree_mesh.height = 4.5
+	tree_mesh.radial_segments = 7
+
+	var tree_material: StandardMaterial3D = StandardMaterial3D.new()
+	tree_material.albedo_color = Color(0.10, 0.27, 0.08)
+	tree_material.roughness = 1.0
+
+	var rock_mesh: BoxMesh = BoxMesh.new()
+	rock_mesh.size = Vector3.ONE
+
+	var rock_material: StandardMaterial3D = StandardMaterial3D.new()
+	rock_material.albedo_color = Color(0.31, 0.32, 0.29)
+	rock_material.roughness = 1.0
+
+	decoration_assets = {
+		"tree_mesh": tree_mesh,
+		"tree_material": tree_material,
+		"rock_mesh": rock_mesh,
+		"rock_material": rock_material,
+	}
 
 
 func generate_initial(world_position: Vector3) -> void:
@@ -148,6 +179,13 @@ func get_pending_chunk_count() -> int:
 
 func get_current_player_chunk() -> Vector2i:
 	return current_player_chunk
+
+
+func get_current_decoration_counts() -> Vector2i:
+	if not chunks.has(current_player_chunk):
+		return Vector2i.ZERO
+	var chunk = chunks[current_player_chunk]
+	return Vector2i(chunk.tree_instance_count, chunk.rock_instance_count)
 
 
 func get_last_generation_ms() -> float:
@@ -311,7 +349,7 @@ func _build_chunk_from_data(coord: Vector2i, data: Dictionary, data_ms: float) -
 	)
 
 	var needs_collision: bool = _is_within_collision_radius(coord, current_player_chunk)
-	chunk.build(coord, data, terrain_material, needs_collision)
+	chunk.build(coord, data, terrain_material, decoration_assets, needs_collision)
 	add_child(chunk)
 	chunks[coord] = chunk
 
