@@ -62,9 +62,17 @@ func _refresh_text() -> void:
 			world.get_pending_chunk_count(),
 			world.get_total_chunks_generated()
 		]
-		+ "Chunk gen: %.2f ms   Max: %.2f ms\n" % [
+		+ "Chunk total: %.2f ms   Max: %.2f ms\n" % [
 			world.get_last_generation_ms(),
 			world.get_max_generation_ms()
+		]
+		+ "  Data: %.2f ms   Max: %.2f ms\n" % [
+			world.get_last_data_generation_ms(),
+			world.get_max_data_generation_ms()
+		]
+		+ "  Build: %.2f ms   Max: %.2f ms\n" % [
+			world.get_last_chunk_build_ms(),
+			world.get_max_chunk_build_ms()
 		]
 		+ "Speed: %.1f m/s\n" % speed
 		+ "F3: debug   Esc: release mouse   Wheel: camera zoom"
