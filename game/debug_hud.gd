@@ -4,6 +4,7 @@ var world
 var player
 var settings: UnderworldWorldSettings
 var label: Label
+var crosshair: Label
 var update_timer: float = 0.0
 var visible_debug: bool = true
 
@@ -25,15 +26,28 @@ func _ready() -> void:
 	label.add_theme_constant_override("shadow_offset_x", 2)
 	label.add_theme_constant_override("shadow_offset_y", 2)
 	add_child(label)
+
+	crosshair = Label.new()
+	crosshair.name = "HarvestCrosshair"
+	crosshair.text = "+"
+	crosshair.add_theme_font_size_override("font_size", 22)
+	crosshair.add_theme_color_override("font_color", Color.WHITE)
+	crosshair.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
+	crosshair.add_theme_constant_override("shadow_offset_x", 1)
+	crosshair.add_theme_constant_override("shadow_offset_y", 1)
+	add_child(crosshair)
+
 	_refresh_text()
+	_update_crosshair_position()
 
 
 func _process(delta: float) -> void:
+	_update_crosshair_position()
 	update_timer -= delta
 	if update_timer > 0.0:
 		return
 
-	update_timer = 0.2
+	update_timer = 0.1
 	_refresh_text()
 
 
@@ -41,6 +55,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F3:
 		visible_debug = not visible_debug
 		label.visible = visible_debug
+
+
+func _update_crosshair_position() -> void:
+	if crosshair == null:
+		return
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	crosshair.position = viewport_size * 0.5 - Vector2(6.0, 14.0)
 
 
 func _refresh_text() -> void:
@@ -54,9 +75,10 @@ func _refresh_text() -> void:
 	var surface: Dictionary = world.get_surface_sample_at_world(position.x, position.z)
 	var decoration_counts: Vector2i = world.get_current_decoration_counts()
 	var active_world_objects: int = world.get_active_world_object_count()
+	var resources: Vector2i = world.get_resource_counts()
 
 	label.text = (
-		"UNDERWORLD — prototype 0.03\n"
+		"UNDERWORLD — prototype 0.04\n"
 		+ "FPS: %d\n" % Engine.get_frames_per_second()
 		+ "Seed: %d   Sea: %.1f\n" % [settings.world_seed, settings.sea_level]
 		+ "Position: %.1f, %.1f, %.1f\n" % [position.x, position.y, position.z]
@@ -84,6 +106,12 @@ func _refresh_text() -> void:
 			active_world_objects,
 			settings.world_object_physics_radius
 		]
+		+ "Resources: %d wood   %d stone   Removed: %d\n" % [
+			resources.x,
+			resources.y,
+			world.get_destroyed_object_count()
+		]
+		+ "Harvest: %s\n" % world.get_last_harvest_message()
 		+ "Worker: %s\n" % worker_state
 		+ "Chunk CPU: %.2f ms   Max: %.2f ms\n" % [
 			world.get_last_generation_ms(),
@@ -98,5 +126,5 @@ func _refresh_text() -> void:
 			world.get_max_chunk_build_ms()
 		]
 		+ "Speed: %.1f m/s\n" % speed
-		+ "F3: debug   Esc: release mouse   Wheel: camera zoom"
+		+ "LMB: harvest   F3: debug   Esc: release mouse   Wheel: camera zoom"
 	)
