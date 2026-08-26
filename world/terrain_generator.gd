@@ -24,17 +24,20 @@ var rock_noise: FastNoiseLite = FastNoiseLite.new()
 func configure(world_settings: UnderworldWorldSettings) -> void:
 	settings = world_settings
 
-	_configure_fbm(continental_noise, 101, settings.continental_frequency, 4)
-	_configure_fbm(rolling_noise, 211, settings.rolling_frequency, 3)
-	_configure_fbm(flatland_noise, 307, settings.flatland_frequency, 3)
-	_configure_fbm(ridge_noise, 401, settings.ridge_frequency, 3)
-	_configure_fbm(ridge_region_noise, 503, settings.ridge_region_frequency, 3)
-	_configure_fbm(valley_noise, 601, settings.valley_frequency, 3)
-	_configure_fbm(detail_noise, 701, settings.detail_frequency, 2)
+	# Large-scale fields intentionally use only the octaves needed for their
+	# job. Full detail at every scale is expensive and tends to turn terrain
+	# back into homogeneous procedural noise.
+	_configure_fbm(continental_noise, 101, settings.continental_frequency, 3)
+	_configure_fbm(rolling_noise, 211, settings.rolling_frequency, 2)
+	_configure_fbm(flatland_noise, 307, settings.flatland_frequency, 2)
+	_configure_fbm(ridge_noise, 401, settings.ridge_frequency, 2)
+	_configure_fbm(ridge_region_noise, 503, settings.ridge_region_frequency, 2)
+	_configure_fbm(valley_noise, 601, settings.valley_frequency, 2)
+	_configure_fbm(detail_noise, 701, settings.detail_frequency, 1)
 
-	_configure_fbm(moisture_noise, 809, settings.moisture_frequency, 3)
-	_configure_fbm(forest_noise, 907, settings.forest_frequency, 3)
-	_configure_fbm(rock_noise, 1009, settings.rock_frequency, 2)
+	_configure_fbm(moisture_noise, 809, settings.moisture_frequency, 2)
+	_configure_fbm(forest_noise, 907, settings.forest_frequency, 2)
+	_configure_fbm(rock_noise, 1009, settings.rock_frequency, 1)
 
 
 func _configure_fbm(
@@ -53,6 +56,10 @@ func _configure_fbm(
 
 
 func get_height(world_x: float, world_z: float) -> float:
+	return _sample_height_and_ridge(world_x, world_z).x
+
+
+func _sample_height_and_ridge(world_x: float, world_z: float) -> Vector2:
 	var continental_raw: float = continental_noise.get_noise_2d(world_x, world_z)
 	var continental_height: float = continental_raw * settings.continental_amplitude
 
@@ -65,25 +72,26 @@ func get_height(world_x: float, world_z: float) -> float:
 		* relief_scale
 	)
 
+	var ridge_influence: float = _get_ridge_influence(world_x, world_z)
 	var ridge_height: float = (
-		_get_ridge_influence(world_x, world_z)
+		ridge_influence
 		* settings.ridge_amplitude
-		* (1.0 - flat_mask * 0.70)
+		* (1.0 - flat_mask * 0.76)
 	)
 
 	var valley_depth: float = (
 		_get_valley_influence(world_x, world_z)
 		* settings.valley_depth
-		* (1.0 - flat_mask * 0.35)
+		* (1.0 - flat_mask * 0.42)
 	)
 
 	var detail_height: float = (
 		detail_noise.get_noise_2d(world_x, world_z)
 		* settings.detail_amplitude
-		* (1.0 - flat_mask * 0.65)
+		* (1.0 - flat_mask * 0.72)
 	)
 
-	return (
+	var height: float = (
 		settings.base_height
 		+ continental_height
 		+ rolling_height
@@ -91,11 +99,13 @@ func get_height(world_x: float, world_z: float) -> float:
 		- valley_depth
 		+ detail_height
 	)
+	return Vector2(height, ridge_influence)
 
 
 func get_surface_sample(world_x: float, world_z: float) -> Dictionary:
 	var sample_distance: float = settings.chunk_size / float(maxi(settings.vertices_per_side - 1, 1))
-	var height: float = get_height(world_x, world_z)
+	var center_sample: Vector2 = _sample_height_and_ridge(world_x, world_z)
+	var height: float = center_sample.x
 	var left: float = get_height(world_x - sample_distance, world_z)
 	var right: float = get_height(world_x + sample_distance, world_z)
 	var back: float = get_height(world_x, world_z - sample_distance)
@@ -107,8 +117,7 @@ func get_surface_sample(world_x: float, world_z: float) -> Dictionary:
 	).normalized()
 	var slope: float = clampf(1.0 - normal.y, 0.0, 1.0)
 	var moisture: float = _get_moisture(world_x, world_z, height)
-	var ridge: float = _get_ridge_influence(world_x, world_z)
-	var rockiness: float = _get_rockiness(world_x, world_z, slope, ridge)
+	var rockiness: float = _get_rockiness(world_x, world_z, slope, center_sample.y)
 	var forest_density: float = _get_forest_density(world_x, world_z, height, moisture, rockiness, slope)
 	var buildability: float = _get_buildability(height, slope, rockiness)
 
@@ -134,6 +143,7 @@ func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
 	var colors: PackedColorArray = PackedColorArray()
 	var indices: PackedInt32Array = PackedInt32Array()
 	var heights: PackedFloat32Array = PackedFloat32Array()
+	var ridge_values: PackedFloat32Array = PackedFloat32Array()
 	var collision_heights: PackedFloat32Array = PackedFloat32Array()
 	var moisture_values: PackedFloat32Array = PackedFloat32Array()
 	var forest_values: PackedFloat32Array = PackedFloat32Array()
@@ -145,6 +155,7 @@ func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
 	uvs.resize(vertex_count)
 	colors.resize(vertex_count)
 	heights.resize(padded_resolution * padded_resolution)
+	ridge_values.resize(vertex_count)
 	collision_heights.resize(vertex_count)
 	moisture_values.resize(vertex_count)
 	forest_values.resize(vertex_count)
@@ -156,6 +167,8 @@ func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
 
 	# Cache a one-vertex border around the chunk. Neighboring chunks therefore
 	# calculate the same border heights and normals without sharing any data.
+	# Ridge influence is captured here too, so the environment pass does not
+	# evaluate the two ridge fields a second time for every terrain vertex.
 	for padded_z in range(padded_resolution):
 		for padded_x in range(padded_resolution):
 			var local_x_with_border: float = float(padded_x - 1) * spacing
@@ -163,7 +176,43 @@ func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
 			var sample_world_x: float = chunk_world_x + local_x_with_border
 			var sample_world_z: float = chunk_world_z + local_z_with_border
 			var padded_index: int = padded_z * padded_resolution + padded_x
-			heights[padded_index] = get_height(sample_world_x, sample_world_z)
+			var height_sample: Vector2 = _sample_height_and_ridge(sample_world_x, sample_world_z)
+			heights[padded_index] = height_sample.x
+
+			if (
+				padded_x >= 1
+				and padded_x <= resolution
+				and padded_z >= 1
+				and padded_z <= resolution
+			):
+				var vertex_x: int = padded_x - 1
+				var vertex_z: int = padded_z - 1
+				var vertex_index: int = vertex_z * resolution + vertex_x
+				ridge_values[vertex_index] = height_sample.y
+
+	# Moisture, forest-potential and rock-pattern fields vary at scales much
+	# larger than the 2 m terrain vertex spacing. Sampling them every vertex is
+	# wasted work, so create a deterministic coarse grid and interpolate it.
+	var mask_step: int = maxi(settings.environment_mask_vertex_step, 1)
+	var mask_grid_resolution: int = ceili(float(resolution - 1) / float(mask_step)) + 1
+	var mask_grid_count: int = mask_grid_resolution * mask_grid_resolution
+	var coarse_moisture: PackedFloat32Array = PackedFloat32Array()
+	var coarse_forest: PackedFloat32Array = PackedFloat32Array()
+	var coarse_rock: PackedFloat32Array = PackedFloat32Array()
+	coarse_moisture.resize(mask_grid_count)
+	coarse_forest.resize(mask_grid_count)
+	coarse_rock.resize(mask_grid_count)
+
+	for grid_z in range(mask_grid_resolution):
+		for grid_x in range(mask_grid_resolution):
+			var vertex_x: int = mini(grid_x * mask_step, resolution - 1)
+			var vertex_z: int = mini(grid_z * mask_step, resolution - 1)
+			var world_x: float = chunk_world_x + float(vertex_x) * spacing
+			var world_z: float = chunk_world_z + float(vertex_z) * spacing
+			var grid_index: int = grid_z * mask_grid_resolution + grid_x
+			coarse_moisture[grid_index] = _to_unit(moisture_noise.get_noise_2d(world_x, world_z))
+			coarse_forest[grid_index] = _to_unit(forest_noise.get_noise_2d(world_x, world_z))
+			coarse_rock[grid_index] = _to_unit(rock_noise.get_noise_2d(world_x, world_z))
 
 	for z in range(resolution):
 		for x in range(resolution):
@@ -189,12 +238,36 @@ func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
 			).normalized()
 			var slope: float = clampf(1.0 - normal.y, 0.0, 1.0)
 
-			var moisture: float = _get_moisture(world_x, world_z, height)
-			var ridge: float = _get_ridge_influence(world_x, world_z)
-			var rockiness: float = _get_rockiness(world_x, world_z, slope, ridge)
-			var forest_density: float = _get_forest_density(
-				world_x,
-				world_z,
+			var moisture_pattern: float = _sample_mask_grid(
+				coarse_moisture,
+				mask_grid_resolution,
+				x,
+				z,
+				mask_step,
+				resolution
+			)
+			var forest_pattern: float = _sample_mask_grid(
+				coarse_forest,
+				mask_grid_resolution,
+				x,
+				z,
+				mask_step,
+				resolution
+			)
+			var rock_pattern: float = _sample_mask_grid(
+				coarse_rock,
+				mask_grid_resolution,
+				x,
+				z,
+				mask_step,
+				resolution
+			)
+
+			var moisture: float = _get_moisture_from_pattern(moisture_pattern, height)
+			var ridge: float = ridge_values[index]
+			var rockiness: float = _get_rockiness_from_pattern(rock_pattern, slope, ridge)
+			var forest_density: float = _get_forest_density_from_pattern(
+				forest_pattern,
 				height,
 				moisture,
 				rockiness,
@@ -243,31 +316,76 @@ func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
 	}
 
 
+func _sample_mask_grid(
+	values: PackedFloat32Array,
+	grid_resolution: int,
+	vertex_x: int,
+	vertex_z: int,
+	step: int,
+	terrain_resolution: int
+) -> float:
+	if grid_resolution <= 1 or values.is_empty():
+		return values[0] if not values.is_empty() else 0.0
+
+	var cell_x: int = mini(
+		floori(float(vertex_x) / float(step)),
+		grid_resolution - 2
+	)
+	var cell_z: int = mini(
+		floori(float(vertex_z) / float(step)),
+		grid_resolution - 2
+	)
+
+	var x0: int = cell_x * step
+	var z0: int = cell_z * step
+	var x1: int = mini((cell_x + 1) * step, terrain_resolution - 1)
+	var z1: int = mini((cell_z + 1) * step, terrain_resolution - 1)
+	var tx: float = 0.0 if x1 == x0 else float(vertex_x - x0) / float(x1 - x0)
+	var tz: float = 0.0 if z1 == z0 else float(vertex_z - z0) / float(z1 - z0)
+
+	var i00: int = cell_z * grid_resolution + cell_x
+	var i10: int = i00 + 1
+	var i01: int = (cell_z + 1) * grid_resolution + cell_x
+	var i11: int = i01 + 1
+
+	var top: float = lerpf(values[i00], values[i10], tx)
+	var bottom: float = lerpf(values[i01], values[i11], tx)
+	return lerpf(top, bottom, tz)
+
+
 func _get_flatland_mask(world_x: float, world_z: float, continental_raw: float) -> float:
 	var patch_value: float = _to_unit(flatland_noise.get_noise_2d(world_x, world_z))
-	var patch_mask: float = smoothstep(0.58, 0.88, patch_value)
+	# Flatlands are less frequent than v0.02's first pass, but when they occur
+	# they are deliberately calm enough to be recognizable build locations.
+	var patch_mask: float = smoothstep(0.64, 0.86, patch_value)
 	var continental_unit: float = _to_unit(continental_raw)
-	var lowland_bias: float = 1.0 - smoothstep(0.48, 0.82, continental_unit)
-	return clampf(patch_mask * lerpf(0.45, 1.0, lowland_bias), 0.0, 1.0)
+	var lowland_bias: float = 1.0 - smoothstep(0.42, 0.76, continental_unit)
+	return clampf(patch_mask * lerpf(0.25, 1.0, lowland_bias), 0.0, 1.0)
 
 
 func _get_ridge_influence(world_x: float, world_z: float) -> float:
 	var ridge_raw: float = ridge_noise.get_noise_2d(world_x, world_z)
 	var ridge_line: float = 1.0 - absf(ridge_raw)
-	var ridge_shape: float = pow(clampf((ridge_line - 0.56) / 0.44, 0.0, 1.0), 2.6)
+	var ridge_shape: float = pow(clampf((ridge_line - 0.50) / 0.50, 0.0, 1.0), 2.0)
 	var region_value: float = _to_unit(ridge_region_noise.get_noise_2d(world_x, world_z))
-	var region_mask: float = smoothstep(0.54, 0.78, region_value)
+	var region_mask: float = smoothstep(0.46, 0.70, region_value)
 	return ridge_shape * region_mask
 
 
 func _get_valley_influence(world_x: float, world_z: float) -> float:
 	var valley_raw: float = valley_noise.get_noise_2d(world_x, world_z)
 	var valley_line: float = 1.0 - absf(valley_raw)
-	return pow(clampf((valley_line - 0.69) / 0.31, 0.0, 1.0), 2.2)
+	# Narrower than the first pass: valleys can form waterways/depressions
+	# without turning huge portions of the biome into equally broad channels.
+	return pow(clampf((valley_line - 0.72) / 0.28, 0.0, 1.0), 2.4)
 
 
 func _get_moisture(world_x: float, world_z: float, height: float) -> float:
 	var base_moisture: float = _to_unit(moisture_noise.get_noise_2d(world_x, world_z))
+	return _get_moisture_from_pattern(base_moisture, height)
+
+
+func _get_moisture_from_pattern(base_moisture: float, height: float) -> float:
 	var water_bonus: float = 1.0 - smoothstep(
 		settings.sea_level + 1.0,
 		settings.sea_level + 12.0,
@@ -283,6 +401,14 @@ func _get_rockiness(
 	ridge_influence: float
 ) -> float:
 	var rock_pattern: float = _to_unit(rock_noise.get_noise_2d(world_x, world_z))
+	return _get_rockiness_from_pattern(rock_pattern, slope, ridge_influence)
+
+
+func _get_rockiness_from_pattern(
+	rock_pattern: float,
+	slope: float,
+	ridge_influence: float
+) -> float:
 	var exposed_rock: float = smoothstep(0.67, 0.90, rock_pattern)
 	var slope_rock: float = smoothstep(0.06, 0.30, slope)
 	return clampf(
@@ -300,10 +426,26 @@ func _get_forest_density(
 	rockiness: float,
 	slope: float
 ) -> float:
+	var forest_pattern: float = _to_unit(forest_noise.get_noise_2d(world_x, world_z))
+	return _get_forest_density_from_pattern(
+		forest_pattern,
+		height,
+		moisture,
+		rockiness,
+		slope
+	)
+
+
+func _get_forest_density_from_pattern(
+	forest_pattern: float,
+	height: float,
+	moisture: float,
+	rockiness: float,
+	slope: float
+) -> float:
 	if height <= settings.sea_level + 0.5:
 		return 0.0
 
-	var forest_pattern: float = _to_unit(forest_noise.get_noise_2d(world_x, world_z))
 	var pattern_mask: float = smoothstep(0.34, 0.74, forest_pattern)
 	var slope_penalty: float = smoothstep(0.08, 0.30, slope)
 	var shore_penalty: float = 1.0 - smoothstep(
