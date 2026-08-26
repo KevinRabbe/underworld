@@ -1,6 +1,8 @@
 extends CharacterBody3D
 
 signal harvest_requested(origin: Vector3, direction: Vector3, max_distance: float)
+signal hotbar_slot_requested(slot: int)
+signal craft_requested(recipe_id: String)
 
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 10.0
@@ -23,15 +25,17 @@ const NORMAL_FOV := 75.0
 const SPRINT_FOV := 79.0
 const RESPAWN_FALL_HEIGHT := -100.0
 
-var look_sensitivity := 0.0025
-var camera_pitch := deg_to_rad(-12.0)
-var camera_distance := DEFAULT_CAMERA_DISTANCE
-var coyote_timer := 0.0
-var jump_buffer_timer := 0.0
-var respawn_position := Vector3.ZERO
+var look_sensitivity: float = 0.0025
+var camera_pitch: float = deg_to_rad(-12.0)
+var camera_distance: float = DEFAULT_CAMERA_DISTANCE
+var coyote_timer: float = 0.0
+var jump_buffer_timer: float = 0.0
+var respawn_position: Vector3 = Vector3.ZERO
 var harvest_range: float = 4.5
+var equipped_tool_visual: String = "hands"
 
 var visual_root: Node3D
+var tool_visual_root: Node3D
 var camera_yaw: Node3D
 var camera_pitch_pivot: Node3D
 var spring_arm: SpringArm3D
@@ -50,7 +54,7 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		camera_yaw.rotate_y(-event.relative.x * look_sensitivity)
-		camera_pitch = clamp(
+		camera_pitch = clampf(
 			camera_pitch - event.relative.y * look_sensitivity,
 			CAMERA_MIN_PITCH,
 			CAMERA_MAX_PITCH
@@ -61,6 +65,24 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		return
+
+	if event is InputEventKey and event.pressed and not event.echo:
+		match event.physical_keycode:
+			KEY_1:
+				hotbar_slot_requested.emit(1)
+				return
+			KEY_2:
+				hotbar_slot_requested.emit(2)
+				return
+			KEY_3:
+				hotbar_slot_requested.emit(3)
+				return
+			KEY_C:
+				craft_requested.emit("stone_axe")
+				return
+			KEY_V:
+				craft_requested.emit("stone_pickaxe")
+				return
 
 	if event is InputEventMouseButton and event.pressed:
 		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
@@ -94,6 +116,11 @@ func set_harvest_range(distance: float) -> void:
 	harvest_range = maxf(distance, 0.1)
 
 
+func set_equipped_tool(tool_id: String) -> void:
+	equipped_tool_visual = tool_id
+	_rebuild_tool_visual()
+
+
 func get_horizontal_speed() -> float:
 	return Vector2(velocity.x, velocity.z).length()
 
@@ -103,10 +130,6 @@ func _request_harvest() -> void:
 		return
 
 	var direction: Vector3 = -camera.global_transform.basis.z.normalized()
-
-	# harvest_range describes reach from the character, not from a third-person
-	# camera several metres behind them. Extend the camera ray by its actual
-	# distance to the player's chest so zooming does not steal interaction range.
 	var player_chest: Vector3 = global_position + Vector3(0.0, 1.0, 0.0)
 	var camera_to_player: float = camera.global_position.distance_to(player_chest)
 	var ray_distance: float = camera_to_player + harvest_range
@@ -146,17 +169,17 @@ func _update_vertical_velocity(delta: float) -> void:
 
 
 func _update_horizontal_velocity(delta: float) -> void:
-	var input_vector := Input.get_vector(
+	var input_vector: Vector2 = Input.get_vector(
 		"move_left",
 		"move_right",
 		"move_forward",
 		"move_backward"
 	)
-	var move_direction := _camera_relative_direction(input_vector)
-	var target_speed := SPRINT_SPEED if Input.is_action_pressed("sprint") else WALK_SPEED
-	var target_velocity := move_direction * target_speed
+	var move_direction: Vector3 = _camera_relative_direction(input_vector)
+	var target_speed: float = SPRINT_SPEED if Input.is_action_pressed("sprint") else WALK_SPEED
+	var target_velocity: Vector3 = move_direction * target_speed
 
-	var acceleration := GROUND_ACCELERATION if is_on_floor() else AIR_ACCELERATION
+	var acceleration: float = GROUND_ACCELERATION if is_on_floor() else AIR_ACCELERATION
 	if is_on_floor() and move_direction.is_zero_approx():
 		acceleration = GROUND_DECELERATION
 
@@ -168,22 +191,21 @@ func _camera_relative_direction(input_vector: Vector2) -> Vector3:
 	if input_vector.is_zero_approx():
 		return Vector3.ZERO
 
-	var forward := -camera_yaw.global_transform.basis.z
-	var right := camera_yaw.global_transform.basis.x
+	var forward: Vector3 = -camera_yaw.global_transform.basis.z
+	var right: Vector3 = camera_yaw.global_transform.basis.x
 	forward.y = 0.0
 	right.y = 0.0
 	forward = forward.normalized()
 	right = right.normalized()
-
 	return (right * input_vector.x + forward * -input_vector.y).normalized()
 
 
 func _update_visual_facing(delta: float) -> void:
-	var horizontal_velocity := Vector2(velocity.x, velocity.z)
+	var horizontal_velocity: Vector2 = Vector2(velocity.x, velocity.z)
 	if horizontal_velocity.length_squared() < 0.04:
 		return
 
-	var target_yaw := atan2(velocity.x, velocity.z)
+	var target_yaw: float = atan2(velocity.x, velocity.z)
 	visual_root.rotation.y = lerp_angle(
 		visual_root.rotation.y,
 		target_yaw,
@@ -192,23 +214,22 @@ func _update_visual_facing(delta: float) -> void:
 
 
 func _update_camera_fov(delta: float) -> void:
-	var sprinting := Input.is_action_pressed("sprint") and get_horizontal_speed() > WALK_SPEED
-	var target_fov := SPRINT_FOV if sprinting else NORMAL_FOV
+	var sprinting: bool = Input.is_action_pressed("sprint") and get_horizontal_speed() > WALK_SPEED
+	var target_fov: float = SPRINT_FOV if sprinting else NORMAL_FOV
 	camera.fov = lerpf(camera.fov, target_fov, clampf(6.0 * delta, 0.0, 1.0))
 
 
 func _check_fall_respawn() -> void:
 	if global_position.y >= RESPAWN_FALL_HEIGHT:
 		return
-
 	global_position = respawn_position
 	velocity = Vector3.ZERO
 
 
 func _build_placeholder_body() -> void:
-	var collision := CollisionShape3D.new()
+	var collision: CollisionShape3D = CollisionShape3D.new()
 	collision.name = "CollisionShape3D"
-	var capsule_shape := CapsuleShape3D.new()
+	var capsule_shape: CapsuleShape3D = CapsuleShape3D.new()
 	capsule_shape.radius = 0.45
 	capsule_shape.height = 1.8
 	collision.shape = capsule_shape
@@ -219,28 +240,68 @@ func _build_placeholder_body() -> void:
 	visual_root.name = "VisualRoot"
 	add_child(visual_root)
 
-	var body_mesh := MeshInstance3D.new()
+	var body_mesh: MeshInstance3D = MeshInstance3D.new()
 	body_mesh.name = "PlaceholderBody"
-	var capsule_mesh := CapsuleMesh.new()
+	var capsule_mesh: CapsuleMesh = CapsuleMesh.new()
 	capsule_mesh.radius = 0.45
 	capsule_mesh.height = 1.8
 	body_mesh.mesh = capsule_mesh
 	body_mesh.position.y = 0.9
 
-	var material := StandardMaterial3D.new()
+	var material: StandardMaterial3D = StandardMaterial3D.new()
 	material.albedo_color = Color(0.65, 0.67, 0.72)
 	body_mesh.material_override = material
 	visual_root.add_child(body_mesh)
 
-	# A small forward marker makes movement/facing obvious while we still use a capsule.
-	var facing_marker := MeshInstance3D.new()
+	var facing_marker: MeshInstance3D = MeshInstance3D.new()
 	facing_marker.name = "FacingMarker"
-	var marker_mesh := BoxMesh.new()
+	var marker_mesh: BoxMesh = BoxMesh.new()
 	marker_mesh.size = Vector3(0.18, 0.18, 0.5)
 	facing_marker.mesh = marker_mesh
 	facing_marker.position = Vector3(0.0, 1.1, 0.45)
 	facing_marker.material_override = material
 	visual_root.add_child(facing_marker)
+
+	tool_visual_root = Node3D.new()
+	tool_visual_root.name = "ToolVisual"
+	tool_visual_root.position = Vector3(0.48, 0.92, 0.22)
+	visual_root.add_child(tool_visual_root)
+	_rebuild_tool_visual()
+
+
+func _rebuild_tool_visual() -> void:
+	if tool_visual_root == null:
+		return
+	for child in tool_visual_root.get_children():
+		child.queue_free()
+
+	if equipped_tool_visual == "hands":
+		return
+
+	var handle_material: StandardMaterial3D = StandardMaterial3D.new()
+	handle_material.albedo_color = Color(0.30, 0.17, 0.07)
+	var stone_material: StandardMaterial3D = StandardMaterial3D.new()
+	stone_material.albedo_color = Color(0.36, 0.37, 0.34)
+
+	var handle: MeshInstance3D = MeshInstance3D.new()
+	var handle_mesh: BoxMesh = BoxMesh.new()
+	handle_mesh.size = Vector3(0.10, 0.72, 0.10)
+	handle.mesh = handle_mesh
+	handle.material_override = handle_material
+	handle.rotation_degrees.z = -18.0
+	tool_visual_root.add_child(handle)
+
+	var head: MeshInstance3D = MeshInstance3D.new()
+	var head_mesh: BoxMesh = BoxMesh.new()
+	if equipped_tool_visual == "stone_axe":
+		head_mesh.size = Vector3(0.38, 0.28, 0.13)
+	else:
+		head_mesh.size = Vector3(0.62, 0.16, 0.13)
+	head.mesh = head_mesh
+	head.material_override = stone_material
+	head.position = Vector3(-0.10, 0.31, 0.0)
+	head.rotation_degrees.z = -18.0
+	tool_visual_root.add_child(head)
 
 
 func _build_camera() -> void:
@@ -259,7 +320,7 @@ func _build_camera() -> void:
 	spring_arm.spring_length = camera_distance
 	spring_arm.margin = 0.15
 	spring_arm.collision_mask = 1
-	var camera_collision_shape := SphereShape3D.new()
+	var camera_collision_shape: SphereShape3D = SphereShape3D.new()
 	camera_collision_shape.radius = 0.2
 	spring_arm.shape = camera_collision_shape
 	spring_arm.add_excluded_object(get_rid())
@@ -287,7 +348,7 @@ func _ensure_default_input_actions() -> void:
 	_add_key_action("sprint", KEY_SHIFT)
 
 
-func _add_key_action(action_name: StringName, physical_key) -> void:
+func _add_key_action(action_name: StringName, physical_key: Key) -> void:
 	if not InputMap.has_action(action_name):
 		InputMap.add_action(action_name)
 
@@ -295,6 +356,6 @@ func _add_key_action(action_name: StringName, physical_key) -> void:
 		if existing_event is InputEventKey and existing_event.physical_keycode == physical_key:
 			return
 
-	var key_event := InputEventKey.new()
+	var key_event: InputEventKey = InputEventKey.new()
 	key_event.physical_keycode = physical_key
 	InputMap.action_add_event(action_name, key_event)
