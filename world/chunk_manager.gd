@@ -20,6 +20,7 @@ var max_data_generation_ms: float = 0.0
 var last_chunk_build_ms: float = 0.0
 var max_chunk_build_ms: float = 0.0
 var total_chunks_generated: int = 0
+var world_object_update_timer: float = 0.0
 
 # Terrain data is generated on one background worker. Scene-tree, mesh, and
 # physics objects are still created exclusively on the main thread.
@@ -93,14 +94,20 @@ func set_player(player_node: Node3D) -> void:
 	player = player_node
 	current_player_chunk = world_to_chunk(player.global_position)
 	_update_desired_chunks(current_player_chunk)
+	_update_world_object_physics()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if player != null:
 		var player_chunk: Vector2i = world_to_chunk(player.global_position)
 		if player_chunk != current_player_chunk:
 			current_player_chunk = player_chunk
 			_update_desired_chunks(current_player_chunk)
+
+		world_object_update_timer -= delta
+		if world_object_update_timer <= 0.0:
+			world_object_update_timer = maxf(settings.world_object_update_interval, 0.05)
+			_update_world_object_physics()
 
 	_collect_completed_worker_task()
 	_start_next_worker_task()
@@ -128,10 +135,9 @@ func get_surface_sample_at_world(world_x: float, world_z: float) -> Dictionary:
 
 
 func find_spawn_xz(preferred: Vector3) -> Vector3:
-	# The new macro terrain can legitimately put the preferred origin under
-	# water or on a ridge. Probe a few chunks around it and choose a nearby,
-	# dry, relatively flat location rather than forcing every seed to have the
-	# same hand-shaped spawn island.
+	# Probe around the preferred origin and favor dry, flat, lightly forested
+	# ground. This gives new seeds a natural starting clearing without hand-
+	# sculpting a special spawn island into the generator.
 	var search_step: float = maxf(settings.chunk_size * 0.25, 16.0)
 	var search_radius: float = settings.chunk_size * 3.0
 	var half_steps: int = ceili(search_radius / search_step)
@@ -150,6 +156,7 @@ func find_spawn_xz(preferred: Vector3) -> Vector3:
 			var buildability: float = float(sample["buildability"])
 			var rockiness: float = float(sample["rockiness"])
 			var moisture: float = float(sample["moisture"])
+			var forest_density: float = float(sample["forest_density"])
 			var distance: float = Vector2(
 				candidate_x - preferred.x,
 				candidate_z - preferred.z
@@ -157,6 +164,7 @@ func find_spawn_xz(preferred: Vector3) -> Vector3:
 			var distance_penalty: float = distance / maxf(search_radius, 1.0)
 			var score: float = (
 				buildability * 6.0
+				- forest_density * 1.35
 				- rockiness * 0.35
 				+ moisture * 0.15
 				- distance_penalty * 1.15
@@ -186,6 +194,13 @@ func get_current_decoration_counts() -> Vector2i:
 		return Vector2i.ZERO
 	var chunk = chunks[current_player_chunk]
 	return Vector2i(chunk.tree_instance_count, chunk.rock_instance_count)
+
+
+func get_active_world_object_count() -> int:
+	var total: int = 0
+	for chunk in chunks.values():
+		total += chunk.get_active_world_object_count()
+	return total
 
 
 func get_last_generation_ms() -> float:
@@ -349,7 +364,14 @@ func _build_chunk_from_data(coord: Vector2i, data: Dictionary, data_ms: float) -
 	)
 
 	var needs_collision: bool = _is_within_collision_radius(coord, current_player_chunk)
-	chunk.build(coord, data, terrain_material, decoration_assets, needs_collision)
+	chunk.build(
+		coord,
+		data,
+		terrain_material,
+		decoration_assets,
+		settings,
+		needs_collision
+	)
 	add_child(chunk)
 	chunks[coord] = chunk
 
@@ -358,6 +380,20 @@ func _build_chunk_from_data(coord: Vector2i, data: Dictionary, data_ms: float) -
 	last_generation_ms = data_ms + last_chunk_build_ms
 	max_generation_ms = maxf(max_generation_ms, last_generation_ms)
 	total_chunks_generated += 1
+
+
+func _update_world_object_physics() -> void:
+	if player == null:
+		return
+
+	var activation_radius: float = settings.world_object_physics_radius
+	var release_radius: float = activation_radius + settings.world_object_release_margin
+	for chunk in chunks.values():
+		chunk.update_world_object_physics(
+			player.global_position,
+			activation_radius,
+			release_radius
+		)
 
 
 func _update_collision_radius(center: Vector2i) -> void:
