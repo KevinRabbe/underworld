@@ -1,5 +1,7 @@
 extends CharacterBody3D
 
+signal harvest_requested(origin: Vector3, direction: Vector3, max_distance: float)
+
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 10.0
 const GROUND_ACCELERATION := 30.0
@@ -27,6 +29,7 @@ var camera_distance := DEFAULT_CAMERA_DISTANCE
 var coyote_timer := 0.0
 var jump_buffer_timer := 0.0
 var respawn_position := Vector3.ZERO
+var harvest_range: float = 4.5
 
 var visual_root: Node3D
 var camera_yaw: Node3D
@@ -64,6 +67,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			return
 
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			_request_harvest()
+			return
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_set_camera_distance(camera_distance - CAMERA_ZOOM_STEP)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
@@ -84,8 +90,19 @@ func set_respawn_position(position: Vector3) -> void:
 	respawn_position = position
 
 
+func set_harvest_range(distance: float) -> void:
+	harvest_range = maxf(distance, 0.1)
+
+
 func get_horizontal_speed() -> float:
 	return Vector2(velocity.x, velocity.z).length()
+
+
+func _request_harvest() -> void:
+	if camera == null:
+		return
+	var direction: Vector3 = -camera.global_transform.basis.z.normalized()
+	harvest_requested.emit(camera.global_position, direction, harvest_range)
 
 
 func _configure_character_body() -> void:
