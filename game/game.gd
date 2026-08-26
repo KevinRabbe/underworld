@@ -5,11 +5,11 @@ const ChunkManagerScript := preload("res://world/chunk_manager.gd")
 const PlayerScript := preload("res://player/player.gd")
 const DebugHudScript := preload("res://game/debug_hud.gd")
 
-var settings
+var settings: UnderworldWorldSettings
 var world
 var player
 var debug_hud
-var spawn_xz := Vector3.ZERO
+var spawn_xz: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
@@ -20,10 +20,10 @@ func _ready() -> void:
 
 
 func _setup_environment() -> void:
-	var world_environment := WorldEnvironment.new()
+	var world_environment: WorldEnvironment = WorldEnvironment.new()
 	world_environment.name = "WorldEnvironment"
 
-	var environment := Environment.new()
+	var environment: Environment = Environment.new()
 	environment.background_mode = Environment.BG_COLOR
 	environment.background_color = Color(0.56, 0.72, 0.86)
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
@@ -32,7 +32,7 @@ func _setup_environment() -> void:
 	world_environment.environment = environment
 	add_child(world_environment)
 
-	var sun := DirectionalLight3D.new()
+	var sun: DirectionalLight3D = DirectionalLight3D.new()
 	sun.name = "Sun"
 	sun.rotation_degrees = Vector3(-55.0, -30.0, 0.0)
 	sun.light_energy = 1.1
@@ -57,7 +57,7 @@ func _create_player() -> void:
 	add_child(player)
 
 	var spawn_height: float = world.get_height_at_world(spawn_xz.x, spawn_xz.z)
-	var spawn_position := Vector3(spawn_xz.x, spawn_height + 3.0, spawn_xz.z)
+	var spawn_position: Vector3 = Vector3(spawn_xz.x, spawn_height + 3.0, spawn_xz.z)
 	player.global_position = spawn_position
 	player.set_respawn_position(spawn_position)
 	world.set_player(player)
