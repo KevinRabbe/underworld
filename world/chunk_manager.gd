@@ -63,6 +63,18 @@ func get_height_at_world(world_x: float, world_z: float) -> float:
 	return generator.get_height(world_x, world_z)
 
 
+func get_loaded_chunk_count() -> int:
+	return chunks.size()
+
+
+func get_pending_chunk_count() -> int:
+	return pending_chunks.size()
+
+
+func get_current_player_chunk() -> Vector2i:
+	return current_player_chunk
+
+
 func _update_desired_chunks(center: Vector2i) -> void:
 	desired_chunks.clear()
 
@@ -71,27 +83,54 @@ func _update_desired_chunks(center: Vector2i) -> void:
 			var coord := center + Vector2i(x_offset, z_offset)
 			desired_chunks[coord] = true
 
-			if not chunks.has(coord) and not pending_lookup.has(coord):
-				pending_chunks.append(coord)
-				pending_lookup[coord] = true
-
+	# Remove chunks outside the active square first. keys() gives us a snapshot,
+	# so erasing entries from the dictionary inside this loop is safe.
 	for coord in chunks.keys():
 		if not desired_chunks.has(coord):
 			chunks[coord].queue_free()
 			chunks.erase(coord)
 
+	_rebuild_generation_queue(center)
 	_update_collision_radius(center)
+
+
+func _rebuild_generation_queue(center: Vector2i) -> void:
+	pending_chunks.clear()
+	pending_lookup.clear()
+
+	for coord in desired_chunks.keys():
+		if chunks.has(coord):
+			continue
+		pending_chunks.append(coord)
+		pending_lookup[coord] = true
+
+	current_player_chunk = center
+	pending_chunks.sort_custom(_compare_pending_chunks)
+
+
+func _compare_pending_chunks(a: Vector2i, b: Vector2i) -> bool:
+	return _chunk_distance_squared(a, current_player_chunk) < _chunk_distance_squared(b, current_player_chunk)
+
+
+func _chunk_distance_squared(a: Vector2i, b: Vector2i) -> int:
+	var delta := a - b
+	return delta.x * delta.x + delta.y * delta.y
 
 
 func _process_generation_queue() -> void:
 	if pending_chunks.is_empty():
 		return
 
-	var coord := pending_chunks.pop_front()
-	pending_lookup.erase(coord)
+	var generation_budget := maxi(1, settings.max_chunks_generated_per_frame)
+	for _index in range(generation_budget):
+		if pending_chunks.is_empty():
+			break
 
-	if desired_chunks.has(coord) and not chunks.has(coord):
-		_create_chunk(coord)
+		var coord := pending_chunks.pop_front()
+		pending_lookup.erase(coord)
+
+		if desired_chunks.has(coord) and not chunks.has(coord):
+			_create_chunk(coord)
 
 
 func _create_chunk(coord: Vector2i) -> void:
