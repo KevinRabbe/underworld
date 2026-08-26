@@ -31,7 +31,13 @@ class_name UnderworldWorldSettings
 @export var forest_frequency: float = 0.0036
 @export var rock_frequency: float = 0.0055
 @export var shore_band: float = 2.5
-@export_range(1, 16, 1) var environment_mask_vertex_step: int = 4
+
+@export_group("Prototype Decoration")
+@export_range(2, 12, 1) var decoration_vertex_step: int = 4
+@export_range(0.0, 1.0, 0.01) var tree_threshold: float = 0.28
+@export_range(0.0, 1.0, 0.01) var tree_density: float = 0.78
+@export_range(0.0, 1.0, 0.01) var rock_threshold: float = 0.55
+@export_range(0.0, 1.0, 0.01) var rock_density: float = 0.34
 
 @export_group("Prototype Water")
 @export var water_plane_size: float = 8192.0
