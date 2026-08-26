@@ -234,6 +234,9 @@ func _build_camera() -> void:
 	spring_arm.spring_length = camera_distance
 	spring_arm.margin = 0.15
 	spring_arm.collision_mask = 1
+	var camera_collision_shape := SphereShape3D.new()
+	camera_collision_shape.radius = 0.2
+	spring_arm.shape = camera_collision_shape
 	spring_arm.add_excluded_object(get_rid())
 	camera_pitch_pivot.add_child(spring_arm)
 
@@ -259,7 +262,7 @@ func _ensure_default_input_actions() -> void:
 	_add_key_action("sprint", KEY_SHIFT)
 
 
-func _add_key_action(action_name: StringName, physical_key: Key) -> void:
+func _add_key_action(action_name: StringName, physical_key) -> void:
 	if not InputMap.has_action(action_name):
 		InputMap.add_action(action_name)
 
