@@ -13,6 +13,10 @@ var pending_lookup: Dictionary = {}
 var desired_chunks: Dictionary = {}
 var current_player_chunk := Vector2i(999999999, 999999999)
 
+var last_generation_ms := 0.0
+var max_generation_ms := 0.0
+var total_chunks_generated := 0
+
 var terrain_material := StandardMaterial3D.new()
 
 
@@ -73,6 +77,18 @@ func get_pending_chunk_count() -> int:
 
 func get_current_player_chunk() -> Vector2i:
 	return current_player_chunk
+
+
+func get_last_generation_ms() -> float:
+	return last_generation_ms
+
+
+func get_max_generation_ms() -> float:
+	return max_generation_ms
+
+
+func get_total_chunks_generated() -> int:
+	return total_chunks_generated
 
 
 func _update_desired_chunks(center: Vector2i) -> void:
@@ -138,6 +154,7 @@ func _create_chunk(coord: Vector2i) -> void:
 	if chunks.has(coord):
 		return
 
+	var started_usec := Time.get_ticks_usec()
 	var data := generator.generate_chunk_data(coord)
 	var chunk = TerrainChunkScript.new()
 	chunk.position = Vector3(
@@ -150,6 +167,10 @@ func _create_chunk(coord: Vector2i) -> void:
 	chunk.build(coord, data, terrain_material, needs_collision)
 	add_child(chunk)
 	chunks[coord] = chunk
+
+	last_generation_ms = float(Time.get_ticks_usec() - started_usec) / 1000.0
+	max_generation_ms = maxf(max_generation_ms, last_generation_ms)
+	total_chunks_generated += 1
 
 
 func _update_collision_radius(center: Vector2i) -> void:
