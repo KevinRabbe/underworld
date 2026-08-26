@@ -95,6 +95,8 @@ func _create_player() -> void:
 	var spawn_position: Vector3 = Vector3(spawn_xz.x, spawn_height + 3.0, spawn_xz.z)
 	player.global_position = spawn_position
 	player.set_respawn_position(spawn_position)
+	player.set_harvest_range(settings.harvest_range)
+	player.harvest_requested.connect(world.try_harvest)
 	world.set_player(player)
 
 
