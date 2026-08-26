@@ -48,8 +48,8 @@ func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
 	var chunk_world_x: float = float(chunk_coord.x) * settings.chunk_size
 	var chunk_world_z: float = float(chunk_coord.y) * settings.chunk_size
 
-	for z: int in range(resolution):
-		for x: int in range(resolution):
+	for z in range(resolution):
+		for x in range(resolution):
 			var index: int = z * resolution + x
 			var local_x: float = float(x) * spacing
 			var local_z: float = float(z) * spacing
@@ -61,8 +61,8 @@ func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
 			uvs[index] = Vector2(world_x, world_z) * 0.02
 			normals[index] = _get_normal(world_x, world_z, spacing)
 
-	for z: int in range(resolution - 1):
-		for x: int in range(resolution - 1):
+	for z in range(resolution - 1):
+		for x in range(resolution - 1):
 			var top_left: int = z * resolution + x
 			var bottom_left: int = (z + 1) * resolution + x
 			var top_right: int = top_left + 1
