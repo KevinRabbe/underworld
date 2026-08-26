@@ -28,16 +28,21 @@ class_name UnderworldWorldSettings
 
 @export_group("Environment Masks")
 @export var moisture_frequency: float = 0.0022
-@export var forest_frequency: float = 0.0036
+# Slightly larger forest patches make clearings read as regions instead of
+# tiny holes inside otherwise uniform tree cover.
+@export var forest_frequency: float = 0.0028
 @export var rock_frequency: float = 0.0055
 @export var shore_band: float = 2.5
 
 @export_group("Prototype Decoration")
-@export_range(2, 12, 1) var decoration_vertex_step: int = 4
-@export_range(0.0, 1.0, 0.01) var tree_threshold: float = 0.28
-@export_range(0.0, 1.0, 0.01) var tree_density: float = 0.78
+# Use a finer candidate grid but a lower probability. This reduces the visible
+# one-tree-per-cell rhythm while keeping dense forest counts in roughly the
+# same range as the previous pass.
+@export_range(2, 12, 1) var decoration_vertex_step: int = 3
+@export_range(0.0, 1.0, 0.01) var tree_threshold: float = 0.40
+@export_range(0.0, 1.0, 0.01) var tree_density: float = 0.38
 @export_range(0.0, 1.0, 0.01) var rock_threshold: float = 0.55
-@export_range(0.0, 1.0, 0.01) var rock_density: float = 0.34
+@export_range(0.0, 1.0, 0.01) var rock_density: float = 0.30
 
 @export_group("Prototype Water")
 @export var water_plane_size: float = 8192.0
