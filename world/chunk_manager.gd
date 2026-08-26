@@ -15,6 +15,10 @@ var current_player_chunk: Vector2i = Vector2i(999999999, 999999999)
 
 var last_generation_ms: float = 0.0
 var max_generation_ms: float = 0.0
+var last_data_generation_ms: float = 0.0
+var max_data_generation_ms: float = 0.0
+var last_chunk_build_ms: float = 0.0
+var max_chunk_build_ms: float = 0.0
 var total_chunks_generated: int = 0
 
 var terrain_material: StandardMaterial3D = StandardMaterial3D.new()
@@ -87,6 +91,22 @@ func get_max_generation_ms() -> float:
 	return max_generation_ms
 
 
+func get_last_data_generation_ms() -> float:
+	return last_data_generation_ms
+
+
+func get_max_data_generation_ms() -> float:
+	return max_data_generation_ms
+
+
+func get_last_chunk_build_ms() -> float:
+	return last_chunk_build_ms
+
+
+func get_max_chunk_build_ms() -> float:
+	return max_chunk_build_ms
+
+
 func get_total_chunks_generated() -> int:
 	return total_chunks_generated
 
@@ -156,8 +176,14 @@ func _create_chunk(coord: Vector2i) -> void:
 	if chunks.has(coord):
 		return
 
-	var started_usec: int = Time.get_ticks_usec()
+	var total_started_usec: int = Time.get_ticks_usec()
+
+	var data_started_usec: int = Time.get_ticks_usec()
 	var data: Dictionary = generator.generate_chunk_data(coord)
+	last_data_generation_ms = float(Time.get_ticks_usec() - data_started_usec) / 1000.0
+	max_data_generation_ms = maxf(max_data_generation_ms, last_data_generation_ms)
+
+	var build_started_usec: int = Time.get_ticks_usec()
 	var chunk = TerrainChunkScript.new()
 	chunk.position = Vector3(
 		float(coord.x) * settings.chunk_size,
@@ -169,8 +195,10 @@ func _create_chunk(coord: Vector2i) -> void:
 	chunk.build(coord, data, terrain_material, needs_collision)
 	add_child(chunk)
 	chunks[coord] = chunk
+	last_chunk_build_ms = float(Time.get_ticks_usec() - build_started_usec) / 1000.0
+	max_chunk_build_ms = maxf(max_chunk_build_ms, last_chunk_build_ms)
 
-	last_generation_ms = float(Time.get_ticks_usec() - started_usec) / 1000.0
+	last_generation_ms = float(Time.get_ticks_usec() - total_started_usec) / 1000.0
 	max_generation_ms = maxf(max_generation_ms, last_generation_ms)
 	total_chunks_generated += 1
 
