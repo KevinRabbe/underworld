@@ -2,13 +2,13 @@ extends CanvasLayer
 
 var world
 var player
-var settings
+var settings: UnderworldWorldSettings
 var label: Label
-var update_timer := 0.0
-var visible_debug := true
+var update_timer: float = 0.0
+var visible_debug: bool = true
 
 
-func configure(world_node, player_node, world_settings) -> void:
+func configure(world_node, player_node, world_settings: UnderworldWorldSettings) -> void:
 	world = world_node
 	player = player_node
 	settings = world_settings
