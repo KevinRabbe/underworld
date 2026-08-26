@@ -53,5 +53,12 @@ class_name UnderworldWorldSettings
 @export_range(0.2, 2.0, 0.05) var tree_collider_radius: float = 0.70
 @export_range(1.0, 8.0, 0.1) var tree_collider_height: float = 4.3
 
+@export_group("Prototype Harvesting")
+@export_range(2.0, 8.0, 0.25) var harvest_range: float = 4.5
+@export_range(1, 10, 1) var tree_hits_to_harvest: int = 3
+@export_range(1, 10, 1) var rock_hits_to_harvest: int = 4
+@export_range(1, 20, 1) var tree_wood_yield: int = 4
+@export_range(1, 20, 1) var rock_stone_yield: int = 3
+
 @export_group("Prototype Water")
 @export var water_plane_size: float = 8192.0
