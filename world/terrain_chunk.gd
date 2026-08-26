@@ -13,11 +13,15 @@ var forest_density: PackedFloat32Array = PackedFloat32Array()
 var rockiness: PackedFloat32Array = PackedFloat32Array()
 var buildability: PackedFloat32Array = PackedFloat32Array()
 
+var tree_instance_count: int = 0
+var rock_instance_count: int = 0
+
 
 func build(
 	coord: Vector2i,
 	data: Dictionary,
 	terrain_material: Material,
+	decoration_assets: Dictionary,
 	with_collision: bool
 ) -> void:
 	chunk_coord = coord
@@ -44,7 +48,53 @@ func build(
 	mesh = array_mesh
 	material_override = terrain_material
 
+	_build_decorations(data, decoration_assets)
 	set_collision_enabled(with_collision)
+
+
+func _build_decorations(data: Dictionary, assets: Dictionary) -> void:
+	var tree_transforms: Array = data.get("tree_transforms", [])
+	var rock_transforms: Array = data.get("rock_transforms", [])
+	tree_instance_count = tree_transforms.size()
+	rock_instance_count = rock_transforms.size()
+
+	if tree_instance_count > 0:
+		_create_multimesh_instances(
+			"Trees",
+			assets["tree_mesh"],
+			assets["tree_material"],
+			tree_transforms
+		)
+
+	if rock_instance_count > 0:
+		_create_multimesh_instances(
+			"Rocks",
+			assets["rock_mesh"],
+			assets["rock_material"],
+			rock_transforms
+		)
+
+
+func _create_multimesh_instances(
+	node_name: String,
+	instance_mesh: Mesh,
+	instance_material: Material,
+	transforms: Array
+) -> void:
+	var multi_mesh: MultiMesh = MultiMesh.new()
+	multi_mesh.transform_format = MultiMesh.TRANSFORM_3D
+	multi_mesh.mesh = instance_mesh
+	multi_mesh.instance_count = transforms.size()
+
+	for index in range(transforms.size()):
+		var instance_transform: Transform3D = transforms[index]
+		multi_mesh.set_instance_transform(index, instance_transform)
+
+	var multi_mesh_instance: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	multi_mesh_instance.name = node_name
+	multi_mesh_instance.multimesh = multi_mesh
+	multi_mesh_instance.material_override = instance_material
+	add_child(multi_mesh_instance)
 
 
 func set_collision_enabled(enabled: bool) -> void:
