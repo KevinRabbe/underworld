@@ -68,13 +68,15 @@ func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
 			var top_right: int = top_left + 1
 			var bottom_right: int = bottom_left + 1
 
+			# Godot treats clockwise triangle winding as front-facing.
+			# Keep terrain faces visible from above.
 			indices.append(top_left)
-			indices.append(bottom_left)
 			indices.append(top_right)
+			indices.append(bottom_left)
 
 			indices.append(top_right)
-			indices.append(bottom_left)
 			indices.append(bottom_right)
+			indices.append(bottom_left)
 
 	return {
 		"vertices": vertices,
