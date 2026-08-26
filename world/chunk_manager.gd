@@ -22,6 +22,15 @@ var max_chunk_build_ms: float = 0.0
 var total_chunks_generated: int = 0
 var world_object_update_timer: float = 0.0
 
+# Generated objects are identified by deterministic chunk/type/index IDs.
+# Untouched objects are never saved; only deviations from the generated world
+# are persisted. This keeps save data proportional to player modifications.
+var destroyed_object_ids: Dictionary = {}
+var object_hit_progress: Dictionary = {}
+var gathered_wood: int = 0
+var gathered_stone: int = 0
+var last_harvest_message: String = "Left click a nearby tree or rock"
+
 # Terrain data is generated on one background worker. Scene-tree, mesh, and
 # physics objects are still created exclusively on the main thread.
 var worker_task_id: int = -1
@@ -38,8 +47,6 @@ var decoration_assets: Dictionary = {}
 func configure(world_settings: UnderworldWorldSettings) -> void:
 	settings = world_settings
 
-	# Keep separate noise resources for main-thread probes and background chunk
-	# generation so no FastNoiseLite instance crosses a thread boundary.
 	main_generator = TerrainGeneratorScript.new()
 	main_generator.configure(settings)
 	worker_generator = TerrainGeneratorScript.new()
@@ -50,11 +57,10 @@ func configure(world_settings: UnderworldWorldSettings) -> void:
 	terrain_material.roughness = 1.0
 
 	_create_prototype_decoration_assets()
+	_load_world_modifications()
 
 
 func _create_prototype_decoration_assets() -> void:
-	# These are deliberately low-cost placeholder shapes. They let us judge
-	# generated forest/rock distribution before spending time on art assets.
 	var tree_mesh: CylinderMesh = CylinderMesh.new()
 	tree_mesh.top_radius = 0.0
 	tree_mesh.bottom_radius = 1.25
@@ -177,6 +183,69 @@ func find_spawn_xz(preferred: Vector3) -> Vector3:
 	return best_position
 
 
+func try_harvest(origin: Vector3, direction: Vector3, max_distance: float) -> void:
+	if direction.is_zero_approx():
+		return
+
+	var ray_end: Vector3 = origin + direction.normalized() * maxf(max_distance, 0.1)
+	var query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
+		origin,
+		ray_end,
+		1
+	)
+	var player_collision: CollisionObject3D = player as CollisionObject3D
+	if player_collision != null:
+		query.exclude = [player_collision.get_rid()]
+
+	var result: Dictionary = get_world_3d().direct_space_state.intersect_ray(query)
+	if result.is_empty():
+		last_harvest_message = "Miss"
+		return
+
+	var collider: Object = result.get("collider")
+	if collider == null or not collider.has_meta("world_object_id"):
+		last_harvest_message = "Nothing harvestable"
+		return
+
+	var object_id: String = str(collider.get_meta("world_object_id"))
+	if destroyed_object_ids.has(object_id):
+		return
+
+	var object_type: String = str(collider.get_meta("world_object_type"))
+	var object_index: int = int(collider.get_meta("world_object_index"))
+	var object_chunk: Vector2i = collider.get_meta("world_object_chunk")
+	var required_hits: int = (
+		settings.tree_hits_to_harvest
+		if object_type == "tree"
+		else settings.rock_hits_to_harvest
+	)
+	var current_hits: int = int(object_hit_progress.get(object_id, 0)) + 1
+
+	if current_hits < required_hits:
+		object_hit_progress[object_id] = current_hits
+		last_harvest_message = "%s hit %d/%d" % [
+			object_type.capitalize(),
+			current_hits,
+			required_hits,
+		]
+		return
+
+	object_hit_progress.erase(object_id)
+	destroyed_object_ids[object_id] = true
+
+	if chunks.has(object_chunk):
+		chunks[object_chunk].destroy_world_object(object_type, object_index)
+
+	if object_type == "tree":
+		gathered_wood += settings.tree_wood_yield
+		last_harvest_message = "Tree harvested  +%d wood" % settings.tree_wood_yield
+	else:
+		gathered_stone += settings.rock_stone_yield
+		last_harvest_message = "Rock harvested  +%d stone" % settings.rock_stone_yield
+
+	_save_world_modifications()
+
+
 func get_loaded_chunk_count() -> int:
 	return chunks.size()
 
@@ -201,6 +270,18 @@ func get_active_world_object_count() -> int:
 	for chunk in chunks.values():
 		total += chunk.get_active_world_object_count()
 	return total
+
+
+func get_resource_counts() -> Vector2i:
+	return Vector2i(gathered_wood, gathered_stone)
+
+
+func get_destroyed_object_count() -> int:
+	return destroyed_object_ids.size()
+
+
+func get_last_harvest_message() -> String:
+	return last_harvest_message
 
 
 func get_last_generation_ms() -> float:
@@ -233,6 +314,60 @@ func get_total_chunks_generated() -> int:
 
 func is_worker_busy() -> bool:
 	return worker_task_id != -1
+
+
+func _get_save_path() -> String:
+	return "user://underworld_seed_%d.json" % settings.world_seed
+
+
+func _load_world_modifications() -> void:
+	destroyed_object_ids.clear()
+	object_hit_progress.clear()
+	gathered_wood = 0
+	gathered_stone = 0
+
+	var save_path: String = _get_save_path()
+	if not FileAccess.file_exists(save_path):
+		return
+
+	var file: FileAccess = FileAccess.open(save_path, FileAccess.READ)
+	if file == null:
+		return
+
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if not parsed is Dictionary:
+		return
+
+	var save_data: Dictionary = parsed
+	if int(save_data.get("world_seed", -1)) != settings.world_seed:
+		return
+
+	var destroyed_list: Array = save_data.get("destroyed_objects", [])
+	for object_id in destroyed_list:
+		destroyed_object_ids[str(object_id)] = true
+
+	gathered_wood = int(save_data.get("wood", 0))
+	gathered_stone = int(save_data.get("stone", 0))
+	if not destroyed_object_ids.is_empty():
+		last_harvest_message = "Loaded %d world modifications" % destroyed_object_ids.size()
+
+
+func _save_world_modifications() -> void:
+	var destroyed_list: Array = destroyed_object_ids.keys()
+	destroyed_list.sort()
+	var save_data: Dictionary = {
+		"version": 1,
+		"world_seed": settings.world_seed,
+		"destroyed_objects": destroyed_list,
+		"wood": gathered_wood,
+		"stone": gathered_stone,
+	}
+
+	var file: FileAccess = FileAccess.open(_get_save_path(), FileAccess.WRITE)
+	if file == null:
+		last_harvest_message = "Save failed"
+		return
+	file.store_string(JSON.stringify(save_data, "  "))
 
 
 func _update_desired_chunks(center: Vector2i) -> void:
@@ -370,6 +505,7 @@ func _build_chunk_from_data(coord: Vector2i, data: Dictionary, data_ms: float) -
 		terrain_material,
 		decoration_assets,
 		settings,
+		destroyed_object_ids,
 		needs_collision
 	)
 	add_child(chunk)
