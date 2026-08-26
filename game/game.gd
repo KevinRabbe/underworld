@@ -21,9 +21,6 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	# The prototype sea is intentionally just a large flat plane. Recenter it
-	# around the player so it behaves as effectively infinite during streaming
-	# tests without creating water chunks yet.
 	if water_surface != null and player != null:
 		water_surface.global_position.x = player.global_position.x
 		water_surface.global_position.z = player.global_position.z
@@ -96,8 +93,13 @@ func _create_player() -> void:
 	player.global_position = spawn_position
 	player.set_respawn_position(spawn_position)
 	player.set_harvest_range(settings.harvest_range)
+
 	player.harvest_requested.connect(world.try_harvest)
+	player.hotbar_slot_requested.connect(world.select_hotbar_slot)
+	player.craft_requested.connect(world.request_craft)
+	world.equipped_tool_changed.connect(player.set_equipped_tool)
 	world.set_player(player)
+	player.set_equipped_tool(world.get_equipped_tool())
 
 
 func _create_debug_hud() -> void:
