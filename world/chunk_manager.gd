@@ -83,10 +83,11 @@ func _update_desired_chunks(center: Vector2i) -> void:
 			var coord := center + Vector2i(x_offset, z_offset)
 			desired_chunks[coord] = true
 
-	# Remove chunks outside the active square first. keys() gives us a snapshot,
-	# so erasing entries from the dictionary inside this loop is safe.
+	# Keep a retention ring outside the load radius. This prevents rapid
+	# destroy/regenerate thrashing when the player hovers around a chunk edge.
+	var retention_radius: int = maxi(settings.load_radius, settings.unload_radius)
 	for coord in chunks.keys():
-		if not desired_chunks.has(coord):
+		if not _is_within_square_radius(coord, center, retention_radius):
 			chunks[coord].queue_free()
 			chunks.erase(coord)
 
@@ -159,8 +160,9 @@ func _update_collision_radius(center: Vector2i) -> void:
 
 
 func _is_within_collision_radius(coord: Vector2i, center: Vector2i) -> bool:
+	return _is_within_square_radius(coord, center, settings.collision_radius)
+
+
+func _is_within_square_radius(coord: Vector2i, center: Vector2i, radius: int) -> bool:
 	var delta := coord - center
-	return (
-		abs(delta.x) <= settings.collision_radius
-		and abs(delta.y) <= settings.collision_radius
-	)
+	return abs(delta.x) <= radius and abs(delta.y) <= radius
