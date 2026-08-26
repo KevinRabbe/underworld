@@ -42,11 +42,13 @@ func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
 	var uvs: PackedVector2Array = PackedVector2Array()
 	var indices: PackedInt32Array = PackedInt32Array()
 	var heights: PackedFloat32Array = PackedFloat32Array()
+	var collision_heights: PackedFloat32Array = PackedFloat32Array()
 
 	vertices.resize(vertex_count)
 	normals.resize(vertex_count)
 	uvs.resize(vertex_count)
 	heights.resize(padded_resolution * padded_resolution)
+	collision_heights.resize(vertex_count)
 
 	var chunk_world_x: float = float(chunk_coord.x) * settings.chunk_size
 	var chunk_world_z: float = float(chunk_coord.y) * settings.chunk_size
@@ -82,6 +84,7 @@ func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
 			var front: float = heights[padded_index + padded_resolution]
 
 			vertices[index] = Vector3(local_x, height, local_z)
+			collision_heights[index] = height
 			uvs[index] = Vector2(world_x, world_z) * 0.02
 			normals[index] = Vector3(
 				left - right,
@@ -110,4 +113,7 @@ func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
 		"normals": normals,
 		"uvs": uvs,
 		"indices": indices,
+		"collision_heights": collision_heights,
+		"resolution": resolution,
+		"spacing": spacing,
 	}
