@@ -91,6 +91,7 @@ func _build_camera() -> void:
 	spring_arm.spring_length = 4.5
 	spring_arm.margin = 0.15
 	spring_arm.collision_mask = 1
+	spring_arm.add_excluded_object(get_rid())
 	camera_pivot.add_child(spring_arm)
 
 	var camera := Camera3D.new()
