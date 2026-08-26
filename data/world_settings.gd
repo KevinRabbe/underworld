@@ -39,10 +39,13 @@ class_name UnderworldWorldSettings
 @export_range(0.0, 1.0, 0.01) var rock_threshold: float = 0.55
 @export_range(0.0, 1.0, 0.01) var rock_density: float = 0.30
 
-# Loose resources provide the bootstrap path for a fresh world. They use the
-# same deterministic chunk generation and delta-save model as trees/rocks.
-@export_range(0.0, 1.0, 0.01) var branch_density: float = 0.08
-@export_range(0.0, 1.0, 0.01) var loose_stone_density: float = 0.055
+@export_group("Loose Pickups")
+# Pickups use the already-generated terrain masks, so this can be reasonably
+# dense without adding more world-noise sampling.
+@export_range(2, 12, 1) var pickup_vertex_step: int = 5
+@export_range(0.0, 1.0, 0.01) var branch_pickup_density: float = 0.16
+@export_range(0.0, 1.0, 0.01) var loose_stone_pickup_density: float = 0.13
+@export_range(0.5, 3.0, 0.1) var pickup_collect_radius: float = 1.5
 
 @export_group("World Object Physics")
 @export_range(8.0, 64.0, 1.0) var world_object_physics_radius: float = 28.0
@@ -51,19 +54,18 @@ class_name UnderworldWorldSettings
 @export_range(0.2, 2.0, 0.05) var tree_collider_radius: float = 0.70
 @export_range(1.0, 8.0, 0.1) var tree_collider_height: float = 4.3
 
-@export_group("Prototype Survival Loop")
+@export_group("Harvesting")
 @export_range(2.0, 8.0, 0.25) var harvest_range: float = 4.5
-@export_range(1, 10, 1) var tree_hits_to_harvest: int = 3
-@export_range(1, 10, 1) var rock_hits_to_harvest: int = 4
+@export_range(1, 10, 1) var tree_hits_with_axe: int = 3
+@export_range(1, 10, 1) var rock_hits_with_pickaxe: int = 4
 @export_range(1, 20, 1) var tree_wood_yield: int = 4
 @export_range(1, 20, 1) var rock_stone_yield: int = 3
-@export_range(1, 5, 1) var branch_wood_yield: int = 1
-@export_range(1, 5, 1) var loose_stone_yield: int = 1
 
-@export var stone_axe_wood_cost: int = 5
-@export var stone_axe_stone_cost: int = 2
-@export var stone_pickaxe_wood_cost: int = 4
-@export var stone_pickaxe_stone_cost: int = 4
+@export_group("Stone Tool Crafting")
+@export_range(0, 20, 1) var stone_axe_wood_cost: int = 4
+@export_range(0, 20, 1) var stone_axe_stone_cost: int = 3
+@export_range(0, 20, 1) var stone_pickaxe_wood_cost: int = 3
+@export_range(0, 20, 1) var stone_pickaxe_stone_cost: int = 4
 
 @export_group("Prototype Water")
 @export var water_plane_size: float = 8192.0
