@@ -57,7 +57,15 @@ func _refresh_text() -> void:
 		+ "Seed: %d\n" % settings.world_seed
 		+ "Position: %.1f, %.1f, %.1f\n" % [position.x, position.y, position.z]
 		+ "Chunk: %d, %d\n" % [chunk.x, chunk.y]
-		+ "Loaded: %d   Pending: %d\n" % [world.get_loaded_chunk_count(), world.get_pending_chunk_count()]
+		+ "Loaded: %d   Pending: %d   Generated: %d\n" % [
+			world.get_loaded_chunk_count(),
+			world.get_pending_chunk_count(),
+			world.get_total_chunks_generated()
+		]
+		+ "Chunk gen: %.2f ms   Max: %.2f ms\n" % [
+			world.get_last_generation_ms(),
+			world.get_max_generation_ms()
+		]
 		+ "Speed: %.1f m/s\n" % speed
 		+ "F3: debug   Esc: release mouse   Wheel: camera zoom"
 	)
