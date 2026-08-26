@@ -3,10 +3,12 @@ extends Node3D
 const WorldSettingsScript := preload("res://data/world_settings.gd")
 const ChunkManagerScript := preload("res://world/chunk_manager.gd")
 const PlayerScript := preload("res://player/player.gd")
+const DebugHudScript := preload("res://game/debug_hud.gd")
 
 var settings
 var world
 var player
+var debug_hud
 var spawn_xz := Vector3.ZERO
 
 
@@ -14,6 +16,7 @@ func _ready() -> void:
 	_setup_environment()
 	_create_world()
 	_create_player()
+	_create_debug_hud()
 
 
 func _setup_environment() -> void:
@@ -54,5 +57,14 @@ func _create_player() -> void:
 	add_child(player)
 
 	var spawn_height: float = world.get_height_at_world(spawn_xz.x, spawn_xz.z)
-	player.global_position = Vector3(spawn_xz.x, spawn_height + 3.0, spawn_xz.z)
+	var spawn_position := Vector3(spawn_xz.x, spawn_height + 3.0, spawn_xz.z)
+	player.global_position = spawn_position
+	player.set_respawn_position(spawn_position)
 	world.set_player(player)
+
+
+func _create_debug_hud() -> void:
+	debug_hud = DebugHudScript.new()
+	debug_hud.name = "DebugHUD"
+	debug_hud.configure(world, player, settings)
+	add_child(debug_hud)
