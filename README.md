@@ -2,40 +2,29 @@
 
 Procedural survival game prototype built with Godot 4.
 
-## Prototype 0.02 — first generated biome
+## Prototype 0.02 — generated first biome
 
-Current goal: turn the proven chunk-streaming foundation into a world that already has readable geography and reusable environmental rules.
+Current goal: turn the proven v0.01 chunk-streaming foundation into a world that already has recognizable large-scale geography and deterministic environmental structure.
 
-### Streaming foundation from 0.01
-
-- Seeded deterministic terrain
+Implemented:
+- Seeded procedural terrain using `FastNoiseLite`
 - 128 m terrain chunks with 65×65 vertices by default
-- Seamless world-coordinate sampling across chunk borders
-- Distance-prioritized chunk loading with unload hysteresis
+- Worker-thread terrain data generation with main-thread mesh/physics creation
 - Height-map terrain collision near the player
-- Worker-thread terrain-data generation
-- Main-thread-only mesh, physics, and scene-tree creation
-- Third-person traversal with sprint, jump, slopes, camera collision, and zoom
-- F3 profiling/debug overlay
+- Broad continental elevation
+- Rolling terrain separated from macro elevation
+- Settlement-friendly flatland patches
+- Region-gated ridges and long valley/depression bands
+- Configurable sea level plus a prototype water plane
+- Procedural spawn search preferring dry/buildable terrain
+- Deterministic moisture, forest-potential, rockiness, and buildability masks
+- Terrain coloring using moisture, shoreline, and actual slope exposure
+- Deterministic prototype tree and rock placement from those masks
+- Trees and rocks rendered with per-chunk `MultiMesh` batches
+- Third-person movement, sprinting, jumping, slope snapping, camera collision, and zoom
+- F3 debug HUD for streaming, surface masks, decoration counts, and chunk-generation timings
 
-### Added in 0.02
-
-- Broad continental elevation instead of uniform rolling noise
-- Separate rolling-hill layer
-- Large deterministic flatland patches intended for future settlement placement
-- Region-gated ridges rather than ridges everywhere
-- Long valley/depression bands that can cut below sea level
-- Smaller surface-detail layer
-- Prototype sea surface at a configurable sea level
-- Procedural spawn search that avoids water and strongly prefers buildable ground
-- Per-vertex moisture mask
-- Per-vertex forest-potential mask
-- Per-vertex rockiness mask
-- Per-vertex buildability mask
-- Terrain vertex coloring driven by moisture, rockiness, and shoreline height
-- F3 readout for the environmental masks under the player
-
-The masks are generated data, not just visuals. Future trees, exposed rocks, creature territories, resources, and cave-surface clues should consume these same deterministic values rather than scatter independently.
+The tree cones and box rocks are intentionally placeholder geometry. Their job is to expose whether forest/clearing/rock-field distribution feels natural before real assets or gameplay interactions are added.
 
 ## Controls
 
@@ -48,23 +37,21 @@ The masks are generated data, not just visuals. Future trees, exposed rocks, cre
 - Click — capture mouse again
 - `F3` — toggle world/debug HUD
 
-## 0.02 playtest checklist
+## v0.02 playtest checklist
 
-1. Run the main scene and confirm the procedural spawn is on dry, walkable ground.
-2. Look for terrain that reads at multiple scales: broad lowlands, rolling areas, ridges, and valleys.
-3. Check whether there are useful flatter areas rather than constant rolling terrain.
-4. Find water and verify shorelines come from terrain crossing the fixed sea level rather than a separate handcrafted basin.
-5. Walk across multiple chunks and confirm macro features continue seamlessly across chunk boundaries.
-6. Cross into negative world coordinates and verify generation remains stable.
-7. Watch the F3 `Moist`, `Forest`, `Rock`, and `Build` values while moving between visibly different terrain.
-8. Check that collision still matches the reshaped visual terrain.
-9. Watch worker timings; the richer generator may cost more CPU per chunk, but it should remain off the main thread.
-10. Note seeds/locations where the landforms look especially good or obviously artificial so we can tune the shaping rules rather than hand-edit maps.
+1. Confirm spawn is dry and reasonably walkable.
+2. Traverse several chunks and look for broad lowlands, hills, ridges, valleys, and shoreline changes.
+3. Check that high `Rock` values no longer paint huge smooth areas completely gray.
+4. Compare the F3 `Forest` value with visible tree density and look for recognizable clearings/forest patches.
+5. Compare `Rock` with physical rock placements and exposed stone on steeper terrain.
+6. Cross chunk boundaries and negative coordinates looking for terrain or decoration seams.
+7. Record `Data (worker)` and `Build (main)` timings after the direct-mask optimization.
+8. Walk away and return; terrain and placeholder decorations should regenerate identically.
 
-## Next targets after 0.02 terrain is approved
+## Next targets after this pass
 
-1. Tune macro landform frequencies and amplitudes from actual playtest screenshots.
-2. Generate trees and rocks from the existing forest/rock masks.
-3. Introduce clearings and denser woodland as micro-regions within the same first biome.
-4. Add the first simple surface creature only after the environment is interesting to traverse.
-5. Begin cave-entrance placement from terrain/slope/rock rules, keeping the underground hook connected to the generated surface.
+1. Tune macro terrain and environmental thresholds from screenshots/playtests.
+2. Replace placeholder distribution rules only if forests or rock fields look artificial.
+3. Add simple grass/ground cover after large vegetation placement is convincing.
+4. Begin cave-entrance candidate generation once the surface biome itself is interesting to traverse.
+5. Add actual gathering/combat interactions only after the generated environment is stable enough to play in.
