@@ -143,7 +143,7 @@ func _process_generation_queue() -> void:
 		if pending_chunks.is_empty():
 			break
 
-		var coord := pending_chunks.pop_front()
+		var coord: Vector2i = pending_chunks.pop_front()
 		pending_lookup.erase(coord)
 
 		if desired_chunks.has(coord) and not chunks.has(coord):
@@ -155,7 +155,7 @@ func _create_chunk(coord: Vector2i) -> void:
 		return
 
 	var started_usec := Time.get_ticks_usec()
-	var data := generator.generate_chunk_data(coord)
+	var data: Dictionary = generator.generate_chunk_data(coord)
 	var chunk = TerrainChunkScript.new()
 	chunk.position = Vector3(
 		float(coord.x) * settings.chunk_size,
