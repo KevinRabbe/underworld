@@ -1,10 +1,11 @@
 extends RefCounted
 
-var settings: Resource
-var macro_noise := FastNoiseLite.new()
-var detail_noise := FastNoiseLite.new()
+var settings: UnderworldWorldSettings
+var macro_noise: FastNoiseLite = FastNoiseLite.new()
+var detail_noise: FastNoiseLite = FastNoiseLite.new()
 
-func configure(world_settings: Resource) -> void:
+
+func configure(world_settings: UnderworldWorldSettings) -> void:
 	settings = world_settings
 
 	macro_noise.seed = settings.world_seed
@@ -25,47 +26,47 @@ func configure(world_settings: Resource) -> void:
 
 
 func get_height(world_x: float, world_z: float) -> float:
-	var macro_height := macro_noise.get_noise_2d(world_x, world_z) * settings.macro_amplitude
-	var detail_height := detail_noise.get_noise_2d(world_x, world_z) * settings.detail_amplitude
+	var macro_height: float = macro_noise.get_noise_2d(world_x, world_z) * settings.macro_amplitude
+	var detail_height: float = detail_noise.get_noise_2d(world_x, world_z) * settings.detail_amplitude
 	return macro_height + detail_height
 
 
 func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
-	var resolution: int = max(settings.vertices_per_side, 2)
+	var resolution: int = maxi(settings.vertices_per_side, 2)
 	var spacing: float = settings.chunk_size / float(resolution - 1)
-	var vertex_count := resolution * resolution
+	var vertex_count: int = resolution * resolution
 
-	var vertices := PackedVector3Array()
-	var normals := PackedVector3Array()
-	var uvs := PackedVector2Array()
-	var indices := PackedInt32Array()
+	var vertices: PackedVector3Array = PackedVector3Array()
+	var normals: PackedVector3Array = PackedVector3Array()
+	var uvs: PackedVector2Array = PackedVector2Array()
+	var indices: PackedInt32Array = PackedInt32Array()
 
 	vertices.resize(vertex_count)
 	normals.resize(vertex_count)
 	uvs.resize(vertex_count)
 
-	var chunk_world_x := float(chunk_coord.x) * settings.chunk_size
-	var chunk_world_z := float(chunk_coord.y) * settings.chunk_size
+	var chunk_world_x: float = float(chunk_coord.x) * settings.chunk_size
+	var chunk_world_z: float = float(chunk_coord.y) * settings.chunk_size
 
-	for z in range(resolution):
-		for x in range(resolution):
-			var index := z * resolution + x
-			var local_x := float(x) * spacing
-			var local_z := float(z) * spacing
-			var world_x := chunk_world_x + local_x
-			var world_z := chunk_world_z + local_z
-			var height := get_height(world_x, world_z)
+	for z: int in range(resolution):
+		for x: int in range(resolution):
+			var index: int = z * resolution + x
+			var local_x: float = float(x) * spacing
+			var local_z: float = float(z) * spacing
+			var world_x: float = chunk_world_x + local_x
+			var world_z: float = chunk_world_z + local_z
+			var height: float = get_height(world_x, world_z)
 
 			vertices[index] = Vector3(local_x, height, local_z)
 			uvs[index] = Vector2(world_x, world_z) * 0.02
 			normals[index] = _get_normal(world_x, world_z, spacing)
 
-	for z in range(resolution - 1):
-		for x in range(resolution - 1):
-			var top_left := z * resolution + x
-			var bottom_left := (z + 1) * resolution + x
-			var top_right := top_left + 1
-			var bottom_right := bottom_left + 1
+	for z: int in range(resolution - 1):
+		for x: int in range(resolution - 1):
+			var top_left: int = z * resolution + x
+			var bottom_left: int = (z + 1) * resolution + x
+			var top_right: int = top_left + 1
+			var bottom_right: int = bottom_left + 1
 
 			indices.append(top_left)
 			indices.append(bottom_left)
@@ -84,10 +85,10 @@ func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
 
 
 func _get_normal(world_x: float, world_z: float, sample_distance: float) -> Vector3:
-	var left := get_height(world_x - sample_distance, world_z)
-	var right := get_height(world_x + sample_distance, world_z)
-	var back := get_height(world_x, world_z - sample_distance)
-	var front := get_height(world_x, world_z + sample_distance)
+	var left: float = get_height(world_x - sample_distance, world_z)
+	var right: float = get_height(world_x + sample_distance, world_z)
+	var back: float = get_height(world_x, world_z - sample_distance)
+	var front: float = get_height(world_x, world_z + sample_distance)
 
 	return Vector3(
 		left - right,
