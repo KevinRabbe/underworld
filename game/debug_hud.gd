@@ -51,17 +51,33 @@ func _refresh_text() -> void:
 	var chunk: Vector2i = world.get_current_player_chunk()
 	var speed: float = player.get_horizontal_speed()
 	var worker_state: String = "busy" if world.is_worker_busy() else "idle"
+	var surface: Dictionary = world.get_surface_sample_at_world(position.x, position.z)
+	var decoration_counts: Vector2i = world.get_current_decoration_counts()
 
 	label.text = (
-		"UNDERWORLD — prototype 0.01\n"
+		"UNDERWORLD — prototype 0.02\n"
 		+ "FPS: %d\n" % Engine.get_frames_per_second()
-		+ "Seed: %d\n" % settings.world_seed
+		+ "Seed: %d   Sea: %.1f\n" % [settings.world_seed, settings.sea_level]
 		+ "Position: %.1f, %.1f, %.1f\n" % [position.x, position.y, position.z]
 		+ "Chunk: %d, %d\n" % [chunk.x, chunk.y]
 		+ "Loaded: %d   Pending: %d   Generated: %d\n" % [
 			world.get_loaded_chunk_count(),
 			world.get_pending_chunk_count(),
 			world.get_total_chunks_generated()
+		]
+		+ "Surface H: %.1f   Slope: %.3f\n" % [
+			float(surface["height"]),
+			float(surface["slope"])
+		]
+		+ "Moist: %.2f   Forest: %.2f   Rock: %.2f   Build: %.2f\n" % [
+			float(surface["moisture"]),
+			float(surface["forest_density"]),
+			float(surface["rockiness"]),
+			float(surface["buildability"])
+		]
+		+ "Chunk decor: %d trees   %d rocks\n" % [
+			decoration_counts.x,
+			decoration_counts.y
 		]
 		+ "Worker: %s\n" % worker_state
 		+ "Chunk CPU: %.2f ms   Max: %.2f ms\n" % [
