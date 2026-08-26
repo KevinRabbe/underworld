@@ -2,26 +2,40 @@
 
 Procedural survival game prototype built with Godot 4.
 
-## Prototype 0.01 — world streaming
+## Prototype 0.02 — first generated biome
 
-Current goal: prove deterministic chunk generation, streaming, and basic third-person traversal before adding gameplay systems.
+Current goal: turn the proven chunk-streaming foundation into a world that already has readable geography and reusable environmental rules.
 
-Implemented:
-- Seeded procedural terrain using `FastNoiseLite`
+### Streaming foundation from 0.01
+
+- Seeded deterministic terrain
 - 128 m terrain chunks with 65×65 vertices by default
-- World-coordinate sampling so neighboring chunks share terrain borders
-- Distance-prioritized chunk generation around the player
-- Load/unload hysteresis to avoid chunk-edge regeneration thrashing
-- Collision only near the player
-- Deterministic regeneration from world seed + world coordinates
-- Third-person movement with acceleration/deceleration and camera-relative controls
-- Smooth character facing, slope snapping, coyote time, and jump buffering
-- Spring-arm camera collision and mouse-wheel camera distance
-- Fall-respawn safeguard for prototype testing
-- F3 debug HUD for FPS, chunk state, player position, speed, and chunk-generation timings
-- Main-thread scene/mesh creation kept separate from terrain data generation
+- Seamless world-coordinate sampling across chunk borders
+- Distance-prioritized chunk loading with unload hysteresis
+- Height-map terrain collision near the player
+- Worker-thread terrain-data generation
+- Main-thread-only mesh, physics, and scene-tree creation
+- Third-person traversal with sprint, jump, slopes, camera collision, and zoom
+- F3 profiling/debug overlay
 
-Current generation is intentionally simple: macro elevation noise plus smaller detail noise. Terrain quality comes after streaming correctness.
+### Added in 0.02
+
+- Broad continental elevation instead of uniform rolling noise
+- Separate rolling-hill layer
+- Large deterministic flatland patches intended for future settlement placement
+- Region-gated ridges rather than ridges everywhere
+- Long valley/depression bands that can cut below sea level
+- Smaller surface-detail layer
+- Prototype sea surface at a configurable sea level
+- Procedural spawn search that avoids water and strongly prefers buildable ground
+- Per-vertex moisture mask
+- Per-vertex forest-potential mask
+- Per-vertex rockiness mask
+- Per-vertex buildability mask
+- Terrain vertex coloring driven by moisture, rockiness, and shoreline height
+- F3 readout for the environmental masks under the player
+
+The masks are generated data, not just visuals. Future trees, exposed rocks, creature territories, resources, and cave-surface clues should consume these same deterministic values rather than scatter independently.
 
 ## Controls
 
@@ -32,25 +46,25 @@ Current generation is intentionally simple: macro elevation noise plus smaller d
 - Mouse wheel — camera distance
 - `Esc` — release mouse
 - Click — capture mouse again
-- `F3` — toggle streaming/debug HUD
+- `F3` — toggle world/debug HUD
 
-The prototype registers these gameplay input actions at runtime so we can iterate without hand-editing the Input Map during this first pass.
+## 0.02 playtest checklist
 
-## First playtest checklist
+1. Run the main scene and confirm the procedural spawn is on dry, walkable ground.
+2. Look for terrain that reads at multiple scales: broad lowlands, rolling areas, ridges, and valleys.
+3. Check whether there are useful flatter areas rather than constant rolling terrain.
+4. Find water and verify shorelines come from terrain crossing the fixed sea level rather than a separate handcrafted basin.
+5. Walk across multiple chunks and confirm macro features continue seamlessly across chunk boundaries.
+6. Cross into negative world coordinates and verify generation remains stable.
+7. Watch the F3 `Moist`, `Forest`, `Rock`, and `Build` values while moving between visibly different terrain.
+8. Check that collision still matches the reshaped visual terrain.
+9. Watch worker timings; the richer generator may cost more CPU per chunk, but it should remain off the main thread.
+10. Note seeds/locations where the landforms look especially good or obviously artificial so we can tune the shaping rules rather than hand-edit maps.
 
-1. Open the project in Godot 4 and run the main scene.
-2. Walk and sprint across several chunk boundaries in multiple directions.
-3. Cross into negative world coordinates as well as positive coordinates.
-4. Look for visible mesh/lighting seams or collision gaps at chunk borders.
-5. Watch `Chunk gen` and `Max` in the F3 overlay for frame-spike clues.
-6. Hover around a chunk boundary and confirm loaded chunks do not constantly regenerate.
-7. Walk away and return to an area; the terrain should regenerate identically.
-8. Check slopes, jumping, camera collision, and camera zoom for obvious controller problems.
+## Next targets after 0.02 terrain is approved
 
-## Next technical targets
-
-1. Run and profile chunk generation in Godot.
-2. Move terrain-data generation to worker threads if measured generation time causes frame spikes.
-3. Fix any controller, seam, or collision issues discovered in the first local run.
-4. Begin macro terrain shaping only after the streaming foundation is stable.
-5. Add vegetation/ground-cover generation after the terrain itself is interesting to traverse.
+1. Tune macro landform frequencies and amplitudes from actual playtest screenshots.
+2. Generate trees and rocks from the existing forest/rock masks.
+3. Introduce clearings and denser woodland as micro-regions within the same first biome.
+4. Add the first simple surface creature only after the environment is interesting to traverse.
+5. Begin cave-entrance placement from terrain/slope/rock rules, keeping the underground hook connected to the generated surface.
