@@ -9,6 +9,7 @@ var settings: UnderworldWorldSettings
 var world
 var player
 var debug_hud
+var water_surface: MeshInstance3D
 var spawn_xz: Vector3 = Vector3.ZERO
 
 
@@ -17,6 +18,15 @@ func _ready() -> void:
 	_create_world()
 	_create_player()
 	_create_debug_hud()
+
+
+func _process(_delta: float) -> void:
+	# The prototype sea is intentionally just a large flat plane. Recenter it
+	# around the player so it behaves as effectively infinite during streaming
+	# tests without creating water chunks yet.
+	if water_surface != null and player != null:
+		water_surface.global_position.x = player.global_position.x
+		water_surface.global_position.z = player.global_position.z
 
 
 func _setup_environment() -> void:
@@ -42,13 +52,38 @@ func _setup_environment() -> void:
 
 func _create_world() -> void:
 	settings = WorldSettingsScript.new()
-	spawn_xz = Vector3(settings.chunk_size * 0.5, 0.0, settings.chunk_size * 0.5)
 
 	world = ChunkManagerScript.new()
 	world.name = "World"
 	world.configure(settings)
 	add_child(world)
+
+	var preferred_spawn: Vector3 = Vector3(
+		settings.chunk_size * 0.5,
+		0.0,
+		settings.chunk_size * 0.5
+	)
+	spawn_xz = world.find_spawn_xz(preferred_spawn)
 	world.generate_initial(spawn_xz)
+	_create_water_surface()
+
+
+func _create_water_surface() -> void:
+	water_surface = MeshInstance3D.new()
+	water_surface.name = "PrototypeSea"
+
+	var plane: PlaneMesh = PlaneMesh.new()
+	plane.size = Vector2(settings.water_plane_size, settings.water_plane_size)
+	water_surface.mesh = plane
+
+	var water_material: StandardMaterial3D = StandardMaterial3D.new()
+	water_material.albedo_color = Color(0.08, 0.30, 0.48, 0.72)
+	water_material.roughness = 0.18
+	water_material.metallic = 0.05
+	water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	water_surface.material_override = water_material
+	water_surface.position = Vector3(spawn_xz.x, settings.sea_level + 0.03, spawn_xz.z)
+	add_child(water_surface)
 
 
 func _create_player() -> void:
