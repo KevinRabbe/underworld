@@ -5,6 +5,7 @@ class_name UnderworldWorldSettings
 @export var chunk_size: float = 128.0
 @export var vertices_per_side: int = 65
 @export var load_radius: int = 2
+@export var unload_radius: int = 3
 @export var collision_radius: int = 1
 @export var max_chunks_generated_per_frame: int = 1
 
