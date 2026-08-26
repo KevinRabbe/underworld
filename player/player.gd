@@ -101,8 +101,16 @@ func get_horizontal_speed() -> float:
 func _request_harvest() -> void:
 	if camera == null:
 		return
+
 	var direction: Vector3 = -camera.global_transform.basis.z.normalized()
-	harvest_requested.emit(camera.global_position, direction, harvest_range)
+
+	# harvest_range describes reach from the character, not from a third-person
+	# camera several metres behind them. Extend the camera ray by its actual
+	# distance to the player's chest so zooming does not steal interaction range.
+	var player_chest: Vector3 = global_position + Vector3(0.0, 1.0, 0.0)
+	var camera_to_player: float = camera.global_position.distance_to(player_chest)
+	var ray_distance: float = camera_to_player + harvest_range
+	harvest_requested.emit(camera.global_position, direction, ray_distance)
 
 
 func _configure_character_body() -> void:
