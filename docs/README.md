@@ -27,9 +27,12 @@ Existing code is not automatically the design. Prototype code may be replaced wh
 ## Documents
 
 - `GAME_PILLARS.md` — what Underworld is and what it should not drift into.
-- `WORLD_ARCHITECTURE.md` — surface/underworld relationship, depth layers, cave topology, entrances, connectivity, building freedom, terrain modification, and audio rules.
+- `WORLD_ARCHITECTURE.md` — surface/Underworld relationship, depth layers, cave topology, entrances, connectivity, building freedom, terrain modification, and audio rules.
 - `MINING_AND_RESOURCES.md` — small-node harvesting versus large-deposit excavation.
+- `TECHNICAL_ARCHITECTURE.md` — system boundaries: deterministic definitions, topology, geometry descriptions, runtime representation, streaming, persistence and validation.
+- `UNDERWORLD_GRAPH_SCHEMA.md` — concrete pure-data schema for regions, networks, nodes, edges, entrances, cross-region links and future special-location hooks.
 - `DEVELOPMENT_RULEBOOK.md` — architecture-first development, testing cadence, persistence, deterministic generation, and feature-scope rules.
+- `NEXT_DEVELOPMENT_CYCLE.md` — current architecture deliverables and exit criteria before main Underworld generator implementation.
 - `DECISION_LOG.md` — chronological record of locked decisions and later revisions.
 
 ## Change rule
