@@ -58,7 +58,7 @@ func try_attack(origin: Vector3, direction: Vector3, max_distance: float) -> voi
 		last_combat_message = "Attack blocked"
 		return
 
-	var hit_position: Vector3 = result.get("position", collider.global_position)
+	var hit_position: Vector3 = result["position"]
 	var player_chest: Vector3 = player.global_position + Vector3(0.0, 1.0, 0.0)
 	if player_chest.distance_to(hit_position) > PLAYER_ATTACK_REACH + 0.8:
 		last_combat_message = "Enemy out of reach"
@@ -69,10 +69,10 @@ func try_attack(origin: Vector3, direction: Vector3, max_distance: float) -> voi
 		return
 
 	var damage: int = _get_player_attack_damage()
-	var remaining_health: int = collider.apply_damage(damage, player.global_position)
+	var remaining_health: int = int(collider.call("apply_damage", damage, player.global_position))
 	var enemy_name: String = "Enemy"
 	if collider.has_method("get_display_name"):
-		enemy_name = collider.get_display_name()
+		enemy_name = str(collider.call("get_display_name"))
 
 	if remaining_health <= 0:
 		last_combat_message = "%s defeated" % enemy_name
@@ -150,9 +150,11 @@ func _spawn_enemy_near_player() -> void:
 
 
 func _is_too_close_to_other_enemy(position: Vector3) -> bool:
-	for enemy in active_enemies.values():
-		if is_instance_valid(enemy) and enemy.global_position.distance_to(position) < 6.0:
-			return true
+	for enemy_variant in active_enemies.values():
+		var enemy_node: Node3D = enemy_variant as Node3D
+		if enemy_node != null and is_instance_valid(enemy_node):
+			if enemy_node.global_position.distance_to(position) < 6.0:
+				return true
 	return false
 
 
