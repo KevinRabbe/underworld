@@ -171,7 +171,7 @@ func _refresh_text() -> void:
 			settings.stone_axe_wood_cost, settings.stone_axe_stone_cost,
 			settings.stone_pickaxe_wood_cost, settings.stone_pickaxe_stone_cost
 		]
-		+ "LMB: harvest   |   RMB: melee   |   Ctrl: dodge   |   Q: parry"
+		+ "LMB: harvest   |   RMB: melee   |   Ctrl: dodge   |   Q: parry   |   F: block"
 	)
 
 
