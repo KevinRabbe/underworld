@@ -122,7 +122,7 @@ func _refresh_text() -> void:
 			resources.x, resources.y, world.get_destroyed_object_count()
 		]
 		+ "Equipped: %s   Action: %s\n" % [
-			world.get_tool_display_name(equipped), world.get_last_harvest_message()
+			_tool_display_name(equipped), world.get_last_harvest_message()
 		]
 		+ "Worker: %s\n" % worker_state
 		+ "Chunk CPU: %.2f ms   Max: %.2f ms\n" % [
@@ -158,3 +158,13 @@ func _format_slot(slot: int, item_name: String, available: bool, selected_slot: 
 	if slot == selected_slot:
 		return "> %s <" % content
 	return content
+
+
+func _tool_display_name(tool_id: String) -> String:
+	match tool_id:
+		"stone_axe":
+			return "Stone Axe"
+		"stone_pickaxe":
+			return "Stone Pickaxe"
+		_:
+			return "Hands"
