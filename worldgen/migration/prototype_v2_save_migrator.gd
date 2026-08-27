@@ -57,6 +57,19 @@ func migrate(
 				"reason": "invalid legacy v2 object ID",
 			})
 			continue
+
+		var accepted_index: int = int(parsed["accepted_index"])
+		var max_candidates: int = _max_legacy_candidate_count(
+			str(parsed["object_type"]),
+			world_settings
+		)
+		if max_candidates <= 0 or accepted_index >= max_candidates:
+			unresolved.append({
+				"legacy_id": legacy_id,
+				"reason": "accepted index is outside the possible legacy candidate range",
+			})
+			continue
+
 		var chunk_key: String = "%d:%d" % [int(parsed["chunk_x"]), int(parsed["chunk_z"])]
 		if not ids_by_chunk.has(chunk_key):
 			ids_by_chunk[chunk_key] = {
@@ -132,6 +145,24 @@ func migrate(
 		"unresolved_legacy_ids": unresolved,
 		"diagnostics": diagnostics,
 	}
+
+
+static func _max_legacy_candidate_count(
+	object_type: String,
+	world_settings: UnderworldWorldSettings
+) -> int:
+	var resolution: int = maxi(world_settings.vertices_per_side, 2)
+	var step: int
+	if object_type == "tree" or object_type == "rock":
+		step = maxi(world_settings.decoration_vertex_step, 2)
+	elif object_type == "branch" or object_type == "loose_stone":
+		step = maxi(world_settings.pickup_vertex_step, 2)
+	else:
+		return 0
+
+	var intervals: int = resolution - 1
+	var cells_per_axis: int = ceili(float(intervals) / float(step))
+	return cells_per_axis * cells_per_axis
 
 
 static func _deduplicate_sorted(values: Array[String]) -> Array[String]:
