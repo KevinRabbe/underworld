@@ -15,6 +15,7 @@ const SPRINT_SPEED := 10.0
 const SPRINT_STAMINA_DRAIN := 12.0
 const BLOCK_MOVE_SPEED := 2.4
 const BLOCK_FRONT_DOT := 0.342
+const PARRY_FRONT_DOT := 0.174
 const BLOCK_STAMINA_BASE := 5.0
 const BLOCK_STAMINA_PER_DAMAGE := 1.25
 const GROUND_ACCELERATION := 30.0
@@ -211,10 +212,17 @@ func receive_melee_attack(
 		return &"ignored"
 	if action_controller.is_dodge_iframe_active():
 		return &"dodged"
-	if parryable and action_controller.is_parry_active():
+	if (
+		parryable
+		and action_controller.is_parry_active()
+		and _is_source_in_front_arc(source_position, PARRY_FRONT_DOT)
+	):
 		parry_succeeded.emit(source_position)
 		return &"parried"
-	if action_controller.is_blocking() and _is_source_in_block_arc(source_position):
+	if (
+		action_controller.is_blocking()
+		and _is_source_in_front_arc(source_position, BLOCK_FRONT_DOT)
+	):
 		var impact_cost: float = BLOCK_STAMINA_BASE + float(amount) * BLOCK_STAMINA_PER_DAMAGE
 		if action_controller.try_absorb_block(impact_cost):
 			return &"blocked"
@@ -224,7 +232,7 @@ func receive_melee_attack(
 	return &"hit"
 
 
-func _is_source_in_block_arc(source_position: Vector3) -> bool:
+func _is_source_in_front_arc(source_position: Vector3, minimum_dot: float) -> bool:
 	if visual_root == null:
 		return false
 	var to_source: Vector3 = source_position - global_position
@@ -235,7 +243,7 @@ func _is_source_in_block_arc(source_position: Vector3) -> bool:
 	forward.y = 0.0
 	if forward.is_zero_approx():
 		return false
-	return forward.normalized().dot(to_source.normalized()) >= BLOCK_FRONT_DOT
+	return forward.normalized().dot(to_source.normalized()) >= minimum_dot
 
 
 func _apply_damage(amount: int, source_position: Vector3) -> void:
@@ -278,6 +286,7 @@ func _begin_tool_action() -> bool:
 		return false
 	if not action_controller.try_start_tool_action(tool_use_cooldown_duration):
 		return false
+	_face_combat_camera()
 	tool_use_cooldown_timer = tool_use_cooldown_duration
 	tool_swing_timer = tool_use_cooldown_duration
 	if mannequin != null:
@@ -325,12 +334,14 @@ func _handle_action_inputs() -> void:
 
 	if Input.is_action_just_pressed("parry") and action_controller.try_start_parry():
 		jump_buffer_timer = 0.0
+		_face_combat_camera()
 		if mannequin != null:
 			mannequin.play_parry()
 		return
 
 	if Input.is_action_pressed("block") and action_controller.try_start_block():
 		jump_buffer_timer = 0.0
+		_face_combat_camera()
 
 
 func _update_tool_use_feedback(delta: float) -> void:
@@ -429,6 +440,17 @@ func _camera_relative_direction(input_vector: Vector2) -> Vector3:
 	forward = forward.normalized()
 	right = right.normalized()
 	return (right * input_vector.x + forward * -input_vector.y).normalized()
+
+
+func _face_combat_camera() -> void:
+	if camera_yaw == null or visual_root == null:
+		return
+	var forward: Vector3 = -camera_yaw.global_transform.basis.z
+	forward.y = 0.0
+	if forward.is_zero_approx():
+		return
+	forward = forward.normalized()
+	visual_root.rotation.y = atan2(forward.x, forward.z)
 
 
 func _update_visual_facing(delta: float) -> void:
