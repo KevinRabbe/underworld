@@ -6,6 +6,8 @@ const MacroRegionGenerator := preload("res://worldgen/underworld/macro_region_ge
 const PrimaryTopologyGenerator := preload("res://worldgen/underworld/primary_topology_generator.gd")
 const EntranceGenerator := preload("res://worldgen/underworld/entrance_generator.gd")
 const ConnectivityGenerator := preload("res://worldgen/underworld/secondary_connectivity_generator.gd")
+const HookGenerator := preload("res://worldgen/underworld/special_location_hook_generator.gd")
+const RegionFinalizer := preload("res://worldgen/underworld/region_finalizer.gd")
 const GeometryGenerator := preload("res://worldgen/underworld/cave_geometry_generator.gd")
 
 
@@ -28,23 +30,46 @@ static func _test_determinism_and_coverage(failures: Array[String]) -> void:
 		return
 	_expect_equal(
 		failures,
+		"special-location reservation is deterministic",
+		first["hooks"].fingerprint,
+		second["hooks"].fingerprint
+	)
+	_expect_equal(
+		failures,
+		"region finalization is deterministic",
+		first["finalized"].fingerprint,
+		second["finalized"].fingerprint
+	)
+	_expect_equal(
+		failures,
 		"cave geometry is deterministic",
 		first["geometry"].fingerprint,
 		second["geometry"].fingerprint
 	)
 	var geometry = first["geometry"]
-	var connectivity = first["connectivity"]
+	var finalized = first["finalized"]
 	_expect_equal(
 		failures,
-		"one chamber descriptor exists per graph node",
+		"one chamber descriptor exists per finalized graph node",
 		geometry.chamber_descriptors.size(),
-		connectivity.bundle.nodes.size()
+		finalized.bundle.nodes.size()
 	)
 	_expect_equal(
 		failures,
-		"one tunnel descriptor exists per owned graph edge",
+		"one tunnel descriptor exists per finalized owned graph edge",
 		geometry.tunnel_descriptors.size(),
-		connectivity.bundle.edges.size()
+		finalized.bundle.edges.size()
+	)
+	_expect_true(
+		failures,
+		"reserved special-site count stays bounded",
+		finalized.bundle.special_location_hooks.size() <= 2
+	)
+	_expect_equal(
+		failures,
+		"region special hook ids match reserved hook definitions",
+		finalized.bundle.region_definition.special_location_hook_ids.size(),
+		finalized.bundle.special_location_hooks.size()
 	)
 	var chamber_nodes: Dictionary = {}
 	for chamber in geometry.chamber_descriptors:
@@ -82,7 +107,7 @@ static func _test_determinism_and_coverage(failures: Array[String]) -> void:
 						node_index[tunnel.endpoint_b_node_id].world_position
 					) <= 0.001
 				)
-	for reference in connectivity.external_edge_references:
+	for reference in finalized.external_edge_references:
 		_expect_true(
 			failures,
 			"non-owner cross-region reference does not duplicate tunnel geometry",
@@ -96,6 +121,12 @@ static func _test_neighbor_order_independence(failures: Array[String]) -> void:
 	if not bool(forward.get("success", false)) or not bool(reversed.get("success", false)):
 		failures.append("geometry neighbor-order fixture failed")
 		return
+	_expect_equal(
+		failures,
+		"neighbor scheduling order cannot change finalized region",
+		forward["finalized"].fingerprint,
+		reversed["finalized"].fingerprint
+	)
 	_expect_equal(
 		failures,
 		"neighbor scheduling order cannot change geometry",
@@ -113,6 +144,8 @@ static func _test_negative_region(failures: Array[String]) -> void:
 	)
 	if not bool(built.get("success", false)):
 		return
+	for hook in built["finalized"].bundle.special_location_hooks:
+		_expect_true(failures, "negative-region hook has stable id", not hook.stable_id.is_empty())
 	for chamber in built["geometry"].chamber_descriptors:
 		_expect_true(failures, "negative-region chamber has stable id", not chamber.stable_id.is_empty())
 	for tunnel in built["geometry"].tunnel_descriptors:
@@ -163,10 +196,26 @@ static func _build(seed: int, coord: Vector2i, reverse_neighbors: bool) -> Dicti
 	)
 	if not connectivity_stage.success:
 		return _failure("secondary_connectivity", connectivity_stage.diagnostics)
+	var hook_stage = HookGenerator.generate(
+		context,
+		macro_stage.data,
+		connectivity_stage.data
+	)
+	if not hook_stage.success:
+		return _failure("special_location_hooks", hook_stage.diagnostics)
+	var finalization_stage = RegionFinalizer.generate(
+		context,
+		macro_stage.data,
+		entrance_stage.data,
+		connectivity_stage.data,
+		hook_stage.data
+	)
+	if not finalization_stage.success:
+		return _failure("region_finalization", finalization_stage.diagnostics)
 	var geometry_stage = GeometryGenerator.generate(
 		context,
 		macro_stage.data,
-		connectivity_stage.data,
+		finalization_stage.data,
 		neighbor_views
 	)
 	if not geometry_stage.success:
@@ -179,6 +228,8 @@ static func _build(seed: int, coord: Vector2i, reverse_neighbors: bool) -> Dicti
 		"entrances": entrance_stage.data,
 		"neighbor_views": neighbor_views,
 		"connectivity": connectivity_stage.data,
+		"hooks": hook_stage.data,
+		"finalized": finalization_stage.data,
 		"geometry": geometry_stage.data,
 		"diagnostics": [],
 	}
@@ -186,7 +237,7 @@ static func _build(seed: int, coord: Vector2i, reverse_neighbors: bool) -> Dicti
 
 static func _all_node_index(built: Dictionary) -> Dictionary:
 	var result: Dictionary = {}
-	for node in built["connectivity"].bundle.nodes:
+	for node in built["finalized"].bundle.nodes:
 		result[node.stable_id] = node
 	for view in built["neighbor_views"]:
 		for node in view["primary_topology"].bundle.nodes:
