@@ -96,8 +96,8 @@ WASD      movement
 Shift     sprint
 Space     jump
 Ctrl      dodge
-Q         parry
-F         block (temporary prototype binding)
+Q         frontal parry
+F         frontal block (temporary prototype binding)
 LMB       harvest / tool action
 RMB       melee attack
 ```
@@ -215,8 +215,8 @@ stamina current/max
 current action state
 enemy count / combat message
 Ctrl: dodge
-Q: parry
-F: block
+Q: frontal parry
+F: frontal block
 ```
 
 This is diagnostic UI, not a final stamina bar or final combat HUD.
