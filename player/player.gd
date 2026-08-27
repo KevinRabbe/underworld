@@ -276,6 +276,8 @@ func _begin_tool_action() -> bool:
 		or not action_controller.is_free()
 	):
 		return false
+	if not action_controller.try_start_tool_action(tool_use_cooldown_duration):
+		return false
 	tool_use_cooldown_timer = tool_use_cooldown_duration
 	tool_swing_timer = tool_use_cooldown_duration
 	if mannequin != null:
@@ -399,7 +401,7 @@ func _update_horizontal_velocity(delta: float) -> void:
 	var target_speed: float = BLOCK_MOVE_SPEED if action_controller.is_blocking() else WALK_SPEED
 	if (
 		is_on_floor()
-		and not action_controller.is_blocking()
+		and action_controller.is_free()
 		and not move_direction.is_zero_approx()
 		and Input.is_action_pressed("sprint")
 		and stamina.spend(SPRINT_STAMINA_DRAIN * delta)
