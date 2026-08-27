@@ -21,11 +21,10 @@ class DefensiveTarget:
 		return response
 
 
-static func run() -> Array[String]:
+static func run(tree: SceneTree) -> Array[String]:
 	var failures: Array[String] = []
-	var tree := Engine.get_main_loop() as SceneTree
-	if tree == null:
-		failures.append("Burrower defense test requires SceneTree main loop")
+	if tree == null or tree.root == null:
+		failures.append("Burrower defense test requires SceneTree root")
 		return failures
 
 	_test_parry_response(tree, failures)
