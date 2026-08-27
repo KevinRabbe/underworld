@@ -84,6 +84,7 @@ Examples:
 category.item.equipment.weapon.melee.sword
 capability.equipable
 animation_role.action.parry
+rig_role.socket.hand.right
 ```
 
 These obey the same clarity/stability discipline but are resolved by their respective category/capability/role schemas, not as ordinary content definitions.
@@ -98,6 +99,16 @@ with:
 animation_role.action.parry
 ```
 (a controlled semantic role used inside animation-set definitions).
+
+Likewise:
+```text
+rig_profile.humanoid.prototype
+```
+is an authored rig-profile definition, while:
+```text
+rig_role.socket.hand.right
+```
+is a controlled role that a rig profile maps to a concrete skeleton/socket.
 
 ## Hierarchy is semantic, not class inheritance
 
