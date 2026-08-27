@@ -10,14 +10,14 @@ const RELEASE_DISTANCE := 72.0
 
 var world
 var player
-var settings: UnderworldWorldSettings
+var settings
 var active_enemies: Dictionary = {}
 var spawn_timer: float = 0.0
 var spawn_serial: int = 0
 var last_combat_message: String = "No threat nearby"
 
 
-func configure(world_node, player_node, world_settings: UnderworldWorldSettings) -> void:
+func configure(world_node, player_node, world_settings) -> void:
 	world = world_node
 	player = player_node
 	settings = world_settings
