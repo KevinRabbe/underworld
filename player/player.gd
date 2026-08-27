@@ -4,11 +4,15 @@ signal harvest_requested(origin: Vector3, direction: Vector3, max_distance: floa
 signal attack_requested(origin: Vector3, direction: Vector3, max_distance: float)
 signal hotbar_slot_requested(slot: int)
 signal craft_requested(recipe_id: String)
+signal parry_succeeded(source_position: Vector3)
 
 const PrototypeMannequinScript := preload("res://player/prototype_mannequin.gd")
+const StaminaComponentScript := preload("res://player/stamina_component.gd")
+const PlayerActionControllerScript := preload("res://player/player_action_controller.gd")
 
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 10.0
+const SPRINT_STAMINA_DRAIN := 12.0
 const GROUND_ACCELERATION := 30.0
 const GROUND_DECELERATION := 38.0
 const AIR_ACCELERATION := 7.0
@@ -44,6 +48,10 @@ var tool_swing_timer: float = 0.0
 var damage_invulnerability_timer: float = 0.0
 var health: int = MAX_HEALTH
 var equipped_tool_visual: String = "hands"
+var sprinting_this_frame: bool = false
+
+var stamina := StaminaComponentScript.new(100.0, 0.75, 20.0)
+var action_controller := PlayerActionControllerScript.new(stamina)
 
 var visual_root: Node3D
 var mannequin: UnderworldPrototypeMannequin
@@ -115,6 +123,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _physics_process(delta: float) -> void:
 	damage_invulnerability_timer = maxf(0.0, damage_invulnerability_timer - delta)
+	_handle_action_inputs()
 	_update_jump_timers(delta)
 	_update_vertical_velocity(delta)
 	_update_horizontal_velocity(delta)
@@ -124,6 +133,8 @@ func _physics_process(delta: float) -> void:
 	_update_camera_fov(delta)
 	_update_tool_use_feedback(delta)
 	_check_fall_respawn()
+	action_controller.tick(delta)
+	stamina.tick(delta)
 
 
 func set_respawn_position(position: Vector3) -> void:
@@ -155,14 +166,53 @@ func get_max_health() -> int:
 	return MAX_HEALTH
 
 
+func get_stamina() -> float:
+	return stamina.current_stamina
+
+
+func get_max_stamina() -> float:
+	return stamina.max_stamina
+
+
+func get_action_state_name() -> String:
+	return action_controller.state_name()
+
+
+func is_dodge_iframe_active() -> bool:
+	return action_controller.is_dodge_iframe_active()
+
+
+func is_parry_active() -> bool:
+	return action_controller.is_parry_active()
+
+
 func get_mannequin() -> UnderworldPrototypeMannequin:
 	return mannequin
 
 
 func take_damage(amount: int, source_position: Vector3) -> void:
-	if amount <= 0 or damage_invulnerability_timer > 0.0:
-		return
+	receive_melee_attack(amount, source_position, true)
 
+
+func receive_melee_attack(
+	amount: int,
+	source_position: Vector3,
+	parryable: bool = true
+) -> StringName:
+	if amount <= 0:
+		return &"ignored"
+	if action_controller.is_dodge_iframe_active():
+		return &"dodged"
+	if parryable and action_controller.is_parry_active():
+		parry_succeeded.emit(source_position)
+		return &"parried"
+	if damage_invulnerability_timer > 0.0:
+		return &"ignored"
+	_apply_damage(amount, source_position)
+	return &"hit"
+
+
+func _apply_damage(amount: int, source_position: Vector3) -> void:
 	damage_invulnerability_timer = DAMAGE_INVULNERABILITY
 	health = maxi(health - amount, 0)
 	if mannequin != null:
@@ -194,7 +244,11 @@ func _request_attack() -> void:
 
 
 func _begin_tool_action() -> bool:
-	if camera == null or tool_use_cooldown_timer > 0.0:
+	if (
+		camera == null
+		or tool_use_cooldown_timer > 0.0
+		or not action_controller.is_free()
+	):
 		return false
 	tool_use_cooldown_timer = tool_use_cooldown_duration
 	tool_swing_timer = tool_use_cooldown_duration
@@ -212,6 +266,34 @@ func _get_camera_action_ray(reach_from_player: float) -> Dictionary:
 		"direction": direction,
 		"distance": camera_to_player + reach_from_player,
 	}
+
+
+func _handle_action_inputs() -> void:
+	if not is_on_floor() or not action_controller.is_free():
+		return
+
+	if Input.is_action_just_pressed("dodge"):
+		var input_vector: Vector2 = Input.get_vector(
+			"move_left", "move_right", "move_forward", "move_backward"
+		)
+		var dodge_direction: Vector3 = _camera_relative_direction(input_vector)
+		if dodge_direction.is_zero_approx():
+			# The visual convention uses +Z as character forward, so no-input dodge
+			# becomes a predictable backstep along local -Z.
+			dodge_direction = -visual_root.global_transform.basis.z
+			dodge_direction.y = 0.0
+			dodge_direction = dodge_direction.normalized()
+		if action_controller.try_start_dodge(dodge_direction):
+			jump_buffer_timer = 0.0
+			if mannequin != null:
+				var local: Vector3 = visual_root.global_transform.basis.inverse() * dodge_direction
+				mannequin.play_dodge(Vector2(local.x, local.z))
+			return
+
+	if Input.is_action_just_pressed("parry") and action_controller.try_start_parry():
+		jump_buffer_timer = 0.0
+		if mannequin != null:
+			mannequin.play_parry()
 
 
 func _update_tool_use_feedback(delta: float) -> void:
@@ -236,14 +318,14 @@ func _update_jump_timers(delta: float) -> void:
 	else:
 		coyote_timer = maxf(0.0, coyote_timer - delta)
 
-	if Input.is_action_just_pressed("jump"):
+	if Input.is_action_just_pressed("jump") and action_controller.is_free():
 		jump_buffer_timer = JUMP_BUFFER_TIME
 	else:
 		jump_buffer_timer = maxf(0.0, jump_buffer_timer - delta)
 
 
 func _update_vertical_velocity(delta: float) -> void:
-	if jump_buffer_timer > 0.0 and coyote_timer > 0.0:
+	if jump_buffer_timer > 0.0 and coyote_timer > 0.0 and action_controller.is_free():
 		velocity.y = JUMP_VELOCITY
 		jump_buffer_timer = 0.0
 		coyote_timer = 0.0
@@ -256,6 +338,22 @@ func _update_vertical_velocity(delta: float) -> void:
 
 
 func _update_horizontal_velocity(delta: float) -> void:
+	sprinting_this_frame = false
+
+	if action_controller.is_dodging():
+		var dodge_velocity: Vector3 = (
+			action_controller.dodge_direction_world
+			* action_controller.get_dodge_speed()
+		)
+		velocity.x = dodge_velocity.x
+		velocity.z = dodge_velocity.z
+		return
+
+	if action_controller.is_parrying():
+		velocity.x = move_toward(velocity.x, 0.0, GROUND_DECELERATION * 1.4 * delta)
+		velocity.z = move_toward(velocity.z, 0.0, GROUND_DECELERATION * 1.4 * delta)
+		return
+
 	var input_vector: Vector2 = Input.get_vector(
 		"move_left",
 		"move_right",
@@ -263,9 +361,17 @@ func _update_horizontal_velocity(delta: float) -> void:
 		"move_backward"
 	)
 	var move_direction: Vector3 = _camera_relative_direction(input_vector)
-	var target_speed: float = SPRINT_SPEED if Input.is_action_pressed("sprint") else WALK_SPEED
-	var target_velocity: Vector3 = move_direction * target_speed
+	var target_speed: float = WALK_SPEED
+	if (
+		is_on_floor()
+		and not move_direction.is_zero_approx()
+		and Input.is_action_pressed("sprint")
+		and stamina.spend(SPRINT_STAMINA_DRAIN * delta)
+	):
+		target_speed = SPRINT_SPEED
+		sprinting_this_frame = true
 
+	var target_velocity: Vector3 = move_direction * target_speed
 	var acceleration: float = GROUND_ACCELERATION if is_on_floor() else AIR_ACCELERATION
 	if is_on_floor() and move_direction.is_zero_approx():
 		acceleration = GROUND_DECELERATION
@@ -288,6 +394,8 @@ func _camera_relative_direction(input_vector: Vector2) -> Vector3:
 
 
 func _update_visual_facing(delta: float) -> void:
+	if action_controller.is_dodging() or action_controller.is_parrying():
+		return
 	var horizontal_velocity: Vector2 = Vector2(velocity.x, velocity.z)
 	if horizontal_velocity.length_squared() < 0.04:
 		return
@@ -305,13 +413,11 @@ func _update_mannequin(delta: float) -> void:
 		return
 	var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
 	var local_velocity: Vector3 = visual_root.global_transform.basis.inverse() * horizontal_velocity
-	var sprinting: bool = Input.is_action_pressed("sprint") and get_horizontal_speed() > WALK_SPEED
-	mannequin.update_visual(delta, local_velocity, is_on_floor(), sprinting)
+	mannequin.update_visual(delta, local_velocity, is_on_floor(), sprinting_this_frame)
 
 
 func _update_camera_fov(delta: float) -> void:
-	var sprinting: bool = Input.is_action_pressed("sprint") and get_horizontal_speed() > WALK_SPEED
-	var target_fov: float = SPRINT_FOV if sprinting else NORMAL_FOV
+	var target_fov: float = SPRINT_FOV if sprinting_this_frame else NORMAL_FOV
 	camera.fov = lerpf(camera.fov, target_fov, clampf(6.0 * delta, 0.0, 1.0))
 
 
@@ -326,6 +432,8 @@ func _respawn_after_defeat() -> void:
 	velocity = Vector3.ZERO
 	health = MAX_HEALTH
 	damage_invulnerability_timer = 1.0
+	stamina.reset()
+	action_controller.reset()
 	if mannequin != null:
 		mannequin.reset_pose()
 
@@ -428,6 +536,8 @@ func _ensure_default_input_actions() -> void:
 	_add_key_action("move_right", KEY_D)
 	_add_key_action("jump", KEY_SPACE)
 	_add_key_action("sprint", KEY_SHIFT)
+	_add_key_action("dodge", KEY_CTRL)
+	_add_key_action("parry", KEY_Q)
 
 
 func _add_key_action(action_name: StringName, physical_key: Key) -> void:
