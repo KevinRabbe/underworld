@@ -22,9 +22,9 @@ func _run_tests() -> void:
 	if failures.is_empty():
 		print("[CHARACTER VALIDATION] PASS")
 		print("  articulated mannequin rig / sockets / placeholder poses passed")
-		print("  stamina / dodge / parry timing contracts passed")
-		print("  player integration / defensive melee resolution passed")
-		print("  Burrower parry stagger / dodge miss distinction passed")
+		print("  stamina / dodge / parry / block action contracts passed")
+		print("  player defensive melee / frontal block / guard-break integration passed")
+		print("  Burrower parry stagger / dodge / block distinction passed")
 		quit(0)
 		return
 
