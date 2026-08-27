@@ -28,6 +28,7 @@ var gait_phase: float = 0.0
 var current_action: StringName = ACTION_NONE
 var action_time: float = 0.0
 var dodge_local_direction: Vector2 = Vector2(0.0, -1.0)
+var blocking_pose_active: bool = false
 var _built: bool = false
 
 var torso_material: StandardMaterial3D
@@ -63,6 +64,8 @@ func update_visual(
 
 	_apply_base_pose(delta, local_horizontal_velocity, grounded, sprinting, normalized_speed)
 	_update_action(delta)
+	if blocking_pose_active and current_action == ACTION_NONE:
+		_apply_block_pose()
 
 
 func play_attack() -> void:
@@ -82,11 +85,20 @@ func play_hit() -> void:
 	_start_action(ACTION_HIT)
 
 
+func set_blocking(active: bool) -> void:
+	blocking_pose_active = active
+
+
+func is_block_pose_active() -> bool:
+	return blocking_pose_active
+
+
 func reset_pose() -> void:
 	if skeleton == null:
 		return
 	current_action = ACTION_NONE
 	action_time = 0.0
+	blocking_pose_active = false
 	for bone_name_variant in bone_indices.keys():
 		var bone_name: String = str(bone_name_variant)
 		var bone_index: int = int(bone_indices[bone_name])
@@ -328,6 +340,17 @@ func _apply_parry_pose(t_raw: float) -> void:
 	_set_rot("forearm_r", Vector3(deg_to_rad(-70.0) * hold, 0.0, deg_to_rad(20.0) * hold))
 	_set_rot("upperarm_l", Vector3(deg_to_rad(-32.0) * hold, deg_to_rad(8.0) * hold, deg_to_rad(-42.0) * hold))
 	_set_rot("forearm_l", Vector3(deg_to_rad(-45.0) * hold, 0.0, deg_to_rad(-10.0) * hold))
+
+
+func _apply_block_pose() -> void:
+	_set_rot("spine_01", Vector3(deg_to_rad(4.0), 0.0, 0.0))
+	_set_rot("spine_02", Vector3(deg_to_rad(3.0), 0.0, 0.0))
+	_set_rot("chest", Vector3(deg_to_rad(2.0), deg_to_rad(-4.0), 0.0))
+	_set_rot("upperarm_r", Vector3(deg_to_rad(-46.0), deg_to_rad(-14.0), deg_to_rad(52.0)))
+	_set_rot("forearm_r", Vector3(deg_to_rad(-72.0), 0.0, deg_to_rad(18.0)))
+	_set_rot("upperarm_l", Vector3(deg_to_rad(-38.0), deg_to_rad(10.0), deg_to_rad(-50.0)))
+	_set_rot("forearm_l", Vector3(deg_to_rad(-60.0), 0.0, deg_to_rad(-14.0)))
+	_set_rot("head", Vector3(deg_to_rad(-3.0), 0.0, 0.0))
 
 
 func _apply_dodge_pose(t_raw: float) -> void:
