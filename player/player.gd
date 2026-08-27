@@ -4,9 +4,20 @@ signal harvest_requested(origin: Vector3, direction: Vector3, max_distance: floa
 signal attack_requested(origin: Vector3, direction: Vector3, max_distance: float)
 signal hotbar_slot_requested(slot: int)
 signal craft_requested(recipe_id: String)
+signal parry_succeeded(source_position: Vector3)
+
+const PrototypeMannequinScript := preload("res://player/prototype_mannequin.gd")
+const StaminaComponentScript := preload("res://player/stamina_component.gd")
+const PlayerActionControllerScript := preload("res://player/player_action_controller.gd")
 
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 10.0
+const SPRINT_STAMINA_DRAIN := 12.0
+const BLOCK_MOVE_SPEED := 2.4
+const BLOCK_FRONT_DOT := 0.342
+const PARRY_FRONT_DOT := 0.174
+const BLOCK_STAMINA_BASE := 5.0
+const BLOCK_STAMINA_PER_DAMAGE := 1.25
 const GROUND_ACCELERATION := 30.0
 const GROUND_DECELERATION := 38.0
 const AIR_ACCELERATION := 7.0
@@ -42,8 +53,13 @@ var tool_swing_timer: float = 0.0
 var damage_invulnerability_timer: float = 0.0
 var health: int = MAX_HEALTH
 var equipped_tool_visual: String = "hands"
+var sprinting_this_frame: bool = false
+
+var stamina := StaminaComponentScript.new(100.0, 0.75, 20.0)
+var action_controller := PlayerActionControllerScript.new(stamina)
 
 var visual_root: Node3D
+var mannequin
 var tool_visual_root: Node3D
 var camera_yaw: Node3D
 var camera_pitch_pivot: Node3D
@@ -54,7 +70,7 @@ var camera: Camera3D
 func _ready() -> void:
 	_ensure_default_input_actions()
 	_configure_character_body()
-	_build_placeholder_body()
+	_build_character_visual()
 	_build_camera()
 	respawn_position = global_position
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -112,14 +128,18 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _physics_process(delta: float) -> void:
 	damage_invulnerability_timer = maxf(0.0, damage_invulnerability_timer - delta)
+	_handle_action_inputs()
 	_update_jump_timers(delta)
 	_update_vertical_velocity(delta)
 	_update_horizontal_velocity(delta)
 	move_and_slide()
 	_update_visual_facing(delta)
+	_update_mannequin(delta)
 	_update_camera_fov(delta)
 	_update_tool_use_feedback(delta)
 	_check_fall_respawn()
+	action_controller.tick(delta)
+	stamina.tick(delta)
 
 
 func set_respawn_position(position: Vector3) -> void:
@@ -151,12 +171,87 @@ func get_max_health() -> int:
 	return MAX_HEALTH
 
 
-func take_damage(amount: int, source_position: Vector3) -> void:
-	if amount <= 0 or damage_invulnerability_timer > 0.0:
-		return
+func get_stamina() -> float:
+	return stamina.current_stamina
 
+
+func get_max_stamina() -> float:
+	return stamina.max_stamina
+
+
+func get_action_state_name() -> String:
+	return action_controller.state_name()
+
+
+func is_dodge_iframe_active() -> bool:
+	return action_controller.is_dodge_iframe_active()
+
+
+func is_parry_active() -> bool:
+	return action_controller.is_parry_active()
+
+
+func is_blocking() -> bool:
+	return action_controller.is_blocking()
+
+
+func get_mannequin():
+	return mannequin
+
+
+func take_damage(amount: int, source_position: Vector3) -> void:
+	receive_melee_attack(amount, source_position, true)
+
+
+func receive_melee_attack(
+	amount: int,
+	source_position: Vector3,
+	parryable: bool = true
+) -> StringName:
+	if amount <= 0:
+		return &"ignored"
+	if action_controller.is_dodge_iframe_active():
+		return &"dodged"
+	if (
+		parryable
+		and action_controller.is_parry_active()
+		and _is_source_in_front_arc(source_position, PARRY_FRONT_DOT)
+	):
+		parry_succeeded.emit(source_position)
+		return &"parried"
+	if (
+		action_controller.is_blocking()
+		and _is_source_in_front_arc(source_position, BLOCK_FRONT_DOT)
+	):
+		var impact_cost: float = BLOCK_STAMINA_BASE + float(amount) * BLOCK_STAMINA_PER_DAMAGE
+		if action_controller.try_absorb_block(impact_cost):
+			return &"blocked"
+	if damage_invulnerability_timer > 0.0:
+		return &"ignored"
+	_apply_damage(amount, source_position)
+	return &"hit"
+
+
+func _is_source_in_front_arc(source_position: Vector3, minimum_dot: float) -> bool:
+	if visual_root == null:
+		return false
+	var to_source: Vector3 = source_position - global_position
+	to_source.y = 0.0
+	if to_source.is_zero_approx():
+		return true
+	var forward: Vector3 = visual_root.global_transform.basis.z
+	forward.y = 0.0
+	if forward.is_zero_approx():
+		return false
+	return forward.normalized().dot(to_source.normalized()) >= minimum_dot
+
+
+func _apply_damage(amount: int, source_position: Vector3) -> void:
 	damage_invulnerability_timer = DAMAGE_INVULNERABILITY
 	health = maxi(health - amount, 0)
+	if mannequin != null:
+		mannequin.play_hit()
+
 	var away: Vector3 = global_position - source_position
 	away.y = 0.0
 	if not away.is_zero_approx():
@@ -183,10 +278,19 @@ func _request_attack() -> void:
 
 
 func _begin_tool_action() -> bool:
-	if camera == null or tool_use_cooldown_timer > 0.0:
+	if (
+		camera == null
+		or tool_use_cooldown_timer > 0.0
+		or not action_controller.is_free()
+	):
 		return false
+	if not action_controller.try_start_tool_action(tool_use_cooldown_duration):
+		return false
+	_face_combat_camera()
 	tool_use_cooldown_timer = tool_use_cooldown_duration
 	tool_swing_timer = tool_use_cooldown_duration
+	if mannequin != null:
+		mannequin.play_attack()
 	return true
 
 
@@ -201,25 +305,50 @@ func _get_camera_action_ray(reach_from_player: float) -> Dictionary:
 	}
 
 
+func _handle_action_inputs() -> void:
+	if action_controller.is_blocking():
+		if not is_on_floor() or not Input.is_action_pressed("block"):
+			action_controller.stop_block()
+		return
+
+	if not is_on_floor() or not action_controller.is_free():
+		return
+
+	if Input.is_action_just_pressed("dodge"):
+		var input_vector: Vector2 = Input.get_vector(
+			"move_left", "move_right", "move_forward", "move_backward"
+		)
+		var dodge_direction: Vector3 = _camera_relative_direction(input_vector)
+		if dodge_direction.is_zero_approx():
+			# The visual convention uses +Z as character forward, so no-input dodge
+			# becomes a predictable backstep along local -Z.
+			dodge_direction = -visual_root.global_transform.basis.z
+			dodge_direction.y = 0.0
+			dodge_direction = dodge_direction.normalized()
+		if action_controller.try_start_dodge(dodge_direction):
+			jump_buffer_timer = 0.0
+			if mannequin != null:
+				var local: Vector3 = visual_root.global_transform.basis.inverse() * dodge_direction
+				mannequin.play_dodge(Vector2(local.x, local.z))
+			return
+
+	if Input.is_action_just_pressed("parry") and action_controller.try_start_parry():
+		jump_buffer_timer = 0.0
+		_face_combat_camera()
+		if mannequin != null:
+			mannequin.play_parry()
+		return
+
+	if Input.is_action_pressed("block") and action_controller.try_start_block():
+		jump_buffer_timer = 0.0
+		_face_combat_camera()
+
+
 func _update_tool_use_feedback(delta: float) -> void:
 	tool_use_cooldown_timer = maxf(0.0, tool_use_cooldown_timer - delta)
 	tool_swing_timer = maxf(0.0, tool_swing_timer - delta)
-
-	if tool_visual_root == null:
-		return
-	if equipped_tool_visual == "hands":
-		tool_visual_root.rotation_degrees.z = lerpf(
-			tool_visual_root.rotation_degrees.z,
-			0.0,
-			clampf(delta * 16.0, 0.0, 1.0)
-		)
-		return
-
-	var swing_progress: float = 1.0 - (
-		tool_swing_timer / maxf(tool_use_cooldown_duration, 0.05)
-	)
-	var swing_amount: float = sin(clampf(swing_progress, 0.0, 1.0) * PI)
-	tool_visual_root.rotation_degrees.z = -58.0 * swing_amount
+	# The articulated right arm now supplies the visible swing. The equipment
+	# socket itself stays stable so tools do not need their own fake animation.
 
 
 func _configure_character_body() -> void:
@@ -237,14 +366,14 @@ func _update_jump_timers(delta: float) -> void:
 	else:
 		coyote_timer = maxf(0.0, coyote_timer - delta)
 
-	if Input.is_action_just_pressed("jump"):
+	if Input.is_action_just_pressed("jump") and action_controller.is_free():
 		jump_buffer_timer = JUMP_BUFFER_TIME
 	else:
 		jump_buffer_timer = maxf(0.0, jump_buffer_timer - delta)
 
 
 func _update_vertical_velocity(delta: float) -> void:
-	if jump_buffer_timer > 0.0 and coyote_timer > 0.0:
+	if jump_buffer_timer > 0.0 and coyote_timer > 0.0 and action_controller.is_free():
 		velocity.y = JUMP_VELOCITY
 		jump_buffer_timer = 0.0
 		coyote_timer = 0.0
@@ -257,6 +386,22 @@ func _update_vertical_velocity(delta: float) -> void:
 
 
 func _update_horizontal_velocity(delta: float) -> void:
+	sprinting_this_frame = false
+
+	if action_controller.is_dodging():
+		var dodge_velocity: Vector3 = (
+			action_controller.dodge_direction_world
+			* action_controller.get_dodge_speed()
+		)
+		velocity.x = dodge_velocity.x
+		velocity.z = dodge_velocity.z
+		return
+
+	if action_controller.is_parrying():
+		velocity.x = move_toward(velocity.x, 0.0, GROUND_DECELERATION * 1.4 * delta)
+		velocity.z = move_toward(velocity.z, 0.0, GROUND_DECELERATION * 1.4 * delta)
+		return
+
 	var input_vector: Vector2 = Input.get_vector(
 		"move_left",
 		"move_right",
@@ -264,9 +409,18 @@ func _update_horizontal_velocity(delta: float) -> void:
 		"move_backward"
 	)
 	var move_direction: Vector3 = _camera_relative_direction(input_vector)
-	var target_speed: float = SPRINT_SPEED if Input.is_action_pressed("sprint") else WALK_SPEED
-	var target_velocity: Vector3 = move_direction * target_speed
+	var target_speed: float = BLOCK_MOVE_SPEED if action_controller.is_blocking() else WALK_SPEED
+	if (
+		is_on_floor()
+		and action_controller.is_free()
+		and not move_direction.is_zero_approx()
+		and Input.is_action_pressed("sprint")
+		and stamina.spend(SPRINT_STAMINA_DRAIN * delta)
+	):
+		target_speed = SPRINT_SPEED
+		sprinting_this_frame = true
 
+	var target_velocity: Vector3 = move_direction * target_speed
 	var acceleration: float = GROUND_ACCELERATION if is_on_floor() else AIR_ACCELERATION
 	if is_on_floor() and move_direction.is_zero_approx():
 		acceleration = GROUND_DECELERATION
@@ -288,7 +442,24 @@ func _camera_relative_direction(input_vector: Vector2) -> Vector3:
 	return (right * input_vector.x + forward * -input_vector.y).normalized()
 
 
+func _face_combat_camera() -> void:
+	if camera_yaw == null or visual_root == null:
+		return
+	var forward: Vector3 = -camera_yaw.global_transform.basis.z
+	forward.y = 0.0
+	if forward.is_zero_approx():
+		return
+	forward = forward.normalized()
+	visual_root.rotation.y = atan2(forward.x, forward.z)
+
+
 func _update_visual_facing(delta: float) -> void:
+	if (
+		action_controller.is_dodging()
+		or action_controller.is_parrying()
+		or action_controller.is_blocking()
+	):
+		return
 	var horizontal_velocity: Vector2 = Vector2(velocity.x, velocity.z)
 	if horizontal_velocity.length_squared() < 0.04:
 		return
@@ -301,9 +472,17 @@ func _update_visual_facing(delta: float) -> void:
 	)
 
 
+func _update_mannequin(delta: float) -> void:
+	if mannequin == null or visual_root == null:
+		return
+	var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
+	var local_velocity: Vector3 = visual_root.global_transform.basis.inverse() * horizontal_velocity
+	mannequin.set_blocking(action_controller.is_blocking())
+	mannequin.update_visual(delta, local_velocity, is_on_floor(), sprinting_this_frame)
+
+
 func _update_camera_fov(delta: float) -> void:
-	var sprinting: bool = Input.is_action_pressed("sprint") and get_horizontal_speed() > WALK_SPEED
-	var target_fov: float = SPRINT_FOV if sprinting else NORMAL_FOV
+	var target_fov: float = SPRINT_FOV if sprinting_this_frame else NORMAL_FOV
 	camera.fov = lerpf(camera.fov, target_fov, clampf(6.0 * delta, 0.0, 1.0))
 
 
@@ -318,12 +497,16 @@ func _respawn_after_defeat() -> void:
 	velocity = Vector3.ZERO
 	health = MAX_HEALTH
 	damage_invulnerability_timer = 1.0
+	stamina.reset()
+	action_controller.reset()
+	if mannequin != null:
+		mannequin.reset_pose()
 
 
-func _build_placeholder_body() -> void:
-	var collision: CollisionShape3D = CollisionShape3D.new()
+func _build_character_visual() -> void:
+	var collision := CollisionShape3D.new()
 	collision.name = "CollisionShape3D"
-	var capsule_shape: CapsuleShape3D = CapsuleShape3D.new()
+	var capsule_shape := CapsuleShape3D.new()
 	capsule_shape.radius = 0.45
 	capsule_shape.height = 1.8
 	collision.shape = capsule_shape
@@ -334,32 +517,11 @@ func _build_placeholder_body() -> void:
 	visual_root.name = "VisualRoot"
 	add_child(visual_root)
 
-	var body_mesh: MeshInstance3D = MeshInstance3D.new()
-	body_mesh.name = "PlaceholderBody"
-	var capsule_mesh: CapsuleMesh = CapsuleMesh.new()
-	capsule_mesh.radius = 0.45
-	capsule_mesh.height = 1.8
-	body_mesh.mesh = capsule_mesh
-	body_mesh.position.y = 0.9
-
-	var material: StandardMaterial3D = StandardMaterial3D.new()
-	material.albedo_color = Color(0.65, 0.67, 0.72)
-	body_mesh.material_override = material
-	visual_root.add_child(body_mesh)
-
-	var facing_marker: MeshInstance3D = MeshInstance3D.new()
-	facing_marker.name = "FacingMarker"
-	var marker_mesh: BoxMesh = BoxMesh.new()
-	marker_mesh.size = Vector3(0.18, 0.18, 0.5)
-	facing_marker.mesh = marker_mesh
-	facing_marker.position = Vector3(0.0, 1.1, 0.45)
-	facing_marker.material_override = material
-	visual_root.add_child(facing_marker)
-
-	tool_visual_root = Node3D.new()
-	tool_visual_root.name = "ToolVisual"
-	tool_visual_root.position = Vector3(0.48, 0.92, 0.22)
-	visual_root.add_child(tool_visual_root)
+	mannequin = PrototypeMannequinScript.new()
+	mannequin.name = "PrototypeMannequin"
+	visual_root.add_child(mannequin)
+	mannequin.build()
+	tool_visual_root = mannequin.get_tool_visual_root()
 	_rebuild_tool_visual()
 
 
@@ -369,25 +531,23 @@ func _rebuild_tool_visual() -> void:
 	for child in tool_visual_root.get_children():
 		child.queue_free()
 
-	tool_visual_root.rotation_degrees = Vector3.ZERO
 	if equipped_tool_visual == "hands":
 		return
 
-	var handle_material: StandardMaterial3D = StandardMaterial3D.new()
+	var handle_material := StandardMaterial3D.new()
 	handle_material.albedo_color = Color(0.30, 0.17, 0.07)
-	var stone_material: StandardMaterial3D = StandardMaterial3D.new()
+	var stone_material := StandardMaterial3D.new()
 	stone_material.albedo_color = Color(0.36, 0.37, 0.34)
 
-	var handle: MeshInstance3D = MeshInstance3D.new()
-	var handle_mesh: BoxMesh = BoxMesh.new()
+	var handle := MeshInstance3D.new()
+	var handle_mesh := BoxMesh.new()
 	handle_mesh.size = Vector3(0.10, 0.72, 0.10)
 	handle.mesh = handle_mesh
 	handle.material_override = handle_material
-	handle.rotation_degrees.z = -18.0
 	tool_visual_root.add_child(handle)
 
-	var head: MeshInstance3D = MeshInstance3D.new()
-	var head_mesh: BoxMesh = BoxMesh.new()
+	var head := MeshInstance3D.new()
+	var head_mesh := BoxMesh.new()
 	if equipped_tool_visual == "stone_axe":
 		head_mesh.size = Vector3(0.38, 0.28, 0.13)
 	else:
@@ -415,7 +575,7 @@ func _build_camera() -> void:
 	spring_arm.spring_length = camera_distance
 	spring_arm.margin = 0.15
 	spring_arm.collision_mask = 1
-	var camera_collision_shape: SphereShape3D = SphereShape3D.new()
+	var camera_collision_shape := SphereShape3D.new()
 	camera_collision_shape.radius = 0.2
 	spring_arm.shape = camera_collision_shape
 	spring_arm.add_excluded_object(get_rid())
@@ -441,6 +601,9 @@ func _ensure_default_input_actions() -> void:
 	_add_key_action("move_right", KEY_D)
 	_add_key_action("jump", KEY_SPACE)
 	_add_key_action("sprint", KEY_SHIFT)
+	_add_key_action("dodge", KEY_CTRL)
+	_add_key_action("parry", KEY_Q)
+	_add_key_action("block", KEY_F)
 
 
 func _add_key_action(action_name: StringName, physical_key: Key) -> void:
@@ -451,6 +614,6 @@ func _add_key_action(action_name: StringName, physical_key: Key) -> void:
 		if existing_event is InputEventKey and existing_event.physical_keycode == physical_key:
 			return
 
-	var key_event: InputEventKey = InputEventKey.new()
+	var key_event := InputEventKey.new()
 	key_event.physical_keycode = physical_key
 	InputMap.action_add_event(action_name, key_event)
