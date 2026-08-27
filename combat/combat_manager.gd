@@ -7,10 +7,6 @@ const SPAWN_MIN_DISTANCE := 18.0
 const SPAWN_MAX_DISTANCE := 34.0
 const SPAWN_INTERVAL := 2.0
 const RELEASE_DISTANCE := 72.0
-const PLAYER_ATTACK_REACH := 2.8
-const PLAYER_ATTACK_CENTER_DISTANCE := 1.65
-const PLAYER_ATTACK_RADIUS := 1.05
-const PLAYER_ATTACK_MIN_DOT := 0.10
 
 var world
 var player
@@ -39,23 +35,37 @@ func _process(delta: float) -> void:
 		_spawn_enemy_near_player()
 
 
-func try_attack(_origin: Vector3, direction: Vector3, _max_distance: float) -> void:
-	if direction.is_zero_approx() or player == null:
+func try_attack(execution: Dictionary) -> void:
+	if player == null or execution.is_empty():
 		return
 
-	var forward: Vector3 = direction.normalized()
+	var source_position: Vector3 = execution.get("source_position", player.global_position)
+	var forward: Vector3 = execution.get("direction", Vector3.ZERO)
 	forward.y = 0.0
 	if forward.is_zero_approx():
 		last_combat_message = "Attack missed"
 		return
 	forward = forward.normalized()
 
-	var player_chest: Vector3 = player.global_position + Vector3(0.0, 1.0, 0.0)
-	var attack_center: Vector3 = player_chest + forward * PLAYER_ATTACK_CENTER_DISTANCE
+	var damage: int = clampi(int(execution.get("damage", 0)), 0, 10000)
+	var reach: float = clampf(float(execution.get("reach", 0.0)), 0.1, 8.0)
+	var center_distance: float = clampf(
+		float(execution.get("center_distance", 0.0)),
+		0.0,
+		reach
+	)
+	var radius: float = clampf(float(execution.get("radius", 0.0)), 0.05, 3.0)
+	var minimum_dot: float = clampf(float(execution.get("minimum_dot", 0.0)), -1.0, 1.0)
+	if damage <= 0:
+		last_combat_message = "Attack failed"
+		return
 
-	var sphere: SphereShape3D = SphereShape3D.new()
-	sphere.radius = PLAYER_ATTACK_RADIUS
-	var shape_query: PhysicsShapeQueryParameters3D = PhysicsShapeQueryParameters3D.new()
+	var source_chest: Vector3 = source_position + Vector3(0.0, 1.0, 0.0)
+	var attack_center: Vector3 = source_chest + forward * center_distance
+
+	var sphere := SphereShape3D.new()
+	sphere.radius = radius
+	var shape_query := PhysicsShapeQueryParameters3D.new()
 	shape_query.shape = sphere
 	shape_query.transform = Transform3D(Basis.IDENTITY, attack_center)
 	shape_query.collision_mask = 2
@@ -81,14 +91,14 @@ func try_attack(_origin: Vector3, direction: Vector3, _max_distance: float) -> v
 			continue
 
 		var enemy_node: Node3D = collider as Node3D
-		var to_enemy: Vector3 = enemy_node.global_position - player.global_position
+		var to_enemy: Vector3 = enemy_node.global_position - source_position
 		var planar_to_enemy: Vector3 = Vector3(to_enemy.x, 0.0, to_enemy.z)
 		var distance: float = planar_to_enemy.length()
-		if distance > PLAYER_ATTACK_REACH:
+		if distance > reach:
 			continue
-		if distance > 0.001 and forward.dot(planar_to_enemy / distance) < PLAYER_ATTACK_MIN_DOT:
+		if distance > 0.001 and forward.dot(planar_to_enemy / distance) < minimum_dot:
 			continue
-		if not _has_clear_attack_path(player_chest, enemy_node):
+		if not _has_clear_attack_path(source_chest, enemy_node):
 			continue
 		if distance < best_distance:
 			best_distance = distance
@@ -101,8 +111,7 @@ func try_attack(_origin: Vector3, direction: Vector3, _max_distance: float) -> v
 		last_combat_message = "Attack failed"
 		return
 
-	var damage: int = _get_player_attack_damage()
-	var remaining_health: int = int(best_enemy.call("apply_damage", damage, player.global_position))
+	var remaining_health: int = int(best_enemy.call("apply_damage", damage, source_position))
 	var enemy_name: String = "Enemy"
 	if best_enemy.has_method("get_display_name"):
 		enemy_name = str(best_enemy.call("get_display_name"))
@@ -125,18 +134,6 @@ func get_last_combat_message() -> String:
 	return last_combat_message
 
 
-func _get_player_attack_damage() -> int:
-	if world == null or not world.has_method("get_equipped_tool"):
-		return 7
-	match world.get_equipped_tool():
-		"stone_axe":
-			return 16
-		"stone_pickaxe":
-			return 13
-		_:
-			return 7
-
-
 func _has_clear_attack_path(origin: Vector3, enemy: Node3D) -> bool:
 	var target_position: Vector3 = enemy.global_position + Vector3(0.0, 0.65, 0.0)
 	var ray_query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
@@ -157,7 +154,7 @@ func _spawn_enemy_near_player() -> void:
 	if player == null or world == null:
 		return
 
-	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	var rng := RandomNumberGenerator.new()
 	rng.seed = settings.world_seed + 9109 + spawn_serial * 7919
 	spawn_serial += 1
 
@@ -172,7 +169,7 @@ func _spawn_enemy_near_player() -> void:
 		if height <= settings.sea_level + 1.0 or slope > 0.12:
 			continue
 
-		var spawn_position: Vector3 = Vector3(candidate_x, height + 0.2, candidate_z)
+		var spawn_position := Vector3(candidate_x, height + 0.2, candidate_z)
 		if _is_too_close_to_other_enemy(spawn_position):
 			continue
 
