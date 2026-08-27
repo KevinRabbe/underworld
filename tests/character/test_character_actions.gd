@@ -9,6 +9,7 @@ static func run() -> Array[String]:
 	_test_stamina(failures)
 	_test_dodge_contract(failures)
 	_test_parry_contract(failures)
+	_test_block_contract(failures)
 	return failures
 
 
@@ -36,6 +37,7 @@ static func _test_dodge_contract(failures: Array[String]) -> void:
 	_expect_close(failures, "dodge spends stamina", stamina.current_stamina, 75.0)
 	_expect_true(failures, "dodge has startup before iframes", not actions.is_dodge_iframe_active())
 	_expect_true(failures, "cannot parry during dodge", not actions.try_start_parry())
+	_expect_true(failures, "cannot block during dodge", not actions.try_start_block())
 	actions.tick(0.10)
 	_expect_true(failures, "dodge iframes become active", actions.is_dodge_iframe_active())
 	_expect_true(failures, "dodge curve produces movement", actions.get_dodge_speed() > 0.0)
@@ -52,6 +54,7 @@ static func _test_parry_contract(failures: Array[String]) -> void:
 	_expect_true(failures, "parry starts", actions.try_start_parry())
 	_expect_close(failures, "parry spends stamina", stamina.current_stamina, 85.0)
 	_expect_true(failures, "parry startup is not active", not actions.is_parry_active())
+	_expect_true(failures, "cannot block during parry", not actions.try_start_block())
 	actions.tick(0.07)
 	_expect_true(failures, "parry active window opens", actions.is_parry_active())
 	actions.tick(0.12)
@@ -62,6 +65,27 @@ static func _test_parry_contract(failures: Array[String]) -> void:
 
 	stamina.current_stamina = 10.0
 	_expect_true(failures, "parry rejects insufficient stamina", not actions.try_start_parry())
+
+
+static func _test_block_contract(failures: Array[String]) -> void:
+	var stamina = StaminaScript.new()
+	var actions = ActionControllerScript.new(stamina)
+	_expect_true(failures, "block starts", actions.try_start_block())
+	_expect_true(failures, "block enters held state", actions.is_blocking())
+	_expect_close(failures, "raising guard has no upfront cost", stamina.current_stamina, 100.0)
+	_expect_true(failures, "cannot dodge while blocking", not actions.try_start_dodge(Vector3.RIGHT))
+	_expect_true(failures, "cannot parry while blocking", not actions.try_start_parry())
+	_expect_true(failures, "block absorbs affordable impact", actions.try_absorb_block(17.5))
+	_expect_close(failures, "block spends impact stamina", stamina.current_stamina, 82.5)
+	actions.stop_block()
+	_expect_true(failures, "releasing block returns to free", actions.is_free())
+
+	stamina.current_stamina = 4.0
+	_expect_true(failures, "low-stamina guard can still be raised", actions.try_start_block())
+	_expect_true(failures, "unaffordable impact breaks guard", not actions.try_absorb_block(10.0))
+	_expect_true(failures, "guard break returns action controller to free", actions.is_free())
+	_expect_close(failures, "guard break drains remaining stamina", stamina.current_stamina, 0.0)
+	_expect_true(failures, "zero-stamina guard cannot be raised", not actions.try_start_block())
 
 
 static func _expect_true(failures: Array[String], label: String, condition: bool) -> void:
