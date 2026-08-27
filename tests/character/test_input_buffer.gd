@@ -18,20 +18,20 @@ static func _test_buffer_component(failures: Array[String]) -> void:
 	_expect_true(failures, "non-positive lifetime is rejected", not buffer.push(&"attack", {}, 0.0))
 
 	var original_payload: Dictionary = {
-		"tool_id": "stone_axe",
+		"direction": Vector3.RIGHT,
 		"nested": {"value": 3},
 	}
 	_expect_true(
 		failures,
 		"valid input enters one-slot buffer",
-		buffer.push(&"attack", original_payload, 0.12)
+		buffer.push(&"dodge", original_payload, 0.12)
 	)
 	original_payload["nested"]["value"] = 99
-	_expect_equal(failures, "buffer exposes pending action", buffer.peek_action(), &"attack")
+	_expect_equal(failures, "buffer exposes pending action", buffer.peek_action(), &"dodge")
 	buffer.tick(0.119)
 	_expect_true(failures, "input survives inside lifetime", buffer.has_pending())
 	var consumed: Dictionary = buffer.consume()
-	_expect_equal(failures, "consume returns buffered action", consumed.get("action"), &"attack")
+	_expect_equal(failures, "consume returns buffered action", consumed.get("action"), &"dodge")
 	var consumed_payload: Dictionary = consumed.get("payload", {})
 	var nested: Dictionary = consumed_payload.get("nested", {})
 	_expect_equal(failures, "payload is snapshotted deeply", int(nested.get("value", 0)), 3)
@@ -93,9 +93,14 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 	_expect_equal(failures, "buffered attack does not start immediately", String(actions.call("state_name")), "USING_TOOL")
 	_expect_equal(failures, "buffered attack emits nothing immediately", captured.size(), 0)
 
-	# The intent snapshots the weapon and direction at button press. Switching
-	# equipment before consumption must not mutate the buffered attack.
+	# A buffered attack is not committed yet. Current weapon and facing are
+	# deliberately resolved when the old action ends, so late camera/tool changes
+	# remain responsive rather than being frozen 120 ms early.
 	player.call("set_equipped_tool", "stone_pickaxe")
+	var camera_yaw = player.get("camera_yaw")
+	camera_yaw.set("rotation", Vector3(0.0, 0.45, 0.0))
+	var expected_direction: Vector3 = player.call("_get_combat_forward")
+
 	actions.call("tick", 0.05)
 	buffer.call("tick", 0.05)
 	player.call("_try_consume_buffered_action")
@@ -112,18 +117,22 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 		"ATTACKING/STARTUP"
 	)
 	_expect_equal(failures, "buffer slot clears after consumption", String(player.call("get_buffered_action_name")), "")
+	_expect_vector_close(
+		failures,
+		"buffered attack uses execution-time facing",
+		player.get("pending_attack_direction"),
+		expected_direction
+	)
 
-	# Advance through the original axe startup and prove the buffered snapshot
-	# remains the axe even though the currently equipped visual is now pickaxe.
-	actions.call("tick", 0.13)
+	actions.call("tick", 0.15)
 	player.call("_resolve_pending_attack_activation")
 	_expect_equal(failures, "buffered attack emits once at active boundary", captured.size(), 1)
 	if captured.size() == 1:
 		_expect_equal(
 			failures,
-			"buffered attack preserves input-time weapon",
+			"buffered attack uses execution-time weapon",
 			captured[0].get("attack_id"),
-			&"stone_axe_light"
+			&"stone_pickaxe_light"
 		)
 
 	# Respawn/reset is a hard boundary: buffered input must never leak through it.
@@ -155,4 +164,14 @@ static func _expect_equal(
 	expected: Variant
 ) -> void:
 	if actual != expected:
+		failures.append("%s — expected %s, got %s" % [label, str(expected), str(actual)])
+
+
+static func _expect_vector_close(
+	failures: Array[String],
+	label: String,
+	actual: Vector3,
+	expected: Vector3
+) -> void:
+	if not actual.is_equal_approx(expected):
 		failures.append("%s — expected %s, got %s" % [label, str(expected), str(actual)])
