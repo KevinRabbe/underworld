@@ -254,3 +254,76 @@ The following remain intentionally open until their implementation architecture 
 - exact project-owned deterministic PRNG algorithm;
 - exact numeric domain IDs and canonical binary StableAddress encoding;
 - exact generator-version manifest format.
+
+## 2026-08-27 — Generation pipeline interface checkpoint
+
+### Pure stage contracts — LOCKED
+
+- Deterministic world generation is decomposed into explicit pure-data stages rather than one monolithic cave generator.
+- A generation stage receives immutable context + typed immutable input and returns typed deterministic data/diagnostics.
+- Player state, progression, buildings, save deltas, runtime scene state and loaded assets are not inputs to deterministic world truth generation.
+
+### Scheduler versus generator — LOCKED
+
+- The pipeline scheduler owns dependency resolution, worker scheduling, cache lookup, prioritization/cancellation and main-thread handoff.
+- Generator stages do not secretly fetch/generate neighbor regions or mutate global runtime state.
+- Neighbor primary-topology/entrance views required for cross-region analysis are resolved by the scheduler and passed explicitly in canonical order.
+
+### Stage sequence — LOCKED ARCHITECTURAL ORDER
+
+- Macro region planning creates stable candidate budgets/biases.
+- Primary topology creates local networks/nodes/primary edges.
+- Entrance generation selects viable surface-to-topology connections and emits pure surface-integration descriptors.
+- Secondary connectivity runs after primary topology/entrances so topology usefulness and entrance relationships can influence reconnection decisions.
+- Special-location hook reservation consumes the resulting topology but does not implement bosses/resources/structures itself.
+- Region finalization validates and freezes deterministic definitions.
+- Base geometry-description generation consumes finalized topology later; runtime scene construction remains a separate stage.
+
+### Depth profiles are generation input — LOCKED
+
+- Shallow/mid/deep profile evaluation is used while topology is generated, not merely applied as a cosmetic label afterward.
+- A deterministic depth-profile service returns continuous profile weights/grammar parameters from world position, region bias and deterministic surface reference data.
+- Exact depth curves remain tuning data rather than scattered hard-coded conditionals.
+
+### Entrances and surface dependency — LOCKED
+
+- Entrances are generated from existing underground topology plus deterministic surface data, not placed randomly before cave networks exist.
+- Entrance generation emits `SurfaceEntranceIntegrationDescriptor`-style pure data so surface geometry can integrate an opening even when underground runtime geometry is not loaded.
+- Generating a surface chunk may therefore require underground definition data, but never underground runtime meshes/AI/audio.
+
+### Cross-region secondary connectivity — LOCKED
+
+- Cross-region candidate analysis uses canonical endpoint/region ownership and deterministic stage inputs.
+- The owner region stores the actual secondary edge definition; non-owner regions may retain external stable references.
+- Region scheduling order cannot alter connection identity, acceptance or ownership.
+
+### Base geometry versus deltas — LOCKED
+
+- Base geometry descriptions represent untouched deterministic world geometry derived from finalized definitions.
+- Player digging, cleared collapses, mined deposits and buildings remain persistent deltas composed later.
+- Splitting one tunnel/chamber across geometry/runtime cells does not create new persistent gameplay identities merely because runtime mesh fragments differ.
+
+### Typed stage data — LOCKED DIRECTION
+
+- Prefer typed request/result/data-only classes for macro plans, topology, entrances, connectivity, hooks, finalization and geometry descriptions.
+- Avoid one giant mutable dictionary with undocumented keys passed through every generator stage.
+- Each deterministic stage must be independently fingerprintable/testable without rendering.
+
+### Stage revisions — LOCKED DIRECTION
+
+- Generator compatibility manifests need stage revisions in addition to seed-domain revisions because deterministic logic can change without changing random-domain IDs.
+- Exact manifest serialization remains part of the upcoming persistence/version architecture.
+
+## Open decisions after generation-pipeline checkpoint
+
+- exact macro region dimensions;
+- exact primary topology algorithm/candidate budgets;
+- exact depth-profile curves and numeric grammar distributions;
+- exact entrance scoring weights;
+- exact secondary-connectivity scoring/cap values;
+- exact special-location hook roster/selection rules;
+- exact base geometry spline/volume/meshing representation;
+- exact geometry/runtime streaming-cell sizes;
+- exact cache implementation and task-priority thresholds;
+- exact persistence/generator manifest serialization;
+- exact automated batch-test runner implementation.
