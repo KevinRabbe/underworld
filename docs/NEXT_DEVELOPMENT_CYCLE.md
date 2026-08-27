@@ -65,39 +65,38 @@ The architecture now specifies:
 
 The exact low-level hash/PRNG algorithms remain an implementation choice, but must be frozen and protected by hard-coded test vectors before production world generation uses them.
 
-### 4. Generation-stage interfaces — NEXT
+### 4. Generation-stage interfaces — COMPLETE
 
-Define concrete inputs/outputs and ownership boundaries for:
+Defined in `GENERATION_PIPELINE_INTERFACES.md`.
 
-- macro underground-region generation;
-- primary network candidate/topology generation;
-- depth-profile assignment/blending;
-- entrance candidate generation/selection;
-- secondary connectivity proposal/scoring/acceptance;
+The architecture now specifies pure-data contracts for:
+
+- immutable `WorldGenerationContext`;
+- macro underground-region planning;
+- continuous depth-profile sampling/grammar resolution used during topology generation;
+- primary network/node/edge topology generation;
+- entrance generation/selection and deterministic surface-integration descriptors;
+- secondary/cross-region connectivity analysis with scheduler-supplied neighbor views;
 - special-location hook reservation;
-- geometry-description generation;
-- runtime streaming/build stage.
+- region finalization/validation;
+- streamable base-geometry descriptions;
+- runtime build handoff.
 
-The interfaces must preserve the locked separation:
+It also locks the separation between pipeline scheduler responsibilities and pure deterministic stages, explicit dependency resolution, stage revisions, canonical cross-region ownership/references, base geometry versus player deltas, and typed stage results rather than one giant mutable generator dictionary.
 
-```text
-stable addresses + seed domains
-        -> pure world/topology definitions
-        -> geometry descriptions
-        -> runtime scene representation
-```
+### 5. Streaming ownership model — NEXT
 
-No generation stage should require Godot scene-tree nodes merely to produce deterministic world truth.
+Define which system owns and controls lifetime of:
 
-### 5. Streaming ownership model
-
-Define which system owns:
-
-- generated definitions/cache;
-- loaded underground geometry;
+- finalized world-definition data/cache;
+- surface entrance-integration queries;
+- base geometry-description cache;
+- rendered surface/underground geometry;
 - collision activation;
 - active creatures/interactables;
-- transitions between surface and underground streaming.
+- local audio;
+- runtime cell transitions across surface and underground;
+- async generation requests/cancellation/prioritization.
 
 The design must support one continuous world without requiring all underground content to be instantiated.
 
@@ -108,6 +107,7 @@ Define:
 - save version;
 - generator version/manifest;
 - seed-schema/domain revision recording where required;
+- stage/profile revision recording where required;
 - delta ownership;
 - stable-ID references;
 - migration boundaries;
@@ -121,6 +121,7 @@ Initial validation targets:
 
 - deterministic seed test vectors;
 - stable IDs;
+- stage-level deterministic fingerprints;
 - valid graph references;
 - entrance validity/reachability;
 - depth constraints;
@@ -153,10 +154,11 @@ The architecture cycle is complete when we can answer, concretely and without ha
 1. What deterministic data describes an underground cave system before any Godot scene nodes exist? **Answered by `UNDERWORLD_GRAPH_SCHEMA.md`.**
 2. How is every persistent generated object addressed stably? **Answered by `STABLE_PROCEDURAL_IDS.md`.**
 3. How is randomness isolated from load order, thread scheduling, sibling rejection and unrelated generator changes? **Answered by `DETERMINISTIC_SEED_DOMAINS.md`.**
-4. How do shallow/mid/deep profiles feed the topology generator? **Data representation answered; generation-stage interface/curves still pending.**
-5. How are 1–3 entrances and secondary loops generated, represented and validated? **Representation answered; stage interfaces/scoring contract still pending.**
-6. What gets generated on worker threads versus instantiated on the main thread?
-7. What is saved versus regenerated, and how are generator compatibility boundaries represented?
-8. How can hundreds/thousands of seeds be validated without manual exploration?
+4. What are the deterministic generation stages and their typed inputs/outputs? **Answered by `GENERATION_PIPELINE_INTERFACES.md`.**
+5. How do shallow/mid/deep profiles feed the topology generator? **Architectural interface answered by the depth-profile service; exact curves remain tuning data.**
+6. How are entrances and secondary loops generated without coupling to runtime/load order? **Stage interfaces and ownership/dependency model answered; exact scoring parameters remain tuning data.**
+7. What owns definition/geometry/runtime lifetimes and what gets generated on workers versus built on the main thread?
+8. What is saved versus regenerated, and how are generator compatibility boundaries represented?
+9. How can hundreds/thousands of seeds be validated without manual exploration?
 
 Only after these answers are reflected in concrete interfaces/data structures should the main Underworld generator implementation begin.
