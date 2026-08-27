@@ -1,6 +1,8 @@
 extends RefCounted
 class_name UnderworldGenerationStageResult
 
+const SCRIPT_PATH: String = "res://worldgen/pipeline/generation_stage_result.gd"
+
 var stage_name: String
 var success: bool
 var data
@@ -23,7 +25,7 @@ func _init(
 
 
 static func ok(stage_name_value: String, data_value = null, fingerprint_value: String = ""):
-	return UnderworldGenerationStageResult.new(
+	return load(SCRIPT_PATH).new(
 		stage_name_value,
 		true,
 		data_value,
@@ -33,7 +35,7 @@ static func ok(stage_name_value: String, data_value = null, fingerprint_value: S
 
 
 static func fail(stage_name_value: String, diagnostics_value: Array[String]):
-	return UnderworldGenerationStageResult.new(
+	return load(SCRIPT_PATH).new(
 		stage_name_value,
 		false,
 		null,

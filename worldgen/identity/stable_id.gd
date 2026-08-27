@@ -5,6 +5,7 @@ const StableAddressScript := preload("res://worldgen/identity/stable_address.gd"
 
 const SCHEMA_VERSION: int = 1
 const PREFIX: String = "sid1:"
+const SCRIPT_PATH: String = "res://worldgen/identity/stable_id.gd"
 
 var _address
 
@@ -21,7 +22,7 @@ static func from_address(address):
 	var canonical_address = StableAddressScript.parse(address.canonical_text())
 	if canonical_address == null:
 		return null
-	return UnderworldStableId.new(canonical_address)
+	return load(SCRIPT_PATH).new(canonical_address)
 
 
 static func parse(value: String):
@@ -31,7 +32,7 @@ static func parse(value: String):
 	var address = StableAddressScript.parse(address_text)
 	if address == null:
 		return null
-	var stable_id = UnderworldStableId.new(address)
+	var stable_id = load(SCRIPT_PATH).new(address)
 	if stable_id.value() != value:
 		return null
 	return stable_id

@@ -7,6 +7,7 @@ const SeedDomains := preload("res://worldgen/random/seed_domains.gd")
 
 const MANIFEST_SCHEMA_VERSION: int = 1
 const PREFIX: String = "gm1"
+const SCRIPT_PATH: String = "res://worldgen/versioning/generator_manifest.gd"
 
 var seed_schema_version: int
 var stable_address_schema_version: int
@@ -113,7 +114,7 @@ func validate() -> Array[String]:
 
 
 static func foundation_default():
-	return UnderworldGeneratorManifest.new(
+	return load(SCRIPT_PATH).new(
 		{
 			"macro_region": 1,
 			"primary_topology": 1,

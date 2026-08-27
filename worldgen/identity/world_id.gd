@@ -4,6 +4,7 @@ class_name UnderworldWorldId
 const PREFIX: String = "wid1:"
 const CONTRACT_TAG: String = "underworld-world-id-v1"
 const LOWER_HEX: String = "0123456789abcdef"
+const SCRIPT_PATH: String = "res://worldgen/identity/world_id.gd"
 
 var _value: String
 
@@ -14,7 +15,7 @@ func _init(value: String) -> void:
 
 static func from_seed(world_seed: int):
 	var canonical_source: String = "%s|seed|%d" % [CONTRACT_TAG, world_seed]
-	return UnderworldWorldId.new(PREFIX + canonical_source.sha256_text())
+	return load(SCRIPT_PATH).new(PREFIX + canonical_source.sha256_text())
 
 
 static func parse(value: String):
@@ -27,7 +28,7 @@ static func parse(value: String):
 		var c: String = digest.substr(index, 1)
 		if LOWER_HEX.find(c) < 0:
 			return null
-	return UnderworldWorldId.new(value)
+	return load(SCRIPT_PATH).new(value)
 
 
 func value() -> String:

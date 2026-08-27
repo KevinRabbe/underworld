@@ -11,6 +11,7 @@ class_name UnderworldStableAddress
 
 const SCHEMA_VERSION: int = 1
 const SCHEMA_PREFIX: String = "sa1"
+const SCRIPT_PATH: String = "res://worldgen/identity/stable_address.gd"
 
 var _segments: Array[String] = []
 
@@ -27,12 +28,12 @@ static func from_segments(segments: Array):
 		if not _is_valid_segment(segment):
 			return null
 		normalized.append(segment)
-	return UnderworldStableAddress.new(normalized)
+	return load(SCRIPT_PATH).new(normalized)
 
 
 static func parse(canonical_text: String):
 	if canonical_text == SCHEMA_PREFIX:
-		return UnderworldStableAddress.new([])
+		return load(SCRIPT_PATH).new([])
 	if not canonical_text.begins_with(SCHEMA_PREFIX + "|"):
 		return null
 
@@ -67,7 +68,7 @@ static func parse(canonical_text: String):
 		parsed_segments.append(segment)
 		cursor = segment_start + segment_length
 
-	var address = UnderworldStableAddress.new(parsed_segments)
+	var address = load(SCRIPT_PATH).new(parsed_segments)
 	# Parser accepts only the one canonical representation.
 	if address.canonical_text() != canonical_text:
 		return null
@@ -99,7 +100,7 @@ func child(additional_segments: Array):
 		if not _is_valid_segment(segment):
 			return null
 		combined.append(segment)
-	return UnderworldStableAddress.new(combined)
+	return load(SCRIPT_PATH).new(combined)
 
 
 func equals(other) -> bool:

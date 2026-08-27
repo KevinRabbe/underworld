@@ -6,6 +6,7 @@ const SeedDeriver := preload("res://worldgen/random/seed_deriver.gd")
 const MASK_32: int = 0xFFFFFFFF
 const TWO_POW_32: int = 4294967296
 const UNIT_DENOMINATOR: float = 4294967296.0
+const SCRIPT_PATH: String = "res://worldgen/random/deterministic_rng.gd"
 
 var _s0: int = 0
 var _s1: int = 0
@@ -30,7 +31,7 @@ static func from_context(
 	domain,
 	subkey: String = ""
 ):
-	return UnderworldDeterministicRng.new(
+	return load(SCRIPT_PATH).new(
 		SeedDeriver.derive_state_words(world_seed, stable_address, domain, subkey)
 	)
 
