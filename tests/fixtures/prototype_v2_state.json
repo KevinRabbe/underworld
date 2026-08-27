@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "world_seed": 12345,
+  "destroyed_objects": [],
+  "wood": 17,
+  "stone": 11,
+  "stone_axe": true,
+  "stone_pickaxe": true,
+  "selected_slot": 3
+}
