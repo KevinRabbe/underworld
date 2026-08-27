@@ -47,9 +47,12 @@ func _run_fixture(fixture_name: String) -> void:
 			failures.append_array(LegacyV2MigrationTests.run())
 		"graph":
 			var bundle = SampleGraphFixture.build()
-			failures.append_array(GraphValidator.validate(bundle))
+			failures.append_array(GraphValidator.validate_region_bundle(bundle))
 			if failures.is_empty():
-				print("[VALIDATION] graph fingerprint=%s" % GraphCanonicalizer.fingerprint(bundle))
+				print(
+					"[VALIDATION] graph fingerprint=%s" %
+					GraphCanonicalizer.region_bundle_fingerprint(bundle)
+				)
 		_:
 			failures.append("unknown fixture: %s" % fixture_name)
 	_finish("fixture:%s" % fixture_name, failures)
