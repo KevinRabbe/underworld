@@ -22,9 +22,65 @@ When sources disagree, use this order:
 4. Existing implementation.
 5. Old prototype behavior.
 
-Existing code is not automatically the design. Prototype code may be replaced when it conflicts with the documented architecture.
+Existing code is not automatically the design. Prototype code may be replaced when it conflicts with documented architecture.
 
-## Documents
+## Documentation architecture
+
+New scalable documentation uses ordered top-level sections:
+
+```text
+docs/
+├─ 00_project/
+├─ 10_architecture/
+├─ 20_world/
+├─ 30_gameplay/
+├─ 40_content/
+├─ 50_authoring/
+└─ 60_validation/
+```
+
+The numeric prefixes are internal reading/order markers only. They are not patch numbers, content IDs, runtime namespaces or save identifiers.
+
+See `00_project/DOCUMENTATION_ARCHITECTURE.md` for the organization contract and migration rules.
+
+Existing root-level documents remain authoritative until they are deliberately migrated in documentation-only changes. Do not move active contracts merely for cosmetic organization.
+
+## New architecture package
+
+### Project/documentation governance
+- `00_project/DOCUMENTATION_ARCHITECTURE.md` — numbered documentation hierarchy, document types, migration policy and scaling gate.
+
+### Core architecture
+- `10_architecture/CONTENT_ARCHITECTURE.md` — definition/category/capability/asset/runtime separation.
+- `10_architecture/CONTENT_REGISTRY.md` — future semantic-ID registry/resolution boundary.
+- `10_architecture/DEPENDENCY_RULES.md` — allowed and forbidden dependency direction.
+- `10_architecture/REPOSITORY_STRUCTURE.md` — complete `res://` folder/file architecture, ownership rules, PackedScene placement, naming contract and staged current→target migration map.
+
+### Content contracts
+- `40_content/CONTENT_RULEBOOK.md` — meta-rule defining what every scalable family rulebook must answer.
+- `40_content/CONTENT_IDS.md` — stable semantic content identity and separate controlled schema-ID rules.
+- `40_content/CONTENT_CATEGORIES.md` — controlled hierarchical classification rules.
+- `40_content/CONTENT_CAPABILITIES.md` — behavioral composition contracts.
+- `40_content/CONTENT_REFERENCES.md` — typed semantic reference and cycle rules.
+- `40_content/CONTENT_FAMILIES.md` — directional map of major future item, creature, structure, worldgen, gameplay-data and presentation-data families.
+- `40_content/RULEBOOK_TEMPLATE.md` — reusable family-rulebook template.
+- `40_content/animations/ANIMATION_ROLE_SCHEMA.md` — controlled semantic animation-role vocabulary independent from clip filenames.
+- `40_content/animations/RIG_PROFILE_RULEBOOK.md` — semantic skeleton/socket mapping contract for replaceable character rigs.
+- `40_content/animations/ANIMATION_SET_RULEBOOK.md` — first family-specific content rulebook; animation implementation remains deferred.
+
+### Authoring
+- `50_authoring/AUTHORING_CONTRACT.md` — project-wide content authoring workflow.
+- `50_authoring/FILE_PLACEMENT_GUIDE.md` — practical decision guide for placing new runtime code, definitions, PackedScenes, presentation assets, tools and tests.
+- `50_authoring/ADDING_RIG_PROFILE.md` — rig mapping/import workflow without gameplay bone-path coupling.
+- `50_authoring/ADDING_ANIMATION_SET.md` — reusable semantic animation-set authoring workflow.
+
+### Validation
+- `60_validation/CONTENT_VALIDATION.md` — staged machine-enforcement architecture for IDs, categories, capabilities, definitions, references and assets.
+- `60_validation/REPOSITORY_LAYOUT_VALIDATION.md` — future path/dependency validation and staged retirement of prototype root folders.
+
+## Existing authoritative documents
+
+The following root documents remain authoritative while staged migration is pending:
 
 - `GAME_PILLARS.md` — what Underworld is and what it should not drift into.
 - `WORLD_ARCHITECTURE.md` — surface/Underworld relationship, depth layers, cave topology, entrances, connectivity, building freedom, terrain modification, and audio rules.
@@ -43,6 +99,14 @@ Existing code is not automatically the design. Prototype code may be replaced wh
 - `DEVELOPMENT_RULEBOOK.md` — architecture-first development, testing cadence, persistence, deterministic generation, and feature-scope rules.
 - `NEXT_DEVELOPMENT_CYCLE.md` — current architecture-cycle completion state and handoff into foundational implementation.
 - `DECISION_LOG.md` — chronological record of locked decisions and later revisions.
+
+## Core scaling principle
+
+Underworld systems should scale primarily by adding definitions, categories, capabilities, assets and compositions—not by adding special-case branches to central managers.
+
+Before a content family becomes large, establish its architecture placement, stable identity, rulebook, authoring guide and validation contract.
+
+The filesystem follows the same principle: runtime systems, authored definitions and replaceable presentation assets have separate ownership roots, and filesystem paths never become semantic game identity.
 
 ## Change rule
 
