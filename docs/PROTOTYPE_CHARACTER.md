@@ -21,7 +21,7 @@ PrototypeMannequin + Skeleton3D
         = visual articulation
 
 PlayerActionController
-        = dodge / parry / block timing and commitment
+        = dodge / parry / block / tool-use commitment
 
 StaminaComponent
         = generic stamina resource
@@ -83,6 +83,12 @@ block
 There is no MMO-style ability bar and no progressive weapon-technique unlock
 system implied by this contract.
 
+The prototype action controller currently exposes mutually exclusive committed
+states for dodge, parry, held block and active tool/melee use. An accepted LMB
+or RMB swing enters `USING_TOOL` for the existing tool-use duration, preventing
+that swing from being cancelled directly into dodge, parry, block, jump or
+sprint. Ordinary walking remains available during the swing.
+
 ## Current prototype controls
 
 ```text
@@ -97,6 +103,18 @@ RMB       melee attack
 ```
 
 Input bindings are prototype defaults, not permanent UX decisions.
+
+## Combat facing
+
+Attack/tool use, parry and block establish a combat-facing direction from the
+horizontal camera forward vector. The mannequin's +Z visual-forward axis is
+aligned to that direction when the action begins.
+
+While block is held, normal locomotion does not rotate the visual root. This
+keeps the guard cone stable while the player strafes. Dodge retains its own
+committed movement direction.
+
+This is a prototype facing contract, not a lock-on system.
 
 ## Stamina
 
@@ -129,20 +147,27 @@ Movement input selects dodge direction. A no-input dodge becomes a predictable
 backstep. Normal horizontal movement temporarily yields authority to the dodge
 curve. The full dodge animation is not invulnerable.
 
+Dodge iframes are not directional: an attack from any direction is avoided while
+the iframe window is active.
+
 ## Parry contract
 
 Current prototype:
 
 ```text
-startup           0.06 s
-active window     0.12 s
-recovery          0.30 s
+startup                 0.06 s
+active window           0.12 s
+recovery                0.30 s
+frontal coverage        ~160 degrees total
 ```
 
-Parry is a committed timed action. During the active window, parryable melee
-hits resolve as `parried` rather than normal damage. The player returns a small
-combat result (`hit`, `dodged`, `parried`, `blocked`, or `ignored`); enemies
-decide what that result means for their own behavior.
+Parry is a committed timed action. During the active window, a parryable melee
+hit resolves as `parried` only when the attacker is also inside the character's
+frontal parry arc. Rear attacks therefore bypass an active parry instead of
+turning parry into a 360-degree immunity field.
+
+The player returns a small combat result (`hit`, `dodged`, `parried`, `blocked`,
+or `ignored`); enemies decide what that result means for their own behavior.
 
 The prototype Burrower consumes `parried` by entering a distinct **0.85 second
 stagger**, cancelling the current attack, flashing, and receiving recoil away
@@ -176,8 +201,9 @@ heavy impacts can exhaust it.
 `blocked` is deliberately not equivalent to `parried`: the prototype Burrower
 does not receive parry stagger or recoil when its attack is merely blocked.
 
-The first mechanical block pass does not yet have a dedicated held guard pose.
-That is a visual-only follow-up and must not change the block resolution rules.
+The mannequin now includes a persistent held guard pose. This is a visual layer,
+not a timed action: gameplay owns whether guard is active, and the mannequin only
+renders the corresponding stance.
 
 ## Prototype HUD feedback
 
@@ -207,6 +233,7 @@ airborne pose
 attack
 parry
 directional dodge
+held guard
 hit reaction
 ```
 
@@ -222,14 +249,20 @@ later while preserving the same high-level visual API and action timings.
 - the rig constructs under Godot;
 - required bones and sockets exist;
 - the tool root is attached to the hand socket;
-- placeholder action poses advance and recover;
+- placeholder timed action poses advance and recover;
+- held guard visual state activates and clears without becoming a timed action;
 - stamina spending/regeneration follows its contract;
 - dodge startup/iframe/recovery timing is correct;
 - parry startup/active/recovery timing is correct;
+- frontal parry succeeds while rear melee bypasses it;
+- combat facing aligns the mannequin to horizontal camera forward;
 - held block starts/releases and is mutually exclusive with dodge/parry;
 - block impact stamina is charged exactly;
 - frontal block prevents damage while rear attacks bypass it;
-- insufficient stamina produces guard break and drains the remainder;
+- guard facing remains stable while strafing;
+- insufficient stamina produces guard break, drains the remainder and clears the visual guard;
+- accepted live tool/melee use enters the committed `USING_TOOL` state;
+- tool commitment rejects dodge/parry/block and ends with the existing cooldown;
 - `player.gd` constructs and resolves normal/dodged/parried/blocked melee;
 - a parried Burrower attack produces the long parry stagger and recoil;
 - dodged or blocked Burrower attacks do not accidentally produce parry stagger.
