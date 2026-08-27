@@ -80,8 +80,8 @@ func _update_layout() -> void:
 	if crosshair != null:
 		crosshair.position = viewport_size * 0.5 - Vector2(6.0, 14.0)
 	if survival_label != null:
-		survival_label.position = Vector2(0.0, viewport_size.y - 112.0)
-		survival_label.size = Vector2(viewport_size.x, 106.0)
+		survival_label.position = Vector2(0.0, viewport_size.y - 136.0)
+		survival_label.size = Vector2(viewport_size.x, 130.0)
 
 
 func _refresh_text() -> void:
@@ -91,6 +91,9 @@ func _refresh_text() -> void:
 	var position: Vector3 = player.global_position
 	var chunk: Vector2i = world.get_current_player_chunk()
 	var speed: float = player.get_horizontal_speed()
+	var stamina_current: float = player.get_stamina()
+	var stamina_max: float = player.get_max_stamina()
+	var action_state: String = player.get_action_state_name()
 	var worker_state: String = "busy" if world.is_worker_busy() else "idle"
 	var surface: Dictionary = world.get_surface_sample_at_world(position.x, position.z)
 	var decoration_counts: Vector2i = world.get_current_decoration_counts()
@@ -108,7 +111,7 @@ func _refresh_text() -> void:
 		combat_message = combat.get_last_combat_message()
 
 	label.text = (
-		"UNDERWORLD — prototype 0.07\n"
+		"UNDERWORLD — prototype 0.07 + character rig\n"
 		+ "FPS: %d\n" % Engine.get_frames_per_second()
 		+ "Seed: %d   Sea: %.1f\n" % [settings.world_seed, settings.sea_level]
 		+ "Position: %.1f, %.1f, %.1f\n" % [position.x, position.y, position.z]
@@ -137,6 +140,9 @@ func _refresh_text() -> void:
 			_tool_display_name(equipped), world.get_last_harvest_message()
 		]
 		+ "Combat: %s   Active enemies: %d\n" % [combat_message, active_enemies]
+		+ "Character: STA %.0f/%.0f   Action: %s\n" % [
+			stamina_current, stamina_max, action_state
+		]
 		+ "Worker: %s\n" % worker_state
 		+ "Chunk CPU: %.2f ms   Max: %.2f ms\n" % [
 			world.get_last_generation_ms(), world.get_max_generation_ms()
@@ -154,8 +160,10 @@ func _refresh_text() -> void:
 	var slot_2: String = _format_slot(2, "Stone Axe", has_axe, selected_slot)
 	var slot_3: String = _format_slot(3, "Stone Pickaxe", has_pickaxe, selected_slot)
 	survival_label.text = (
-		"HP %d/%d    Enemies %d    %s\n" % [
-			player.get_health(), player.get_max_health(), active_enemies, combat_message
+		"HP %d/%d    STA %.0f/%.0f    Action: %s    Enemies %d    %s\n" % [
+			player.get_health(), player.get_max_health(),
+			stamina_current, stamina_max, action_state,
+			active_enemies, combat_message
 		]
 		+ slot_1 + "    " + slot_2 + "    " + slot_3 + "\n"
 		+ "Wood %d   Stone %d    C: craft Axe (%dW/%dS)    V: craft Pickaxe (%dW/%dS)\n" % [
@@ -163,7 +171,7 @@ func _refresh_text() -> void:
 			settings.stone_axe_wood_cost, settings.stone_axe_stone_cost,
 			settings.stone_pickaxe_wood_cost, settings.stone_pickaxe_stone_cost
 		]
-		+ "LMB: harvest   |   RMB: melee attack   |   step away during Burrower wind-up"
+		+ "LMB: harvest   |   RMB: melee   |   Ctrl: dodge   |   Q: parry"
 	)
 
 
