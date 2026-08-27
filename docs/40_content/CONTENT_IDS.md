@@ -16,6 +16,8 @@ item.tool.stone_pickaxe
 creature.underworld.burrower
 attack.sword.light_01
 animation_set.humanoid.one_handed_sword
+rig_profile.humanoid.prototype
+visual.weapon.iron_sword
 recipe.weapon.iron_sword
 structure.surface.ruined_hut
 ```
@@ -49,7 +51,7 @@ Content IDs are not:
 
 ## Namespace ownership
 
-The leading namespace identifies the broad semantic family.
+The leading namespace identifies the broad semantic content family.
 
 Initial directional namespaces:
 ```text
@@ -59,6 +61,8 @@ structure.*
 attack.*
 attack_set.*
 animation_set.*
+rig_profile.*
+visual.*
 audio_set.*
 vfx_set.*
 recipe.*
@@ -69,7 +73,31 @@ spawn_profile.*
 status_effect.*
 ```
 
-New top-level namespaces require architecture review rather than being invented casually.
+New top-level content namespaces require architecture review rather than being invented casually.
+
+## Schema identifiers are separate
+
+Some controlled vocabularies also use semantic dot-separated IDs but identify schema concepts rather than authored content definitions.
+
+Examples:
+```text
+category.item.equipment.weapon.melee.sword
+capability.equipable
+animation_role.action.parry
+```
+
+These obey the same clarity/stability discipline but are resolved by their respective category/capability/role schemas, not as ordinary content definitions.
+
+Do not confuse:
+```text
+animation_set.humanoid.prototype
+```
+(an authored content definition)
+with:
+```text
+animation_role.action.parry
+```
+(a controlled semantic role used inside animation-set definitions).
 
 ## Hierarchy is semantic, not class inheritance
 
