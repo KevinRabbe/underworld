@@ -16,7 +16,8 @@ const CanonicalValue := preload("res://worldgen/validation/canonical_value.gd")
 const ConnectivityResult := preload("res://worldgen/underworld/secondary_connectivity_result.gd")
 
 const MIN_LOCAL_LENGTH := 26.0
-const MAX_CROSS_REGION_LENGTH := 185.0
+const MAX_CROSS_REGION_LENGTH := 240.0
+const MIN_CROSS_REGION_SCORE := 0.42
 const MAX_SECONDARY_DEGREE := 1
 
 
@@ -285,7 +286,7 @@ static func _cross_candidates(context, region_plan, primary_topology, view: Dict
 	var accepted = null
 	if not result.is_empty():
 		var best: Dictionary = result[0]
-		if float(best["score"]) >= 0.46 and float(best["roll"]) < float(best["probability"]):
+		if float(best["score"]) >= MIN_CROSS_REGION_SCORE and float(best["roll"]) < float(best["probability"]):
 			best["accepted"] = true
 			accepted = best
 	return {"candidates": result, "accepted": accepted}
