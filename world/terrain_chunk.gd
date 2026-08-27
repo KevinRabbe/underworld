@@ -8,8 +8,6 @@ var _collision_spacing: float = 1.0
 var _settings: UnderworldWorldSettings
 var _decoration_assets: Dictionary = {}
 
-# Kept with the chunk because these masks will drive deterministic vegetation,
-# rocks, resources, creatures, and later cave-surface clues.
 var moisture: PackedFloat32Array = PackedFloat32Array()
 var forest_density: PackedFloat32Array = PackedFloat32Array()
 var rockiness: PackedFloat32Array = PackedFloat32Array()
@@ -17,12 +15,24 @@ var buildability: PackedFloat32Array = PackedFloat32Array()
 
 var tree_instance_count: int = 0
 var rock_instance_count: int = 0
+var branch_instance_count: int = 0
+var loose_stone_instance_count: int = 0
+
 var _tree_transforms: Array = []
 var _rock_transforms: Array = []
+var _branch_transforms: Array = []
+var _loose_stone_transforms: Array = []
+
 var _destroyed_tree_indices: Dictionary = {}
 var _destroyed_rock_indices: Dictionary = {}
+var _destroyed_branch_indices: Dictionary = {}
+var _destroyed_loose_stone_indices: Dictionary = {}
+
 var _tree_multimesh_instance: MultiMeshInstance3D
 var _rock_multimesh_instance: MultiMeshInstance3D
+var _branch_multimesh_instance: MultiMeshInstance3D
+var _loose_stone_multimesh_instance: MultiMeshInstance3D
+
 var _world_object_root: Node3D
 var _active_tree_bodies: Dictionary = {}
 var _active_rock_bodies: Dictionary = {}
@@ -74,48 +84,111 @@ func build(
 func _build_decorations(data: Dictionary, destroyed_objects: Dictionary) -> void:
 	_tree_transforms = data.get("tree_transforms", [])
 	_rock_transforms = data.get("rock_transforms", [])
+	_branch_transforms = data.get("branch_transforms", [])
+	_loose_stone_transforms = data.get("loose_stone_transforms", [])
+
 	_destroyed_tree_indices.clear()
 	_destroyed_rock_indices.clear()
+	_destroyed_branch_indices.clear()
+	_destroyed_loose_stone_indices.clear()
 
-	for index in range(_tree_transforms.size()):
-		if destroyed_objects.has(_make_object_id("tree", index)):
-			_destroyed_tree_indices[index] = true
-	for index in range(_rock_transforms.size()):
-		if destroyed_objects.has(_make_object_id("rock", index)):
-			_destroyed_rock_indices[index] = true
+	_load_destroyed_indices("tree", _tree_transforms, _destroyed_tree_indices, destroyed_objects)
+	_load_destroyed_indices("rock", _rock_transforms, _destroyed_rock_indices, destroyed_objects)
+	_load_destroyed_indices("branch", _branch_transforms, _destroyed_branch_indices, destroyed_objects)
+	_load_destroyed_indices(
+		"loose_stone",
+		_loose_stone_transforms,
+		_destroyed_loose_stone_indices,
+		destroyed_objects
+	)
 
 	_rebuild_visual_set("tree")
 	_rebuild_visual_set("rock")
+	_rebuild_visual_set("branch")
+	_rebuild_visual_set("loose_stone")
+
+
+func _load_destroyed_indices(
+	object_type: String,
+	transforms: Array,
+	destroyed: Dictionary,
+	world_destroyed: Dictionary
+) -> void:
+	for index in range(transforms.size()):
+		if world_destroyed.has(_make_object_id(object_type, index)):
+			destroyed[index] = true
 
 
 func _rebuild_visual_set(object_type: String) -> void:
-	var transforms: Array = _tree_transforms if object_type == "tree" else _rock_transforms
-	var destroyed: Dictionary = (
-		_destroyed_tree_indices if object_type == "tree" else _destroyed_rock_indices
-	)
+	var transforms: Array = []
+	var destroyed: Dictionary = {}
+	var node_name: String = ""
+	var mesh_key: String = ""
+	var material_key: String = ""
+
+	match object_type:
+		"tree":
+			transforms = _tree_transforms
+			destroyed = _destroyed_tree_indices
+			node_name = "Trees"
+			mesh_key = "tree_mesh"
+			material_key = "tree_material"
+		"rock":
+			transforms = _rock_transforms
+			destroyed = _destroyed_rock_indices
+			node_name = "Rocks"
+			mesh_key = "rock_mesh"
+			material_key = "rock_material"
+		"branch":
+			transforms = _branch_transforms
+			destroyed = _destroyed_branch_indices
+			node_name = "LooseBranches"
+			mesh_key = "branch_mesh"
+			material_key = "branch_material"
+		"loose_stone":
+			transforms = _loose_stone_transforms
+			destroyed = _destroyed_loose_stone_indices
+			node_name = "LooseStones"
+			mesh_key = "loose_stone_mesh"
+			material_key = "loose_stone_material"
+		_:
+			return
+
 	var visible_transforms: Array = []
 	for index in range(transforms.size()):
 		if not destroyed.has(index):
 			visible_transforms.append(transforms[index])
 
-	if object_type == "tree":
-		tree_instance_count = visible_transforms.size()
-		_tree_multimesh_instance = _replace_multimesh_instance(
-			_tree_multimesh_instance,
-			"Trees",
-			_decoration_assets["tree_mesh"],
-			_decoration_assets["tree_material"],
-			visible_transforms
-		)
-	else:
-		rock_instance_count = visible_transforms.size()
-		_rock_multimesh_instance = _replace_multimesh_instance(
-			_rock_multimesh_instance,
-			"Rocks",
-			_decoration_assets["rock_mesh"],
-			_decoration_assets["rock_material"],
-			visible_transforms
-		)
+	var replacement: MultiMeshInstance3D
+	match object_type:
+		"tree":
+			replacement = _replace_multimesh_instance(
+				_tree_multimesh_instance, node_name, _decoration_assets[mesh_key],
+				_decoration_assets[material_key], visible_transforms
+			)
+			_tree_multimesh_instance = replacement
+			tree_instance_count = visible_transforms.size()
+		"rock":
+			replacement = _replace_multimesh_instance(
+				_rock_multimesh_instance, node_name, _decoration_assets[mesh_key],
+				_decoration_assets[material_key], visible_transforms
+			)
+			_rock_multimesh_instance = replacement
+			rock_instance_count = visible_transforms.size()
+		"branch":
+			replacement = _replace_multimesh_instance(
+				_branch_multimesh_instance, node_name, _decoration_assets[mesh_key],
+				_decoration_assets[material_key], visible_transforms
+			)
+			_branch_multimesh_instance = replacement
+			branch_instance_count = visible_transforms.size()
+		"loose_stone":
+			replacement = _replace_multimesh_instance(
+				_loose_stone_multimesh_instance, node_name, _decoration_assets[mesh_key],
+				_decoration_assets[material_key], visible_transforms
+			)
+			_loose_stone_multimesh_instance = replacement
+			loose_stone_instance_count = visible_transforms.size()
 
 
 func _replace_multimesh_instance(
@@ -180,22 +253,93 @@ func update_world_object_physics(
 	)
 
 
+func collect_nearby_pickups(player_world_position: Vector3, radius: float) -> Array:
+	var collected: Array = []
+	var player_local: Vector3 = to_local(player_world_position)
+	var radius_sq: float = radius * radius
+
+	var branches_changed: bool = _collect_pickup_set(
+		_branch_transforms,
+		_destroyed_branch_indices,
+		"branch",
+		player_local,
+		radius_sq,
+		collected
+	)
+	var stones_changed: bool = _collect_pickup_set(
+		_loose_stone_transforms,
+		_destroyed_loose_stone_indices,
+		"loose_stone",
+		player_local,
+		radius_sq,
+		collected
+	)
+
+	if branches_changed:
+		_rebuild_visual_set("branch")
+	if stones_changed:
+		_rebuild_visual_set("loose_stone")
+	return collected
+
+
+func _collect_pickup_set(
+	transforms: Array,
+	destroyed: Dictionary,
+	object_type: String,
+	player_local: Vector3,
+	radius_sq: float,
+	collected: Array
+) -> bool:
+	var changed: bool = false
+	for index in range(transforms.size()):
+		if destroyed.has(index):
+			continue
+		var instance_transform: Transform3D = transforms[index]
+		var delta: Vector3 = instance_transform.origin - player_local
+		if delta.length_squared() > radius_sq:
+			continue
+		destroyed[index] = true
+		changed = true
+		collected.append({
+			"object_id": _make_object_id(object_type, index),
+			"object_type": object_type,
+			"index": index,
+		})
+	return changed
+
+
 func get_active_world_object_count() -> int:
 	return _active_tree_bodies.size() + _active_rock_bodies.size()
 
 
-func destroy_world_object(object_type: String, index: int) -> bool:
-	var transforms: Array = _tree_transforms if object_type == "tree" else _rock_transforms
-	if index < 0 or index >= transforms.size():
-		return false
+func get_pickup_counts() -> Vector2i:
+	return Vector2i(branch_instance_count, loose_stone_instance_count)
 
-	var destroyed: Dictionary = (
-		_destroyed_tree_indices if object_type == "tree" else _destroyed_rock_indices
-	)
-	var active_bodies: Dictionary = (
-		_active_tree_bodies if object_type == "tree" else _active_rock_bodies
-	)
-	if destroyed.has(index):
+
+func destroy_world_object(object_type: String, index: int) -> bool:
+	var transforms: Array = []
+	var destroyed: Dictionary = {}
+	var active_bodies: Dictionary = {}
+
+	match object_type:
+		"tree":
+			transforms = _tree_transforms
+			destroyed = _destroyed_tree_indices
+			active_bodies = _active_tree_bodies
+		"rock":
+			transforms = _rock_transforms
+			destroyed = _destroyed_rock_indices
+			active_bodies = _active_rock_bodies
+		"branch":
+			transforms = _branch_transforms
+			destroyed = _destroyed_branch_indices
+		"loose_stone":
+			transforms = _loose_stone_transforms
+			destroyed = _destroyed_loose_stone_indices
+		_:
+			return false
+
+	if index < 0 or index >= transforms.size() or destroyed.has(index):
 		return false
 
 	destroyed[index] = true
@@ -217,8 +361,6 @@ func _update_proxy_set(
 	activation_sq: float,
 	release_sq: float
 ) -> void:
-	# Release with a larger radius than activation so objects do not constantly
-	# create/destroy when the player hovers on the boundary.
 	for key in active_bodies.keys():
 		var index: int = int(key)
 		if destroyed.has(index) or index < 0 or index >= transforms.size():
@@ -319,9 +461,6 @@ func _create_collision() -> void:
 	var scaled_heights: PackedFloat32Array = PackedFloat32Array()
 	scaled_heights.resize(_collision_heights.size())
 
-	# HeightMapShape3D uses one local unit between height samples. Scale the
-	# whole static body uniformly by the terrain spacing, then divide the
-	# stored heights by the same amount so X, Y and Z end up in world units.
 	for index in range(_collision_heights.size()):
 		scaled_heights[index] = _collision_heights[index] / spacing
 
@@ -336,8 +475,6 @@ func _create_collision() -> void:
 	_collision_body.collision_mask = 1
 	_collision_body.scale = Vector3.ONE * spacing
 
-	# HeightMapShape3D is centered around its origin, while our visual mesh
-	# runs from local (0, 0) to (chunk_size, chunk_size).
 	var local_extent: float = float(_collision_resolution - 1)
 	_collision_body.position = Vector3(
 		local_extent * 0.5 * spacing,
