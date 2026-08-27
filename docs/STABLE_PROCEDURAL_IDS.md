@@ -10,6 +10,8 @@ The core rule is:
 
 > **Identity belongs to a deterministic generation candidate/address, not to the object's current array index, runtime node, mesh instance, or RNG call order.**
 
+Randomness derived from these addresses is specified in `DETERMINISTIC_SEED_DOMAINS.md`.
+
 ---
 
 ## 1. Why the current prototype ID is unsafe
@@ -120,7 +122,7 @@ Correct:
 
 ```text
 candidate address = deterministic cell + semantic slot
-candidate RNG = derive(world_seed, candidate address, generation domain)
+candidate randomness = derive(world_seed, candidate address, named generation domain)
 if candidate passes:
     object ID = ID(candidate address)
 ```
@@ -323,14 +325,14 @@ Use integer/categorical generation addresses for identity. Position is generated
 
 IDs must not depend on mutable/random-generator state such as "the 57th random number consumed."
 
-The preferred dependency direction is:
+The dependency direction is:
 
 ```text
 StableAddress
      |
      +--> StableId
      |
-     +--> deterministic derived RNG seed for a named generation domain
+     +--> SeedDeriver(named domain + explicit revision + optional subkey)
 ```
 
 not:
@@ -339,7 +341,7 @@ not:
 shared RNG sequence -> object exists -> assign next ID
 ```
 
-The detailed seed-domain/hash design is specified in the next architecture document.
+`DETERMINISTIC_SEED_DOMAINS.md` defines the full seed contract, including the rule that global generator version is not automatically used as a universal RNG salt.
 
 ---
 
@@ -510,6 +512,6 @@ The following are **OPEN** until implementation/profiling makes a concrete choic
 - exact global surface candidate-lattice spacing/domain versioning;
 - exact underground region dimensions;
 - exact node-lineage key representation;
-- exact hash function used to derive local RNG seeds from stable addresses.
+- exact seed hash/PRNG implementation chosen under the requirements of `DETERMINISTIC_SEED_DOMAINS.md`.
 
 These choices may change without violating this architecture as long as the semantic stable address and invariants remain intact.
