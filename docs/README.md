@@ -39,6 +39,7 @@ Existing code is not automatically the design. Prototype code may be replaced wh
 - `VALIDATION_HARNESS.md` — deterministic primitives, stage fingerprints, graph invariants, batch-seed campaigns, migration fixtures and streaming-lifetime tests.
 - `PROTOTYPE_CHARACTER.md` — replaceable humanoid mannequin, movement/defense states, stamina, combat facing and prototype controls.
 - `PLAYER_ATTACK_CONTRACT.md` — data-driven player melee ownership, startup/active/recovery phases, immutable execution messages and hit-resolution boundaries.
+- `PLAYER_INPUT_BUFFER.md` — one-slot expiring combat intent buffer, ownership boundary, execution-time attack state and reset/expiry rules.
 - `DEVELOPMENT_RULEBOOK.md` — architecture-first development, testing cadence, persistence, deterministic generation, and feature-scope rules.
 - `NEXT_DEVELOPMENT_CYCLE.md` — current architecture-cycle completion state and handoff into foundational implementation.
 - `DECISION_LOG.md` — chronological record of locked decisions and later revisions.
