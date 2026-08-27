@@ -38,7 +38,29 @@ static func run(tree: SceneTree) -> Array[String]:
 		fixture_root.free()
 		return failures
 
-	# Parry resolution must preserve health while the timed active window is open.
+	# Combat actions establish a camera-facing direction. Directional defense then
+	# resolves against that visual forward rather than a fixed world axis.
+	var visual_root: Node3D = player.get("visual_root")
+	var camera_yaw: Node3D = player.get("camera_yaw")
+	player.call("_face_combat_camera")
+	var camera_forward: Vector3 = -camera_yaw.global_transform.basis.z
+	camera_forward.y = 0.0
+	camera_forward = camera_forward.normalized()
+	var combat_forward: Vector3 = visual_root.global_transform.basis.z
+	combat_forward.y = 0.0
+	combat_forward = combat_forward.normalized()
+	_expect_true(
+		failures,
+		"combat facing aligns mannequin forward to camera forward",
+		combat_forward.dot(camera_forward) > 0.999
+	)
+
+	var player_position: Vector3 = player.get("global_position")
+	var front_source: Vector3 = player_position + combat_forward
+	var rear_source: Vector3 = player_position - combat_forward
+
+	# Parry resolution must preserve health while the timed active window is open
+	# and the melee source is inside the frontal parry arc.
 	_expect_true(
 		failures,
 		"player parry action starts",
@@ -49,10 +71,10 @@ static func run(tree: SceneTree) -> Array[String]:
 	var parry_result: StringName = player.call(
 		"receive_melee_attack",
 		10,
-		Vector3(1.0, 0.0, 0.0),
+		front_source,
 		true
 	)
-	_expect_equal(failures, "active parry resolves as parried", parry_result, &"parried")
+	_expect_equal(failures, "frontal active parry resolves as parried", parry_result, &"parried")
 	_expect_equal(
 		failures,
 		"parry prevents health loss",
@@ -60,19 +82,44 @@ static func run(tree: SceneTree) -> Array[String]:
 		health_before
 	)
 
-	# Dodge iframe path is distinct from parry and also preserves health.
+	# Parry is not a 360-degree immunity field. The same active window does not
+	# protect an attack coming from behind.
 	actions.call("reset")
 	stamina.call("reset")
+	player.set("damage_invulnerability_timer", 0.0)
+	_expect_true(failures, "rear-parry fixture starts parry", bool(actions.call("try_start_parry")))
+	actions.call("tick", 0.07)
+	var rear_parry_health: int = int(player.call("get_health"))
+	var rear_parry_result: StringName = player.call(
+		"receive_melee_attack",
+		10,
+		rear_source,
+		true
+	)
+	_expect_equal(failures, "rear melee bypasses active parry", rear_parry_result, &"hit")
+	_expect_equal(
+		failures,
+		"rear melee damages parrying player",
+		int(player.call("get_health")),
+		rear_parry_health - 10
+	)
+
+	# Dodge iframe path is distinct from directional defenses and remains valid
+	# independent of attack direction.
+	actions.call("reset")
+	stamina.call("reset")
+	player.set("damage_invulnerability_timer", 0.0)
 	_expect_true(
 		failures,
 		"player dodge action starts",
 		bool(actions.call("try_start_dodge", Vector3(1.0, 0.0, 0.0)))
 	)
 	actions.call("tick", 0.10)
+	var dodge_health_before: int = int(player.call("get_health"))
 	var dodge_result: StringName = player.call(
 		"receive_melee_attack",
 		10,
-		Vector3(1.0, 0.0, 0.0),
+		rear_source,
 		true
 	)
 	_expect_equal(failures, "active dodge iframe resolves as dodged", dodge_result, &"dodged")
@@ -80,7 +127,7 @@ static func run(tree: SceneTree) -> Array[String]:
 		failures,
 		"dodge iframe prevents health loss",
 		int(player.call("get_health")),
-		health_before
+		dodge_health_before
 	)
 
 	# Held block protects only the front arc, pays stamina on impact, and propagates
@@ -95,7 +142,6 @@ static func run(tree: SceneTree) -> Array[String]:
 		"player block state reaches mannequin guard pose",
 		bool(mannequin.call("is_block_pose_active"))
 	)
-	var visual_root: Node3D = player.get("visual_root")
 	var guard_yaw: float = visual_root.rotation.y
 	player.set("velocity", Vector3(4.0, 0.0, 0.0))
 	player.call("_update_visual_facing", 1.0)
@@ -107,8 +153,6 @@ static func run(tree: SceneTree) -> Array[String]:
 	)
 	player.set("velocity", Vector3.ZERO)
 
-	var player_position: Vector3 = player.get("global_position")
-	var front_source: Vector3 = player_position + Vector3(0.0, 0.0, 1.0)
 	var block_health_before: int = int(player.call("get_health"))
 	var block_result: StringName = player.call(
 		"receive_melee_attack",
@@ -127,7 +171,6 @@ static func run(tree: SceneTree) -> Array[String]:
 
 	# The same held guard does not protect the rear hemisphere.
 	player.set("damage_invulnerability_timer", 0.0)
-	var rear_source: Vector3 = player_position + Vector3(0.0, 0.0, -1.0)
 	var rear_health_before: int = int(player.call("get_health"))
 	var rear_result: StringName = player.call(
 		"receive_melee_attack",
@@ -181,7 +224,7 @@ static func run(tree: SceneTree) -> Array[String]:
 	var hit_result: StringName = player.call(
 		"receive_melee_attack",
 		10,
-		Vector3(1.0, 0.0, 0.0),
+		front_source,
 		true
 	)
 	_expect_equal(failures, "undefended melee resolves as hit", hit_result, &"hit")
@@ -197,7 +240,16 @@ static func run(tree: SceneTree) -> Array[String]:
 	actions.call("reset")
 	stamina.call("reset")
 	player.set("tool_use_cooldown_timer", 0.0)
+	visual_root.rotation.y = 0.0
 	_expect_true(failures, "live player tool action starts", bool(player.call("_begin_tool_action")))
+	var attack_forward: Vector3 = visual_root.global_transform.basis.z
+	attack_forward.y = 0.0
+	attack_forward = attack_forward.normalized()
+	_expect_true(
+		failures,
+		"tool action establishes camera-facing combat direction",
+		attack_forward.dot(camera_forward) > 0.999
+	)
 	_expect_equal(
 		failures,
 		"live player exposes USING_TOOL state",
