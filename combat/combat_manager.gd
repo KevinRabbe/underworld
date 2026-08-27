@@ -6,6 +6,7 @@ const TARGET_ENEMY_COUNT := 4
 const SPAWN_MIN_DISTANCE := 18.0
 const SPAWN_MAX_DISTANCE := 34.0
 const SPAWN_INTERVAL := 2.0
+const RELEASE_DISTANCE := 72.0
 const PLAYER_ATTACK_REACH := 2.7
 
 var world
@@ -28,6 +29,7 @@ func _process(delta: float) -> void:
 	if world == null or player == null or settings == null:
 		return
 
+	_release_distant_or_invalid_enemies()
 	spawn_timer = maxf(0.0, spawn_timer - delta)
 	if active_enemies.size() < TARGET_ENEMY_COUNT and spawn_timer <= 0.0:
 		spawn_timer = SPAWN_INTERVAL
@@ -147,6 +149,18 @@ func _spawn_enemy_near_player() -> void:
 		active_enemies[id] = enemy
 		last_combat_message = "A Burrower is nearby"
 		return
+
+
+func _release_distant_or_invalid_enemies() -> void:
+	for id_variant in active_enemies.keys():
+		var id: String = str(id_variant)
+		var enemy_node: Node3D = active_enemies[id] as Node3D
+		if enemy_node == null or not is_instance_valid(enemy_node):
+			active_enemies.erase(id)
+			continue
+		if enemy_node.global_position.distance_to(player.global_position) > RELEASE_DISTANCE:
+			enemy_node.queue_free()
+			active_enemies.erase(id)
 
 
 func _is_too_close_to_other_enemy(position: Vector3) -> bool:
