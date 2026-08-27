@@ -122,7 +122,7 @@ func _try_attack_target() -> void:
 		return
 	attack_timer = attack_cooldown
 	if target.has_method("take_damage"):
-		target.take_damage(attack_damage, global_position)
+		target.call("take_damage", attack_damage, global_position)
 
 
 func _get_wander_direction() -> Vector3:
