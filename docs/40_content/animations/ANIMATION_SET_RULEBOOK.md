@@ -14,49 +14,54 @@ The box mannequin is replaceable. Animation semantics and authoring contracts sh
 
 ## Stable identity
 
-Animation sets use semantic IDs such as:
+Animation sets use semantic content IDs such as:
 ```text
 animation_set.humanoid.prototype
 animation_set.humanoid.one_handed_sword
 animation_set.humanoid.two_handed_axe
 ```
 
-Individual semantic actions should also use controlled names/IDs rather than gameplay depending on raw clip filenames.
+Rig/profile definitions use their own semantic family, for example:
+```text
+rig_profile.humanoid.prototype
+```
+
+Individual animation semantic roles use a controlled `animation_role.*` schema namespace rather than gameplay depending on raw clip filenames.
 
 Directional semantic vocabulary:
 ```text
-locomotion.idle
-locomotion.walk_forward
-locomotion.walk_backward
-locomotion.strafe_left
-locomotion.strafe_right
-locomotion.sprint
-locomotion.jump_start
-locomotion.fall
-locomotion.land
+animation_role.locomotion.idle
+animation_role.locomotion.walk_forward
+animation_role.locomotion.walk_backward
+animation_role.locomotion.strafe_left
+animation_role.locomotion.strafe_right
+animation_role.locomotion.sprint
+animation_role.locomotion.jump_start
+animation_role.locomotion.fall
+animation_role.locomotion.land
 
-action.attack.light_01
-action.dodge.forward
-action.dodge.backward
-action.dodge.left
-action.dodge.right
-action.parry
-action.block
+animation_role.action.attack.light_01
+animation_role.action.dodge.forward
+animation_role.action.dodge.backward
+animation_role.action.dodge.left
+animation_role.action.dodge.right
+animation_role.action.parry
+animation_role.action.block
 
-reaction.hit.front
-reaction.death
+animation_role.reaction.hit.front
+animation_role.reaction.death
 ```
 
 Exact vocabulary may evolve before production content depends on it.
 
 ## Categories
 
-Directional categories may include:
+Directional category schema IDs may include:
 ```text
-animation_set
-animation_set.humanoid
-animation_set.humanoid.locomotion
-animation_set.humanoid.combat
+category.animation_set
+category.animation_set.humanoid
+category.animation_set.humanoid.locomotion
+category.animation_set.humanoid.combat
 ```
 
 Categories classify the set; they do not decide combat timing/damage.
@@ -65,8 +70,8 @@ Categories classify the set; they do not decide combat timing/damage.
 
 A valid animation set should eventually define:
 - semantic content ID;
-- compatible rig/profile family;
-- mapping from required semantic animation roles to concrete animations;
+- compatible rig/profile semantic ID;
+- mapping from required `animation_role.*` IDs to concrete animations;
 - animation library/resource references;
 - root-motion policy;
 - optional blend/layer metadata where the presentation system needs it.
@@ -99,7 +104,7 @@ The animation layer visualizes semantic actions and may expose timing markers on
 
 Animation sets target a semantic rig/profile rather than gameplay knowing concrete bone paths.
 
-Important roles may include:
+Important semantic rig roles may include:
 ```text
 pelvis
 chest
@@ -134,7 +139,7 @@ Gameplay code should not manipulate bones directly once this pipeline is establi
 Future animation-set validation should check:
 - valid/unique animation-set ID;
 - compatible rig profile exists;
-- required semantic roles exist;
+- required animation-role schema IDs exist;
 - mapped animation resources/clips exist;
 - no duplicate/ambiguous required role mapping;
 - root-motion policy is declared;
@@ -146,16 +151,24 @@ It must not try to judge animation artistic quality automatically.
 
 For the current player foundation, the first reusable set should cover at least:
 ```text
-idle
-walk/run directional locomotion
-sprint
-jump/fall/land
-light attack
-dodge directions
-parry
-block
-hit reaction
-death
+animation_role.locomotion.idle
+animation_role.locomotion.walk_forward
+animation_role.locomotion.walk_backward
+animation_role.locomotion.strafe_left
+animation_role.locomotion.strafe_right
+animation_role.locomotion.sprint
+animation_role.locomotion.jump_start
+animation_role.locomotion.fall
+animation_role.locomotion.land
+animation_role.action.attack.light_01
+animation_role.action.dodge.forward
+animation_role.action.dodge.backward
+animation_role.action.dodge.left
+animation_role.action.dodge.right
+animation_role.action.parry
+animation_role.action.block
+animation_role.reaction.hit.front
+animation_role.reaction.death
 ```
 
 The first implementation may convert current procedural placeholder poses into actual reusable Animation resources while retaining the box mannequin.
