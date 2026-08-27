@@ -176,3 +176,81 @@ The following remain intentionally open and must not become permanent accidental
 - exact global surface candidate-lattice spacing/domain versioning;
 - exact cave geometry/spline/meshing algorithm;
 - exact underground runtime streaming-cell dimensions and cache thresholds.
+
+## 2026-08-27 — Deterministic seed-domain checkpoint
+
+### No shared generation RNG — LOCKED
+
+- Persistent procedural generation must not use one mutable world RNG or one shared per-region RNG across unrelated systems.
+- Every persistent random decision derives from world seed + seed-schema contract + named domain/revision + semantic stable address + optional semantic subkey.
+- Load order, worker scheduling, accepted/rejected candidate count and unrelated RNG consumption must not alter a candidate's randomness.
+
+### Generator version is not a universal salt — LOCKED
+
+- Global `generator_version` records the compatible collection/manifest of generation contracts.
+- It is not automatically mixed into every derived seed.
+- Individual persistent generation domains have immutable domain IDs and explicit domain revisions.
+- A local generator change can therefore revise one domain without automatically reshuffling unrelated domains.
+
+### Domain semantics — LOCKED
+
+- Domain IDs never change semantic meaning after use in persistent generation.
+- Do not use insertion-sensitive implicit enum ordinals as persisted domain IDs.
+- Ad-hoc magic-number salts scattered through generator files are forbidden; one authoritative seed-domain registry owns domain IDs/names/revisions.
+- If two decisions should be able to evolve independently, they should not depend on the same mutable RNG sequence.
+
+### Stable address as seed anchor — LOCKED
+
+- Seed derivation consumes the semantic stable generation address, not runtime array index, Node identity, float-formatted world position or readable StableId string formatting.
+- Rejected sibling candidates do not advance or perturb another candidate's random stream.
+- Cross-region connector randomness derives from the same canonical owner/endpoint address used by its identity.
+
+### Topology/geometry RNG separation — LOCKED
+
+- Randomness that decides cave existence/connectivity is separated from randomness that controls detailed tunnel/chamber geometry.
+- A future geometry/remeshing revision must not automatically change cave graph topology merely because its random call sequence changed.
+
+### Local sequences and subkeys — LOCKED DIRECTION
+
+- Stateless deterministic values/subkeys are preferred for simple independent decisions.
+- A local deterministic RNG sequence is allowed inside one semantic compatibility unit such as tree shape or one tunnel geometry calculation.
+- If properties later need independent compatibility, they are split into separate domains/subkeys rather than extending a shared world RNG.
+
+### Project-owned deterministic RNG contract — LOCKED DIRECTION
+
+- Persistent world generation will use a project-owned/frozen deterministic RNG or stateless deterministic-value contract seeded only through the central seed deriver.
+- Its exact low-level algorithm is chosen during implementation, documented, and protected with hard-coded platform-independent test vectors before persistent worlds depend on it.
+- Runtime-only cosmetic randomness may use ordinary engine randomness when it does not define persistent world truth.
+
+### Engine/noise drift detection — LOCKED
+
+- Seed isolation does not by itself guarantee noise output compatibility across engine/library changes.
+- Representative persistent terrain/noise fingerprints must be part of validation so engine upgrades cannot silently reshape existing deterministic worlds without being detected.
+
+### Current surface prototype — RECORDED
+
+- The current prototype uses deterministic fixed noise offsets plus mutable per-chunk RNG sequences for decoration/pickups.
+- The legacy algorithm remains frozen as needed for v2 save-ID migration before incompatible generation changes.
+- Moving existing surface terrain/noise to the new seed-domain system is a generator-compatibility decision, not automatically a harmless refactor.
+
+## Open decisions after seed-domain checkpoint
+
+The following remain intentionally open until their implementation architecture is designed:
+
+- exact surface dimensions/shape and final biome count;
+- exact numerical depth boundaries and profile blend curves;
+- exact tree-harvesting interaction;
+- exact surface terraforming limits/implementation;
+- exact future combat defense/stamina model;
+- final creature/resource/boss roster;
+- exact underground water/structure/ecology content;
+- final logistics/transport systems;
+- exact macro underground region dimensions;
+- exact stable-ID text/binary encoding;
+- exact surface candidate-lattice definitions/revisions;
+- exact cave geometry/spline/meshing algorithm;
+- exact runtime streaming-cell dimensions/cache thresholds;
+- exact project-owned seed hash/mixing algorithm;
+- exact project-owned deterministic PRNG algorithm;
+- exact numeric domain IDs and canonical binary StableAddress encoding;
+- exact generator-version manifest format.
