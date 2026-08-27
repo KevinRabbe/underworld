@@ -3,15 +3,20 @@ extends RefCounted
 const PlayerScript := preload("res://player/player.gd")
 
 
-static func run() -> Array[String]:
+static func run(tree: SceneTree) -> Array[String]:
 	var failures: Array[String] = []
-	var player: Object = PlayerScript.new()
+	if tree == null or tree.root == null:
+		failures.append("player integration test requires SceneTree root")
+		return failures
+
+	var fixture_root := Node3D.new()
+	tree.root.add_child(fixture_root)
 
 	# Keep player.gd preloaded so the full integration script must compile, but
-	# invoke its contract dynamically. Fresh Godot headless imports can otherwise
-	# reject statically inferred custom members on a preloaded external script
-	# before the runtime fixture gets a chance to exercise them.
-	player.call("_build_character_visual")
+	# invoke custom members dynamically. Fresh Godot headless imports can otherwise
+	# reject statically inferred custom members on a preloaded external script.
+	var player: Node = PlayerScript.new()
+	fixture_root.add_child(player)
 	var mannequin = player.call("get_mannequin")
 	_expect_true(
 		failures,
@@ -30,7 +35,7 @@ static func run() -> Array[String]:
 	_expect_true(failures, "player exposes action controller", actions != null)
 	_expect_true(failures, "player exposes stamina component", stamina != null)
 	if actions == null or stamina == null:
-		player.free()
+		fixture_root.free()
 		return failures
 
 	# Parry resolution must preserve health while the timed active window is open.
@@ -94,7 +99,7 @@ static func run() -> Array[String]:
 		health_before - 10
 	)
 
-	player.free()
+	fixture_root.free()
 	return failures
 
 
