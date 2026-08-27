@@ -7,11 +7,13 @@ const MacroRegionGenerator := preload("res://worldgen/underworld/macro_region_ge
 const PrimaryTopologyGenerator := preload("res://worldgen/underworld/primary_topology_generator.gd")
 const EntranceGenerator := preload("res://worldgen/underworld/entrance_generator.gd")
 const ConnectivityGenerator := preload("res://worldgen/underworld/secondary_connectivity_generator.gd")
+const HookGenerator := preload("res://worldgen/underworld/special_location_hook_generator.gd")
+const RegionFinalizer := preload("res://worldgen/underworld/region_finalizer.gd")
 const GeometryGenerator := preload("res://worldgen/underworld/cave_geometry_generator.gd")
 
 # Batch validation requests each seed/region twice in immediate succession.
-# Reuse only that case's immutable upstream inputs so the geometry stage itself
-# is replayed independently without regenerating the entire neighborhood twice.
+# Reuse only that case's immutable finalized upstream inputs so Stage 7 geometry
+# itself is replayed independently without regenerating the neighborhood twice.
 static var _cached_key: String = ""
 static var _cached_inputs: Dictionary = {}
 
@@ -31,7 +33,7 @@ static func build(world_seed: int, region_coord: Vector2i) -> Dictionary:
 	var geometry = GeometryGenerator.generate(
 		inputs["context"],
 		inputs["macro"],
-		inputs["connectivity"],
+		inputs["finalized"],
 		inputs["neighbor_views"]
 	)
 	if not geometry.success:
@@ -43,6 +45,8 @@ static func build(world_seed: int, region_coord: Vector2i) -> Dictionary:
 		"topology_fingerprint": inputs["topology_fingerprint"],
 		"entrance_fingerprint": inputs["entrance_fingerprint"],
 		"connectivity_fingerprint": inputs["connectivity_fingerprint"],
+		"hook_fingerprint": inputs["hook_fingerprint"],
+		"finalization_fingerprint": inputs["finalization_fingerprint"],
 		"metrics": geometry.data.geometry_metrics,
 		"diagnostics": [],
 	}
@@ -90,6 +94,18 @@ static func _build_inputs(world_seed: int, region_coord: Vector2i) -> Dictionary
 	)
 	if not connectivity.success:
 		return _failure("secondary_connectivity", connectivity.diagnostics)
+	var hooks = HookGenerator.generate(context, macro.data, connectivity.data)
+	if not hooks.success:
+		return _failure("special_location_hooks", hooks.diagnostics)
+	var finalized = RegionFinalizer.generate(
+		context,
+		macro.data,
+		entrances.data,
+		connectivity.data,
+		hooks.data
+	)
+	if not finalized.success:
+		return _failure("region_finalization", finalized.diagnostics)
 	return {
 		"success": true,
 		"context": context,
@@ -97,11 +113,15 @@ static func _build_inputs(world_seed: int, region_coord: Vector2i) -> Dictionary
 		"topology": topology.data,
 		"entrances": entrances.data,
 		"connectivity": connectivity.data,
+		"hooks": hooks.data,
+		"finalized": finalized.data,
 		"neighbor_views": neighbor_views,
 		"macro_fingerprint": macro.fingerprint,
 		"topology_fingerprint": topology.fingerprint,
 		"entrance_fingerprint": entrances.fingerprint,
 		"connectivity_fingerprint": connectivity.fingerprint,
+		"hook_fingerprint": hooks.fingerprint,
+		"finalization_fingerprint": finalized.fingerprint,
 		"diagnostics": [],
 	}
 
