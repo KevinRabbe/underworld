@@ -83,11 +83,30 @@ static func run(tree: SceneTree) -> Array[String]:
 		health_before
 	)
 
-	# Held block protects only the front arc and pays stamina on impact.
+	# Held block protects only the front arc, pays stamina on impact, and propagates
+	# to the visual mannequin without allowing locomotion to rotate the guard cone.
 	actions.call("reset")
 	stamina.call("reset")
 	player.set("damage_invulnerability_timer", 0.0)
 	_expect_true(failures, "player block starts", bool(actions.call("try_start_block")))
+	player.call("_update_mannequin", 1.0 / 60.0)
+	_expect_true(
+		failures,
+		"player block state reaches mannequin guard pose",
+		bool(mannequin.call("is_block_pose_active"))
+	)
+	var visual_root: Node3D = player.get("visual_root")
+	var guard_yaw: float = visual_root.rotation.y
+	player.set("velocity", Vector3(4.0, 0.0, 0.0))
+	player.call("_update_visual_facing", 1.0)
+	_expect_close(
+		failures,
+		"held guard preserves facing while strafing",
+		visual_root.rotation.y,
+		guard_yaw
+	)
+	player.set("velocity", Vector3.ZERO)
+
 	var player_position: Vector3 = player.get("global_position")
 	var front_source: Vector3 = player_position + Vector3(0.0, 0.0, 1.0)
 	var block_health_before: int = int(player.call("get_health"))
@@ -147,6 +166,12 @@ static func run(tree: SceneTree) -> Array[String]:
 	)
 	_expect_true(failures, "guard break exits blocking state", not bool(actions.call("is_blocking")))
 	_expect_close(failures, "guard break drains remaining stamina", float(player.call("get_stamina")), 0.0)
+	player.call("_update_mannequin", 1.0 / 60.0)
+	_expect_true(
+		failures,
+		"guard break clears mannequin guard pose",
+		not bool(mannequin.call("is_block_pose_active"))
+	)
 
 	# Normal melee outside defensive windows still uses the existing damage path.
 	actions.call("reset")
