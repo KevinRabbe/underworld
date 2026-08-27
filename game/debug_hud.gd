@@ -80,8 +80,8 @@ func _update_layout() -> void:
 	if crosshair != null:
 		crosshair.position = viewport_size * 0.5 - Vector2(6.0, 14.0)
 	if survival_label != null:
-		survival_label.position = Vector2(0.0, viewport_size.y - 136.0)
-		survival_label.size = Vector2(viewport_size.x, 130.0)
+		survival_label.position = Vector2(0.0, viewport_size.y - 112.0)
+		survival_label.size = Vector2(viewport_size.x, 106.0)
 
 
 func _refresh_text() -> void:
@@ -91,9 +91,6 @@ func _refresh_text() -> void:
 	var position: Vector3 = player.global_position
 	var chunk: Vector2i = world.get_current_player_chunk()
 	var speed: float = player.get_horizontal_speed()
-	var stamina_current: float = player.get_stamina()
-	var stamina_max: float = player.get_max_stamina()
-	var action_state: String = player.get_action_state_name()
 	var worker_state: String = "busy" if world.is_worker_busy() else "idle"
 	var surface: Dictionary = world.get_surface_sample_at_world(position.x, position.z)
 	var decoration_counts: Vector2i = world.get_current_decoration_counts()
@@ -104,6 +101,9 @@ func _refresh_text() -> void:
 	var has_axe: bool = world.has_tool("stone_axe")
 	var has_pickaxe: bool = world.has_tool("stone_pickaxe")
 	var equipped: String = world.get_equipped_tool()
+	var stamina_current: float = player.get_stamina()
+	var stamina_max: float = player.get_max_stamina()
+	var action_state: String = player.get_action_state_name()
 	var active_enemies: int = 0
 	var combat_message: String = "Combat unavailable"
 	if combat != null:
@@ -111,7 +111,7 @@ func _refresh_text() -> void:
 		combat_message = combat.get_last_combat_message()
 
 	label.text = (
-		"UNDERWORLD — prototype 0.07 + character rig\n"
+		"UNDERWORLD — prototype character foundation\n"
 		+ "FPS: %d\n" % Engine.get_frames_per_second()
 		+ "Seed: %d   Sea: %.1f\n" % [settings.world_seed, settings.sea_level]
 		+ "Position: %.1f, %.1f, %.1f\n" % [position.x, position.y, position.z]
@@ -171,7 +171,7 @@ func _refresh_text() -> void:
 			settings.stone_axe_wood_cost, settings.stone_axe_stone_cost,
 			settings.stone_pickaxe_wood_cost, settings.stone_pickaxe_stone_cost
 		]
-		+ "LMB: harvest   |   RMB: melee   |   Ctrl: dodge   |   Q: parry   |   F: block"
+		+ "LMB: harvest   |   RMB: melee   |   Ctrl: dodge   |   Q: frontal parry   |   F: frontal block"
 	)
 
 
