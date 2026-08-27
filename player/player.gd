@@ -1,7 +1,7 @@
 extends CharacterBody3D
 
 signal harvest_requested(origin: Vector3, direction: Vector3, max_distance: float)
-signal attack_requested(origin: Vector3, direction: Vector3, max_distance: float)
+signal attack_requested(execution: Dictionary)
 signal hotbar_slot_requested(slot: int)
 signal craft_requested(recipe_id: String)
 signal parry_succeeded(source_position: Vector3)
@@ -9,6 +9,7 @@ signal parry_succeeded(source_position: Vector3)
 const PrototypeMannequinScript := preload("res://player/prototype_mannequin.gd")
 const StaminaComponentScript := preload("res://player/stamina_component.gd")
 const PlayerActionControllerScript := preload("res://player/player_action_controller.gd")
+const AttackCatalogScript := preload("res://combat/player_attack_catalog.gd")
 
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 10.0
@@ -38,7 +39,6 @@ const SPRINT_FOV := 79.0
 const RESPAWN_FALL_HEIGHT := -100.0
 const MAX_HEALTH := 100
 const DAMAGE_INVULNERABILITY := 0.45
-const COMBAT_REACH := 2.7
 
 var look_sensitivity: float = 0.0025
 var camera_pitch: float = deg_to_rad(-12.0)
@@ -57,6 +57,8 @@ var sprinting_this_frame: bool = false
 
 var stamina := StaminaComponentScript.new(100.0, 0.75, 20.0)
 var action_controller := PlayerActionControllerScript.new(stamina)
+var pending_attack_definition
+var pending_attack_direction: Vector3 = Vector3.ZERO
 
 var visual_root: Node3D
 var mannequin
@@ -139,6 +141,7 @@ func _physics_process(delta: float) -> void:
 	_update_tool_use_feedback(delta)
 	_check_fall_respawn()
 	action_controller.tick(delta)
+	_resolve_pending_attack_activation()
 	stamina.tick(delta)
 
 
@@ -271,10 +274,46 @@ func _request_harvest() -> void:
 
 
 func _request_attack() -> void:
-	if not _begin_tool_action():
+	if camera == null or not action_controller.is_free():
 		return
-	var ray: Dictionary = _get_camera_action_ray(COMBAT_REACH)
-	attack_requested.emit(ray["origin"], ray["direction"], ray["distance"])
+	var attack_definition = AttackCatalogScript.for_tool(equipped_tool_visual)
+	if attack_definition == null or not bool(attack_definition.call("is_valid")):
+		return
+	var direction: Vector3 = _get_combat_forward()
+	if direction.is_zero_approx():
+		return
+	if not action_controller.try_start_attack(
+		float(attack_definition.get("startup")),
+		float(attack_definition.get("active")),
+		float(attack_definition.get("recovery"))
+	):
+		return
+
+	pending_attack_definition = attack_definition
+	pending_attack_direction = direction
+	_face_combat_direction(direction)
+	tool_swing_timer = float(attack_definition.call("total_duration"))
+	if mannequin != null:
+		mannequin.play_attack()
+
+
+func _resolve_pending_attack_activation() -> void:
+	if not action_controller.consume_attack_activation():
+		return
+	var attack_definition = pending_attack_definition
+	var direction: Vector3 = pending_attack_direction
+	pending_attack_definition = null
+	pending_attack_direction = Vector3.ZERO
+	if attack_definition == null:
+		return
+	var execution: Dictionary = attack_definition.call(
+		"make_execution",
+		global_position,
+		direction
+	)
+	if execution.is_empty():
+		return
+	attack_requested.emit(execution)
 
 
 func _begin_tool_action() -> bool:
@@ -442,11 +481,24 @@ func _camera_relative_direction(input_vector: Vector2) -> Vector3:
 	return (right * input_vector.x + forward * -input_vector.y).normalized()
 
 
-func _face_combat_camera() -> void:
-	if camera_yaw == null or visual_root == null:
-		return
+func _get_combat_forward() -> Vector3:
+	if camera_yaw == null:
+		return Vector3.ZERO
 	var forward: Vector3 = -camera_yaw.global_transform.basis.z
 	forward.y = 0.0
+	if forward.is_zero_approx():
+		return Vector3.ZERO
+	return forward.normalized()
+
+
+func _face_combat_camera() -> void:
+	_face_combat_direction(_get_combat_forward())
+
+
+func _face_combat_direction(direction: Vector3) -> void:
+	if visual_root == null:
+		return
+	var forward := Vector3(direction.x, 0.0, direction.z)
 	if forward.is_zero_approx():
 		return
 	forward = forward.normalized()
@@ -458,6 +510,7 @@ func _update_visual_facing(delta: float) -> void:
 		action_controller.is_dodging()
 		or action_controller.is_parrying()
 		or action_controller.is_blocking()
+		or action_controller.is_attacking()
 	):
 		return
 	var horizontal_velocity: Vector2 = Vector2(velocity.x, velocity.z)
@@ -499,6 +552,8 @@ func _respawn_after_defeat() -> void:
 	damage_invulnerability_timer = 1.0
 	stamina.reset()
 	action_controller.reset()
+	pending_attack_definition = null
+	pending_attack_direction = Vector3.ZERO
 	if mannequin != null:
 		mannequin.reset_pose()
 
