@@ -7,84 +7,92 @@
   primary topology.
 - PR #12 / v0.10 branch: deterministic surface sampling, surface-relative depth,
   entrance selection, entrance-path graph data and surface-integration descriptors.
+- PR #15 / v0.11 branch: deterministic secondary loops, regional network joins,
+  canonical cross-region ownership, external edge references and the 2,250-case
+  connectivity validation campaign.
 
 ---
 
-# Current cycle: v0.11 secondary connectivity
+# Current cycle: v0.12 cave geometry descriptions
 
 ## Goal
 
-Add a selective deterministic post-topology connection pass after entrances exist.
-The pass may create useful local loops, join separate networks, and reconcile rare
-cross-region connectors without modifying the primary tree or turning the
-Underworld into spaghetti.
+Convert the final deterministic cave graph into stable physical-space descriptions
+that a later carving/mesh stage can consume without changing topology.
 
-This cycle remains pure data. It creates graph edges and external references, not
-cave meshes, collision or runtime Nodes.
+This cycle remains data-only. It describes chambers and tunnel centerlines,
+cross-sections and shape tendencies. It does not create mesh vertices, collision,
+CSG operations, runtime Nodes or streaming cells.
 
 ## Required deliverables
 
-### 1. Local secondary candidate analysis
+### 1. Chamber geometry descriptors
 
-- enumerate stable node-pair candidates independently of iteration order;
-- reject already-connected endpoint pairs and trivial same-network shortcuts;
-- score physical distance, topology improvement, entrance usefulness, vertical
-  variation and continuous shallow/mid/deep profile tendency;
-- use the existing `ug.secondary.exists` and `ug.secondary.shape` seed domains;
-- preserve primary topology and entrance-path edges unchanged.
+- emit exactly one stable chamber descriptor for every locally-owned cave graph node;
+- preserve the source node position as the chamber anchor;
+- derive deterministic dimensions, Y rotation, floor bias, ceiling arch, wall
+  roughness and asymmetry from `ug.geometry.shape`;
+- classify lightweight chamber families from node semantics and continuous depth
+  profile, including entrance vestibules, alcoves, junction vaults, galleries,
+  fracture vaults and shallow low-oval chambers;
+- retain source node, network, region and profile identity for downstream carving.
 
-### 2. Bounded useful loops and network joins
+### 2. Tunnel geometry descriptors
 
-- allow `secondary_loop` edges inside a network when they materially shorten a
-  branch relationship;
-- allow `cross_network_connection` edges between separate regional networks;
-- keep shallow connectivity sparse, emphasize mid-depth opportunities, and allow
-  deep regions to vary between isolation and stronger interconnection;
-- cap accepted local connectors and secondary degree per node so candidate density
-  cannot create spaghetti.
+- emit exactly one stable tunnel descriptor for every graph edge owned by the region;
+- cover primary edges, vertical transitions, entrance paths, secondary loops,
+  cross-network joins and canonically-owned cross-region connectors through one
+  common representation;
+- generate a deterministic four-point centerline, width, height, clearance margin,
+  roughness, path style and slope class;
+- use neighboring primary-topology views only to resolve the remote endpoint of an
+  owned cross-region connector;
+- never duplicate cross-region tunnel geometry in the non-owner region.
 
-### 3. Canonical cross-region reconciliation
+### 3. Stable downstream boundary
 
-- consume explicitly supplied neighboring primary-topology views;
-- only analyze cardinally adjacent macro regions;
-- use the precomputed boundary-candidate metadata from primary topology;
-- derive one canonical connector address and owner from the region pair and endpoint
-  pair;
-- allow at most one accepted connector per adjacent region pair in this cycle;
-- owner region stores the `cross_region_connection` edge;
-- non-owner region emits an external edge reference with the same StableId.
+- geometry addresses derive from the source node/edge StableAddress rather than
+  accepted-array indexes or runtime iteration order;
+- geometry generation may not mutate topology, entrance or connectivity data;
+- descriptor ordering must be canonical and independent of supplied neighbor order;
+- the geometry result retains the source graph bundle plus typed chamber/tunnel
+  descriptor collections and exact metrics/fingerprint.
 
 ### 4. Validation and reproduction
 
-- deterministic replay must be independent of supplied neighbor ordering;
-- secondary connectors may not duplicate existing endpoint pairs;
-- local secondary degree stays bounded;
-- cross-region owner/non-owner results must agree on connector identity;
-- negative coordinates must remain valid;
-- expose exact connectivity fingerprints and a connectivity reproduction CLI mode;
-- promote the 250 seeds × 9 regions CI batch to the full connectivity pipeline.
+- repeated geometry requests must produce identical fingerprints;
+- reversed neighbor scheduling must not change the result;
+- every local node and owned edge must receive exactly one descriptor;
+- tunnel endpoints must resolve and centerlines must terminate exactly at the source
+  graph-node anchors;
+- non-owner external edge references must not produce duplicate tunnel descriptors;
+- dimensions/clearance values must remain positive and bounded;
+- negative region coordinates must remain valid;
+- expose exact geometry fingerprints through `--mode=geometry-repro`;
+- promote the 250 seeds × 9 regions CI batch through the full geometry-description
+  pipeline.
 
 ## Explicitly out of scope
 
-- chamber/tunnel volume descriptions;
-- cave meshes, carving, collision and runtime streaming cells;
-- special-location hooks, resources, enemies, bosses or ecology;
-- final geometry style for accepted connectors;
-- player progression or save deltas;
-- final connectivity probabilities or geometry dimensions.
+- marching cubes, SurfaceTool meshes, CSG or voxel carving;
+- terrain-hole realization for surface entrances;
+- physics collision and navigation meshes;
+- streaming-cell partitioning and LOD;
+- decorative rock noise, materials, props, resources, enemies or ecology;
+- special-location room templates;
+- final production art dimensions or cave aesthetics.
 
 ## Exit criteria
 
 This cycle is complete when:
 
-1. repeated region requests produce identical connectivity fingerprints;
-2. reversed neighbor input order produces the same result;
-3. primary and entrance stage inputs remain unchanged;
-4. no accepted local node exceeds the secondary-degree cap;
-5. cross-region connectors have exactly one canonical owner and one matching
-   non-owner reference;
-6. local accepted connectivity remains bounded across the seed campaign;
+1. repeated region requests produce identical geometry fingerprints;
+2. reversed neighbor input order produces the same geometry result;
+3. source graph fingerprints are unchanged by geometry generation;
+4. chamber count equals local graph-node count;
+5. tunnel count equals locally-owned graph-edge count;
+6. non-owner cross-region references never duplicate tunnel geometry;
 7. negative-coordinate fixtures pass;
-8. Godot 4.7.2 fast contracts and the 2,250-case connectivity batch are green.
+8. Godot 4.7.2 fast contracts and the 2,250-case geometry batch are green.
 
-Only after this gate should base cave geometry-description generation begin.
+Only after this gate should cave carving/mesh realization begin.
