@@ -93,7 +93,7 @@ func _create_player() -> void:
 	player.global_position = spawn_position
 	player.set_respawn_position(spawn_position)
 	player.set_harvest_range(settings.harvest_range)
-
+	player.set_tool_use_cooldown(settings.tool_use_cooldown)
 	player.harvest_requested.connect(world.try_harvest)
 	player.hotbar_slot_requested.connect(world.select_hotbar_slot)
 	player.craft_requested.connect(world.request_craft)
