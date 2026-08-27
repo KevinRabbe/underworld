@@ -9,6 +9,7 @@ signal parry_succeeded(source_position: Vector3)
 const PrototypeMannequinScript := preload("res://player/prototype_mannequin.gd")
 const StaminaComponentScript := preload("res://player/stamina_component.gd")
 const PlayerActionControllerScript := preload("res://player/player_action_controller.gd")
+const PlayerInputBufferScript := preload("res://player/player_input_buffer.gd")
 const AttackCatalogScript := preload("res://combat/player_attack_catalog.gd")
 
 const WALK_SPEED := 6.0
@@ -57,6 +58,7 @@ var sprinting_this_frame: bool = false
 
 var stamina := StaminaComponentScript.new(100.0, 0.75, 20.0)
 var action_controller := PlayerActionControllerScript.new(stamina)
+var input_buffer := PlayerInputBufferScript.new()
 var pending_attack_definition
 var pending_attack_direction: Vector3 = Vector3.ZERO
 
@@ -142,6 +144,8 @@ func _physics_process(delta: float) -> void:
 	_check_fall_respawn()
 	action_controller.tick(delta)
 	_resolve_pending_attack_activation()
+	input_buffer.tick(delta)
+	_try_consume_buffered_action()
 	stamina.tick(delta)
 
 
@@ -184,6 +188,10 @@ func get_max_stamina() -> float:
 
 func get_action_state_name() -> String:
 	return action_controller.state_name()
+
+
+func get_buffered_action_name() -> String:
+	return String(input_buffer.peek_action())
 
 
 func is_dodge_iframe_active() -> bool:
@@ -274,20 +282,49 @@ func _request_harvest() -> void:
 
 
 func _request_attack() -> void:
-	if camera == null or not action_controller.is_free():
+	var intent: Dictionary = _build_attack_intent()
+	if intent.is_empty():
 		return
+	if action_controller.is_free():
+		_start_attack_from_intent(intent)
+		return
+	input_buffer.push(&"attack", intent)
+
+
+func _build_attack_intent() -> Dictionary:
+	if camera == null:
+		return {}
 	var attack_definition = AttackCatalogScript.for_tool(equipped_tool_visual)
 	if attack_definition == null or not bool(attack_definition.call("is_valid")):
-		return
+		return {}
 	var direction: Vector3 = _get_combat_forward()
 	if direction.is_zero_approx():
-		return
+		return {}
+	return {
+		"tool_id": equipped_tool_visual,
+		"direction": direction,
+	}
+
+
+func _start_attack_from_intent(intent: Dictionary) -> bool:
+	if not action_controller.is_free():
+		return false
+	var tool_id: String = str(intent.get("tool_id", "hands"))
+	var direction: Vector3 = intent.get("direction", Vector3.ZERO)
+	direction.y = 0.0
+	if direction.is_zero_approx():
+		return false
+	direction = direction.normalized()
+
+	var attack_definition = AttackCatalogScript.for_tool(tool_id)
+	if attack_definition == null or not bool(attack_definition.call("is_valid")):
+		return false
 	if not action_controller.try_start_attack(
 		float(attack_definition.get("startup")),
 		float(attack_definition.get("active")),
 		float(attack_definition.get("recovery"))
 	):
-		return
+		return false
 
 	pending_attack_definition = attack_definition
 	pending_attack_direction = direction
@@ -296,6 +333,7 @@ func _request_attack() -> void:
 	tool_swing_timer = total_duration
 	if mannequin != null:
 		mannequin.play_attack(total_duration)
+	return true
 
 
 func _resolve_pending_attack_activation() -> void:
@@ -315,6 +353,27 @@ func _resolve_pending_attack_activation() -> void:
 	if execution.is_empty():
 		return
 	attack_requested.emit(execution)
+
+
+func _try_consume_buffered_action() -> void:
+	if not action_controller.is_free() or not input_buffer.has_pending():
+		return
+	var buffered_action: StringName = input_buffer.peek_action()
+	if (
+		(buffered_action == &"dodge" or buffered_action == &"parry")
+		and not is_on_floor()
+	):
+		return
+
+	var intent: Dictionary = input_buffer.consume()
+	var payload: Dictionary = intent.get("payload", {})
+	match StringName(intent.get("action", &"")):
+		&"attack":
+			_start_attack_from_intent(payload)
+		&"dodge":
+			_start_dodge(payload.get("direction", Vector3.ZERO))
+		&"parry":
+			_start_parry()
 
 
 func _begin_tool_action() -> bool:
@@ -349,39 +408,77 @@ func _handle_action_inputs() -> void:
 	if action_controller.is_blocking():
 		if not is_on_floor() or not Input.is_action_pressed("block"):
 			action_controller.stop_block()
-		return
+		if action_controller.is_blocking():
+			_buffer_pressed_defensive_inputs()
+			return
 
-	if not is_on_floor() or not action_controller.is_free():
+	if not action_controller.is_free():
+		_buffer_pressed_defensive_inputs()
+		return
+	if not is_on_floor():
 		return
 
 	if Input.is_action_just_pressed("dodge"):
-		var input_vector: Vector2 = Input.get_vector(
-			"move_left", "move_right", "move_forward", "move_backward"
-		)
-		var dodge_direction: Vector3 = _camera_relative_direction(input_vector)
-		if dodge_direction.is_zero_approx():
-			# The visual convention uses +Z as character forward, so no-input dodge
-			# becomes a predictable backstep along local -Z.
-			dodge_direction = -visual_root.global_transform.basis.z
-			dodge_direction.y = 0.0
-			dodge_direction = dodge_direction.normalized()
-		if action_controller.try_start_dodge(dodge_direction):
-			jump_buffer_timer = 0.0
-			if mannequin != null:
-				var local: Vector3 = visual_root.global_transform.basis.inverse() * dodge_direction
-				mannequin.play_dodge(Vector2(local.x, local.z))
+		if _start_dodge(_get_requested_dodge_direction()):
 			return
 
-	if Input.is_action_just_pressed("parry") and action_controller.try_start_parry():
-		jump_buffer_timer = 0.0
-		_face_combat_camera()
-		if mannequin != null:
-			mannequin.play_parry()
-		return
+	if Input.is_action_just_pressed("parry"):
+		if _start_parry():
+			return
 
 	if Input.is_action_pressed("block") and action_controller.try_start_block():
 		jump_buffer_timer = 0.0
 		_face_combat_camera()
+
+
+func _buffer_pressed_defensive_inputs() -> void:
+	if not is_on_floor():
+		return
+	if Input.is_action_just_pressed("dodge"):
+		var dodge_direction: Vector3 = _get_requested_dodge_direction()
+		if not dodge_direction.is_zero_approx():
+			input_buffer.push(&"dodge", {"direction": dodge_direction})
+	if Input.is_action_just_pressed("parry"):
+		input_buffer.push(&"parry")
+
+
+func _get_requested_dodge_direction() -> Vector3:
+	var input_vector: Vector2 = Input.get_vector(
+		"move_left", "move_right", "move_forward", "move_backward"
+	)
+	var dodge_direction: Vector3 = _camera_relative_direction(input_vector)
+	if dodge_direction.is_zero_approx() and visual_root != null:
+		# The visual convention uses +Z as character forward, so no-input dodge
+		# becomes a predictable backstep along local -Z.
+		dodge_direction = -visual_root.global_transform.basis.z
+		dodge_direction.y = 0.0
+	if dodge_direction.is_zero_approx():
+		return Vector3.ZERO
+	return dodge_direction.normalized()
+
+
+func _start_dodge(dodge_direction: Vector3) -> bool:
+	var horizontal := Vector3(dodge_direction.x, 0.0, dodge_direction.z)
+	if horizontal.is_zero_approx():
+		return false
+	horizontal = horizontal.normalized()
+	if not action_controller.try_start_dodge(horizontal):
+		return false
+	jump_buffer_timer = 0.0
+	if mannequin != null and visual_root != null:
+		var local: Vector3 = visual_root.global_transform.basis.inverse() * horizontal
+		mannequin.play_dodge(Vector2(local.x, local.z))
+	return true
+
+
+func _start_parry() -> bool:
+	if not action_controller.try_start_parry():
+		return false
+	jump_buffer_timer = 0.0
+	_face_combat_camera()
+	if mannequin != null:
+		mannequin.play_parry()
+	return true
 
 
 func _update_tool_use_feedback(delta: float) -> void:
@@ -553,6 +650,7 @@ func _respawn_after_defeat() -> void:
 	damage_invulnerability_timer = 1.0
 	stamina.reset()
 	action_controller.reset()
+	input_buffer.reset()
 	pending_attack_definition = null
 	pending_attack_direction = Vector3.ZERO
 	if mannequin != null:
