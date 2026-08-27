@@ -292,9 +292,10 @@ func _request_attack() -> void:
 	pending_attack_definition = attack_definition
 	pending_attack_direction = direction
 	_face_combat_direction(direction)
-	tool_swing_timer = float(attack_definition.call("total_duration"))
+	var total_duration: float = float(attack_definition.call("total_duration"))
+	tool_swing_timer = total_duration
 	if mannequin != null:
-		mannequin.play_attack()
+		mannequin.play_attack(total_duration)
 
 
 func _resolve_pending_attack_activation() -> void:
