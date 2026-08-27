@@ -54,7 +54,7 @@ var stamina := StaminaComponentScript.new(100.0, 0.75, 20.0)
 var action_controller := PlayerActionControllerScript.new(stamina)
 
 var visual_root: Node3D
-var mannequin: UnderworldPrototypeMannequin
+var mannequin
 var tool_visual_root: Node3D
 var camera_yaw: Node3D
 var camera_pitch_pivot: Node3D
@@ -186,7 +186,7 @@ func is_parry_active() -> bool:
 	return action_controller.is_parry_active()
 
 
-func get_mannequin() -> UnderworldPrototypeMannequin:
+func get_mannequin():
 	return mannequin
 
 
