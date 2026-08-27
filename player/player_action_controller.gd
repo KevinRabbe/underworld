@@ -4,6 +4,7 @@ class_name UnderworldPlayerActionController
 const STATE_FREE: int = 0
 const STATE_DODGING: int = 1
 const STATE_PARRYING: int = 2
+const STATE_BLOCKING: int = 3
 
 const DODGE_COST: float = 25.0
 const DODGE_DURATION: float = 0.48
@@ -16,6 +17,8 @@ const PARRY_STARTUP: float = 0.06
 const PARRY_ACTIVE_DURATION: float = 0.12
 const PARRY_RECOVERY: float = 0.30
 const PARRY_TOTAL_DURATION: float = PARRY_STARTUP + PARRY_ACTIVE_DURATION + PARRY_RECOVERY
+
+const BLOCK_MIN_START_STAMINA: float = 1.0
 
 var stamina
 var state: int = STATE_FREE
@@ -59,6 +62,32 @@ func try_start_parry() -> bool:
 	return true
 
 
+func try_start_block() -> bool:
+	if state != STATE_FREE or stamina == null:
+		return false
+	if not stamina.can_spend(BLOCK_MIN_START_STAMINA):
+		return false
+	state = STATE_BLOCKING
+	elapsed = 0.0
+	return true
+
+
+func stop_block() -> void:
+	if state == STATE_BLOCKING:
+		_finish_action()
+
+
+func try_absorb_block(impact_cost: float) -> bool:
+	if state != STATE_BLOCKING or stamina == null:
+		return false
+	if stamina.spend(maxf(impact_cost, 0.0)):
+		return true
+	# Insufficient stamina breaks guard immediately. The caller can then resolve
+	# the same incoming attack as a normal hit.
+	_finish_action()
+	return false
+
+
 func is_free() -> bool:
 	return state == STATE_FREE
 
@@ -69,6 +98,10 @@ func is_dodging() -> bool:
 
 func is_parrying() -> bool:
 	return state == STATE_PARRYING
+
+
+func is_blocking() -> bool:
+	return state == STATE_BLOCKING
 
 
 func is_dodge_iframe_active() -> bool:
@@ -104,6 +137,7 @@ func state_name() -> String:
 	match state:
 		STATE_DODGING: return "DODGING"
 		STATE_PARRYING: return "PARRYING"
+		STATE_BLOCKING: return "BLOCKING"
 	return "FREE"
 
 
