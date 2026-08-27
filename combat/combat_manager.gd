@@ -7,7 +7,10 @@ const SPAWN_MIN_DISTANCE := 18.0
 const SPAWN_MAX_DISTANCE := 34.0
 const SPAWN_INTERVAL := 2.0
 const RELEASE_DISTANCE := 72.0
-const PLAYER_ATTACK_REACH := 2.7
+const PLAYER_ATTACK_REACH := 2.8
+const PLAYER_ATTACK_CENTER_DISTANCE := 1.65
+const PLAYER_ATTACK_RADIUS := 1.05
+const PLAYER_ATTACK_MIN_DOT := 0.10
 
 var world
 var player
@@ -36,45 +39,73 @@ func _process(delta: float) -> void:
 		_spawn_enemy_near_player()
 
 
-func try_attack(origin: Vector3, direction: Vector3, max_distance: float) -> void:
+func try_attack(_origin: Vector3, direction: Vector3, _max_distance: float) -> void:
 	if direction.is_zero_approx() or player == null:
 		return
 
-	var ray_end: Vector3 = origin + direction.normalized() * maxf(max_distance, 0.1)
-	var query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
-		origin,
-		ray_end,
-		1 | 2
-	)
-	var player_collision: CollisionObject3D = player as CollisionObject3D
-	if player_collision != null:
-		query.exclude = [player_collision.get_rid()]
-
-	var result: Dictionary = get_world_3d().direct_space_state.intersect_ray(query)
-	if result.is_empty():
+	var forward: Vector3 = direction.normalized()
+	forward.y = 0.0
+	if forward.is_zero_approx():
 		last_combat_message = "Attack missed"
 		return
+	forward = forward.normalized()
 
-	var collider: Object = result.get("collider")
-	if collider == null or not collider.has_meta("combat_enemy"):
-		last_combat_message = "Attack blocked"
-		return
-
-	var hit_position: Vector3 = result["position"]
 	var player_chest: Vector3 = player.global_position + Vector3(0.0, 1.0, 0.0)
-	if player_chest.distance_to(hit_position) > PLAYER_ATTACK_REACH + 0.8:
-		last_combat_message = "Enemy out of reach"
-		return
+	var attack_center: Vector3 = player_chest + forward * PLAYER_ATTACK_CENTER_DISTANCE
 
-	if not collider.has_method("apply_damage"):
+	var sphere: SphereShape3D = SphereShape3D.new()
+	sphere.radius = PLAYER_ATTACK_RADIUS
+	var shape_query: PhysicsShapeQueryParameters3D = PhysicsShapeQueryParameters3D.new()
+	shape_query.shape = sphere
+	shape_query.transform = Transform3D(Basis.IDENTITY, attack_center)
+	shape_query.collision_mask = 2
+	shape_query.collide_with_bodies = true
+	shape_query.collide_with_areas = false
+
+	var player_collision: CollisionObject3D = player as CollisionObject3D
+	if player_collision != null:
+		shape_query.exclude = [player_collision.get_rid()]
+
+	var candidates: Array[Dictionary] = get_world_3d().direct_space_state.intersect_shape(
+		shape_query,
+		12
+	)
+	var best_enemy: Object = null
+	var best_distance: float = 1.0e20
+
+	for candidate in candidates:
+		var collider: Object = candidate.get("collider")
+		if collider == null or not collider.has_meta("combat_enemy"):
+			continue
+		if not collider is Node3D:
+			continue
+
+		var enemy_node: Node3D = collider as Node3D
+		var to_enemy: Vector3 = enemy_node.global_position - player.global_position
+		var planar_to_enemy: Vector3 = Vector3(to_enemy.x, 0.0, to_enemy.z)
+		var distance: float = planar_to_enemy.length()
+		if distance > PLAYER_ATTACK_REACH:
+			continue
+		if distance > 0.001 and forward.dot(planar_to_enemy / distance) < PLAYER_ATTACK_MIN_DOT:
+			continue
+		if not _has_clear_attack_path(player_chest, enemy_node):
+			continue
+		if distance < best_distance:
+			best_distance = distance
+			best_enemy = collider
+
+	if best_enemy == null:
+		last_combat_message = "Attack missed"
+		return
+	if not best_enemy.has_method("apply_damage"):
 		last_combat_message = "Attack failed"
 		return
 
 	var damage: int = _get_player_attack_damage()
-	var remaining_health: int = int(collider.call("apply_damage", damage, player.global_position))
+	var remaining_health: int = int(best_enemy.call("apply_damage", damage, player.global_position))
 	var enemy_name: String = "Enemy"
-	if collider.has_method("get_display_name"):
-		enemy_name = str(collider.call("get_display_name"))
+	if best_enemy.has_method("get_display_name"):
+		enemy_name = str(best_enemy.call("get_display_name"))
 
 	if remaining_health <= 0:
 		last_combat_message = "%s defeated" % enemy_name
@@ -104,6 +135,22 @@ func _get_player_attack_damage() -> int:
 			return 13
 		_:
 			return 7
+
+
+func _has_clear_attack_path(origin: Vector3, enemy: Node3D) -> bool:
+	var target_position: Vector3 = enemy.global_position + Vector3(0.0, 0.65, 0.0)
+	var ray_query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
+		origin,
+		target_position,
+		1 | 2
+	)
+	var player_collision: CollisionObject3D = player as CollisionObject3D
+	if player_collision != null:
+		ray_query.exclude = [player_collision.get_rid()]
+	var result: Dictionary = get_world_3d().direct_space_state.intersect_ray(ray_query)
+	if result.is_empty():
+		return true
+	return result.get("collider") == enemy
 
 
 func _spawn_enemy_near_player() -> void:
@@ -139,9 +186,10 @@ func _spawn_enemy_near_player() -> void:
 				"health": 36,
 				"move_speed": 3.3,
 				"detection_range": 16.0,
-				"attack_range": 1.55,
+				"attack_range": 1.80,
 				"attack_damage": 10,
-				"attack_cooldown": 1.15,
+				"attack_cooldown": 1.20,
+				"attack_windup": 0.42,
 			}
 		)
 		enemy.died.connect(_on_enemy_died)
