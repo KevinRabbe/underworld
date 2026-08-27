@@ -163,6 +163,58 @@ static func _validate_networks(
 			elif entrances[entrance_id].connected_network_id != network_id:
 				failures.append("Network references entrance attached elsewhere: " + entrance_id)
 
+		_validate_primary_connectivity(network, nodes, edges, failures)
+
+
+static func _validate_primary_connectivity(
+	network,
+	nodes: Dictionary,
+	edges: Dictionary,
+	failures: Array[String]
+) -> void:
+	if not nodes.has(network.root_node_id):
+		return
+
+	var adjacency: Dictionary = {}
+	for node_id in network.node_ids:
+		adjacency[node_id] = []
+	var endpoint_pairs: Dictionary = {}
+	for edge_id in network.primary_edge_ids:
+		if not edges.has(edge_id):
+			continue
+		var edge = edges[edge_id]
+		if not adjacency.has(edge.endpoint_a_node_id) or not adjacency.has(edge.endpoint_b_node_id):
+			continue
+		var pair_key: String = edge.endpoint_a_node_id + "\n" + edge.endpoint_b_node_id
+		if endpoint_pairs.has(pair_key):
+			failures.append(
+				"Network has duplicate undirected primary edge endpoints: %s" % network.stable_id
+			)
+		else:
+			endpoint_pairs[pair_key] = true
+		adjacency[edge.endpoint_a_node_id].append(edge.endpoint_b_node_id)
+		adjacency[edge.endpoint_b_node_id].append(edge.endpoint_a_node_id)
+
+	var reached: Dictionary = {network.root_node_id: true}
+	var pending: Array[String] = [network.root_node_id]
+	while not pending.is_empty():
+		var current: String = pending.pop_front()
+		for neighbor_variant in adjacency.get(current, []):
+			var neighbor: String = str(neighbor_variant)
+			if reached.has(neighbor):
+				continue
+			reached[neighbor] = true
+			pending.append(neighbor)
+
+	if reached.size() != network.node_ids.size():
+		failures.append(
+			"Primary network is disconnected: %s reached=%d nodes=%d" % [
+				network.stable_id,
+				reached.size(),
+				network.node_ids.size(),
+			]
+		)
+
 
 static func _validate_nodes(
 	networks: Dictionary,

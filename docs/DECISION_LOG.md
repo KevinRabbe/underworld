@@ -395,9 +395,23 @@ The pre-implementation architecture cycle is complete at the documented semantic
 
 The next development cycle is deliberately narrower: implement the tested deterministic foundation primitives — stable addresses/IDs, seed domains, generator manifests, pure graph data, canonical fingerprints/invariant validation, headless test runner and prototype-v2 migration adapter — before implementing the first real Underworld topology generator.
 
+## 2026-08-27 — Deterministic foundation merged; primary topology cycle begins
+
+PR #10 completed the deterministic foundation gate under Godot 4.7.2 headless
+validation, including the fast contract suite and 2,250 deterministic region
+probes.
+
+The next implementation cycle is the first data-only primary Underworld topology
+generator. It includes the macro-region plan and continuous depth grammar required
+by the locked Stage 2 input contract, then produces region-owned primary networks,
+nodes and connected primary edges with stable candidate identities.
+
+Entrances, secondary/cross-region connectivity, special content, geometry and
+runtime construction remain later stages and must not be folded into this cycle.
+
 ## Current intentionally open implementation/tuning decisions
 
-The following remain intentionally open and must not become accidental permanent rules during foundation implementation:
+The following remain intentionally open and must not become accidental permanent rules during implementation:
 
 - exact surface dimensions/shape and final biome count;
 - exact numerical depth boundaries/profile blend curves;
@@ -412,10 +426,6 @@ The following remain intentionally open and must not become accidental permanent
 - exact entrance/connectivity scoring weights/caps;
 - exact cave geometry/spline/meshing algorithm;
 - exact geometry/runtime streaming-cell dimensions and cache budgets;
-- exact StableId textual/binary encoding beyond the locked semantic-address contract;
-- exact project-owned hash/PRNG algorithm until frozen by implementation test vectors;
-- exact generator-manifest serialization/storage format;
 - exact save file/sharding/compression format;
 - exact terrain/deformation delta representation;
-- exact headless test framework/CLI syntax/CI provider;
 - exact performance budgets/statistical tuning thresholds.

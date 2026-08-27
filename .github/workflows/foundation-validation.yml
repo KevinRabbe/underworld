@@ -1,4 +1,4 @@
-name: Foundation Validation
+name: Deterministic Worldgen Validation
 
 on:
   pull_request:
@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - 'foundation/**'
+      - 'codex/**'
 
 permissions:
   contents: read
@@ -35,7 +36,7 @@ jobs:
           godot --headless --path . --quit-after 1
           --script res://tests/run_validation.gd -- --mode=fast
 
-      - name: Run deterministic batch probes
+      - name: Run deterministic topology batch probes
         run: >-
           godot --headless --path . --quit-after 1
           --script res://tests/run_validation.gd --

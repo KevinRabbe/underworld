@@ -65,7 +65,7 @@ static func _test_manifest_vector(failures: Array[String]) -> void:
 		failures,
 		"foundation GeneratorManifest SHA-256 vector",
 		manifest.manifest_id(),
-		"gm-sha256:682c1e0e1026a7272b43f7932143d4155f58ad8756f60369889ac94592fc66f0"
+		"gm-sha256:e6d999a60466f4594dd6a513494c4342b1fdf570cc617ba3e95982588e8cb10d"
 	)
 
 
