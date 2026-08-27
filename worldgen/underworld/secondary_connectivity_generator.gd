@@ -238,7 +238,7 @@ static func _cross_candidates(context, region_plan, primary_topology, view: Dict
 	var local_nodes := _node_index(primary_topology.bundle.nodes)
 	var remote_nodes := _node_index(neighbor_topology.bundle.nodes)
 	var owner_address = StableAddress.canonical_owner(region_plan.stable_address, neighbor_plan.stable_address)
-	var owner_id := StableId.from_address(owner_address).value()
+	var owner_id: String = str(StableId.from_address(owner_address).value())
 	var result: Array = []
 
 	for local_meta in primary_topology.boundary_candidate_metadata:
