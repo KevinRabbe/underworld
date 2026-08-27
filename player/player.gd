@@ -32,6 +32,9 @@ var coyote_timer: float = 0.0
 var jump_buffer_timer: float = 0.0
 var respawn_position: Vector3 = Vector3.ZERO
 var harvest_range: float = 4.5
+var tool_use_cooldown_duration: float = 0.38
+var tool_use_cooldown_timer: float = 0.0
+var tool_swing_timer: float = 0.0
 var equipped_tool_visual: String = "hands"
 
 var visual_root: Node3D
@@ -105,6 +108,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_update_visual_facing(delta)
 	_update_camera_fov(delta)
+	_update_tool_use_feedback(delta)
 	_check_fall_respawn()
 
 
@@ -114,6 +118,10 @@ func set_respawn_position(position: Vector3) -> void:
 
 func set_harvest_range(distance: float) -> void:
 	harvest_range = maxf(distance, 0.1)
+
+
+func set_tool_use_cooldown(duration: float) -> void:
+	tool_use_cooldown_duration = maxf(duration, 0.05)
 
 
 func set_equipped_tool(tool_id: String) -> void:
@@ -126,14 +134,38 @@ func get_horizontal_speed() -> float:
 
 
 func _request_harvest() -> void:
-	if camera == null:
+	if camera == null or tool_use_cooldown_timer > 0.0:
 		return
+
+	tool_use_cooldown_timer = tool_use_cooldown_duration
+	tool_swing_timer = tool_use_cooldown_duration
 
 	var direction: Vector3 = -camera.global_transform.basis.z.normalized()
 	var player_chest: Vector3 = global_position + Vector3(0.0, 1.0, 0.0)
 	var camera_to_player: float = camera.global_position.distance_to(player_chest)
 	var ray_distance: float = camera_to_player + harvest_range
 	harvest_requested.emit(camera.global_position, direction, ray_distance)
+
+
+func _update_tool_use_feedback(delta: float) -> void:
+	tool_use_cooldown_timer = maxf(0.0, tool_use_cooldown_timer - delta)
+	tool_swing_timer = maxf(0.0, tool_swing_timer - delta)
+
+	if tool_visual_root == null:
+		return
+	if equipped_tool_visual == "hands":
+		tool_visual_root.rotation_degrees.z = lerpf(
+			tool_visual_root.rotation_degrees.z,
+			0.0,
+			clampf(delta * 16.0, 0.0, 1.0)
+		)
+		return
+
+	var swing_progress: float = 1.0 - (
+		tool_swing_timer / maxf(tool_use_cooldown_duration, 0.05)
+	)
+	var swing_amount: float = sin(clampf(swing_progress, 0.0, 1.0) * PI)
+	tool_visual_root.rotation_degrees.z = -58.0 * swing_amount
 
 
 func _configure_character_body() -> void:
@@ -275,6 +307,7 @@ func _rebuild_tool_visual() -> void:
 	for child in tool_visual_root.get_children():
 		child.queue_free()
 
+	tool_visual_root.rotation_degrees = Vector3.ZERO
 	if equipped_tool_visual == "hands":
 		return
 
