@@ -5,6 +5,7 @@ const STATE_FREE: int = 0
 const STATE_DODGING: int = 1
 const STATE_PARRYING: int = 2
 const STATE_BLOCKING: int = 3
+const STATE_USING_TOOL: int = 4
 
 const DODGE_COST: float = 25.0
 const DODGE_DURATION: float = 0.48
@@ -24,6 +25,7 @@ var stamina
 var state: int = STATE_FREE
 var elapsed: float = 0.0
 var dodge_direction_world: Vector3 = Vector3.ZERO
+var tool_action_duration: float = 0.0
 
 
 func _init(stamina_component) -> void:
@@ -37,6 +39,8 @@ func tick(delta: float) -> void:
 	if state == STATE_DODGING and elapsed >= DODGE_DURATION:
 		_finish_action()
 	elif state == STATE_PARRYING and elapsed >= PARRY_TOTAL_DURATION:
+		_finish_action()
+	elif state == STATE_USING_TOOL and elapsed >= tool_action_duration:
 		_finish_action()
 
 
@@ -91,6 +95,15 @@ func try_absorb_block(impact_cost: float) -> bool:
 	return false
 
 
+func try_start_tool_action(duration: float) -> bool:
+	if state != STATE_FREE:
+		return false
+	state = STATE_USING_TOOL
+	elapsed = 0.0
+	tool_action_duration = maxf(duration, 0.05)
+	return true
+
+
 func is_free() -> bool:
 	return state == STATE_FREE
 
@@ -105,6 +118,10 @@ func is_parrying() -> bool:
 
 func is_blocking() -> bool:
 	return state == STATE_BLOCKING
+
+
+func is_using_tool() -> bool:
+	return state == STATE_USING_TOOL
 
 
 func is_dodge_iframe_active() -> bool:
@@ -134,6 +151,7 @@ func reset() -> void:
 	state = STATE_FREE
 	elapsed = 0.0
 	dodge_direction_world = Vector3.ZERO
+	tool_action_duration = 0.0
 
 
 func state_name() -> String:
@@ -141,6 +159,7 @@ func state_name() -> String:
 		STATE_DODGING: return "DODGING"
 		STATE_PARRYING: return "PARRYING"
 		STATE_BLOCKING: return "BLOCKING"
+		STATE_USING_TOOL: return "USING_TOOL"
 	return "FREE"
 
 
@@ -148,3 +167,4 @@ func _finish_action() -> void:
 	state = STATE_FREE
 	elapsed = 0.0
 	dodge_direction_world = Vector3.ZERO
+	tool_action_duration = 0.0
