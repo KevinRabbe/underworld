@@ -5,44 +5,94 @@ const PlayerScript := preload("res://player/player.gd")
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
-	var player = PlayerScript.new()
+	var player: Object = PlayerScript.new()
 
-	# Build only the visual/collision portion; no viewport or live world is needed
-	# to validate the player->mannequin contract headlessly.
-	player._build_character_visual()
+	# Keep player.gd preloaded so the full integration script must compile, but
+	# invoke its contract dynamically. Fresh Godot headless imports can otherwise
+	# reject statically inferred custom members on a preloaded external script
+	# before the runtime fixture gets a chance to exercise them.
+	player.call("_build_character_visual")
+	var mannequin = player.call("get_mannequin")
 	_expect_true(
 		failures,
 		"player builds articulated mannequin",
-		player.get_mannequin() != null and player.get_mannequin().has_required_rig()
+		mannequin != null and bool(mannequin.call("has_required_rig"))
 	)
-	_expect_close(failures, "player starts with full stamina", player.get_stamina(), 100.0)
+	_expect_close(
+		failures,
+		"player starts with full stamina",
+		float(player.call("get_stamina")),
+		100.0
+	)
+
+	var actions = player.get("action_controller")
+	var stamina = player.get("stamina")
+	_expect_true(failures, "player exposes action controller", actions != null)
+	_expect_true(failures, "player exposes stamina component", stamina != null)
+	if actions == null or stamina == null:
+		player.free()
+		return failures
 
 	# Parry resolution must preserve health while the timed active window is open.
-	_expect_true(failures, "player parry action starts", player.action_controller.try_start_parry())
-	player.action_controller.tick(0.07)
-	var health_before: int = player.get_health()
-	var parry_result: StringName = player.receive_melee_attack(10, Vector3(1.0, 0.0, 0.0), true)
+	_expect_true(
+		failures,
+		"player parry action starts",
+		bool(actions.call("try_start_parry"))
+	)
+	actions.call("tick", 0.07)
+	var health_before: int = int(player.call("get_health"))
+	var parry_result: StringName = player.call(
+		"receive_melee_attack",
+		10,
+		Vector3(1.0, 0.0, 0.0),
+		true
+	)
 	_expect_equal(failures, "active parry resolves as parried", parry_result, &"parried")
-	_expect_equal(failures, "parry prevents health loss", player.get_health(), health_before)
+	_expect_equal(
+		failures,
+		"parry prevents health loss",
+		int(player.call("get_health")),
+		health_before
+	)
 
 	# Dodge iframe path is distinct from parry and also preserves health.
-	player.action_controller.reset()
-	player.stamina.reset()
+	actions.call("reset")
+	stamina.call("reset")
 	_expect_true(
 		failures,
 		"player dodge action starts",
-		player.action_controller.try_start_dodge(Vector3(1.0, 0.0, 0.0))
+		bool(actions.call("try_start_dodge", Vector3(1.0, 0.0, 0.0)))
 	)
-	player.action_controller.tick(0.10)
-	var dodge_result: StringName = player.receive_melee_attack(10, Vector3(1.0, 0.0, 0.0), true)
+	actions.call("tick", 0.10)
+	var dodge_result: StringName = player.call(
+		"receive_melee_attack",
+		10,
+		Vector3(1.0, 0.0, 0.0),
+		true
+	)
 	_expect_equal(failures, "active dodge iframe resolves as dodged", dodge_result, &"dodged")
-	_expect_equal(failures, "dodge iframe prevents health loss", player.get_health(), health_before)
+	_expect_equal(
+		failures,
+		"dodge iframe prevents health loss",
+		int(player.call("get_health")),
+		health_before
+	)
 
 	# Normal melee outside defensive windows still uses the existing damage path.
-	player.action_controller.reset()
-	var hit_result: StringName = player.receive_melee_attack(10, Vector3(1.0, 0.0, 0.0), true)
+	actions.call("reset")
+	var hit_result: StringName = player.call(
+		"receive_melee_attack",
+		10,
+		Vector3(1.0, 0.0, 0.0),
+		true
+	)
 	_expect_equal(failures, "undefended melee resolves as hit", hit_result, &"hit")
-	_expect_equal(failures, "undefended melee reduces health", player.get_health(), health_before - 10)
+	_expect_equal(
+		failures,
+		"undefended melee reduces health",
+		int(player.call("get_health")),
+		health_before - 10
+	)
 
 	player.free()
 	return failures
