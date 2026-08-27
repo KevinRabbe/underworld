@@ -6,6 +6,10 @@ Animation sets are the first content family intended to prove the reusable archi
 
 This document defines the content contract only. It does not implement the AnimationTree/AnimationPlayer migration.
 
+Related contracts:
+- `ANIMATION_ROLE_SCHEMA.md`
+- `RIG_PROFILE_RULEBOOK.md`
+
 ## Purpose
 
 An animation set maps stable semantic animation roles used by gameplay/presentation adapters to concrete animation assets compatible with a rig/profile.
@@ -70,7 +74,7 @@ Categories classify the set; they do not decide combat timing/damage.
 
 A valid animation set should eventually define:
 - semantic content ID;
-- compatible rig/profile semantic ID;
+- compatible `rig_profile.*` semantic ID;
 - mapping from required `animation_role.*` IDs to concrete animations;
 - animation library/resource references;
 - root-motion policy;
@@ -102,23 +106,23 @@ The animation layer visualizes semantic actions and may expose timing markers on
 
 ## Rig compatibility
 
-Animation sets target a semantic rig/profile rather than gameplay knowing concrete bone paths.
+Animation sets target a semantic `rig_profile.*` definition rather than gameplay knowing concrete bone paths.
 
-Important semantic rig roles may include:
+Relevant semantic rig roles may include:
 ```text
-pelvis
-chest
-head
-hand_l
-hand_r
-foot_l
-foot_r
-socket_hand_l
-socket_hand_r
-socket_back
+rig_role.pelvis
+rig_role.chest
+rig_role.head
+rig_role.hand.left
+rig_role.hand.right
+rig_role.foot.left
+rig_role.foot.right
+rig_role.socket.hand.left
+rig_role.socket.hand.right
+rig_role.socket.back
 ```
 
-A production character with different imported bone names can use a rig mapping/retargeting adapter.
+A production character with different imported bone names can use a rig mapping/retargeting adapter defined by the rig-profile contract.
 
 ## Asset replacement
 
@@ -130,7 +134,8 @@ A `CharacterAnimationController`/presentation adapter will eventually:
 - receive gameplay state/semantic action requests;
 - resolve the animation set;
 - drive AnimationTree/AnimationPlayer;
-- map semantic rig/socket roles to concrete rig resources.
+- map semantic `rig_role.*` IDs to concrete rig resources;
+- expose semantic equipment socket roles without leaking imported bone paths.
 
 Gameplay code should not manipulate bones directly once this pipeline is established.
 
