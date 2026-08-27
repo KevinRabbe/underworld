@@ -54,6 +54,7 @@ Existing root-level documents remain authoritative until they are deliberately m
 - `10_architecture/CONTENT_ARCHITECTURE.md` — definition/category/capability/asset/runtime separation.
 - `10_architecture/CONTENT_REGISTRY.md` — future semantic-ID registry/resolution boundary.
 - `10_architecture/DEPENDENCY_RULES.md` — allowed and forbidden dependency direction.
+- `10_architecture/REPOSITORY_STRUCTURE.md` — complete `res://` folder/file architecture, ownership rules, PackedScene placement, naming contract and staged current→target migration map.
 
 ### Content contracts
 - `40_content/CONTENT_RULEBOOK.md` — meta-rule defining what every scalable family rulebook must answer.
@@ -69,11 +70,13 @@ Existing root-level documents remain authoritative until they are deliberately m
 
 ### Authoring
 - `50_authoring/AUTHORING_CONTRACT.md` — project-wide content authoring workflow.
+- `50_authoring/FILE_PLACEMENT_GUIDE.md` — practical decision guide for placing new runtime code, definitions, PackedScenes, presentation assets, tools and tests.
 - `50_authoring/ADDING_RIG_PROFILE.md` — rig mapping/import workflow without gameplay bone-path coupling.
 - `50_authoring/ADDING_ANIMATION_SET.md` — reusable semantic animation-set authoring workflow.
 
 ### Validation
 - `60_validation/CONTENT_VALIDATION.md` — staged machine-enforcement architecture for IDs, categories, capabilities, definitions, references and assets.
+- `60_validation/REPOSITORY_LAYOUT_VALIDATION.md` — future path/dependency validation and staged retirement of prototype root folders.
 
 ## Existing authoritative documents
 
@@ -102,6 +105,8 @@ The following root documents remain authoritative while staged migration is pend
 Underworld systems should scale primarily by adding definitions, categories, capabilities, assets and compositions—not by adding special-case branches to central managers.
 
 Before a content family becomes large, establish its architecture placement, stable identity, rulebook, authoring guide and validation contract.
+
+The filesystem follows the same principle: runtime systems, authored definitions and replaceable presentation assets have separate ownership roots, and filesystem paths never become semantic game identity.
 
 ## Change rule
 
