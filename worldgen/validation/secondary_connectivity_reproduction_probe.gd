@@ -8,8 +8,48 @@ const PrimaryTopologyGenerator := preload("res://worldgen/underworld/primary_top
 const EntranceGenerator := preload("res://worldgen/underworld/entrance_generator.gd")
 const ConnectivityGenerator := preload("res://worldgen/underworld/secondary_connectivity_generator.gd")
 
+# Batch validation asks for the same seed/region twice in immediate succession so
+# Stage 4 can prove deterministic replay. Cache only that last immutable upstream
+# input set: the full macro/topology/entrance + four-neighbor pipeline still runs
+# once for every case, while the connectivity stage itself is executed twice.
+static var _cached_key: String = ""
+static var _cached_inputs: Dictionary = {}
+
 
 static func build(world_seed: int, region_coord: Vector2i) -> Dictionary:
+	var cache_key := "%d:%d:%d" % [world_seed, region_coord.x, region_coord.y]
+	var inputs: Dictionary
+	if cache_key == _cached_key and not _cached_inputs.is_empty():
+		inputs = _cached_inputs
+	else:
+		inputs = _build_inputs(world_seed, region_coord)
+		if not bool(inputs.get("success", false)):
+			return inputs
+		_cached_key = cache_key
+		_cached_inputs = inputs
+
+	var connectivity = ConnectivityGenerator.generate(
+		inputs["context"],
+		inputs["macro"],
+		inputs["topology"],
+		inputs["entrances"],
+		inputs["neighbor_views"]
+	)
+	if not connectivity.success:
+		return _failure("secondary_connectivity", connectivity.diagnostics)
+
+	return {
+		"success": true,
+		"fingerprint": connectivity.fingerprint,
+		"macro_fingerprint": inputs["macro_fingerprint"],
+		"topology_fingerprint": inputs["topology_fingerprint"],
+		"entrance_fingerprint": inputs["entrance_fingerprint"],
+		"metrics": connectivity.data.connectivity_metrics,
+		"diagnostics": [],
+	}
+
+
+static func _build_inputs(world_seed: int, region_coord: Vector2i) -> Dictionary:
 	var context = WorldGenerationContext.new(world_seed)
 	var sampler = SurfaceSampler.new(world_seed)
 	var macro = MacroRegionGenerator.generate(context, region_coord)
@@ -44,23 +84,16 @@ static func build(world_seed: int, region_coord: Vector2i) -> Dictionary:
 			"primary_topology": neighbor_topology.data,
 		})
 
-	var connectivity = ConnectivityGenerator.generate(
-		context,
-		macro.data,
-		topology.data,
-		entrances.data,
-		neighbor_views
-	)
-	if not connectivity.success:
-		return _failure("secondary_connectivity", connectivity.diagnostics)
-
 	return {
 		"success": true,
-		"fingerprint": connectivity.fingerprint,
+		"context": context,
+		"macro": macro.data,
+		"topology": topology.data,
+		"entrances": entrances.data,
+		"neighbor_views": neighbor_views,
 		"macro_fingerprint": macro.fingerprint,
 		"topology_fingerprint": topology.fingerprint,
 		"entrance_fingerprint": entrances.fingerprint,
-		"metrics": connectivity.data.connectivity_metrics,
 		"diagnostics": [],
 	}
 
