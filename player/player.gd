@@ -432,7 +432,11 @@ func _camera_relative_direction(input_vector: Vector2) -> Vector3:
 
 
 func _update_visual_facing(delta: float) -> void:
-	if action_controller.is_dodging() or action_controller.is_parrying():
+	if (
+		action_controller.is_dodging()
+		or action_controller.is_parrying()
+		or action_controller.is_blocking()
+	):
 		return
 	var horizontal_velocity: Vector2 = Vector2(velocity.x, velocity.z)
 	if horizontal_velocity.length_squared() < 0.04:
@@ -451,6 +455,7 @@ func _update_mannequin(delta: float) -> void:
 		return
 	var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
 	var local_velocity: Vector3 = visual_root.global_transform.basis.inverse() * horizontal_velocity
+	mannequin.set_blocking(action_controller.is_blocking())
 	mannequin.update_visual(delta, local_velocity, is_on_floor(), sprinting_this_frame)
 
 
