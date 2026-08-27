@@ -20,8 +20,11 @@ const SURFACE_LOOSE_STONE_SHAPE: int = 0x010212
 const UG_REGION_LAYOUT: int = 0x020001
 const UG_NETWORK_EXISTS: int = 0x020101
 const UG_NETWORK_TOPOLOGY: int = 0x020102
+const UG_NODE_EXISTS: int = 0x020200
 const UG_NODE_POSITION: int = 0x020201
 const UG_NODE_SHAPE: int = 0x020202
+const UG_NODE_PROFILE: int = 0x020203
+const UG_PRIMARY_EDGE_TOPOLOGY: int = 0x020211
 const UG_ENTRANCE_SELECTION: int = 0x020301
 const UG_ENTRANCE_PROFILE: int = 0x020302
 const UG_SECONDARY_EXISTS: int = 0x020401
@@ -60,8 +63,15 @@ static func all_domains() -> Array:
 		SeedDomainScript.new(UG_REGION_LAYOUT, "ug.region.layout", 1),
 		SeedDomainScript.new(UG_NETWORK_EXISTS, "ug.network.exists", 1),
 		SeedDomainScript.new(UG_NETWORK_TOPOLOGY, "ug.network.topology", 1),
+		SeedDomainScript.new(UG_NODE_EXISTS, "ug.node.exists", 1),
 		SeedDomainScript.new(UG_NODE_POSITION, "ug.node.position", 1),
 		SeedDomainScript.new(UG_NODE_SHAPE, "ug.node.shape", 1),
+		SeedDomainScript.new(UG_NODE_PROFILE, "ug.node.profile", 1),
+		SeedDomainScript.new(
+			UG_PRIMARY_EDGE_TOPOLOGY,
+			"ug.primary_edge.topology",
+			1
+		),
 		SeedDomainScript.new(UG_ENTRANCE_SELECTION, "ug.entrance.selection", 1),
 		SeedDomainScript.new(UG_ENTRANCE_PROFILE, "ug.entrance.profile", 1),
 		SeedDomainScript.new(UG_SECONDARY_EXISTS, "ug.secondary.exists", 1),

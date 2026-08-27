@@ -5,7 +5,9 @@ const DeterministicRandomTests := preload("res://tests/foundation/test_determini
 const ManifestAndGraphTests := preload("res://tests/foundation/test_manifest_and_graph.gd")
 const LegacyV2MigrationTests := preload("res://tests/foundation/test_legacy_v2_migration.gd")
 const ServiceBoundaryTests := preload("res://tests/foundation/test_service_boundaries.gd")
+const PrimaryTopologyTests := preload("res://tests/topology/test_primary_topology.gd")
 const ReproductionProbe := preload("res://worldgen/validation/reproduction_probe.gd")
+const TopologyProbe := preload("res://worldgen/validation/topology_reproduction_probe.gd")
 const SampleGraphFixture := preload("res://tests/foundation/sample_graph_fixture.gd")
 const GraphValidator := preload("res://worldgen/validation/graph_validator.gd")
 const GraphCanonicalizer := preload("res://worldgen/validation/graph_canonicalizer.gd")
@@ -22,6 +24,8 @@ func _init() -> void:
 			_run_fixture(str(args.get("name", "graph")))
 		"repro":
 			_run_reproduction(args)
+		"topology-repro":
+			_run_topology_reproduction(args)
 		"batch":
 			_run_batch(args)
 		_:
@@ -37,6 +41,7 @@ func _run_fast() -> void:
 	failures.append_array(ManifestAndGraphTests.run())
 	failures.append_array(LegacyV2MigrationTests.run())
 	failures.append_array(ServiceBoundaryTests.run())
+	failures.append_array(PrimaryTopologyTests.run())
 	_finish("fast", failures)
 
 
@@ -101,9 +106,20 @@ func _run_batch(args: Dictionary) -> void:
 		for region_z in range(-region_radius, region_radius + 1):
 			for region_x in range(-region_radius, region_radius + 1):
 				var region := Vector2i(region_x, region_z)
-				var first: Dictionary = ReproductionProbe.build(world_seed, region)
-				var second: Dictionary = ReproductionProbe.build(world_seed, region)
+				var first: Dictionary = TopologyProbe.build(world_seed, region)
+				var second: Dictionary = TopologyProbe.build(world_seed, region)
 				cases += 1
+				if not bool(first.get("success", false)) or not bool(second.get("success", false)):
+					failures.append(
+						"topology probe failed seed=%d region=(%d,%d) first=%s second=%s" % [
+							world_seed,
+							region_x,
+							region_z,
+							first.get("diagnostics", []),
+							second.get("diagnostics", []),
+						]
+					)
+					continue
 				if first["fingerprint"] != second["fingerprint"]:
 					failures.append(
 						"non-deterministic probe seed=%d region=(%d,%d) first=%s second=%s" % [
@@ -130,6 +146,30 @@ func _run_batch(args: Dictionary) -> void:
 		]
 	)
 	_finish("batch", failures)
+
+
+func _run_topology_reproduction(args: Dictionary) -> void:
+	var world_seed: int = int(args.get("seed", "12345"))
+	var region_x: int = int(args.get("region-x", "0"))
+	var region_z: int = int(args.get("region-z", "0"))
+	var expected: String = str(args.get("expect", ""))
+	var probe: Dictionary = TopologyProbe.build(world_seed, Vector2i(region_x, region_z))
+	if not bool(probe.get("success", false)):
+		printerr("[TOPOLOGY REPRO] FAIL diagnostics=%s" % probe.get("diagnostics", []))
+		quit(1)
+		return
+	var fingerprint: String = str(probe["fingerprint"])
+	print("[TOPOLOGY REPRO]")
+	print("  seed=%d" % world_seed)
+	print("  region=(%d,%d)" % [region_x, region_z])
+	print("  macro_fingerprint=%s" % probe["macro_fingerprint"])
+	print("  topology_fingerprint=%s" % fingerprint)
+	print("  metrics=%s" % probe["metrics"])
+	if not expected.is_empty() and fingerprint != expected:
+		printerr("[TOPOLOGY REPRO] expected=%s actual=%s" % [expected, fingerprint])
+		quit(1)
+		return
+	quit(0)
 
 
 func _finish(label: String, failures: Array[String]) -> void:
@@ -164,4 +204,5 @@ static func _print_usage() -> void:
 	print("  --mode=fast")
 	print("  --mode=fixture --name=graph|legacy-v2")
 	print("  --mode=repro --seed=12345 --region-x=0 --region-z=0 [--expect=probe-sha256:...]")
+	print("  --mode=topology-repro --seed=12345 --region-x=0 --region-z=0 [--expect=topology-sha256:...]")
 	print("  --mode=batch --start-seed=1 --count=100 --region-radius=1")

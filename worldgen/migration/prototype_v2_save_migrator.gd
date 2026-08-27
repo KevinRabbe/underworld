@@ -11,7 +11,7 @@ const MODERN_SAVE_SCHEMA_VERSION: int = 3
 
 func migrate(
 	legacy_save: Dictionary,
-	world_settings: UnderworldWorldSettings,
+	world_settings,
 	generator_manifest = null
 ) -> Dictionary:
 	var diagnostics: Array[String] = []
@@ -149,7 +149,7 @@ func migrate(
 
 static func _max_legacy_candidate_count(
 	object_type: String,
-	world_settings: UnderworldWorldSettings
+	world_settings
 ) -> int:
 	var resolution: int = maxi(world_settings.vertices_per_side, 2)
 	var step: int

@@ -25,11 +25,12 @@ func _init(
 
 
 static func ok(stage_name_value: String, data_value = null, fingerprint_value: String = ""):
+	var no_diagnostics: Array[String] = []
 	return load(SCRIPT_PATH).new(
 		stage_name_value,
 		true,
 		data_value,
-		[],
+		no_diagnostics,
 		fingerprint_value
 	)
 

@@ -11,12 +11,12 @@ const LEGACY_ROCK_DOMAIN: String = "legacy-v2-rock"
 const LEGACY_BRANCH_DOMAIN: String = "legacy-v2-branch"
 const LEGACY_STONE_DOMAIN: String = "legacy-v2-loose-stone"
 
-var settings: UnderworldWorldSettings
+var settings
 var _terrain_generator
 var _pickup_generator
 
 
-func configure(world_settings: UnderworldWorldSettings) -> void:
+func configure(world_settings) -> void:
 	settings = world_settings
 	_terrain_generator = TerrainGeneratorScript.new()
 	_terrain_generator.configure(settings)

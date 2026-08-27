@@ -1,9 +1,9 @@
 extends RefCounted
 
-var settings: UnderworldWorldSettings
+var settings
 
 
-func configure(world_settings: UnderworldWorldSettings) -> void:
+func configure(world_settings) -> void:
 	settings = world_settings
 
 

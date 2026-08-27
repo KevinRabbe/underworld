@@ -6,7 +6,7 @@ const COLOR_ROCK := Color(0.39, 0.40, 0.37)
 const COLOR_SHORE := Color(0.48, 0.43, 0.28)
 const COLOR_SUBMERGED := Color(0.18, 0.28, 0.17)
 
-var settings: UnderworldWorldSettings
+var settings
 
 var continental_noise: FastNoiseLite = FastNoiseLite.new()
 var rolling_noise: FastNoiseLite = FastNoiseLite.new()
@@ -21,7 +21,7 @@ var forest_noise: FastNoiseLite = FastNoiseLite.new()
 var rock_noise: FastNoiseLite = FastNoiseLite.new()
 
 
-func configure(world_settings: UnderworldWorldSettings) -> void:
+func configure(world_settings) -> void:
 	settings = world_settings
 
 	# Large-scale fields do not need many fractal octaves. Keeping these lean
