@@ -57,17 +57,20 @@ Existing root-level documents remain authoritative until they are deliberately m
 
 ### Content contracts
 - `40_content/CONTENT_RULEBOOK.md` — meta-rule defining what every scalable family rulebook must answer.
-- `40_content/CONTENT_IDS.md` — stable semantic content identity rules.
+- `40_content/CONTENT_IDS.md` — stable semantic content identity and separate controlled schema-ID rules.
 - `40_content/CONTENT_CATEGORIES.md` — controlled hierarchical classification rules.
 - `40_content/CONTENT_CAPABILITIES.md` — behavioral composition contracts.
 - `40_content/CONTENT_REFERENCES.md` — typed semantic reference and cycle rules.
 - `40_content/CONTENT_FAMILIES.md` — directional map of major future item, creature, structure, worldgen, gameplay-data and presentation-data families.
 - `40_content/RULEBOOK_TEMPLATE.md` — reusable family-rulebook template.
-- `40_content/animations/ANIMATION_SET_RULEBOOK.md` — first family-specific rulebook; animation implementation remains deferred.
+- `40_content/animations/ANIMATION_ROLE_SCHEMA.md` — controlled semantic animation-role vocabulary independent from clip filenames.
+- `40_content/animations/RIG_PROFILE_RULEBOOK.md` — semantic skeleton/socket mapping contract for replaceable character rigs.
+- `40_content/animations/ANIMATION_SET_RULEBOOK.md` — first family-specific content rulebook; animation implementation remains deferred.
 
 ### Authoring
 - `50_authoring/AUTHORING_CONTRACT.md` — project-wide content authoring workflow.
-- `50_authoring/ADDING_ANIMATION_SET.md` — first family-specific authoring guide.
+- `50_authoring/ADDING_RIG_PROFILE.md` — rig mapping/import workflow without gameplay bone-path coupling.
+- `50_authoring/ADDING_ANIMATION_SET.md` — reusable semantic animation-set authoring workflow.
 
 ### Validation
 - `60_validation/CONTENT_VALIDATION.md` — staged machine-enforcement architecture for IDs, categories, capabilities, definitions, references and assets.
