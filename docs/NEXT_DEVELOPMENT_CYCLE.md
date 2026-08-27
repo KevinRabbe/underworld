@@ -10,7 +10,7 @@ This cycle is intentionally architecture-heavy. It is successful when the implem
 
 ## Required deliverables
 
-### 1. Stable procedural ID specification
+### 1. Stable procedural ID specification — NEXT
 
 Define the concrete stable-ID/address scheme for:
 
@@ -21,20 +21,22 @@ Define the concrete stable-ID/address scheme for:
 
 Include a migration strategy for existing prototype index-based saved object IDs.
 
-### 2. Underground world-definition schema
+### 2. Underground world-definition schema — COMPLETE
 
-Choose the concrete Godot/GDScript representation for:
+Defined in `UNDERWORLD_GRAPH_SCHEMA.md`.
 
-- world definition;
-- underground region definition;
-- cave network graph;
-- node/chamber definition;
-- edge/tunnel definition;
-- entrance definition;
-- depth-profile data;
-- future special-location hooks.
+The schema now specifies:
 
-The schema must be serializable/debuggable enough for tests without requiring scene nodes.
+- pure data-only world/region/network/node/edge/entrance definitions;
+- continuous shallow/mid/deep profile blends;
+- stable network identity after secondary connections;
+- accepted proximity/loop connections as stable graph edges;
+- canonical ownership requirement for cross-region edges;
+- future special-location hooks;
+- immutable finalized definitions plus player delta state;
+- required graph invariants and canonical deterministic debug serialization.
+
+Exact class/field spellings may change during implementation, but the semantic boundaries are now architecture rules.
 
 ### 3. Deterministic generation seed domains
 
@@ -115,10 +117,10 @@ They may influence interfaces where future compatibility matters, but they are n
 
 The architecture cycle is complete when we can answer, concretely and without hand-waving:
 
-1. What deterministic data describes an underground cave system before any Godot scene nodes exist?
+1. What deterministic data describes an underground cave system before any Godot scene nodes exist? **Answered by `UNDERWORLD_GRAPH_SCHEMA.md`.**
 2. How is every persistent generated object addressed stably?
-3. How do shallow/mid/deep profiles feed the topology generator?
-4. How are 1–3 entrances and secondary loops represented and validated?
+3. How do shallow/mid/deep profiles feed the topology generator? **Data representation answered; generation curves/interface still pending.**
+4. How are 1–3 entrances and secondary loops represented and validated? **Representation answered; generator interface/scoring parameters still pending.**
 5. What gets generated on worker threads versus instantiated on the main thread?
 6. What is saved versus regenerated?
 7. How can hundreds/thousands of seeds be validated without manual exploration?
