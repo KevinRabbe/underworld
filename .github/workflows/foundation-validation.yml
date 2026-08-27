@@ -1,0 +1,39 @@
+name: Foundation Validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'foundation/**'
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-foundation:
+    name: Godot headless contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Show Godot version
+        run: godot --version
+
+      - name: Run foundation contracts
+        run: godot --headless --path . --script res://tests/run_validation.gd -- --mode=fast
+
+      - name: Run deterministic batch probes
+        run: >-
+          godot --headless --path . --script res://tests/run_validation.gd --
+          --mode=batch --start-seed=1 --count=250 --region-radius=1
