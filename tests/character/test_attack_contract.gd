@@ -3,6 +3,7 @@ extends RefCounted
 const StaminaScript := preload("res://player/stamina_component.gd")
 const ActionControllerScript := preload("res://player/player_action_controller.gd")
 const AttackCatalogScript := preload("res://combat/player_attack_catalog.gd")
+const CombatManagerScript := preload("res://combat/combat_manager.gd")
 const PlayerScript := preload("res://player/player.gd")
 
 
@@ -123,6 +124,20 @@ static func _test_live_player_activation(tree: SceneTree, failures: Array[String
 			"committed attack keeps original axe damage",
 			int(captured[0].get("damage", 0)),
 			16
+		)
+
+		# Exercise the actual CombatManager execution consumer in a live World3D.
+		# No enemy exists in this fixture, so a valid execution should resolve as
+		# a clean miss rather than parser/runtime failure.
+		var combat: Node = CombatManagerScript.new()
+		fixture_root.add_child(combat)
+		combat.set("player", player)
+		combat.call("try_attack", captured[0])
+		_expect_equal(
+			failures,
+			"CombatManager consumes supplied execution",
+			String(combat.call("get_last_combat_message")),
+			"Attack missed"
 		)
 
 	actions.call("tick", 0.40)
