@@ -201,7 +201,7 @@ heavy impacts can exhaust it.
 `blocked` is deliberately not equivalent to `parried`: the prototype Burrower
 does not receive parry stagger or recoil when its attack is merely blocked.
 
-The mannequin now includes a persistent held guard pose. This is a visual layer,
+The mannequin includes a persistent held guard pose. This is a visual layer,
 not a timed action: gameplay owns whether guard is active, and the mannequin only
 renders the corresponding stance.
 
@@ -271,3 +271,11 @@ Spatial integration fixtures run only after the headless SceneTree is active so
 `global_position` behavior is the same contract used during actual play.
 
 Visual feel is deliberately not treated as an automated-test question.
+
+## First-character checkpoint boundary
+
+This prototype is considered structurally sufficient once the character and
+existing deterministic-worldgen gates are green on the same PR head. The next
+character work should not automatically expand this PR into combos, production
+animation, armor, lock-on, advanced input buffering or weapon-specific combat.
+Those belong to later, deliberately scoped cycles.
