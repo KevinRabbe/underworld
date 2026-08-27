@@ -13,6 +13,10 @@ const PlayerActionControllerScript := preload("res://player/player_action_contro
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 10.0
 const SPRINT_STAMINA_DRAIN := 12.0
+const BLOCK_MOVE_SPEED := 2.4
+const BLOCK_FRONT_DOT := 0.342
+const BLOCK_STAMINA_BASE := 5.0
+const BLOCK_STAMINA_PER_DAMAGE := 1.25
 const GROUND_ACCELERATION := 30.0
 const GROUND_DECELERATION := 38.0
 const AIR_ACCELERATION := 7.0
@@ -186,6 +190,10 @@ func is_parry_active() -> bool:
 	return action_controller.is_parry_active()
 
 
+func is_blocking() -> bool:
+	return action_controller.is_blocking()
+
+
 func get_mannequin():
 	return mannequin
 
@@ -206,10 +214,28 @@ func receive_melee_attack(
 	if parryable and action_controller.is_parry_active():
 		parry_succeeded.emit(source_position)
 		return &"parried"
+	if action_controller.is_blocking() and _is_source_in_block_arc(source_position):
+		var impact_cost: float = BLOCK_STAMINA_BASE + float(amount) * BLOCK_STAMINA_PER_DAMAGE
+		if action_controller.try_absorb_block(impact_cost):
+			return &"blocked"
 	if damage_invulnerability_timer > 0.0:
 		return &"ignored"
 	_apply_damage(amount, source_position)
 	return &"hit"
+
+
+func _is_source_in_block_arc(source_position: Vector3) -> bool:
+	if visual_root == null:
+		return false
+	var to_source: Vector3 = source_position - global_position
+	to_source.y = 0.0
+	if to_source.is_zero_approx():
+		return true
+	var forward: Vector3 = visual_root.global_transform.basis.z
+	forward.y = 0.0
+	if forward.is_zero_approx():
+		return false
+	return forward.normalized().dot(to_source.normalized()) >= BLOCK_FRONT_DOT
 
 
 func _apply_damage(amount: int, source_position: Vector3) -> void:
@@ -269,6 +295,11 @@ func _get_camera_action_ray(reach_from_player: float) -> Dictionary:
 
 
 func _handle_action_inputs() -> void:
+	if action_controller.is_blocking():
+		if not is_on_floor() or not Input.is_action_pressed("block"):
+			action_controller.stop_block()
+		return
+
 	if not is_on_floor() or not action_controller.is_free():
 		return
 
@@ -294,6 +325,10 @@ func _handle_action_inputs() -> void:
 		jump_buffer_timer = 0.0
 		if mannequin != null:
 			mannequin.play_parry()
+		return
+
+	if Input.is_action_pressed("block") and action_controller.try_start_block():
+		jump_buffer_timer = 0.0
 
 
 func _update_tool_use_feedback(delta: float) -> void:
@@ -361,9 +396,10 @@ func _update_horizontal_velocity(delta: float) -> void:
 		"move_backward"
 	)
 	var move_direction: Vector3 = _camera_relative_direction(input_vector)
-	var target_speed: float = WALK_SPEED
+	var target_speed: float = BLOCK_MOVE_SPEED if action_controller.is_blocking() else WALK_SPEED
 	if (
 		is_on_floor()
+		and not action_controller.is_blocking()
 		and not move_direction.is_zero_approx()
 		and Input.is_action_pressed("sprint")
 		and stamina.spend(SPRINT_STAMINA_DRAIN * delta)
@@ -538,6 +574,7 @@ func _ensure_default_input_actions() -> void:
 	_add_key_action("sprint", KEY_SHIFT)
 	_add_key_action("dodge", KEY_CTRL)
 	_add_key_action("parry", KEY_Q)
+	_add_key_action("block", KEY_F)
 
 
 func _add_key_action(action_name: StringName, physical_key: Key) -> void:
