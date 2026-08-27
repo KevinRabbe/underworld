@@ -76,15 +76,62 @@ This file records explicit design/architecture decisions. It is append-oriented:
 
 - Prototype procedural surface objects/pickups have relied on accepted-array-index identities in places. This must be migrated toward stable generation-address IDs before future density/distribution tuning can invalidate persistent saves.
 
+## 2026-08-27 — Underground graph schema checkpoint
+
+### Pure topology data — LOCKED
+
+- Underground graph definitions exist independently of Godot scene nodes, meshes, collision, AI and audio.
+- The first implementation should use data-only `RefCounted`-style objects or an equivalent scene-independent representation.
+- Generation and validation must work without entering the scene tree.
+
+### Region/network ownership — LOCKED
+
+- Macro generation regions, cave networks and runtime streaming cells are separate concepts.
+- A cave network keeps its stable identity after a secondary connection links it to another network.
+- Secondary connectivity must not merge/renumber existing networks and thereby invalidate persistent IDs.
+
+### Continuous depth representation — LOCKED
+
+- Nodes carry continuous shallow/mid/deep profile weights rather than relying only on one hard depth enum.
+- Exact meter ranges and blend curves remain open.
+
+### Secondary edges — LOCKED
+
+- Accepted proximity connections and deliberate topology loops become normal stable graph-edge definitions.
+- Candidate-connection scoring data is transient and is not part of the final world definition unless the connection is accepted.
+
+### Cross-region determinism — LOCKED
+
+- Cross-region connections have one canonical deterministic owner.
+- Generation/load order must not produce duplicate or differently identified cross-region connections.
+
+### Immutable generated definitions — LOCKED
+
+- Generation may use mutable builders, but finalized graph definitions are treated as immutable world truth for the current seed/generator version.
+- Player-caused changes are saved as deltas referencing stable IDs rather than by mutating/re-saving the generated graph.
+
+### Future content hooks — LOCKED ARCHITECTURAL INTERFACE
+
+- Structures, large deposits, boss lairs and other future special locations can reserve stable graph/world anchors through special-location hooks.
+- The topology generator does not implement those gameplay systems itself.
+
+### Deterministic validation representation — LOCKED
+
+- Generated graphs require canonical sorted debug serialization/fingerprints so identical seed/version input can be compared automatically across runs, load order and thread scheduling.
+
 ## Open decisions at this checkpoint
 
 The following remain intentionally open and must not become permanent accidentally:
 
 - exact surface dimensions/shape and final biome count;
-- exact numerical depth boundaries;
+- exact numerical depth boundaries and depth-profile blend curves;
 - exact tree-harvesting interaction;
 - exact surface terraforming limits/implementation;
 - exact future block/parry/dodge/stamina combat model;
 - final creature/resource/boss roster;
 - exact underground water/structure/ecology content;
-- final logistics/transport systems.
+- final logistics/transport systems;
+- exact macro underground region size/address encoding;
+- exact stable-ID string/binary representation;
+- exact cave geometry/spline/meshing algorithm;
+- exact underground runtime streaming-cell dimensions and cache thresholds.
