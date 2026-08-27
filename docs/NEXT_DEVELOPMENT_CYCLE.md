@@ -1,164 +1,226 @@
 # Underworld — Next Development Cycle
 
-## Cycle: Architecture foundation before Underworld implementation
+## Architecture foundation status — COMPLETE
 
-### Goal
+The architecture-design cycle that preceded Underworld implementation is complete.
 
-Design the technical architecture required for the Underworld before adding substantial cave-generation/gameplay code.
+The required contracts are now defined in:
 
-This cycle is intentionally architecture-heavy. It is successful when the implementation boundaries, data model, persistence model and validation strategy are clear enough that cave code can be added without immediately redesigning foundations.
+- `UNDERWORLD_GRAPH_SCHEMA.md` — deterministic underground graph/world-definition data;
+- `STABLE_PROCEDURAL_IDS.md` — persistent candidate-address identity and prototype-v2 migration mapping;
+- `DETERMINISTIC_SEED_DOMAINS.md` — isolated named/revisioned randomness domains;
+- `GENERATION_PIPELINE_INTERFACES.md` — pure typed generation-stage inputs/outputs;
+- `STREAMING_OWNERSHIP.md` — definition/cache/runtime ownership and continuous surface/Underworld streaming;
+- `PERSISTENCE_AND_VERSIONING.md` — explicit generator manifests, delta ownership and compatibility/migration policy;
+- `VALIDATION_HARNESS.md` — headless deterministic validation, batch campaigns, fingerprints, migration fixtures and streaming simulations.
 
-## Required deliverables
+These documents answer the architecture questions that had to be resolved before substantial cave-generation code.
 
-### 1. Stable procedural ID specification — COMPLETE
+---
 
-Defined in `STABLE_PROCEDURAL_IDS.md`.
+# Next cycle: Foundation implementation before the cave generator
 
-The architecture now specifies:
+## Goal
 
-- `WorldId`, semantic `StableAddress`, and persisted `StableId` as separate concepts;
-- candidate-address identity rather than accepted-array indexes;
-- global surface candidate domains/cells plus fixed semantic slots;
-- hierarchical underground region/network/node/edge/entrance/special-location addresses;
-- canonical endpoint/owner rules for secondary and cross-region connectors;
-- parent-derived stable IDs for persistent generated child objects;
-- runtime index mappings as transient caches only;
-- a one-time migration path from prototype v2 `chunk:type:index` IDs before incompatible surface-density/generation tuning;
-- automated ID determinism/migration validation requirements.
+Implement the small reusable deterministic infrastructure that the future Underworld generator depends on, together with its automated tests.
 
-Exact textual/binary encoding remains open, but the semantic identity rules are locked.
+This cycle is **not** the first cave-content cycle yet.
 
-### 2. Underground world-definition schema — COMPLETE
+Success means the project has concrete tested primitives for identity, randomness, manifests, graph data and validation so the first topology generator can be written against stable interfaces rather than inventing infrastructure while generating caves.
 
-Defined in `UNDERWORLD_GRAPH_SCHEMA.md`.
+---
 
-The schema now specifies:
+## Required implementation deliverables
 
-- pure data-only world/region/network/node/edge/entrance definitions;
-- continuous shallow/mid/deep profile blends;
-- stable network identity after secondary connections;
-- accepted proximity/loop connections as stable graph edges;
-- canonical ownership requirement for cross-region edges;
-- future special-location hooks;
-- immutable finalized definitions plus player delta state;
-- required graph invariants and canonical deterministic debug serialization.
+### 1. Canonical stable-address / StableId primitives
 
-Exact class/field spellings may change during implementation, but the semantic boundaries are now architecture rules.
+Implement a central data-only address/ID module that supports at least the semantic categories already required by the architecture:
 
-### 3. Deterministic generation seed domains — COMPLETE
+```text
+surface candidate cells/slots
+underground regions
+network candidates
+nodes/edges
+entrances
+secondary/cross-region connectors
+special-location hooks
+persistent generated children
+```
 
-Defined in `DETERMINISTIC_SEED_DOMAINS.md`.
+Requirements:
 
-The architecture now specifies:
+- no gameplay code manually concatenates identity strings;
+- canonical ordering for undirected endpoints;
+- negative coordinates are unambiguous;
+- equality/sorting/debug representation are deterministic;
+- runtime indexes are not part of identity.
 
-- stable-address + named-domain seed derivation instead of a shared mutable world RNG;
-- separate `seed_schema_version`, immutable domain IDs and explicit per-domain revisions;
-- global generator version as a compatibility manifest rather than a universal RNG salt;
-- independent randomness for unrelated systems and important semantic properties;
-- deterministic local sequences/subkeys where a system naturally needs multiple samples;
-- a project-owned deterministic RNG/value interface with frozen test vectors before persistent generation depends on it;
-- separate topology and geometry randomness domains;
-- canonical candidate enumeration/tie resolution;
-- parallel/thread-order independence;
-- canonical cross-region seed ownership;
-- legacy-surface migration considerations and engine/noise fingerprint testing.
+Add L0/L1 validation vectors immediately.
 
-The exact low-level hash/PRNG algorithms remain an implementation choice, but must be frozen and protected by hard-coded test vectors before production world generation uses them.
+### 2. Seed-domain registry and deterministic value/RNG contract
 
-### 4. Generation-stage interfaces — COMPLETE
+Implement:
 
-Defined in `GENERATION_PIPELINE_INTERFACES.md`.
+```text
+SeedDomain registry
+explicit immutable domain IDs/names/revisions
+central seed derivation from world seed + semantic StableAddress + domain + subkey
+project-owned deterministic stateless values and/or local PRNG sequence
+```
 
-The architecture now specifies pure-data contracts for:
+Before any persistent generator depends on it, commit hard-coded deterministic test vectors.
 
-- immutable `WorldGenerationContext`;
-- macro underground-region planning;
-- continuous depth-profile sampling/grammar resolution used during topology generation;
-- primary network/node/edge topology generation;
-- entrance generation/selection and deterministic surface-integration descriptors;
-- secondary/cross-region connectivity analysis with scheduler-supplied neighbor views;
-- special-location hook reservation;
-- region finalization/validation;
-- streamable base-geometry descriptions;
-- runtime build handoff.
+Do not route new persistent generation through the current mutable per-chunk RNG pattern.
 
-It also locks the separation between pipeline scheduler responsibilities and pure deterministic stages, explicit dependency resolution, stage revisions, canonical cross-region ownership/references, base geometry versus player deltas, and typed stage results rather than one giant mutable generator dictionary.
+### 3. Generator manifest primitives
 
-### 5. Streaming ownership model — NEXT
+Implement data-only types/canonical serialization for:
 
-Define which system owns and controls lifetime of:
+```text
+save/generation contract identity
+seed schema version
+stable-address schema version
+stage revisions
+seed-domain revisions
+profile/config revisions or references
+manifest fingerprint/ID
+```
 
-- finalized world-definition data/cache;
-- surface entrance-integration queries;
-- base geometry-description cache;
-- rendered surface/underground geometry;
-- collision activation;
-- active creatures/interactables;
-- local audio;
-- runtime cell transitions across surface and underground;
-- async generation requests/cancellation/prioritization.
+The global manifest identifies the deterministic contract but is not mixed into every RNG seed as a universal salt.
 
-The design must support one continuous world without requiring all underground content to be instantiated.
+### 4. Pure graph definition classes
 
-### 6. Persistence and generation-version strategy
+Implement the first scene-independent typed classes described in `UNDERWORLD_GRAPH_SCHEMA.md`:
 
-Define:
+```text
+WorldDefinitionIndex
+UndergroundRegionDefinition
+CaveNetworkDefinition
+CaveNodeDefinition
+CaveEdgeDefinition
+EntranceDefinition
+SpecialLocationHookDefinition
+```
 
-- save version;
-- generator version/manifest;
-- seed-schema/domain revision recording where required;
-- stage/profile revision recording where required;
-- delta ownership;
-- stable-ID references;
-- migration boundaries;
-- behavior when a future generation algorithm changes incompatibly.
+This cycle does not need to generate interesting caves yet.
 
-### 7. Test/validation harness specification
+The classes must be usable without `Node`, `Node3D`, meshes, physics, AI or audio.
 
-Before large generator implementation, define a headless/simple test runner capable of batch seeds.
+### 5. Canonical serialization / fingerprints / invariant validator
 
-Initial validation targets:
+Implement reusable test/debug infrastructure for deterministic data:
 
-- deterministic seed test vectors;
-- stable IDs;
-- stage-level deterministic fingerprints;
-- valid graph references;
-- entrance validity/reachability;
-- depth constraints;
-- bounded topology/connectivity;
-- canonical serialization/fingerprints;
-- reproducible failure output.
+```text
+canonical sorted representation
+fingerprint generation
+StableId uniqueness checks
+graph reference checks
+finite numeric checks
+canonical ownership checks
+```
 
-## Explicitly out of scope for this cycle
+A deliberately constructed invalid graph should fail with a precise reason and stable address/ID context.
 
-Do not add merely because the design discusses them:
+### 6. Headless validation runner skeleton
 
-- additional enemies;
-- bosses;
+Implement the first executable validation entry point capable of:
+
+```text
+run fast contract tests
+run one named fixture
+run one world/region reproduction case
+print deterministic fingerprints/diagnostics
+return non-zero/failure status for CI or scripts
+```
+
+Exact CLI/framework is an implementation choice.
+
+No rendered game window should be required for these tests.
+
+### 7. Prototype-v2 save migration adapter and fixtures
+
+Before incompatible surface decoration/pickup generation changes, implement the legacy mapping path while the current algorithm is still reproducible.
+
+Fixtures should cover at least:
+
+```text
+empty modifications
+harvested tree/rock
+collected branch/stone
+multiple destroyed objects
+negative chunk coordinates
+wood/stone/tool/hotbar state
+```
+
+The migration should translate old `chunk_x:chunk_z:type:accepted_index` references to modern StableIds or explicitly quarantine unresolved references.
+
+Do **not** simultaneously redesign surface densities/generation in this cycle.
+
+### 8. Service/interface skeletons only where needed
+
+Create lightweight interfaces/data contracts required to connect future work, such as:
+
+```text
+WorldGenerationContext
+stage request/result base conventions
+WorldDefinitionService interface boundary
+WorldDeltaStore logical interface boundary
+```
+
+Do not build a large runtime framework just to satisfy the document. Implement only the boundary needed by the next topology cycle and tests.
+
+---
+
+## Explicitly out of scope
+
+Do not add merely because later architecture supports it:
+
+- finished cave topology algorithm;
+- cave meshes/art;
+- additional enemies or bosses;
 - block/parry/dodge/stamina;
-- production cave art;
 - underground ecology/content roster;
 - building system;
 - finished terrain deformation;
 - large-deposit mining implementation;
 - inventory/logistics overhaul;
 - audio propagation implementation;
-- additional surface biomes.
+- additional surface biomes;
+- surface decoration density retuning;
+- runtime 3D Underworld streaming cells beyond minimal interface/test scaffolding.
 
-They may influence interfaces where future compatibility matters, but they are not implementation targets now.
+This is an infrastructure/testing cycle.
+
+---
+
+## Testing cadence for this cycle
+
+Manual F5/playtesting is not required for each change.
+
+Use automated/headless tests as the normal validation path:
+
+```text
+implement primitive
+-> deterministic unit/fixture tests
+-> batch/simple headless validation
+-> continue
+```
+
+A human playtest is unnecessary until a later milestone contains experiential behavior worth judging.
+
+---
 
 ## Exit criteria
 
-The architecture cycle is complete when we can answer, concretely and without hand-waving:
+The foundation implementation cycle is complete when:
 
-1. What deterministic data describes an underground cave system before any Godot scene nodes exist? **Answered by `UNDERWORLD_GRAPH_SCHEMA.md`.**
-2. How is every persistent generated object addressed stably? **Answered by `STABLE_PROCEDURAL_IDS.md`.**
-3. How is randomness isolated from load order, thread scheduling, sibling rejection and unrelated generator changes? **Answered by `DETERMINISTIC_SEED_DOMAINS.md`.**
-4. What are the deterministic generation stages and their typed inputs/outputs? **Answered by `GENERATION_PIPELINE_INTERFACES.md`.**
-5. How do shallow/mid/deep profiles feed the topology generator? **Architectural interface answered by the depth-profile service; exact curves remain tuning data.**
-6. How are entrances and secondary loops generated without coupling to runtime/load order? **Stage interfaces and ownership/dependency model answered; exact scoring parameters remain tuning data.**
-7. What owns definition/geometry/runtime lifetimes and what gets generated on workers versus built on the main thread?
-8. What is saved versus regenerated, and how are generator compatibility boundaries represented?
-9. How can hundreds/thousands of seeds be validated without manual exploration?
+1. stable semantic addresses/IDs are concrete and tested;
+2. deterministic seed-domain derivation has frozen test vectors;
+3. generator manifests can be canonically represented/fingerprinted;
+4. pure underground graph definitions exist independently of scene nodes;
+5. graph/ID invariant validation and canonical fingerprints work;
+6. the test harness can run headlessly and reproduce one exact failing case from seed/address data;
+7. prototype-v2 save fixtures migrate safely to modern StableIds;
+8. no new gameplay subsystem had to invent its own identity/randomness/persistence convention.
 
-Only after these answers are reflected in concrete interfaces/data structures should the main Underworld generator implementation begin.
+Only after this cycle should the first actual **primary Underworld topology generator** be implemented.
