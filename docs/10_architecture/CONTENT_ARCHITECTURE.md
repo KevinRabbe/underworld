@@ -19,12 +19,14 @@ Definitions contain data and references. They do not own scene-tree lifetime or 
 ### Category
 A controlled hierarchical classification answering **what kind of content is this?**
 
+Category schema IDs use the `category.*` namespace, for example `category.item.equipment.weapon.melee.sword`.
+
 Categories may add validation requirements but should not become hidden runtime inheritance trees.
 
 ### Capability
 A controlled declaration answering **what behaviors/interfaces may this content participate in?**
 
-Examples: equipable, damageable, harvestable, placeable, repairable.
+Capability schema IDs use the `capability.*` namespace, for example `capability.equipable`, `capability.damageable`, `capability.harvestable`, `capability.placeable` and `capability.repairable`.
 
 Capabilities describe contracts. Runtime systems implement those contracts.
 
@@ -62,11 +64,13 @@ Definitions must not directly own runtime managers, player Nodes, AI state, phys
 ## Classification model
 
 Content may combine:
-- one or more hierarchical categories;
-- zero or more capabilities;
+- one or more hierarchical category schema IDs;
+- zero or more capability schema IDs;
 - typed references to other definitions;
 - typed asset references;
 - family-specific parameter data.
+
+Authored definitions use the full controlled IDs. Editor/tooling UIs may display shorter labels, but persisted/serialized architecture data must not depend on ambiguous shorthand.
 
 Example:
 
@@ -74,18 +78,18 @@ Example:
 item.weapon.iron_longsword
 
 categories:
-  item
-  item.equipment
-  item.equipment.weapon
-  item.equipment.weapon.melee
-  item.equipment.weapon.melee.sword
-  item.equipment.weapon.melee.sword.longsword
+  category.item
+  category.item.equipment
+  category.item.equipment.weapon
+  category.item.equipment.weapon.melee
+  category.item.equipment.weapon.melee.sword
+  category.item.equipment.weapon.melee.sword.longsword
 
 capabilities:
-  equipable
-  damage_dealer
-  repairable
-  parry_tool
+  capability.equipable
+  capability.damage_dealer
+  capability.repairable
+  capability.parry_tool
 
 references:
   attack_set = attack_set.sword.one_handed.basic
