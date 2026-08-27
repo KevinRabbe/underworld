@@ -10,7 +10,7 @@ They are not runtime instances and must not become a hidden replacement for capa
 
 Nested categories are allowed and encouraged where they make authoring/validation clearer.
 
-Example:
+Conceptual tree labels may be shown without prefixes for readability:
 ```text
 item
 └─ equipment
@@ -22,7 +22,7 @@ item
             └─ greatsword
 ```
 
-Possible semantic registry form:
+Authoritative schema IDs use the full `category.*` namespace:
 ```text
 category.item
 category.item.equipment
@@ -32,6 +32,8 @@ category.item.equipment.weapon.melee.sword
 category.item.equipment.weapon.melee.sword.longsword
 ```
 
+Authored/serialized definitions use the full IDs. Editor/tooling UIs may display shorter labels.
+
 ## Classification vs behavior
 
 Categories primarily classify.
@@ -39,23 +41,23 @@ Categories primarily classify.
 Good:
 ```text
 categories:
-  item
-  item.equipment
-  item.equipment.weapon
-  item.equipment.weapon.melee
-  item.equipment.weapon.melee.axe
+  category.item
+  category.item.equipment
+  category.item.equipment.weapon
+  category.item.equipment.weapon.melee
+  category.item.equipment.weapon.melee.axe
 ```
 
 Behavior belongs in capabilities/definitions:
 ```text
 capabilities:
-  equipable
-  damage_dealer
-  harvest_tool
-  repairable
+  capability.equipable
+  capability.damage_dealer
+  capability.harvest_tool
+  capability.repairable
 ```
 
-Do not rely on `category == axe` to secretly implement all axe mechanics.
+Do not rely on `category.item.equipment.weapon.melee.axe` to secretly implement all axe mechanics.
 
 ## Category inheritance of validation
 
@@ -89,9 +91,9 @@ Categories come from an authoritative category registry/schema.
 
 Definitions must not invent arbitrary category strings such as:
 ```text
-cool_sword
-weaponthing
-melee2
+category.cool_sword
+category.weaponthing
+category.melee2
 ```
 
 Unknown categories become validation errors.
