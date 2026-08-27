@@ -27,6 +27,7 @@ var tool_visual_root: Node3D
 var gait_phase: float = 0.0
 var current_action: StringName = ACTION_NONE
 var action_time: float = 0.0
+var attack_duration: float = ATTACK_DURATION
 var dodge_local_direction: Vector2 = Vector2(0.0, -1.0)
 var blocking_pose_active: bool = false
 var _built: bool = false
@@ -68,7 +69,8 @@ func update_visual(
 		_apply_block_pose()
 
 
-func play_attack() -> void:
+func play_attack(duration: float = ATTACK_DURATION) -> void:
+	attack_duration = maxf(duration, 0.05)
 	_start_action(ACTION_ATTACK)
 
 
@@ -98,6 +100,7 @@ func reset_pose() -> void:
 		return
 	current_action = ACTION_NONE
 	action_time = 0.0
+	attack_duration = ATTACK_DURATION
 	blocking_pose_active = false
 	for bone_name_variant in bone_indices.keys():
 		var bone_name: String = str(bone_name_variant)
@@ -301,8 +304,8 @@ func _update_action(delta: float) -> void:
 	action_time += delta
 	match current_action:
 		ACTION_ATTACK:
-			_apply_attack_pose(action_time / ATTACK_DURATION)
-			if action_time >= ATTACK_DURATION:
+			_apply_attack_pose(action_time / attack_duration)
+			if action_time >= attack_duration:
 				_end_action()
 		ACTION_PARRY:
 			_apply_parry_pose(action_time / PARRY_DURATION)
@@ -381,8 +384,11 @@ func _start_action(action: StringName) -> void:
 
 
 func _end_action() -> void:
+	var ended_action: StringName = current_action
 	current_action = ACTION_NONE
 	action_time = 0.0
+	if ended_action == ACTION_ATTACK:
+		attack_duration = ATTACK_DURATION
 
 
 func _set_rot(bone_name: String, euler: Vector3) -> void:

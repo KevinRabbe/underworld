@@ -6,6 +6,7 @@ const STATE_DODGING: int = 1
 const STATE_PARRYING: int = 2
 const STATE_BLOCKING: int = 3
 const STATE_USING_TOOL: int = 4
+const STATE_ATTACKING: int = 5
 
 const DODGE_COST: float = 25.0
 const DODGE_DURATION: float = 0.48
@@ -27,6 +28,12 @@ var elapsed: float = 0.0
 var dodge_direction_world: Vector3 = Vector3.ZERO
 var tool_action_duration: float = 0.0
 
+var attack_startup: float = 0.0
+var attack_active: float = 0.0
+var attack_recovery: float = 0.0
+var attack_activation_pending: bool = false
+var attack_activation_emitted: bool = false
+
 
 func _init(stamina_component) -> void:
 	stamina = stamina_component
@@ -42,6 +49,12 @@ func tick(delta: float) -> void:
 		_finish_action()
 	elif state == STATE_USING_TOOL and elapsed >= tool_action_duration:
 		_finish_action()
+	elif state == STATE_ATTACKING:
+		if not attack_activation_emitted and elapsed >= attack_startup:
+			attack_activation_emitted = true
+			attack_activation_pending = true
+		if elapsed >= get_attack_total_duration():
+			_finish_action()
 
 
 func try_start_dodge(world_direction: Vector3) -> bool:
@@ -104,6 +117,31 @@ func try_start_tool_action(duration: float) -> bool:
 	return true
 
 
+func try_start_attack(startup: float, active: float, recovery: float) -> bool:
+	if state != STATE_FREE:
+		return false
+	var sanitized_startup: float = maxf(startup, 0.0)
+	var sanitized_active: float = maxf(active, 0.01)
+	var sanitized_recovery: float = maxf(recovery, 0.0)
+	if sanitized_startup + sanitized_active + sanitized_recovery < 0.05:
+		return false
+	state = STATE_ATTACKING
+	elapsed = 0.0
+	attack_startup = sanitized_startup
+	attack_active = sanitized_active
+	attack_recovery = sanitized_recovery
+	attack_activation_pending = false
+	attack_activation_emitted = false
+	return true
+
+
+func consume_attack_activation() -> bool:
+	if not attack_activation_pending:
+		return false
+	attack_activation_pending = false
+	return true
+
+
 func is_free() -> bool:
 	return state == STATE_FREE
 
@@ -122,6 +160,10 @@ func is_blocking() -> bool:
 
 func is_using_tool() -> bool:
 	return state == STATE_USING_TOOL
+
+
+func is_attacking() -> bool:
+	return state == STATE_ATTACKING
 
 
 func is_dodge_iframe_active() -> bool:
@@ -147,11 +189,26 @@ func get_dodge_speed() -> float:
 	return sin(progress * PI) * DODGE_PEAK_SPEED
 
 
+func get_attack_total_duration() -> float:
+	return attack_startup + attack_active + attack_recovery
+
+
+func get_attack_phase_name() -> String:
+	if state != STATE_ATTACKING:
+		return "NONE"
+	if elapsed < attack_startup:
+		return "STARTUP"
+	if elapsed < attack_startup + attack_active:
+		return "ACTIVE"
+	return "RECOVERY"
+
+
 func reset() -> void:
 	state = STATE_FREE
 	elapsed = 0.0
 	dodge_direction_world = Vector3.ZERO
 	tool_action_duration = 0.0
+	_reset_attack_contract(true)
 
 
 func state_name() -> String:
@@ -160,11 +217,26 @@ func state_name() -> String:
 		STATE_PARRYING: return "PARRYING"
 		STATE_BLOCKING: return "BLOCKING"
 		STATE_USING_TOOL: return "USING_TOOL"
+		STATE_ATTACKING: return "ATTACKING/%s" % get_attack_phase_name()
 	return "FREE"
 
 
 func _finish_action() -> void:
+	var finished_attack: bool = state == STATE_ATTACKING
 	state = STATE_FREE
 	elapsed = 0.0
 	dodge_direction_world = Vector3.ZERO
 	tool_action_duration = 0.0
+	if finished_attack:
+		# Keep a just-crossed activation pending long enough for Player to consume
+		# it even if a very large frame also crossed the end of recovery.
+		_reset_attack_contract(false)
+
+
+func _reset_attack_contract(clear_pending: bool) -> void:
+	attack_startup = 0.0
+	attack_active = 0.0
+	attack_recovery = 0.0
+	attack_activation_emitted = false
+	if clear_pending:
+		attack_activation_pending = false

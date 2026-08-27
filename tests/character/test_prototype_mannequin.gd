@@ -46,6 +46,24 @@ static func run() -> Array[String]:
 	_advance(mannequin, 0.50)
 	_expect_equal(failures, "attack pose returns to neutral", mannequin.current_action, mannequin.ACTION_NONE)
 
+	# Combat definitions may supply different total durations. The mannequin must
+	# consume that duration instead of owning a second copy of attack timing.
+	mannequin.play_attack(0.70)
+	_advance(mannequin, 0.45)
+	_expect_equal(
+		failures,
+		"custom-duration attack remains active before supplied end",
+		mannequin.current_action,
+		mannequin.ACTION_ATTACK
+	)
+	_advance(mannequin, 0.30)
+	_expect_equal(
+		failures,
+		"custom-duration attack ends after supplied duration",
+		mannequin.current_action,
+		mannequin.ACTION_NONE
+	)
+
 	mannequin.play_parry()
 	_advance(mannequin, 0.55)
 	_expect_equal(failures, "parry pose returns to neutral", mannequin.current_action, mannequin.ACTION_NONE)
