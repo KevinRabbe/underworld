@@ -27,6 +27,8 @@ capability.parry_tool
 
 The exact registry grows deliberately as systems are introduced.
 
+Authored/serialized definitions use the full `capability.*` IDs. Editor/tooling UIs may display shorter labels.
+
 ## Composition
 
 A content definition may combine multiple capabilities.
@@ -34,25 +36,25 @@ A content definition may combine multiple capabilities.
 Example axe:
 ```text
 categories:
-  item.equipment.weapon.melee.axe
+  category.item.equipment.weapon.melee.axe
 
 capabilities:
-  equipable
-  damage_dealer
-  harvest_tool
-  repairable
+  capability.equipable
+  capability.damage_dealer
+  capability.harvest_tool
+  capability.repairable
 ```
 
 Example torch:
 ```text
 categories:
-  item.equipment.utility.torch
+  category.item.equipment.utility.torch
 
 capabilities:
-  equipable
-  placeable
-  light_source
-  fuel
+  capability.equipable
+  capability.placeable
+  capability.light_source
+  capability.fuel
 ```
 
 This avoids creating one runtime class for every behavior combination.
@@ -81,9 +83,9 @@ Capabilities come from a registry/schema. Unknown capability strings are validat
 
 Do not casually create near-duplicates such as:
 ```text
-repairable
-can_repair
-repair_item
+capability.repairable
+capability.can_repair
+capability.repair_item
 ```
 
 One semantic concept should have one authoritative capability contract.
@@ -100,16 +102,16 @@ A sword being repairable is a capability.
 
 Capabilities should remain coarse interfaces, not become huge bags of tuning numbers.
 
-For example `damage_dealer` may require an attack/weapon profile reference; it should not duplicate every attack's timing, reach and damage inside the capability declaration.
+For example `capability.damage_dealer` may require an attack/weapon profile reference; it should not duplicate every attack's timing, reach and damage inside the capability declaration.
 
 ## Runtime boundary
 
 Runtime systems may query validated capabilities to decide whether a definition can enter a workflow.
 
 Examples:
-- equipment system accepts `equipable` definitions;
-- harvesting system accepts `harvest_tool` definitions;
-- building placement accepts `placeable` definitions.
+- equipment system accepts `capability.equipable` definitions;
+- harvesting system accepts `capability.harvest_tool` definitions;
+- building placement accepts `capability.placeable` definitions.
 
 Systems should still consume typed definition/profile data rather than branch on every concrete content ID.
 
