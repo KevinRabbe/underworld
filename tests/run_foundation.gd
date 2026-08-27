@@ -2,17 +2,20 @@ extends SceneTree
 
 const StableIdentityTests := preload("res://tests/foundation/test_stable_identity.gd")
 const DeterministicRandomTests := preload("res://tests/foundation/test_deterministic_random.gd")
+const ManifestAndGraphTests := preload("res://tests/foundation/test_manifest_and_graph.gd")
 
 
 func _init() -> void:
 	var failures: Array[String] = []
 	failures.append_array(StableIdentityTests.run())
 	failures.append_array(DeterministicRandomTests.run())
+	failures.append_array(ManifestAndGraphTests.run())
 
 	if failures.is_empty():
 		print("[FOUNDATION TESTS] PASS")
 		print("  StableAddress / StableId vectors and invariants passed")
 		print("  Seed-domain registry / seed derivation / PRNG vectors passed")
+		print("  GeneratorManifest / canonical serialization / graph invariants passed")
 		quit(0)
 		return
 
