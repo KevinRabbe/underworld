@@ -3,6 +3,7 @@ class_name UnderworldWorldId
 
 const PREFIX: String = "wid1:"
 const CONTRACT_TAG: String = "underworld-world-id-v1"
+const LOWER_HEX: String = "0123456789abcdef"
 
 var _value: String
 
@@ -24,7 +25,7 @@ static func parse(value: String):
 		return null
 	for index in range(digest.length()):
 		var c: String = digest.substr(index, 1)
-		if c not in "0123456789abcdef":
+		if LOWER_HEX.find(c) < 0:
 			return null
 	return UnderworldWorldId.new(value)
 
