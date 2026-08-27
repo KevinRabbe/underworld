@@ -22,38 +22,8 @@ static func run() -> Array[String]:
 	resolver.configure(settings)
 
 	var selected_legacy_ids: Array[String] = []
-	var saw_negative_chunk: bool = false
-	var coordinates: Array[Vector2i] = [
-		Vector2i.ZERO,
-		Vector2i(-1, 0),
-		Vector2i(0, -1),
-		Vector2i(1, 0),
-		Vector2i(-2, 1),
-		Vector2i(1, -2),
-	]
-
-	for coord in coordinates:
-		var result: Dictionary = resolver.build_chunk_index_map(coord)
-		var diagnostics: Array = result.get("diagnostics", [])
-		if not diagnostics.is_empty():
-			failures.append(
-				"legacy resolver replay diagnostics for chunk %s: %s" % [coord, diagnostics]
-			)
-			continue
-
-		var mapping: Dictionary = result["mapping"]
-		var legacy_keys: Array = mapping.keys()
-		legacy_keys.sort()
-		for key_variant in legacy_keys:
-			var legacy_id: String = str(key_variant)
-			if selected_legacy_ids.size() < 8:
-				selected_legacy_ids.append(legacy_id)
-				if coord.x < 0 or coord.y < 0:
-					saw_negative_chunk = true
-			if selected_legacy_ids.size() >= 8 and saw_negative_chunk:
-				break
-		if selected_legacy_ids.size() >= 8 and saw_negative_chunk:
-			break
+	_collect_chunk_ids(resolver, Vector2i.ZERO, 4, selected_legacy_ids, failures)
+	_collect_chunk_ids(resolver, Vector2i(-1, 0), 4, selected_legacy_ids, failures)
 
 	if selected_legacy_ids.size() < 4:
 		failures.append(
@@ -61,6 +31,13 @@ static func run() -> Array[String]:
 			selected_legacy_ids.size()
 		)
 		return failures
+
+	var saw_negative_chunk: bool = false
+	for legacy_id in selected_legacy_ids:
+		var parsed: Dictionary = LegacyResolverScript.parse_legacy_id(legacy_id)
+		if not parsed.is_empty() and int(parsed["chunk_x"]) < 0:
+			saw_negative_chunk = true
+			break
 	if not saw_negative_chunk:
 		failures.append("legacy migration fixture did not exercise negative chunk coordinates")
 
@@ -70,7 +47,7 @@ static func run() -> Array[String]:
 		destroyed.append(legacy_id)
 	# Duplicate input must not create duplicate modern deltas.
 	destroyed.append(selected_legacy_ids[0])
-	# Invalid/unresolvable IDs are quarantined instead of guessed.
+	# Mathematically impossible accepted index is quarantined before terrain replay.
 	destroyed.append("999:999:tree:999999")
 	legacy_save["destroyed_objects"] = destroyed
 
@@ -135,6 +112,26 @@ static func run() -> Array[String]:
 		failures.append("prototype-v2 migrator accepted an unsupported save version")
 
 	return failures
+
+
+static func _collect_chunk_ids(
+	resolver,
+	coord: Vector2i,
+	limit: int,
+	target: Array[String],
+	failures: Array[String]
+) -> void:
+	var result: Dictionary = resolver.build_chunk_index_map(coord)
+	var diagnostics: Array = result.get("diagnostics", [])
+	if not diagnostics.is_empty():
+		failures.append("legacy resolver replay diagnostics for chunk %s: %s" % [coord, diagnostics])
+		return
+
+	var legacy_keys: Array = result["mapping"].keys()
+	legacy_keys.sort()
+	var take_count: int = mini(limit, legacy_keys.size())
+	for index in range(take_count):
+		target.append(str(legacy_keys[index]))
 
 
 static func _load_fixture(failures: Array[String]) -> Dictionary:
