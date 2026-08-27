@@ -16,13 +16,14 @@ const GraphCanonicalizer := preload("res://worldgen/validation/graph_canonicaliz
 const GraphValidator := preload("res://worldgen/validation/graph_validator.gd")
 const CanonicalValue := preload("res://worldgen/validation/canonical_value.gd")
 const TopologyResult := preload("res://worldgen/underworld/primary_topology_result.gd")
+const SurfaceSampler := preload("res://worldgen/surface/deterministic_surface_sampler.gd")
 
 const CHILD_CANDIDATE_COUNT: int = 7
 const REGION_MARGIN: float = 24.0
 const BOUNDARY_DISTANCE: float = 72.0
 
 
-static func generate(context, region_plan):
+static func generate(context, region_plan, surface_sampler = null):
 	var failures: Array[String] = []
 	if context == null:
 		return StageResult.fail("primary_topology", ["WorldGenerationContext is null"])
@@ -31,6 +32,8 @@ static func generate(context, region_plan):
 	failures.append_array(context.validate())
 	if not failures.is_empty():
 		return StageResult.fail("primary_topology", failures)
+	if surface_sampler == null:
+		surface_sampler = SurfaceSampler.new(context.world_seed)
 
 	var networks: Array = []
 	var nodes: Array = []
@@ -63,7 +66,8 @@ static func generate(context, region_plan):
 			context,
 			region_plan,
 			network_address,
-			slot
+			slot,
+			surface_sampler
 		)
 		var network = generated["network"]
 		networks.append(network)
@@ -125,7 +129,8 @@ static func _generate_network(
 	context,
 	region_plan,
 	network_address,
-	network_slot: int
+	network_slot: int,
+	surface_sampler
 ) -> Dictionary:
 	var network_id: String = StableId.from_address(network_address).value()
 	var records: Array = []
@@ -152,7 +157,8 @@ static func _generate_network(
 			context,
 			region_plan,
 			parent_record["position"],
-			parent_record["address"]
+			parent_record["address"],
+			surface_sampler
 		)
 		var grammar: Dictionary = DepthProfiles.resolve_grammar(
 			parent_profile,
@@ -208,7 +214,8 @@ static func _generate_network(
 			context,
 			region_plan,
 			record["position"],
-			node_address
+			node_address,
+			surface_sampler
 		)
 		var grammar: Dictionary = DepthProfiles.resolve_grammar(
 			profile,

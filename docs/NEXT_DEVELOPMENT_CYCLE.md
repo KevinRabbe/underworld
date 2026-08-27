@@ -1,79 +1,74 @@
 # Underworld — Next Development Cycle
 
-## Deterministic foundation status — COMPLETE
+## Completed gates
 
-The deterministic foundation was merged through PR #10 after the Godot 4.7.2
-headless contracts and 2,250-case batch probe completed successfully.
-
-The project now has tested contracts for stable identity, named seed domains,
-generator manifests, pure graph definitions, canonical fingerprints, graph
-validation, reproduction probes, persistence boundaries and prototype-v2 save
-migration.
+- PR #10: deterministic foundation, migration, headless validation and batch CI.
+- PR #11: deterministic macro planning, continuous depth grammar and connected
+  primary topology.
 
 ---
 
-# Current cycle: first primary Underworld topology generator
+# Current cycle: v0.10 deterministic entrance generation
 
 ## Goal
 
-Implement the first deterministic data-only generator for local cave networks,
-nodes and primary edges. This cycle proves the macro-plan -> depth grammar ->
-primary-topology path before entrances, secondary connectivity or geometry.
-
-The result is an abstract graph definition, not a rendered cave.
+Generate deterministic, data-only connections from the sampled surface world to
+existing primary cave topology. This stage runs after primary topology and before
+secondary connectivity. It does not create meshes or runtime Nodes.
 
 ## Required deliverables
 
-### 1. Deterministic macro-region plan
+### 1. Deterministic surface sampling boundary
 
-- derive one canonical region address, ownership bounds and profile bias;
-- expose fixed network candidate slots before acceptance;
-- carry regional branching/verticality tendencies as pure data;
-- produce a canonical stage fingerprint.
+- expose height, normal, slope and viability signals from world seed and world XZ;
+- reuse the surface terrain generation contract without loaded chunks or scene Nodes;
+- measure depth against the sampled local surface, never an arbitrary global Y plane.
 
-### 2. Continuous depth-profile grammar
+### 2. Stable entrance selection
 
-- sample normalized shallow/mid/deep weights from deterministic region/depth data;
-- blend topology parameters from those weights;
-- keep exact curves explicit and revisable rather than scattering depth checks.
+- create fixed entrance candidate slots before acceptance;
+- score topology usefulness, surface viability and surface-relative depth;
+- treat roughly 1–3 entrances as a distribution tendency, allowing valid zero cases;
+- preserve stable entrance identity independently of accepted-array order;
+- select deterministic gradual, steep and crevice descent profiles.
 
-### 3. Primary topology generation
+### 3. Pure entrance graph data
 
-- accept/reject stable network and node candidate slots independently;
-- generate at least one connected primary network per region;
-- create pure `CaveNetworkDefinition`, `CaveNodeDefinition` and
-  `CaveEdgeDefinition` data;
-- keep primary topology region-owned and loop-free in this stage;
-- emit canonical transient boundary candidates for later connectivity analysis.
+- produce `EntranceDefinition` objects;
+- add entrance-anchor nodes and `entrance_path` graph edges without changing the
+  primary tree-edge set;
+- produce `SurfaceEntranceIntegrationDescriptor` objects containing surface
+  position, orientation, required opening bounds, clearance, topology target,
+  underground anchor and descent profile;
+- keep the primary topology input unchanged.
 
 ### 4. Validation and reproduction
 
-- reject disconnected primary networks and duplicate undirected primary edges;
-- verify stable candidate identity, normalized profiles and valid graph ownership;
-- produce exact seed/region topology fingerprints;
-- run deterministic batch validation across positive and negative region coordinates.
+- prove every accepted entrance owns one traversable route to its declared target;
+- validate descriptor bounds, orientation, clearance and ownership;
+- cover deterministic replay, negative coordinates and statistical count/profile rules;
+- expose exact seed/region entrance fingerprints;
+- run the full entrance pipeline over 250 seeds × 9 regions in CI.
 
 ## Explicitly out of scope
 
-- entrances and surface integration;
-- secondary loops or cross-region connections;
-- special-location content;
-- cave meshes, collision or runtime streaming cells;
-- enemies, resources, bosses or ecology;
-- player progression, save deltas or runtime scene state;
-- final tuning of region size, depth curves or cave-shape distributions.
+- secondary loops and cross-region connections;
+- cave or surface meshes, collision and runtime streaming cells;
+- carving visible surface openings;
+- special-location content, enemies, resources, bosses or ecology;
+- final entrance scoring weights, candidate budgets or geometry tuning.
 
 ## Exit criteria
 
 This cycle is complete when:
 
-1. the same context and macro request produce the same macro fingerprint;
-2. the same macro plan produces the same topology fingerprint;
-3. candidate rejection never renumbers network or node candidate identities;
-4. every generated primary network is internally reachable;
-5. generated definitions pass the graph invariant validator;
-6. shallow/mid/deep grammar materially changes topology tendencies;
-7. an exact seed/region topology failure can be reproduced from the CLI;
-8. the full headless and batch CI gate is green.
+1. surface samples are deterministic and require no loaded terrain chunks or Nodes;
+2. depth profiles use the sampled surface height at each world XZ;
+3. all fixed entrance slots remain represented before acceptance;
+4. repeated requests produce identical entrance fingerprints;
+5. every accepted entrance has a valid descriptor and connected entrance-path edge;
+6. count expectations are validated statistically rather than as a universal law;
+7. negative-coordinate fixtures pass;
+8. the Godot 4.7.2 fast and 2,250-case batch CI gate is green.
 
-Only after this gate should entrance generation or secondary connectivity begin.
+Only after this gate should secondary and cross-region connectivity begin.

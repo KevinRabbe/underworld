@@ -154,6 +154,7 @@ CaveNetworkDefinition
 - root_node_id
 - node_ids
 - primary_edge_ids
+- entrance_path_edge_ids
 - attached_entrance_ids
 - topology metrics
 ```
@@ -171,6 +172,10 @@ Secondary Edge X connects nodes from A and B
 ```
 
 This prevents persistent IDs from changing simply because topology later gains a useful loop/reconnection.
+
+Entrance-anchor nodes belong to the existing network, while their edges are kept
+in `entrance_path_edge_ids`. They therefore extend reachability without being
+misclassified as part of the original primary tree.
 
 ---
 

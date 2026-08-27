@@ -43,7 +43,7 @@ jobs:
           fi
           grep -Fq '[VALIDATION] PASS fast' "$validation_log"
 
-      - name: Run deterministic topology batch probes
+      - name: Run deterministic entrance batch probes
         run: |
           set -o pipefail
           validation_log="$(mktemp)"

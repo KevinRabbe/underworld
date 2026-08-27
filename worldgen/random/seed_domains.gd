@@ -27,6 +27,8 @@ const UG_NODE_PROFILE: int = 0x020203
 const UG_PRIMARY_EDGE_TOPOLOGY: int = 0x020211
 const UG_ENTRANCE_SELECTION: int = 0x020301
 const UG_ENTRANCE_PROFILE: int = 0x020302
+const UG_ENTRANCE_SURFACE: int = 0x020303
+const UG_ENTRANCE_GEOMETRY: int = 0x020304
 const UG_SECONDARY_EXISTS: int = 0x020401
 const UG_SECONDARY_SHAPE: int = 0x020402
 const UG_SPECIAL_EXISTS: int = 0x020501
@@ -74,6 +76,8 @@ static func all_domains() -> Array:
 		),
 		SeedDomainScript.new(UG_ENTRANCE_SELECTION, "ug.entrance.selection", 1),
 		SeedDomainScript.new(UG_ENTRANCE_PROFILE, "ug.entrance.profile", 1),
+		SeedDomainScript.new(UG_ENTRANCE_SURFACE, "ug.entrance.surface", 1),
+		SeedDomainScript.new(UG_ENTRANCE_GEOMETRY, "ug.entrance.geometry", 1),
 		SeedDomainScript.new(UG_SECONDARY_EXISTS, "ug.secondary.exists", 1),
 		SeedDomainScript.new(UG_SECONDARY_SHAPE, "ug.secondary.shape", 1),
 		SeedDomainScript.new(UG_SPECIAL_EXISTS, "ug.special.exists", 1),
