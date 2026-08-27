@@ -5,6 +5,8 @@ signal attack_requested(origin: Vector3, direction: Vector3, max_distance: float
 signal hotbar_slot_requested(slot: int)
 signal craft_requested(recipe_id: String)
 
+const PrototypeMannequinScript := preload("res://player/prototype_mannequin.gd")
+
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 10.0
 const GROUND_ACCELERATION := 30.0
@@ -44,6 +46,7 @@ var health: int = MAX_HEALTH
 var equipped_tool_visual: String = "hands"
 
 var visual_root: Node3D
+var mannequin: UnderworldPrototypeMannequin
 var tool_visual_root: Node3D
 var camera_yaw: Node3D
 var camera_pitch_pivot: Node3D
@@ -54,7 +57,7 @@ var camera: Camera3D
 func _ready() -> void:
 	_ensure_default_input_actions()
 	_configure_character_body()
-	_build_placeholder_body()
+	_build_character_visual()
 	_build_camera()
 	respawn_position = global_position
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -117,6 +120,7 @@ func _physics_process(delta: float) -> void:
 	_update_horizontal_velocity(delta)
 	move_and_slide()
 	_update_visual_facing(delta)
+	_update_mannequin(delta)
 	_update_camera_fov(delta)
 	_update_tool_use_feedback(delta)
 	_check_fall_respawn()
@@ -151,12 +155,19 @@ func get_max_health() -> int:
 	return MAX_HEALTH
 
 
+func get_mannequin() -> UnderworldPrototypeMannequin:
+	return mannequin
+
+
 func take_damage(amount: int, source_position: Vector3) -> void:
 	if amount <= 0 or damage_invulnerability_timer > 0.0:
 		return
 
 	damage_invulnerability_timer = DAMAGE_INVULNERABILITY
 	health = maxi(health - amount, 0)
+	if mannequin != null:
+		mannequin.play_hit()
+
 	var away: Vector3 = global_position - source_position
 	away.y = 0.0
 	if not away.is_zero_approx():
@@ -187,6 +198,8 @@ func _begin_tool_action() -> bool:
 		return false
 	tool_use_cooldown_timer = tool_use_cooldown_duration
 	tool_swing_timer = tool_use_cooldown_duration
+	if mannequin != null:
+		mannequin.play_attack()
 	return true
 
 
@@ -204,22 +217,8 @@ func _get_camera_action_ray(reach_from_player: float) -> Dictionary:
 func _update_tool_use_feedback(delta: float) -> void:
 	tool_use_cooldown_timer = maxf(0.0, tool_use_cooldown_timer - delta)
 	tool_swing_timer = maxf(0.0, tool_swing_timer - delta)
-
-	if tool_visual_root == null:
-		return
-	if equipped_tool_visual == "hands":
-		tool_visual_root.rotation_degrees.z = lerpf(
-			tool_visual_root.rotation_degrees.z,
-			0.0,
-			clampf(delta * 16.0, 0.0, 1.0)
-		)
-		return
-
-	var swing_progress: float = 1.0 - (
-		tool_swing_timer / maxf(tool_use_cooldown_duration, 0.05)
-	)
-	var swing_amount: float = sin(clampf(swing_progress, 0.0, 1.0) * PI)
-	tool_visual_root.rotation_degrees.z = -58.0 * swing_amount
+	# The articulated right arm now supplies the visible swing. The equipment
+	# socket itself stays stable so tools do not need their own fake animation.
 
 
 func _configure_character_body() -> void:
@@ -301,6 +300,15 @@ func _update_visual_facing(delta: float) -> void:
 	)
 
 
+func _update_mannequin(delta: float) -> void:
+	if mannequin == null or visual_root == null:
+		return
+	var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
+	var local_velocity: Vector3 = visual_root.global_transform.basis.inverse() * horizontal_velocity
+	var sprinting: bool = Input.is_action_pressed("sprint") and get_horizontal_speed() > WALK_SPEED
+	mannequin.update_visual(delta, local_velocity, is_on_floor(), sprinting)
+
+
 func _update_camera_fov(delta: float) -> void:
 	var sprinting: bool = Input.is_action_pressed("sprint") and get_horizontal_speed() > WALK_SPEED
 	var target_fov: float = SPRINT_FOV if sprinting else NORMAL_FOV
@@ -318,12 +326,14 @@ func _respawn_after_defeat() -> void:
 	velocity = Vector3.ZERO
 	health = MAX_HEALTH
 	damage_invulnerability_timer = 1.0
+	if mannequin != null:
+		mannequin.reset_pose()
 
 
-func _build_placeholder_body() -> void:
-	var collision: CollisionShape3D = CollisionShape3D.new()
+func _build_character_visual() -> void:
+	var collision := CollisionShape3D.new()
 	collision.name = "CollisionShape3D"
-	var capsule_shape: CapsuleShape3D = CapsuleShape3D.new()
+	var capsule_shape := CapsuleShape3D.new()
 	capsule_shape.radius = 0.45
 	capsule_shape.height = 1.8
 	collision.shape = capsule_shape
@@ -334,32 +344,11 @@ func _build_placeholder_body() -> void:
 	visual_root.name = "VisualRoot"
 	add_child(visual_root)
 
-	var body_mesh: MeshInstance3D = MeshInstance3D.new()
-	body_mesh.name = "PlaceholderBody"
-	var capsule_mesh: CapsuleMesh = CapsuleMesh.new()
-	capsule_mesh.radius = 0.45
-	capsule_mesh.height = 1.8
-	body_mesh.mesh = capsule_mesh
-	body_mesh.position.y = 0.9
-
-	var material: StandardMaterial3D = StandardMaterial3D.new()
-	material.albedo_color = Color(0.65, 0.67, 0.72)
-	body_mesh.material_override = material
-	visual_root.add_child(body_mesh)
-
-	var facing_marker: MeshInstance3D = MeshInstance3D.new()
-	facing_marker.name = "FacingMarker"
-	var marker_mesh: BoxMesh = BoxMesh.new()
-	marker_mesh.size = Vector3(0.18, 0.18, 0.5)
-	facing_marker.mesh = marker_mesh
-	facing_marker.position = Vector3(0.0, 1.1, 0.45)
-	facing_marker.material_override = material
-	visual_root.add_child(facing_marker)
-
-	tool_visual_root = Node3D.new()
-	tool_visual_root.name = "ToolVisual"
-	tool_visual_root.position = Vector3(0.48, 0.92, 0.22)
-	visual_root.add_child(tool_visual_root)
+	mannequin = PrototypeMannequinScript.new()
+	mannequin.name = "PrototypeMannequin"
+	visual_root.add_child(mannequin)
+	mannequin.build()
+	tool_visual_root = mannequin.get_tool_visual_root()
 	_rebuild_tool_visual()
 
 
@@ -369,25 +358,23 @@ func _rebuild_tool_visual() -> void:
 	for child in tool_visual_root.get_children():
 		child.queue_free()
 
-	tool_visual_root.rotation_degrees = Vector3.ZERO
 	if equipped_tool_visual == "hands":
 		return
 
-	var handle_material: StandardMaterial3D = StandardMaterial3D.new()
+	var handle_material := StandardMaterial3D.new()
 	handle_material.albedo_color = Color(0.30, 0.17, 0.07)
-	var stone_material: StandardMaterial3D = StandardMaterial3D.new()
+	var stone_material := StandardMaterial3D.new()
 	stone_material.albedo_color = Color(0.36, 0.37, 0.34)
 
-	var handle: MeshInstance3D = MeshInstance3D.new()
-	var handle_mesh: BoxMesh = BoxMesh.new()
+	var handle := MeshInstance3D.new()
+	var handle_mesh := BoxMesh.new()
 	handle_mesh.size = Vector3(0.10, 0.72, 0.10)
 	handle.mesh = handle_mesh
 	handle.material_override = handle_material
-	handle.rotation_degrees.z = -18.0
 	tool_visual_root.add_child(handle)
 
-	var head: MeshInstance3D = MeshInstance3D.new()
-	var head_mesh: BoxMesh = BoxMesh.new()
+	var head := MeshInstance3D.new()
+	var head_mesh := BoxMesh.new()
 	if equipped_tool_visual == "stone_axe":
 		head_mesh.size = Vector3(0.38, 0.28, 0.13)
 	else:
@@ -415,7 +402,7 @@ func _build_camera() -> void:
 	spring_arm.spring_length = camera_distance
 	spring_arm.margin = 0.15
 	spring_arm.collision_mask = 1
-	var camera_collision_shape: SphereShape3D = SphereShape3D.new()
+	var camera_collision_shape := SphereShape3D.new()
 	camera_collision_shape.radius = 0.2
 	spring_arm.shape = camera_collision_shape
 	spring_arm.add_excluded_object(get_rid())
@@ -451,6 +438,6 @@ func _add_key_action(action_name: StringName, physical_key: Key) -> void:
 		if existing_event is InputEventKey and existing_event.physical_keycode == physical_key:
 			return
 
-	var key_event: InputEventKey = InputEventKey.new()
+	var key_event := InputEventKey.new()
 	key_event.physical_keycode = physical_key
 	InputMap.action_add_event(action_name, key_event)
