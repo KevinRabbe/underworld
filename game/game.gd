@@ -3,11 +3,13 @@ extends Node3D
 const WorldSettingsScript := preload("res://data/world_settings.gd")
 const ChunkManagerScript := preload("res://world/chunk_manager.gd")
 const PlayerScript := preload("res://player/player.gd")
+const CombatManagerScript := preload("res://combat/combat_manager.gd")
 const DebugHudScript := preload("res://game/debug_hud.gd")
 
 var settings: UnderworldWorldSettings
 var world
 var player
+var combat
 var debug_hud
 var water_surface: MeshInstance3D
 var spawn_xz: Vector3 = Vector3.ZERO
@@ -17,6 +19,7 @@ func _ready() -> void:
 	_setup_environment()
 	_create_world()
 	_create_player()
+	_create_combat()
 	_create_debug_hud()
 
 
@@ -102,8 +105,16 @@ func _create_player() -> void:
 	player.set_equipped_tool(world.get_equipped_tool())
 
 
+func _create_combat() -> void:
+	combat = CombatManagerScript.new()
+	combat.name = "Combat"
+	add_child(combat)
+	combat.configure(world, player, settings)
+	player.attack_requested.connect(combat.try_attack)
+
+
 func _create_debug_hud() -> void:
 	debug_hud = DebugHudScript.new()
 	debug_hud.name = "DebugHUD"
-	debug_hud.configure(world, player, settings)
+	debug_hud.configure(world, player, settings, combat)
 	add_child(debug_hud)

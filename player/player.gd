@@ -1,6 +1,7 @@
 extends CharacterBody3D
 
 signal harvest_requested(origin: Vector3, direction: Vector3, max_distance: float)
+signal attack_requested(origin: Vector3, direction: Vector3, max_distance: float)
 signal hotbar_slot_requested(slot: int)
 signal craft_requested(recipe_id: String)
 
@@ -24,6 +25,9 @@ const DEFAULT_CAMERA_DISTANCE := 4.5
 const NORMAL_FOV := 75.0
 const SPRINT_FOV := 79.0
 const RESPAWN_FALL_HEIGHT := -100.0
+const MAX_HEALTH := 100
+const DAMAGE_INVULNERABILITY := 0.45
+const COMBAT_REACH := 2.7
 
 var look_sensitivity: float = 0.0025
 var camera_pitch: float = deg_to_rad(-12.0)
@@ -35,6 +39,8 @@ var harvest_range: float = 4.5
 var tool_use_cooldown_duration: float = 0.38
 var tool_use_cooldown_timer: float = 0.0
 var tool_swing_timer: float = 0.0
+var damage_invulnerability_timer: float = 0.0
+var health: int = MAX_HEALTH
 var equipped_tool_visual: String = "hands"
 
 var visual_root: Node3D
@@ -95,6 +101,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			_request_harvest()
 			return
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			_request_attack()
+			return
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_set_camera_distance(camera_distance - CAMERA_ZOOM_STEP)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
@@ -102,6 +111,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	damage_invulnerability_timer = maxf(0.0, damage_invulnerability_timer - delta)
 	_update_jump_timers(delta)
 	_update_vertical_velocity(delta)
 	_update_horizontal_velocity(delta)
@@ -133,18 +143,62 @@ func get_horizontal_speed() -> float:
 	return Vector2(velocity.x, velocity.z).length()
 
 
-func _request_harvest() -> void:
-	if camera == null or tool_use_cooldown_timer > 0.0:
+func get_health() -> int:
+	return health
+
+
+func get_max_health() -> int:
+	return MAX_HEALTH
+
+
+func take_damage(amount: int, source_position: Vector3) -> void:
+	if amount <= 0 or damage_invulnerability_timer > 0.0:
 		return
 
+	damage_invulnerability_timer = DAMAGE_INVULNERABILITY
+	health = maxi(health - amount, 0)
+	var away: Vector3 = global_position - source_position
+	away.y = 0.0
+	if not away.is_zero_approx():
+		away = away.normalized()
+		velocity.x += away.x * 4.5
+		velocity.z += away.z * 4.5
+
+	if health <= 0:
+		_respawn_after_defeat()
+
+
+func _request_harvest() -> void:
+	if not _begin_tool_action():
+		return
+	var ray: Dictionary = _get_camera_action_ray(harvest_range)
+	harvest_requested.emit(ray["origin"], ray["direction"], ray["distance"])
+
+
+func _request_attack() -> void:
+	if not _begin_tool_action():
+		return
+	var ray: Dictionary = _get_camera_action_ray(COMBAT_REACH)
+	attack_requested.emit(ray["origin"], ray["direction"], ray["distance"])
+
+
+func _begin_tool_action() -> bool:
+	if camera == null or tool_use_cooldown_timer > 0.0:
+		return false
 	tool_use_cooldown_timer = tool_use_cooldown_duration
 	tool_swing_timer = tool_use_cooldown_duration
+	return true
 
+
+func _get_camera_action_ray(reach_from_player: float) -> Dictionary:
 	var direction: Vector3 = -camera.global_transform.basis.z.normalized()
 	var player_chest: Vector3 = global_position + Vector3(0.0, 1.0, 0.0)
 	var camera_to_player: float = camera.global_position.distance_to(player_chest)
-	var ray_distance: float = camera_to_player + harvest_range
-	harvest_requested.emit(camera.global_position, direction, ray_distance)
+	return {
+		"origin": camera.global_position,
+		"direction": direction,
+		"distance": camera_to_player + reach_from_player,
+	}
 
 
 func _update_tool_use_feedback(delta: float) -> void:
@@ -169,6 +223,8 @@ func _update_tool_use_feedback(delta: float) -> void:
 
 
 func _configure_character_body() -> void:
+	collision_layer = 1
+	collision_mask = 1 | 2
 	floor_snap_length = 0.45
 	floor_max_angle = deg_to_rad(50.0)
 	floor_stop_on_slope = true
@@ -254,8 +310,14 @@ func _update_camera_fov(delta: float) -> void:
 func _check_fall_respawn() -> void:
 	if global_position.y >= RESPAWN_FALL_HEIGHT:
 		return
+	_respawn_after_defeat()
+
+
+func _respawn_after_defeat() -> void:
 	global_position = respawn_position
 	velocity = Vector3.ZERO
+	health = MAX_HEALTH
+	damage_invulnerability_timer = 1.0
 
 
 func _build_placeholder_body() -> void:
