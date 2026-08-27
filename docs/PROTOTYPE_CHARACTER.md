@@ -21,7 +21,7 @@ PrototypeMannequin + Skeleton3D
         = visual articulation
 
 PlayerActionController
-        = dodge / parry timing
+        = dodge / parry / block timing and commitment
 
 StaminaComponent
         = generic stamina resource
@@ -77,6 +77,7 @@ jump
 attack / harvest
 directional dodge
 parry
+block
 ```
 
 There is no MMO-style ability bar and no progressive weapon-technique unlock
@@ -90,6 +91,7 @@ Shift     sprint
 Space     jump
 Ctrl      dodge
 Q         parry
+F         block (temporary prototype binding)
 LMB       harvest / tool action
 RMB       melee attack
 ```
@@ -109,8 +111,8 @@ regen delay       0.75 s
 regen rate        20 / second
 ```
 
-Stamina owns only resource accounting. It does not know what a dodge, sprint or
-parry is.
+Stamina owns only resource accounting. It does not know what a dodge, sprint,
+parry or block is.
 
 ## Dodge contract
 
@@ -139,16 +141,43 @@ recovery          0.30 s
 
 Parry is a committed timed action. During the active window, parryable melee
 hits resolve as `parried` rather than normal damage. The player returns a small
-combat result (`hit`, `dodged`, `parried`, or `ignored`); enemies decide what
-that result means for their own behavior.
+combat result (`hit`, `dodged`, `parried`, `blocked`, or `ignored`); enemies
+decide what that result means for their own behavior.
 
 The prototype Burrower consumes `parried` by entering a distinct **0.85 second
 stagger**, cancelling the current attack, flashing, and receiving recoil away
 from the player. A `dodged` result is intentionally different: the attack simply
 misses and does not stagger the Burrower.
 
-This keeps enemy-specific punish behavior outside the stamina/action components.
-Future enemies may have different parryability and stagger responses.
+## Block contract
+
+Block is a held defensive state rather than a timed invulnerability window.
+Raising guard itself has no stamina cost. Stamina is paid when an impact is
+actually absorbed.
+
+Current prototype:
+
+```text
+frontal coverage          ~140 degrees total
+movement while blocking   2.4 m/s
+impact stamina cost        5 + 1.25 × incoming damage
+upfront guard cost         0
+```
+
+A block succeeds only when the attacker is inside the character's frontal arc.
+Rear attacks bypass guard and resolve as normal hits. Sprinting and new
+attack/harvest actions cannot start while guard is held.
+
+If stamina cannot pay the impact cost, guard breaks immediately, remaining
+stamina is drained to zero, and the same attack continues through the normal hit
+path. Therefore block is safer and more forgiving than parry, but repeated or
+heavy impacts can exhaust it.
+
+`blocked` is deliberately not equivalent to `parried`: the prototype Burrower
+does not receive parry stagger or recoil when its attack is merely blocked.
+
+The first mechanical block pass does not yet have a dedicated held guard pose.
+That is a visual-only follow-up and must not change the block resolution rules.
 
 ## Prototype HUD feedback
 
@@ -161,6 +190,7 @@ current action state
 enemy count / combat message
 Ctrl: dodge
 Q: parry
+F: block
 ```
 
 This is diagnostic UI, not a final stamina bar or final combat HUD.
@@ -196,10 +226,13 @@ later while preserving the same high-level visual API and action timings.
 - stamina spending/regeneration follows its contract;
 - dodge startup/iframe/recovery timing is correct;
 - parry startup/active/recovery timing is correct;
-- insufficient stamina and overlapping actions are rejected;
-- `player.gd` constructs and resolves normal/dodged/parried melee correctly;
+- held block starts/releases and is mutually exclusive with dodge/parry;
+- block impact stamina is charged exactly;
+- frontal block prevents damage while rear attacks bypass it;
+- insufficient stamina produces guard break and drains the remainder;
+- `player.gd` constructs and resolves normal/dodged/parried/blocked melee;
 - a parried Burrower attack produces the long parry stagger and recoil;
-- a dodged Burrower attack does not accidentally produce parry stagger.
+- dodged or blocked Burrower attacks do not accidentally produce parry stagger.
 
 Spatial integration fixtures run only after the headless SceneTree is active so
 `global_position` behavior is the same contract used during actual play.
