@@ -10,6 +10,8 @@ The purpose of this schema is to answer one question cleanly:
 
 > What deterministic data describes the underground world before Godot creates any cave mesh, collision body, creature, audio source or scene node?
 
+Stable identity is defined in `STABLE_PROCEDURAL_IDS.md`. Deterministic randomness for these addresses is defined in `DETERMINISTIC_SEED_DOMAINS.md`.
+
 ---
 
 ## 1. Core model
@@ -67,9 +69,11 @@ This keeps topology generation usable on worker threads and in headless validati
 
 ### 2.2 IDs are opaque at this layer
 
-Every definition stores a stable procedural ID as an opaque value. The first implementation may use `String` for readability/debugging, but the exact encoding is specified separately by the stable-ID architecture.
+Every definition stores a stable procedural ID as an opaque value produced by the central stable-ID/address architecture.
 
-Graph code must not infer semantic meaning by manually parsing ID strings unless the stable-ID specification explicitly defines that operation.
+The first implementation may use `String` for readability/debugging, but graph code must not infer semantic meaning by manually parsing ad-hoc ID strings.
+
+Where generation needs randomness, it derives that randomness from the semantic stable address plus a named/revisioned seed domain. A cached local seed/value may be stored as data, but it is not the identity and is not produced by a parent/shared mutable RNG stream.
 
 ### 2.3 Collection rule
 
@@ -91,7 +95,8 @@ Required semantic fields:
 WorldDefinitionIndex
 - world_seed
 - schema_version
-- generator_version
+- generator_version / manifest reference
+- seed_schema_version
 - world_id
 - surface_definition_address / surface bounds reference
 - underground_region_addressing configuration
@@ -100,9 +105,10 @@ WorldDefinitionIndex
 
 ### Rules
 
-- The world seed is the root deterministic input.
+- The world seed is the root deterministic entropy input.
 - `schema_version` describes the data layout/contract.
-- `generator_version` describes the algorithm/content-generation contract.
+- `generator_version` describes/identifies the compatible set of generation contracts.
+- `seed_schema_version` identifies the fundamental seed-derivation encoding/algorithm contract.
 - World definition indexing must support lazy regional generation.
 - Opening a save must not require constructing every underground network as a live object.
 
@@ -118,628 +124,467 @@ Required semantic fields:
 
 ```text
 UndergroundRegionDefinition
-- id
-- deterministic_seed
-- region_key / macro address
-- world-space horizontal footprint or macro bounds
-- supported vertical/depth extent metadata
+- stable_id
+- stable_address
+- region_coord
+- world_space_bounds / anchor
+- dominant_profile_bias / profile data
 - network_ids
-- node index
-- edge index
-- entrance index
-- special_location_hook index
-- references to cross-region edges owned elsewhere
-- derived validation/topology metrics
+- entrance_ids
+- secondary_edge_ids owned by this region
+- special_location_hook_ids
+- topology metrics / validation metadata
 ```
 
-### Important distinction
-
-**Region != cave network != runtime chunk.**
-
-A region is an ownership/generation partition. A cave network is semantic topology. Runtime streaming may use completely different 3D cells.
-
-This separation is locked because large deep systems may cross region boundaries and runtime streaming should not be forced to match macro generation size.
+A region coordinate/address is a generation partition. It is not required to equal a runtime streaming cell.
 
 ---
 
 ## 5. `CaveNetworkDefinition`
 
-A network represents one primary generated cave component before optional secondary connections join it to other networks.
+A network represents one primary generated cave component before secondary connections are applied.
 
 Required semantic fields:
 
 ```text
 CaveNetworkDefinition
-- id
-- owner_region_id
-- deterministic_seed
-- root_or_anchor_node_id
-- primary_node_ids
+- stable_id
+- stable_address
+- owning_region_id
+- root_node_id
+- node_ids
 - primary_edge_ids
-- entrance_ids
-- accepted_secondary_edge_ids
-- dominant/profile-summary metadata
-- semantic tags
-- derived topology metrics
+- attached_entrance_ids
+- topology metrics
 ```
 
-### Stable identity rule — LOCKED
+### Network identity rule — LOCKED
 
-If network A and network B are later connected by a proximity tunnel or topology loop, they remain network A and network B.
+A secondary connector that links Network A and Network B does **not** merge their identities into a newly numbered network.
 
-Do not renumber or merge them into a new accepted-array component identity.
+After connection:
 
-This prevents secondary topology changes from cascading into unrelated persistent IDs.
+```text
+Network A identity remains A
+Network B identity remains B
+Secondary Edge X connects nodes from A and B
+```
 
-### Network connectivity invariant
-
-The **primary** node/edge set of a network should form one connected component unless a future explicit network type documents otherwise.
+This prevents persistent IDs from changing simply because topology later gains a useful loop/reconnection.
 
 ---
 
 ## 6. `CaveNodeDefinition`
 
-A node represents an important abstract spatial volume/anchor before detailed geometry generation.
+A node represents an abstract important underground volume before detailed geometry is produced.
 
-Suggested semantic fields:
+Required semantic fields:
 
 ```text
 CaveNodeDefinition
-- id
-- owner_region_id
-- owner_network_id
-- deterministic_seed
-- world_position : Vector3
-- node_role
-- approximate_horizontal_clearance
-- approximate_vertical_clearance
-- depth_below_local_surface
-- depth_profile_blend
-- semantic_tags
-- optional reserved-space hint
+- stable_id
+- stable_address
+- owning_network_id
+- world_position
+- approximate_shape / bounds parameters
+- profile_blend
+- semantic_type / tags
+- generation metadata needed by later stages
 ```
 
-### `node_role`
+Potential semantic node types include:
 
-Initial stable semantic roles should be small and generic, for example:
+```text
+chamber
+junction
+vertical_transition
+terminal
+major_chamber
+structure_anchor
+```
 
-- `chamber`
-- `junction`
-- `transition`
-- `entrance_attach`
-- `special_anchor`
+These are generation semantics, not final gameplay content classes.
 
-Roles describe topology intent, not final art/mesh shape.
+### Profile blend — LOCKED
 
-### Approximate clearance
+Nodes carry continuous shallow/mid/deep weights, conceptually:
 
-Topology needs enough spatial information to avoid impossible overlaps and to evaluate possible connections. Therefore nodes may carry approximate clearance/volume hints.
+```text
+profile_blend = [shallow, mid, deep]
+```
 
-These hints are **not final cave geometry**.
+Example:
 
-The geometry stage remains free to create irregular organic spaces inside the allowed envelope.
+```text
+[0.35, 0.60, 0.05]
+```
+
+Weights should be normalized/canonical for deterministic serialization.
+
+This allows smooth structural transitions without converting the Underworld into rigid floors.
 
 ---
 
-## 7. Continuous depth representation
+## 7. `CaveEdgeDefinition`
 
-The graph does not store a single hard `SHALLOW`, `MID` or `DEEP` enum as the complete truth.
-
-Each node should store:
-
-```text
-depth_below_local_surface : float
-
-depth_profile_blend:
-- shallow_weight
-- mid_weight
-- deep_weight
-```
-
-Weights should normally sum to approximately `1.0`.
-
-Examples:
-
-```text
-very shallow chamber:  [0.95, 0.05, 0.00]
-transition chamber:    [0.35, 0.60, 0.05]
-mid/deep transition:   [0.00, 0.45, 0.55]
-deep chamber:          [0.00, 0.05, 0.95]
-```
-
-### Why this is required
-
-- Depth grammar boundaries remain continuous.
-- One vertical cave can pass naturally through multiple grammar influences.
-- Geometry/resource/ecology generators can consume the same blend without duplicated depth-condition logic.
-- Local exceptions remain possible.
-
-Exact meter ranges and blend curves remain **OPEN**.
-
----
-
-## 8. `CaveEdgeDefinition`
-
-An edge is an abstract traversable relationship between two nodes.
+An edge represents one abstract traversable connection between two nodes.
 
 Required semantic fields:
 
 ```text
 CaveEdgeDefinition
-- id
-- owner_region_id
-- deterministic_seed
-- node_a_id
-- node_b_id
-- connection_origin
-- route_intent
-- approximate_clearance_hint
-- verticality_hint
-- curvature/directness hint
-- semantic_tags
+- stable_id
+- stable_address
+- endpoint_a_node_id
+- endpoint_b_node_id
+- owning_region_id
+- connection_class
+- topology parameters
+- geometry-tendency parameters / later geometry-description address
+- optional tags
 ```
 
-### `connection_origin`
+Connection classes should distinguish at least conceptually:
 
-This records **why the edge exists**, which is useful for validation and topology analysis.
+```text
+primary
+vertical_transition
+entrance_path
+proximity_connection
+deliberate_loop
+cross_region_connection
+```
 
-Initial values:
+The class describes why the edge exists. It does not force a specific mesh shape.
 
-- `primary`
-- `proximity_secondary`
-- `topology_loop_secondary`
-- `cross_region`
+### Endpoint canonicalization
 
-An edge may carry multiple semantic tags when necessary, but its deterministic creation origin should remain inspectable.
+If an edge is semantically undirected, endpoint ordering must be canonical for identity/serialization purposes.
 
-### `route_intent`
+For example:
 
-This gives the later geometry stage constraints/tendencies without prematurely defining the mesh.
+```text
+A-B == B-A
+```
 
-Examples:
-
-- normal tunnel
-- broad connector
-- steep descent
-- near-vertical shaft
-- narrow crack
-- water-path candidate
-
-The exact route taxonomy remains **DIRECTIONAL** until geometry implementation.
-
-### No mesh data
-
-An edge must not contain final triangle vertices, collision shapes or scene references.
-
-A later geometry-description stage consumes the edge and produces a coarse centerline/volume description before mesh construction.
+must not become two persistent connector identities.
 
 ---
 
-## 9. `EntranceDefinition`
+## 8. `EntranceDefinition`
 
-Entrances are explicit world-definition objects because they connect two different environmental domains: surface geography and underground topology.
+An entrance is its own stable world-definition object rather than an incidental hole in a surface mesh.
 
 Required semantic fields:
 
 ```text
 EntranceDefinition
-- id
-- owner_region_id
-- target_network_id
-- target_node_id
-- deterministic_seed
-- surface_anchor_position : Vector3
-- underground_connection_depth
-- descent_profile
-- orientation/direction hint
-- surface_form_tag
-- semantic_tags
+- stable_id
+- stable_address
+- owning_region_id
+- connected_network_id
+- connected_node_id
+- surface_world_position
+- underground_connection_position / depth
+- entrance_kind / descent_profile
+- surface-integration parameters
+- generation metadata
 ```
 
-### `descent_profile`
-
-Initial conceptual values:
-
-- gradual
-- steep
-- shaft
-- constructed
-
-These are generation intents, not guaranteed final visual types.
-
-### Entry depth rule — LOCKED
-
-Different entrances to the same network may connect at very different depths.
-
-The graph must therefore never assume that entrance order corresponds to progression order.
-
-### Entrance-count validation
-
-Roughly 1–3 entrances is the normal design range for surface-accessible regional networks, **not an absolute invariant for every underground component**.
-
-Validation should distinguish:
-
-- hard invalid states (broken target, impossible surface anchor);
-- design-distribution warnings (unexpectedly many/few entrances).
-
-This preserves room for hidden/isolated systems and future special cases without silently allowing corrupted references.
-
----
-
-## 10. Secondary connectivity and the ~10% philosophy
-
-The secondary topology pass operates on completed primary network graphs.
-
-It evaluates candidate node/network pairs and may create additional `CaveEdgeDefinition` objects.
-
-### Candidate data is transient
-
-A candidate connection is **not** part of the permanent world definition until accepted.
-
-Transient analysis may contain:
+Potential descent profiles include conceptually:
 
 ```text
-ConnectivityCandidate
-- endpoint_a
-- endpoint_b
-- direct_distance
-- estimated_connector_cost
-- topology_gain
-- depth_gain
-- entrance_link_value
-- redundancy_penalty
-- plausibility_score
-- final_score
-- rejection/acceptance reason
+gradual_cave
+steep_sinkhole
+constructed_descent
+crevice
 ```
 
-Only accepted candidates become stable edges with stable IDs.
+The exact final roster remains open.
 
-### Two supported mechanisms
+### Entrance count
 
-1. **Proximity connection** — branches/networks physically approach one another.
-2. **Deliberate topology loop** — a longer but still plausible connector materially improves the graph.
+The design target of roughly 1–3 entrances applies to suitable networks/regions as a procedural tendency rather than a hard invariant for every generated system.
 
-### Anti-spaghetti rules
-
-The pass must be able to reject a connector because:
-
-- the endpoints already have adequate alternate routes;
-- local node degree is too high;
-- regional loop/connectivity budget is exhausted;
-- connector length/cost is excessive;
-- the route would cause invalid geometry reservations;
-- the depth profile discourages added connectivity;
-- it adds little topology value.
-
-The ~10% design target is a generation philosophy/distribution target, not a requirement that exactly 10% of edges are secondary.
+The schema therefore stores an arbitrary list and the generator/validator applies the actual profile rules.
 
 ---
 
-## 11. Cross-network and cross-region connections
+## 9. Secondary connection model
 
-This is required so the Underworld can become materially more connected and larger than the surface without sacrificing deterministic regional generation.
+Secondary connections happen **after** primary topology exists.
 
-### Cross-network
+Conceptual transient candidate:
 
-A secondary edge may reference nodes owned by different `CaveNetworkDefinition` objects.
+```text
+ConnectionCandidate
+- endpoint_a
+- endpoint_b
+- canonical candidate address
+- physical distance
+- topology gain
+- depth/profile usefulness
+- entrance/network usefulness
+- redundancy penalty
+- estimated connector cost
+- score
+```
 
-The networks keep their original IDs.
+`ConnectionCandidate` is analysis/transient data and does not become persistent world truth unless accepted.
 
-### Cross-region
+If accepted:
 
-An edge may cross macro region ownership boundaries.
+```text
+ConnectionCandidate
+    -> stable CaveEdgeDefinition
+```
 
-To avoid duplicate/order-dependent generation, every cross-region edge has one **canonical owner region**.
+The resulting edge receives its own stable ID/address according to the stable-ID architecture.
 
-The exact canonical ordering/ID algorithm is part of the stable-ID/seed specification, but the rule is locked:
+Random score/acceptance terms derive from that candidate address and secondary-connectivity seed domains, not from candidate enumeration order.
 
-> The same cross-region connection must be produced once, with the same owner and ID, regardless of which neighboring region is generated first.
+### Why this matters
 
-Non-owning regions may store lightweight external-edge references/boundary stubs for validation and streaming hand-off.
-
-### Runtime implication
-
-Runtime streaming may load geometry around a cross-region edge without loading every definition from both macro regions as scene nodes.
+This keeps the ~10% Souls-style connectivity as an explicit analysis layer rather than accidental random spaghetti.
 
 ---
 
-## 12. `SpecialLocationHookDefinition`
+## 10. Cross-region connections
 
-The architecture must reserve deterministic locations for future content without implementing that content during the topology cycle.
+Underworld networks can eventually cross macro region boundaries.
 
-Suggested semantic fields:
+Cross-region connections must have exactly one deterministic owner.
+
+Conceptual canonical ownership rule:
+
+```text
+owner = deterministic minimum/canonical region key
+```
+
+or another explicit canonical function chosen during implementation.
+
+Requirements:
+
+- Region A generated first or Region B generated first must produce the same connection identity.
+- No duplicate connectors may appear because both regions believe they own it.
+- Cross-region candidates use canonical ordered region/endpoint keys before stable-ID and seed derivation.
+- Neighbor-region metadata may be requested/generated as pure data without instantiating either region as runtime scene geometry.
+
+---
+
+## 11. `SpecialLocationHookDefinition`
+
+The topology architecture must support future special content without implementing it now.
+
+Required semantic fields conceptually:
 
 ```text
 SpecialLocationHookDefinition
-- id
-- owner_region_id
-- deterministic_seed
-- anchor_type
-- anchor_id / world_position
-- category_tag
-- approximate_reserved_volume
-- depth_profile_blend
-- semantic_tags
+- stable_id
+- stable_address
+- owning_region_id
+- anchor_node_id / edge_id / free world anchor
+- semantic category
+- reserved bounds / clearance needs
+- profile/depth context
+- generation metadata
 ```
 
-Potential future `category_tag` values include:
+Future categories may include:
 
-- structure
-- large_deposit
-- boss_lair
-- nest
-- unique_landmark
-- water_feature
+```text
+large_deposit
+structure
+boss_lair
+ancient_complex
+major_rubble/collapse
+other special location
+```
 
-These are hooks only. The current architecture cycle does not implement the associated gameplay/content.
+The hook reserves/identifies world space. The later gameplay/content generator decides what actual content to build there.
 
-### Why hooks belong in the world definition
-
-This preserves the design rule that important underground content can exist independently of player progression and future building choices.
-
-A future rare boss lair beneath a player's eventual 200-hour base is deterministic world geography/content placement, not a reactive spawn caused by the base.
+This prevents topology code from becoming a giant boss/ore/ruin generator.
 
 ---
 
-## 13. Derived topology metrics
+## 12. Topology is not geometry
 
-Metrics are useful for validation and the secondary-connection scorer but are **derived data**, not source-of-truth topology.
+The graph schema describes connectivity and approximate spatial intent.
 
-Useful metrics include:
+It does not contain final mesh triangles.
+
+Conceptually:
 
 ```text
-- node_count
-- primary_edge_count
-- secondary_edge_count
-- entrance_count
-- connected_component_count
-- min_depth
-- max_depth
-- vertical_span
-- average_node_degree
-- maximum_node_degree
-- cycle_rank / independent_loop_count
-- shortest/alternate path statistics between entrances
+CaveNodeDefinition
+CaveEdgeDefinition
+        |
+        v
+GeometryDescription
+        |
+        +-- chamber volumes
+        +-- tunnel centerline/control points
+        +-- cross-section parameters
+        +-- structural bedrock classification
+        +-- optional modifiable-material volumes
+        |
+        v
+Runtime meshes/collision
 ```
 
-Metrics should be recomputable from the graph.
+A geometry algorithm may be replaced without requiring the graph topology to be redesigned.
 
-If cached metrics disagree with recomputation, validation fails.
+Topology randomness and detailed geometry randomness also use separate seed domains so geometry changes do not automatically reshuffle connectivity.
 
 ---
 
-## 14. Immutable finalized definitions
+## 13. Runtime streaming cells are separate
 
-Generation stages may use mutable internal builders, but finalized world-definition objects are treated as immutable-by-convention.
+Runtime streaming cells partition expensive instantiated content.
 
-Conceptual flow:
+They are not necessarily the same size or shape as:
 
 ```text
-RegionGraphBuilder
-    -> primary networks
-    -> depth assignment
-    -> entrance assignment
-    -> secondary connectivity
-    -> special-location reservations
-    -> validate
-    -> freeze/finalize UndergroundRegionDefinition
+macro underground regions
+cave networks
+surface chunks
 ```
 
-Runtime gameplay does **not** mutate the generated graph definition to represent player actions.
+One cave network may pass through multiple runtime cells.
 
-Player/world changes are stored as persistent deltas referencing stable IDs.
+One runtime cell may contain pieces of multiple networks.
+
+Stable world objects keep their graph identity regardless of runtime cell assignment.
+
+---
+
+## 14. Finalized definitions are immutable-by-convention — LOCKED
+
+Generation stages may use mutable builders while constructing a region.
+
+Once finalized/validated, the deterministic world definition is treated as immutable for that seed/generation contract.
+
+Gameplay does not modify the graph definition directly.
+
+Instead:
+
+```text
+generated definition + saved player delta = current world state
+```
 
 Examples:
 
-- collapse cleared;
-- resource removed;
-- boss defeated;
-- player structure built;
-- local modifiable volume excavated.
-
-This protects deterministic regeneration and makes save/version reasoning possible.
-
----
-
-## 15. What is explicitly NOT in the topology graph
-
-The following must remain outside this schema:
-
-- final mesh vertices/indices;
-- `MeshInstance3D` / `StaticBody3D` / `CollisionShape3D` objects;
-- currently spawned creatures;
-- creature AI state;
-- active audio emitters;
-- particle effects;
-- player inventory;
-- player buildings;
-- harvested/destroyed runtime state;
-- detailed visual materials;
-- final terrain-deformation meshes;
-- production encounter logic.
-
-Some future systems may reference graph IDs, but they do not become topology merely because they are located underground.
-
----
-
-## 16. Geometry-description boundary
-
-Topology generation ends with abstract nodes/edges/entrances and spatial constraints.
-
-The next stage produces a **geometry description**, for example:
-
 ```text
-CaveGeometryDescription
-- node volume descriptions
-- tunnel centerlines / spline control points
-- radius/clearance samples
-- structural-bedrock classification
-- designated modifiable/excavatable volumes
-- surface entrance cut volumes
-- streaming-cell coverage metadata
+collapsed edge exists in definition
+save delta says collapse was cleared
+
+ore deposit exists in definition
+save delta says deposit was partially mined
 ```
 
-Only after this description exists does runtime mesh/collision construction occur.
-
-This prevents topology decisions from being hidden inside mesh-building code.
+This keeps regeneration and persistence cleanly separated.
 
 ---
 
-## 17. Required graph invariants
+## 15. Canonical serialization/debug representation
 
-The validator must at minimum enforce these hard invariants.
+For testing and debugging, every definition must support a canonical representation.
 
-### Identity/reference integrity
+Requirements:
 
-- all stable IDs are unique in their required scope;
-- every referenced region/network/node/edge/entrance exists;
-- IDs do not depend on accepted-array order;
-- no cross-region edge has ambiguous ownership.
+- sort objects by stable ID/address;
+- canonical endpoint ordering;
+- canonical normalized profile weights;
+- explicit field order in fingerprints/serialized debug form;
+- do not rely on dictionary iteration order;
+- do not serialize runtime object addresses/instance IDs;
+- deterministic numeric rounding policy where floating values enter fingerprints.
 
-### Graph integrity
-
-- primary network graph is connected;
-- no accidental self-edge;
-- invalid duplicate endpoint connections are rejected unless an explicit route type permits parallel paths;
-- every entrance target is reachable within its referenced network;
-- secondary connectors reference valid finalized primary nodes;
-- graph degree/connectivity hard safety caps are respected.
-
-### Spatial/depth integrity
-
-- node positions are finite and inside supported world extents;
-- approximate node reservations do not violate hard exclusion constraints;
-- depth values are consistent with the deterministic surface-height provider within defined tolerance;
-- depth-profile weights are finite, non-negative and approximately sum to 1;
-- entrance surface anchors are valid surface locations;
-- entrance descent route has a geometrically plausible budget.
-
-### Derived-data integrity
-
-- cached topology metrics match recomputation;
-- canonical fingerprints are repeatable for the same seed/version/region.
-
----
-
-## 18. Deterministic debug serialization
-
-The full generated Underworld should not normally be saved into player save files, but graph definitions need deterministic debug/test export.
-
-Every finalized definition should support a canonical primitive representation suitable for:
-
-- JSON snapshots;
-- test fixtures;
-- deterministic fingerprints/hashes;
-- human-readable failure reports.
-
-Canonical export rules:
-
-1. sort objects by stable ID before output;
-2. never rely on dictionary iteration order;
-3. use stable enum/tag names in debug output;
-4. normalize/format floating-point values consistently for snapshot comparison;
-5. include schema version and generator version;
-6. do not include runtime memory addresses/object instance IDs.
-
-A determinism test should be able to generate the same region twice under different load/thread orders and compare canonical fingerprints.
-
----
-
-## 19. Worker-thread boundary
-
-All objects defined in this document must be creatable and validated without touching the scene tree.
-
-Allowed during graph generation:
-
-- deterministic math/noise;
-- pure surface-height queries from a deterministic data service;
-- `Vector2`/`Vector3`/AABB-like value calculations;
-- graph algorithms;
-- stable-ID/seed derivation;
-- validation;
-- canonical debug serialization.
-
-Not allowed inside the pure topology generator:
-
-- adding/removing scene nodes;
-- creating active physics bodies in the scene;
-- querying gameplay AI state;
-- reading mutable runtime RNG state;
-- depending on player travel/load order.
-
----
-
-## 20. Example topology
-
-Illustrative only:
+This allows tests like:
 
 ```text
-Surface
-
-Entrance E1                           Entrance E3
-   |                                     |
-   | gradual                             | steep/constructed
-   v                                     v
-[A1 shallow] -- [A2 shallow/mid] -- [A3 mid]
-                      |                  |
-                      |                  |
-                      v                  |
-                   [A4 mid]              |
-                      |                  |
-                 secondary loop          |
-                      |                  |
-                      v                  |
-[B2 mid/deep] ------- [B1 deep] <--------+
-   ^
-   |
-Entrance E2 (sinkhole reaching deep quickly)
+fingerprint(seed=123, region=4,-2, run=A)
+==
+fingerprint(seed=123, region=4,-2, run=B)
 ```
 
-Possible ownership:
+including when generated in different worker/load orders.
+
+---
+
+## 16. Required graph invariants
+
+Headless validation should be able to assert at least:
+
+1. every ID in one ownership scope is unique;
+2. every edge endpoint references an existing node;
+3. every node references an existing owning network;
+4. every entrance references an existing target network/node;
+5. primary networks are internally reachable according to their generation contract;
+6. no prohibited self-edge exists;
+7. duplicate undirected edges are absent unless explicitly allowed;
+8. secondary connectors obey per-profile connectivity caps;
+9. cross-region edges have exactly one canonical owner;
+10. profile weights are valid/normalized;
+11. world positions/bounds are finite;
+12. canonical serialization is repeatable;
+13. identical stable addresses/domain contracts derive identical deterministic randomness independent of generation order.
+
+A test failure must identify:
 
 ```text
-Network A = A1,A2,A3,A4 + primary edges
-Network B = B1,B2 + primary edge
-Secondary edge = A4 <-> B2
-E1/E3 reference Network A
-E2 references Network B
+world seed
+generator/seed-schema version
+region ID
+network ID if applicable
+object ID/address if applicable
+seed domain/revision if randomness is involved
+invariant violated
 ```
 
-Even though A and B become traversably connected, their stable network IDs remain unchanged.
+---
+
+## 17. Initial GDScript class direction
+
+Exact implementation is not written in this documentation cycle, but the first code pass should favor small typed data classes rather than nested untyped dictionaries everywhere.
+
+Conceptually:
+
+```text
+world/generation/
+    stable_address.gd
+    stable_id.gd
+    seed_domains.gd
+    seed_deriver.gd
+    deterministic_rng.gd
+    world_definition_index.gd
+    underground_region_definition.gd
+    cave_network_definition.gd
+    cave_node_definition.gd
+    cave_edge_definition.gd
+    entrance_definition.gd
+    special_location_hook_definition.gd
+```
+
+A builder/validator layer can follow separately.
+
+This is directional structure, not a requirement that every file name remain exactly this way.
 
 ---
 
-## 21. Decisions locked by this schema
+## 18. What remains open
 
-The following are now architecture rules unless deliberately revised:
+This schema intentionally does not yet lock:
 
-1. Underground topology is pure data before geometry/runtime.
-2. Macro regions, cave networks and runtime streaming cells are distinct concepts.
-3. Primary cave networks retain stable identities after secondary connections.
-4. Nodes store continuous depth-profile blends rather than only a hard depth enum.
-5. Secondary connectivity is represented as ordinary stable graph edges after acceptance.
-6. Cross-region connections have canonical deterministic ownership independent of generation order.
-7. Finalized graph definitions are immutable-by-convention; player changes are persistent deltas.
-8. Future bosses/structures/large deposits use stable special-location hooks rather than forcing gameplay content into the topology generator.
-9. Canonical graph serialization/fingerprints are required for automated determinism testing.
-10. Graph generation/validation must work without scene nodes.
+- exact underground region size;
+- exact runtime streaming-cell dimensions;
+- exact chamber-shape representation;
+- exact spline/tunnel representation;
+- exact numerical shallow/mid/deep curves;
+- exact entrance-placement algorithm;
+- exact secondary-connection scoring weights;
+- exact geometry meshing algorithm;
+- exact binary/string stable-ID encoding;
+- exact seed hash/PRNG implementation below the `DETERMINISTIC_SEED_DOMAINS.md` contract.
 
----
-
-## 22. Intentionally open implementation details
-
-Do not accidentally lock these while implementing the first version:
-
-- exact macro region dimensions;
-- whether region keys are encoded as 2D X/Z coordinates or another equivalent deterministic address;
-- exact ID binary/string format;
-- exact numeric shallow/mid/deep depth ranges and blend curves;
-- exact node-count/network-size distributions;
-- exact edge route-intent taxonomy;
-- exact geometry algorithm/spline/meshing approach;
-- exact runtime underground streaming-cell dimensions;
-- exact cache eviction strategy;
-- final water/ecology/resource/structure generation systems.
-
-These should be decided by later architecture steps or measured implementation evidence, not by convenience inside the first graph class.
+Those choices belong to later architecture/implementation steps. The semantic data boundaries above are now the contract they must fit.
