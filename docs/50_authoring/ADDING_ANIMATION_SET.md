@@ -9,7 +9,7 @@ This is the first family-specific authoring guide and is intended to prove the r
 Before authoring an animation set:
 - the semantic animation-set ID namespace must be valid;
 - the target rig/profile family must be known;
-- required semantic animation roles must be defined by the animation-set rulebook;
+- required `animation_role.*` schema IDs must be defined by the animation-set rulebook;
 - the referenced animation assets/libraries must exist or be created as part of the same change.
 
 ## Workflow
@@ -18,9 +18,12 @@ Before authoring an animation set:
    ```text
    animation_set.humanoid.prototype
    ```
-2. Choose the compatible rig/profile family.
+2. Choose the compatible rig/profile semantic ID, for example:
+   ```text
+   rig_profile.humanoid.prototype
+   ```
 3. Start from the minimal animation-set template once implemented.
-4. Map required semantic animation roles to concrete animations.
+4. Map required `animation_role.*` IDs to concrete animations.
 5. Declare root-motion policy.
 6. Add optional variants/layers only where the presentation controller supports them.
 7. Run content validation.
@@ -32,32 +35,32 @@ Before authoring an animation set:
 
 The first humanoid prototype set should cover:
 ```text
-locomotion.idle
-locomotion.walk_forward
-locomotion.walk_backward
-locomotion.strafe_left
-locomotion.strafe_right
-locomotion.sprint
-locomotion.jump_start
-locomotion.fall
-locomotion.land
+animation_role.locomotion.idle
+animation_role.locomotion.walk_forward
+animation_role.locomotion.walk_backward
+animation_role.locomotion.strafe_left
+animation_role.locomotion.strafe_right
+animation_role.locomotion.sprint
+animation_role.locomotion.jump_start
+animation_role.locomotion.fall
+animation_role.locomotion.land
 
-action.attack.light_01
-action.dodge.forward
-action.dodge.backward
-action.dodge.left
-action.dodge.right
-action.parry
-action.block
+animation_role.action.attack.light_01
+animation_role.action.dodge.forward
+animation_role.action.dodge.backward
+animation_role.action.dodge.left
+animation_role.action.dodge.right
+animation_role.action.parry
+animation_role.action.block
 
-reaction.hit.front
-reaction.death
+animation_role.reaction.hit.front
+animation_role.reaction.death
 ```
 
 ## Replacing an animation
 
 To improve a clip:
-1. keep the semantic role unchanged;
+1. keep the semantic animation-role ID unchanged;
 2. replace/remap the concrete animation asset;
 3. keep gameplay timing/data in gameplay contracts unless an explicit cross-contract timing revision is made;
 4. rerun validation/integration tests.
@@ -77,7 +80,7 @@ Do not rewrite player movement/combat because imported bone names differ.
 
 ## When a new animation role is justified
 
-Add a new semantic role only when gameplay/presentation needs a genuinely distinct concept.
+Add a new `animation_role.*` ID only when gameplay/presentation needs a genuinely distinct concept.
 
 Do not create role IDs for every imported filename or every cosmetic variation. Variants should remain data under one semantic concept where possible.
 
@@ -86,7 +89,7 @@ Do not create role IDs for every imported filename or every cosmetic variation. 
 An animation set is structurally done when:
 - semantic ID is unique/valid;
 - rig/profile compatibility is valid;
-- all required semantic roles resolve;
+- all required animation-role IDs resolve;
 - all referenced animations exist;
 - root-motion policy is valid;
 - content validation passes;
