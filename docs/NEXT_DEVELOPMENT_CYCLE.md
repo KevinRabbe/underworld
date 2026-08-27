@@ -45,29 +45,49 @@ The schema now specifies:
 
 Exact class/field spellings may change during implementation, but the semantic boundaries are now architecture rules.
 
-### 3. Deterministic generation seed domains — NEXT
+### 3. Deterministic generation seed domains — COMPLETE
 
-Specify how seeds are derived so generation remains independent of:
+Defined in `DETERMINISTIC_SEED_DOMAINS.md`.
 
-- load order;
-- thread scheduling;
-- unrelated generation-stage changes where practical;
-- accepted/rejected candidate count;
-- RNG consumption in unrelated generation domains.
+The architecture now specifies:
 
-The seed architecture must derive local RNG from stable addresses/domains rather than using one mutable shared world RNG sequence.
+- stable-address + named-domain seed derivation instead of a shared mutable world RNG;
+- separate `seed_schema_version`, immutable domain IDs and explicit per-domain revisions;
+- global generator version as a compatibility manifest rather than a universal RNG salt;
+- independent randomness for unrelated systems and important semantic properties;
+- deterministic local sequences/subkeys where a system naturally needs multiple samples;
+- a project-owned deterministic RNG/value interface with frozen test vectors before persistent generation depends on it;
+- separate topology and geometry randomness domains;
+- canonical candidate enumeration/tie resolution;
+- parallel/thread-order independence;
+- canonical cross-region seed ownership;
+- legacy-surface migration considerations and engine/noise fingerprint testing.
 
-### 4. Generation-stage interfaces
+The exact low-level hash/PRNG algorithms remain an implementation choice, but must be frozen and protected by hard-coded test vectors before production world generation uses them.
 
-Define inputs/outputs for:
+### 4. Generation-stage interfaces — NEXT
 
-- macro region generation;
-- primary network topology;
-- entrance selection;
+Define concrete inputs/outputs and ownership boundaries for:
+
+- macro underground-region generation;
+- primary network candidate/topology generation;
 - depth-profile assignment/blending;
-- secondary connectivity/loop analysis;
+- entrance candidate generation/selection;
+- secondary connectivity proposal/scoring/acceptance;
+- special-location hook reservation;
 - geometry-description generation;
 - runtime streaming/build stage.
+
+The interfaces must preserve the locked separation:
+
+```text
+stable addresses + seed domains
+        -> pure world/topology definitions
+        -> geometry descriptions
+        -> runtime scene representation
+```
+
+No generation stage should require Godot scene-tree nodes merely to produce deterministic world truth.
 
 ### 5. Streaming ownership model
 
@@ -86,7 +106,8 @@ The design must support one continuous world without requiring all underground c
 Define:
 
 - save version;
-- generator version;
+- generator version/manifest;
+- seed-schema/domain revision recording where required;
 - delta ownership;
 - stable-ID references;
 - migration boundaries;
@@ -98,12 +119,13 @@ Before large generator implementation, define a headless/simple test runner capa
 
 Initial validation targets:
 
-- determinism;
+- deterministic seed test vectors;
 - stable IDs;
 - valid graph references;
 - entrance validity/reachability;
 - depth constraints;
 - bounded topology/connectivity;
+- canonical serialization/fingerprints;
 - reproducible failure output.
 
 ## Explicitly out of scope for this cycle
@@ -130,10 +152,11 @@ The architecture cycle is complete when we can answer, concretely and without ha
 
 1. What deterministic data describes an underground cave system before any Godot scene nodes exist? **Answered by `UNDERWORLD_GRAPH_SCHEMA.md`.**
 2. How is every persistent generated object addressed stably? **Answered by `STABLE_PROCEDURAL_IDS.md`.**
-3. How do shallow/mid/deep profiles feed the topology generator? **Data representation answered; generation curves/interface still pending.**
-4. How are 1–3 entrances and secondary loops represented and validated? **Representation answered; generator interface/scoring parameters still pending.**
-5. What gets generated on worker threads versus instantiated on the main thread?
-6. What is saved versus regenerated?
-7. How can hundreds/thousands of seeds be validated without manual exploration?
+3. How is randomness isolated from load order, thread scheduling, sibling rejection and unrelated generator changes? **Answered by `DETERMINISTIC_SEED_DOMAINS.md`.**
+4. How do shallow/mid/deep profiles feed the topology generator? **Data representation answered; generation-stage interface/curves still pending.**
+5. How are 1–3 entrances and secondary loops generated, represented and validated? **Representation answered; stage interfaces/scoring contract still pending.**
+6. What gets generated on worker threads versus instantiated on the main thread?
+7. What is saved versus regenerated, and how are generator compatibility boundaries represented?
+8. How can hundreds/thousands of seeds be validated without manual exploration?
 
 Only after these answers are reflected in concrete interfaces/data structures should the main Underworld generator implementation begin.
