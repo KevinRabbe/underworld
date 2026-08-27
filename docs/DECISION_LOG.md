@@ -151,31 +151,12 @@ This file records explicit design/architecture decisions. It is append-oriented:
 
 - IDs do not come from mutable RNG state.
 - The preferred dependency direction is stable address -> stable ID and stable address -> named-domain local RNG seed.
-- The detailed seed-domain derivation is the next architecture task.
 
 ### Legacy prototype migration — LOCKED DIRECTION
 
 - Save version 2 legacy IDs are `chunk_x:chunk_z:type:accepted_index` and must not be reinterpreted directly after generation changes.
 - Before incompatible surface decoration/pickup tuning, implement a one-time migration adapter that regenerates referenced chunks under the frozen legacy-v2 generation contract, maps accepted indexes back to deterministic candidate addresses, and writes upgraded stable IDs.
 - Unresolvable legacy IDs are reported/skipped rather than applied to a possibly wrong object.
-
-## Open decisions at this checkpoint
-
-The following remain intentionally open and must not become permanent accidentally:
-
-- exact surface dimensions/shape and final biome count;
-- exact numerical depth boundaries and depth-profile blend curves;
-- exact tree-harvesting interaction;
-- exact surface terraforming limits/implementation;
-- exact future block/parry/dodge/stamina combat model;
-- final creature/resource/boss roster;
-- exact underground water/structure/ecology content;
-- final logistics/transport systems;
-- exact macro underground region size/address encoding;
-- exact stable-ID text/binary encoding and whether release builds retain readable addresses;
-- exact global surface candidate-lattice spacing/domain versioning;
-- exact cave geometry/spline/meshing algorithm;
-- exact underground runtime streaming-cell dimensions and cache thresholds.
 
 ## 2026-08-27 — Deterministic seed-domain checkpoint
 
@@ -187,7 +168,7 @@ The following remain intentionally open and must not become permanent accidental
 
 ### Generator version is not a universal salt — LOCKED
 
-- Global `generator_version` records the compatible collection/manifest of generation contracts.
+- Global `generator_version`/manifest records the compatible collection of generation contracts.
 - It is not automatically mixed into every derived seed.
 - Individual persistent generation domains have immutable domain IDs and explicit domain revisions.
 - A local generator change can therefore revise one domain without automatically reshuffling unrelated domains.
@@ -233,28 +214,6 @@ The following remain intentionally open and must not become permanent accidental
 - The legacy algorithm remains frozen as needed for v2 save-ID migration before incompatible generation changes.
 - Moving existing surface terrain/noise to the new seed-domain system is a generator-compatibility decision, not automatically a harmless refactor.
 
-## Open decisions after seed-domain checkpoint
-
-The following remain intentionally open until their implementation architecture is designed:
-
-- exact surface dimensions/shape and final biome count;
-- exact numerical depth boundaries and profile blend curves;
-- exact tree-harvesting interaction;
-- exact surface terraforming limits/implementation;
-- exact future combat defense/stamina model;
-- final creature/resource/boss roster;
-- exact underground water/structure/ecology content;
-- final logistics/transport systems;
-- exact macro underground region dimensions;
-- exact stable-ID text/binary encoding;
-- exact surface candidate-lattice definitions/revisions;
-- exact cave geometry/spline/meshing algorithm;
-- exact runtime streaming-cell dimensions/cache thresholds;
-- exact project-owned seed hash/mixing algorithm;
-- exact project-owned deterministic PRNG algorithm;
-- exact numeric domain IDs and canonical binary StableAddress encoding;
-- exact generator-version manifest format.
-
 ## 2026-08-27 — Generation pipeline interface checkpoint
 
 ### Pure stage contracts — LOCKED
@@ -288,7 +247,7 @@ The following remain intentionally open until their implementation architecture 
 ### Entrances and surface dependency — LOCKED
 
 - Entrances are generated from existing underground topology plus deterministic surface data, not placed randomly before cave networks exist.
-- Entrance generation emits `SurfaceEntranceIntegrationDescriptor`-style pure data so surface geometry can integrate an opening even when underground runtime geometry is not loaded.
+- Entrance generation emits pure surface-integration descriptors so surface geometry can integrate an opening even when underground runtime geometry is not loaded.
 - Generating a surface chunk may therefore require underground definition data, but never underground runtime meshes/AI/audio.
 
 ### Cross-region secondary connectivity — LOCKED
@@ -312,18 +271,151 @@ The following remain intentionally open until their implementation architecture 
 ### Stage revisions — LOCKED DIRECTION
 
 - Generator compatibility manifests need stage revisions in addition to seed-domain revisions because deterministic logic can change without changing random-domain IDs.
-- Exact manifest serialization remains part of the upcoming persistence/version architecture.
 
-## Open decisions after generation-pipeline checkpoint
+## 2026-08-27 — Streaming ownership checkpoint
 
-- exact macro region dimensions;
-- exact primary topology algorithm/candidate budgets;
-- exact depth-profile curves and numeric grammar distributions;
-- exact entrance scoring weights;
-- exact secondary-connectivity scoring/cap values;
-- exact special-location hook roster/selection rules;
-- exact base geometry spline/volume/meshing representation;
-- exact geometry/runtime streaming-cell sizes;
-- exact cache implementation and task-priority thresholds;
-- exact persistence/generator manifest serialization;
-- exact automated batch-test runner implementation.
+### One continuous runtime world — LOCKED
+
+- Streaming is not implemented as a hard `SURFACE` versus `UNDERGROUND` mode switch.
+- Near an entrance, surface and nearby Underworld render/collision representations may be active simultaneously.
+- Deep underground, surface runtime content may release because demand is gone, not because the player entered a separate world instance.
+
+### Ownership boundaries — LOCKED
+
+- `WorldDefinitionService` owns/accesses regenerable deterministic finalized definitions and entrance descriptors.
+- `GeometryDescriptionService` owns regenerable/evictable base-geometry descriptions.
+- `WorldStreamingCoordinator` computes current demand and priorities; it does not decide deterministic world truth.
+- Surface and Underworld runtime streamers own live Nodes/meshes/collision for their current cells/chunks only.
+- `WorldDeltaStore` owns durable player-caused world modifications independently of runtime cells/caches.
+
+### Runtime tiers — LOCKED
+
+- World representations progress from address/definition to geometry description, render, collision, simulation/interactables and local audio.
+- These tiers may use different activation/release thresholds and hysteresis.
+- Macro regions, cave networks, geometry cells and runtime streaming cells remain separate concepts.
+- The Underworld runtime index is 3D-capable because multiple cave areas can overlap at the same X/Z at different Y/depths.
+
+### Async lifetime — LOCKED
+
+- In-flight requests carry enough request identity/token data to reject stale results.
+- A stale worker result cannot resurrect an unwanted runtime cell or overwrite a newer incompatible request.
+- Worker completion order can affect readiness timing but never deterministic world contents.
+
+### Entrance overlap/prefetch — LOCKED DIRECTION
+
+- Approaching an entrance may pin/request connected underground definitions and prefetch initial geometry/collision while surface runtime remains active.
+- Surface entrance integration depends on pure deterministic entrance descriptors, never on live underground Nodes.
+
+### Durable deltas are not cell-owned — LOCKED
+
+- Runtime cells query/apply bounded delta views but unloading a cell cannot delete harvested/mined/cleared/built persistent state.
+- Definition/geometry caches are disposable; durable deltas are not.
+
+## 2026-08-27 — Persistence and generator-version checkpoint
+
+### Saved versus regenerated — LOCKED
+
+- Untouched surface terrain, cave topology, base geometry, procedural placements, entrances and other deterministic definitions are regenerated from pinned generation contracts.
+- Player inventory/progression, removed generated objects, persistent object state, terrain/deformation deltas, player structures and other explicit persistent changes are saved as durable state.
+- Visited deterministic cave networks are not serialized wholesale merely because they were loaded.
+
+### Separate version concepts — LOCKED
+
+- `save_schema_version`, `seed_schema_version`, stable-address schema/version semantics and `GeneratorManifest` remain distinct concepts.
+- One integer called `version` must not silently stand for serialization layout, RNG contract and world-generator compatibility at once.
+
+### Generator manifest — LOCKED DIRECTION
+
+- A world pins a canonical generator manifest/configuration sufficient to reproduce deterministic truth.
+- The manifest records the relevant stage revisions, seed-domain revisions, profile/config revisions and persistent algorithm/noise contracts.
+- Mutable current defaults are not silently substituted for an old world's pinned generation parameters.
+- Manifest identity/fingerprint is for compatibility/cache identity and is not a universal RNG salt.
+
+### Compatibility classification — LOCKED
+
+- World load classifies generation compatibility explicitly as `EXACT`, `SUPPORTED_LEGACY`, `MIGRATION_REQUIRED`, `INCOMPATIBLE`, or unknown/corrupt equivalent.
+- Incompatible/unknown worlds are never silently interpreted using the newest generator.
+- Compatible refactors must preserve deterministic vectors/fingerprints/StableIds; unexpected output drift is a failing regression, not an implicit upgrade.
+
+### Migration safety — LOCKED
+
+- Save/generator migration is staged and transactional; do not destroy the only valid old save before a new migrated save validates.
+- Unresolved generated-object references are quarantined/reported rather than guessed by nearest object/position.
+- Disposable caches are versioned sufficiently to avoid serving wrong-contract data and may simply be discarded/regenerated.
+
+### Prototype-v2 implementation order — LOCKED
+
+- Current `version=2` saves are treated as one explicit legacy generation contract.
+- First map accepted-index IDs to modern stable candidate identities while the old surface generator remains reproducible.
+- Initially preserve the corresponding legacy surface-generation result where needed.
+- Moving surface generation to the new seed-domain architecture is a later explicit generator-contract decision, not hidden inside the ID migration.
+
+## 2026-08-27 — Automated validation checkpoint
+
+### Automated correctness before experiential testing — LOCKED
+
+- Deterministic architecture correctness is validated headlessly/as data wherever possible.
+- Human playtesting is reserved for feel, pacing, readability and fun rather than basic graph/reference/determinism corruption.
+
+### Validation layers — LOCKED
+
+- Persistent deterministic primitives receive frozen test vectors.
+- Stable addresses/IDs receive canonicalization and uniqueness tests.
+- Every deterministic generator stage is independently callable, canonically serializable and fingerprintable.
+- Graph/world-definition validity is checked separately from determinism.
+- Persistence/migration has fixture-based tests.
+- Streaming ownership/lifetime can be tested with fake observers/services without rendering a full game world.
+- Engine/noise dependencies receive representative compatibility fingerprints so upgrades cannot silently reshape persistent worlds.
+
+### Batch campaigns — LOCKED
+
+- Use a fixed regression seed/address corpus plus larger deterministic campaign corpora derived from an explicit campaign seed.
+- Statistical design targets such as entrance/connectivity tendencies are tested as distributions rather than forcing every region into one template.
+- Previously important failing campaign cases are promoted into the fixed regression corpus.
+
+### Scheduling independence — LOCKED
+
+- The same deterministic request set is tested under different legal generation/load/worker orders.
+- Final canonical fingerprints must match even if task completion timing differs.
+- Cache warm/cold/eviction variants may change performance but not semantic world truth.
+
+### Reproducible failures — LOCKED
+
+- Hard generation failures report enough information to reproduce the exact case: world seed, manifest/contracts, stage, region/network/candidate address, involved StableIds, fingerprints and campaign index where relevant.
+- A failure should be reproducible without manually searching a rendered world.
+
+### Expected deterministic changes — LOCKED PROCESS
+
+- Intentional generator changes identify the affected domain/stage/profile contract, revise compatibility metadata first where needed, and update only the expected outputs belonging to that contract.
+- Do not mass-update golden fingerprints merely to make a changed generator pass.
+
+## 2026-08-27 — Architecture foundation cycle complete
+
+The pre-implementation architecture cycle is complete at the documented semantic level.
+
+The next development cycle is deliberately narrower: implement the tested deterministic foundation primitives — stable addresses/IDs, seed domains, generator manifests, pure graph data, canonical fingerprints/invariant validation, headless test runner and prototype-v2 migration adapter — before implementing the first real Underworld topology generator.
+
+## Current intentionally open implementation/tuning decisions
+
+The following remain intentionally open and must not become accidental permanent rules during foundation implementation:
+
+- exact surface dimensions/shape and final biome count;
+- exact numerical depth boundaries/profile blend curves;
+- exact tree-harvesting interaction;
+- exact surface terraforming implementation/limits;
+- exact future combat defense/stamina model;
+- final creature/resource/boss roster;
+- exact underground water/structure/ecology content;
+- final logistics/transport systems;
+- exact macro underground region dimensions;
+- exact cave topology algorithm/candidate budgets;
+- exact entrance/connectivity scoring weights/caps;
+- exact cave geometry/spline/meshing algorithm;
+- exact geometry/runtime streaming-cell dimensions and cache budgets;
+- exact StableId textual/binary encoding beyond the locked semantic-address contract;
+- exact project-owned hash/PRNG algorithm until frozen by implementation test vectors;
+- exact generator-manifest serialization/storage format;
+- exact save file/sharding/compression format;
+- exact terrain/deformation delta representation;
+- exact headless test framework/CLI syntax/CI provider;
+- exact performance budgets/statistical tuning thresholds.
