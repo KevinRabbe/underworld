@@ -7,10 +7,16 @@ const BurrowerDefenseTests := preload("res://tests/character/test_burrower_defen
 
 
 func _init() -> void:
+	# Spatial contracts need Node3D.global_position to be valid, which is only true
+	# after the SceneTree has completed its own initialization.
+	call_deferred("_run_tests")
+
+
+func _run_tests() -> void:
 	var failures: Array[String] = []
 	failures.append_array(MannequinTests.run())
 	failures.append_array(CharacterActionTests.run())
-	failures.append_array(PlayerIntegrationTests.run())
+	failures.append_array(PlayerIntegrationTests.run(self))
 	failures.append_array(BurrowerDefenseTests.run(self))
 
 	if failures.is_empty():
