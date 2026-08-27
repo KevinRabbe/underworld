@@ -71,6 +71,27 @@ static func _test_determinism_and_coverage(failures: Array[String]) -> void:
 		finalized.bundle.region_definition.special_location_hook_ids.size(),
 		finalized.bundle.special_location_hooks.size()
 	)
+	_expect_equal(
+		failures,
+		"geometry result carries finalized reserved-site volumes",
+		geometry.reserved_site_descriptors.size(),
+		finalized.bundle.special_location_hooks.size()
+	)
+	for hook_index in range(finalized.bundle.special_location_hooks.size()):
+		var hook = finalized.bundle.special_location_hooks[hook_index]
+		_expect_equal(failures, "reserved hook remains generic", hook.semantic_category, "reserved_site")
+		_expect_true(failures, "reserved hook bounds stay positive", (
+			hook.reserved_bounds.size.x > 0.0
+			and hook.reserved_bounds.size.y > 0.0
+			and hook.reserved_bounds.size.z > 0.0
+		))
+		for other_index in range(hook_index + 1, finalized.bundle.special_location_hooks.size()):
+			var other = finalized.bundle.special_location_hooks[other_index]
+			_expect_true(
+				failures,
+				"reserved special-site volumes do not overlap",
+				not hook.reserved_bounds.intersects(other.reserved_bounds)
+			)
 	var chamber_nodes: Dictionary = {}
 	for chamber in geometry.chamber_descriptors:
 		_expect_true(failures, "chamber dimensions stay positive", (
