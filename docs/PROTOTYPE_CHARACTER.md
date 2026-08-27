@@ -75,7 +75,7 @@ move
 sprint
 jump
 attack / harvest
- directional dodge
+directional dodge
 parry
 ```
 
@@ -138,9 +138,32 @@ recovery          0.30 s
 ```
 
 Parry is a committed timed action. During the active window, parryable melee
-hits resolve as `parried` rather than normal damage. Enemy-specific stagger
-response can consume that result without putting enemy knowledge inside the
-player stamina/action components.
+hits resolve as `parried` rather than normal damage. The player returns a small
+combat result (`hit`, `dodged`, `parried`, or `ignored`); enemies decide what
+that result means for their own behavior.
+
+The prototype Burrower consumes `parried` by entering a distinct **0.85 second
+stagger**, cancelling the current attack, flashing, and receiving recoil away
+from the player. A `dodged` result is intentionally different: the attack simply
+misses and does not stagger the Burrower.
+
+This keeps enemy-specific punish behavior outside the stamina/action components.
+Future enemies may have different parryability and stagger responses.
+
+## Prototype HUD feedback
+
+The existing debug/survival HUD exposes the character systems needed for tuning:
+
+```text
+HP current/max
+stamina current/max
+current action state
+enemy count / combat message
+Ctrl: dodge
+Q: parry
+```
+
+This is diagnostic UI, not a final stamina bar or final combat HUD.
 
 ## Animation strategy
 
@@ -173,6 +196,12 @@ later while preserving the same high-level visual API and action timings.
 - stamina spending/regeneration follows its contract;
 - dodge startup/iframe/recovery timing is correct;
 - parry startup/active/recovery timing is correct;
-- insufficient stamina and overlapping actions are rejected.
+- insufficient stamina and overlapping actions are rejected;
+- `player.gd` constructs and resolves normal/dodged/parried melee correctly;
+- a parried Burrower attack produces the long parry stagger and recoil;
+- a dodged Burrower attack does not accidentally produce parry stagger.
+
+Spatial integration fixtures run only after the headless SceneTree is active so
+`global_position` behavior is the same contract used during actual play.
 
 Visual feel is deliberately not treated as an automated-test question.
