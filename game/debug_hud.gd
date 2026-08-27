@@ -2,6 +2,7 @@ extends CanvasLayer
 
 var world
 var player
+var combat
 var settings: UnderworldWorldSettings
 var label: Label
 var crosshair: Label
@@ -10,10 +11,16 @@ var update_timer: float = 0.0
 var visible_debug: bool = true
 
 
-func configure(world_node, player_node, world_settings: UnderworldWorldSettings) -> void:
+func configure(
+	world_node,
+	player_node,
+	world_settings: UnderworldWorldSettings,
+	combat_node = null
+) -> void:
 	world = world_node
 	player = player_node
 	settings = world_settings
+	combat = combat_node
 
 
 func _ready() -> void:
@@ -29,7 +36,7 @@ func _ready() -> void:
 	add_child(label)
 
 	crosshair = Label.new()
-	crosshair.name = "HarvestCrosshair"
+	crosshair.name = "ActionCrosshair"
 	crosshair.text = "+"
 	crosshair.add_theme_font_size_override("font_size", 22)
 	crosshair.add_theme_color_override("font_color", Color.WHITE)
@@ -73,8 +80,8 @@ func _update_layout() -> void:
 	if crosshair != null:
 		crosshair.position = viewport_size * 0.5 - Vector2(6.0, 14.0)
 	if survival_label != null:
-		survival_label.position = Vector2(0.0, viewport_size.y - 88.0)
-		survival_label.size = Vector2(viewport_size.x, 82.0)
+		survival_label.position = Vector2(0.0, viewport_size.y - 112.0)
+		survival_label.size = Vector2(viewport_size.x, 106.0)
 
 
 func _refresh_text() -> void:
@@ -94,9 +101,14 @@ func _refresh_text() -> void:
 	var has_axe: bool = world.has_tool("stone_axe")
 	var has_pickaxe: bool = world.has_tool("stone_pickaxe")
 	var equipped: String = world.get_equipped_tool()
+	var active_enemies: int = 0
+	var combat_message: String = "Combat unavailable"
+	if combat != null:
+		active_enemies = combat.get_active_enemy_count()
+		combat_message = combat.get_last_combat_message()
 
 	label.text = (
-		"UNDERWORLD — prototype 0.05\n"
+		"UNDERWORLD — prototype 0.06\n"
 		+ "FPS: %d\n" % Engine.get_frames_per_second()
 		+ "Seed: %d   Sea: %.1f\n" % [settings.world_seed, settings.sea_level]
 		+ "Position: %.1f, %.1f, %.1f\n" % [position.x, position.y, position.z]
@@ -121,9 +133,10 @@ func _refresh_text() -> void:
 		+ "Inventory: %d wood  %d stone   Removed world objects: %d\n" % [
 			resources.x, resources.y, world.get_destroyed_object_count()
 		]
-		+ "Equipped: %s   Action: %s\n" % [
+		+ "Equipped: %s   Harvest: %s\n" % [
 			_tool_display_name(equipped), world.get_last_harvest_message()
 		]
+		+ "Combat: %s   Active enemies: %d\n" % [combat_message, active_enemies]
 		+ "Worker: %s\n" % worker_state
 		+ "Chunk CPU: %.2f ms   Max: %.2f ms\n" % [
 			world.get_last_generation_ms(), world.get_max_generation_ms()
@@ -141,13 +154,16 @@ func _refresh_text() -> void:
 	var slot_2: String = _format_slot(2, "Stone Axe", has_axe, selected_slot)
 	var slot_3: String = _format_slot(3, "Stone Pickaxe", has_pickaxe, selected_slot)
 	survival_label.text = (
-		slot_1 + "    " + slot_2 + "    " + slot_3 + "\n"
+		"HP %d/%d    Enemies %d    %s\n" % [
+			player.get_health(), player.get_max_health(), active_enemies, combat_message
+		]
+		+ slot_1 + "    " + slot_2 + "    " + slot_3 + "\n"
 		+ "Wood %d   Stone %d    C: craft Axe (%dW/%dS)    V: craft Pickaxe (%dW/%dS)\n" % [
 			resources.x, resources.y,
 			settings.stone_axe_wood_cost, settings.stone_axe_stone_cost,
 			settings.stone_pickaxe_wood_cost, settings.stone_pickaxe_stone_cost
 		]
-		+ "Walk over loose pickups   |   LMB: use tool   |   tools have a short swing cooldown"
+		+ "LMB: harvest/use tool   |   RMB: attack   |   walk over loose pickups"
 	)
 
 
