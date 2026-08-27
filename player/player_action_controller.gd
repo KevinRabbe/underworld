@@ -82,8 +82,11 @@ func try_absorb_block(impact_cost: float) -> bool:
 		return false
 	if stamina.spend(maxf(impact_cost, 0.0)):
 		return true
-	# Insufficient stamina breaks guard immediately. The caller can then resolve
-	# the same incoming attack as a normal hit.
+	# Guard break consumes whatever stamina remains so holding block cannot
+	# instantly re-enter guard at the same unusable stamina value next frame.
+	var remaining: float = maxf(float(stamina.current_stamina), 0.0)
+	if remaining > 0.0:
+		stamina.spend(remaining)
 	_finish_action()
 	return false
 
