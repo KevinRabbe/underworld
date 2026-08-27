@@ -108,7 +108,7 @@ func _refresh_text() -> void:
 		combat_message = combat.get_last_combat_message()
 
 	label.text = (
-		"UNDERWORLD — prototype 0.06\n"
+		"UNDERWORLD — prototype 0.07\n"
 		+ "FPS: %d\n" % Engine.get_frames_per_second()
 		+ "Seed: %d   Sea: %.1f\n" % [settings.world_seed, settings.sea_level]
 		+ "Position: %.1f, %.1f, %.1f\n" % [position.x, position.y, position.z]
@@ -163,7 +163,7 @@ func _refresh_text() -> void:
 			settings.stone_axe_wood_cost, settings.stone_axe_stone_cost,
 			settings.stone_pickaxe_wood_cost, settings.stone_pickaxe_stone_cost
 		]
-		+ "LMB: harvest/use tool   |   RMB: attack   |   walk over loose pickups"
+		+ "LMB: harvest   |   RMB: melee attack   |   step away during Burrower wind-up"
 	)
 
 
