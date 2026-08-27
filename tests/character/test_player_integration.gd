@@ -83,8 +83,76 @@ static func run(tree: SceneTree) -> Array[String]:
 		health_before
 	)
 
+	# Held block protects only the front arc and pays stamina on impact.
+	actions.call("reset")
+	stamina.call("reset")
+	player.set("damage_invulnerability_timer", 0.0)
+	_expect_true(failures, "player block starts", bool(actions.call("try_start_block")))
+	var player_position: Vector3 = player.get("global_position")
+	var front_source: Vector3 = player_position + Vector3(0.0, 0.0, 1.0)
+	var block_health_before: int = int(player.call("get_health"))
+	var block_result: StringName = player.call(
+		"receive_melee_attack",
+		10,
+		front_source,
+		true
+	)
+	_expect_equal(failures, "front melee resolves as blocked", block_result, &"blocked")
+	_expect_equal(
+		failures,
+		"successful block prevents health loss",
+		int(player.call("get_health")),
+		block_health_before
+	)
+	_expect_close(failures, "10-damage block spends configured stamina", float(player.call("get_stamina")), 82.5)
+
+	# The same held guard does not protect the rear hemisphere.
+	player.set("damage_invulnerability_timer", 0.0)
+	var rear_source: Vector3 = player_position + Vector3(0.0, 0.0, -1.0)
+	var rear_health_before: int = int(player.call("get_health"))
+	var rear_result: StringName = player.call(
+		"receive_melee_attack",
+		10,
+		rear_source,
+		true
+	)
+	_expect_equal(failures, "rear melee bypasses block", rear_result, &"hit")
+	_expect_equal(
+		failures,
+		"rear melee damages blocking player",
+		int(player.call("get_health")),
+		rear_health_before - 10
+	)
+
+	# Insufficient impact stamina breaks guard, drains the remainder, and the hit
+	# continues through the normal damage path.
+	actions.call("reset")
+	stamina.call("reset")
+	stamina.set("current_stamina", 4.0)
+	player.set("damage_invulnerability_timer", 0.0)
+	_expect_true(failures, "low-stamina player can raise guard", bool(actions.call("try_start_block")))
+	var break_health_before: int = int(player.call("get_health"))
+	var break_result: StringName = player.call(
+		"receive_melee_attack",
+		10,
+		front_source,
+		true
+	)
+	_expect_equal(failures, "unaffordable block resolves attack as hit", break_result, &"hit")
+	_expect_equal(
+		failures,
+		"guard-break hit reduces health",
+		int(player.call("get_health")),
+		break_health_before - 10
+	)
+	_expect_true(failures, "guard break exits blocking state", not bool(actions.call("is_blocking")))
+	_expect_close(failures, "guard break drains remaining stamina", float(player.call("get_stamina")), 0.0)
+
 	# Normal melee outside defensive windows still uses the existing damage path.
 	actions.call("reset")
+	stamina.call("reset")
+	player.set("damage_invulnerability_timer", 0.0)
+	var normal_health_before: int = int(player.call("get_health"))
 	var hit_result: StringName = player.call(
 		"receive_melee_attack",
 		10,
@@ -96,7 +164,7 @@ static func run(tree: SceneTree) -> Array[String]:
 		failures,
 		"undefended melee reduces health",
 		int(player.call("get_health")),
-		health_before - 10
+		normal_health_before - 10
 	)
 
 	fixture_root.free()
