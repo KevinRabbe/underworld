@@ -10,16 +10,23 @@ This cycle is intentionally architecture-heavy. It is successful when the implem
 
 ## Required deliverables
 
-### 1. Stable procedural ID specification — NEXT
+### 1. Stable procedural ID specification — COMPLETE
 
-Define the concrete stable-ID/address scheme for:
+Defined in `STABLE_PROCEDURAL_IDS.md`.
 
-- surface procedural objects;
-- underground regions/networks/nodes/edges/entrances;
-- generated resources/special locations;
-- locally generated child objects.
+The architecture now specifies:
 
-Include a migration strategy for existing prototype index-based saved object IDs.
+- `WorldId`, semantic `StableAddress`, and persisted `StableId` as separate concepts;
+- candidate-address identity rather than accepted-array indexes;
+- global surface candidate domains/cells plus fixed semantic slots;
+- hierarchical underground region/network/node/edge/entrance/special-location addresses;
+- canonical endpoint/owner rules for secondary and cross-region connectors;
+- parent-derived stable IDs for persistent generated child objects;
+- runtime index mappings as transient caches only;
+- a one-time migration path from prototype v2 `chunk:type:index` IDs before incompatible surface-density/generation tuning;
+- automated ID determinism/migration validation requirements.
+
+Exact textual/binary encoding remains open, but the semantic identity rules are locked.
 
 ### 2. Underground world-definition schema — COMPLETE
 
@@ -38,13 +45,17 @@ The schema now specifies:
 
 Exact class/field spellings may change during implementation, but the semantic boundaries are now architecture rules.
 
-### 3. Deterministic generation seed domains
+### 3. Deterministic generation seed domains — NEXT
 
 Specify how seeds are derived so generation remains independent of:
 
 - load order;
 - thread scheduling;
-- unrelated generation-stage changes where practical.
+- unrelated generation-stage changes where practical;
+- accepted/rejected candidate count;
+- RNG consumption in unrelated generation domains.
+
+The seed architecture must derive local RNG from stable addresses/domains rather than using one mutable shared world RNG sequence.
 
 ### 4. Generation-stage interfaces
 
@@ -118,7 +129,7 @@ They may influence interfaces where future compatibility matters, but they are n
 The architecture cycle is complete when we can answer, concretely and without hand-waving:
 
 1. What deterministic data describes an underground cave system before any Godot scene nodes exist? **Answered by `UNDERWORLD_GRAPH_SCHEMA.md`.**
-2. How is every persistent generated object addressed stably?
+2. How is every persistent generated object addressed stably? **Answered by `STABLE_PROCEDURAL_IDS.md`.**
 3. How do shallow/mid/deep profiles feed the topology generator? **Data representation answered; generation curves/interface still pending.**
 4. How are 1–3 entrances and secondary loops represented and validated? **Representation answered; generator interface/scoring parameters still pending.**
 5. What gets generated on worker threads versus instantiated on the main thread?
