@@ -11,6 +11,7 @@ static func run(tree: SceneTree) -> Array[String]:
 	var failures: Array[String] = []
 	_test_attack_catalog(failures)
 	_test_attack_phase_controller(failures)
+	_test_attack_phase_edge_cases(failures)
 	_test_live_player_activation(tree, failures)
 	return failures
 
@@ -73,6 +74,38 @@ static func _test_attack_phase_controller(failures: Array[String]) -> void:
 	actions.tick(0.200)
 	_expect_true(failures, "attack returns to free after recovery", actions.is_free())
 	_expect_true(failures, "finished attack has no extra activation", not actions.consume_attack_activation())
+
+
+static func _test_attack_phase_edge_cases(failures: Array[String]) -> void:
+	var stamina = StaminaScript.new()
+	var actions = ActionControllerScript.new(stamina)
+
+	# A hitch/large frame may cross startup, active and recovery at once. The
+	# attack still owes exactly one activation even though the state is already free.
+	_expect_true(failures, "large-frame attack starts", actions.try_start_attack(0.10, 0.05, 0.20))
+	actions.tick(0.50)
+	_expect_true(failures, "large-frame attack can finish in one tick", actions.is_free())
+	_expect_true(
+		failures,
+		"large-frame crossing preserves one activation",
+		actions.consume_attack_activation()
+	)
+	_expect_true(
+		failures,
+		"large-frame activation remains one-shot",
+		not actions.consume_attack_activation()
+	)
+
+	# A hard reset (respawn/defeat) cancels all pending combat work.
+	_expect_true(failures, "reset-edge attack starts", actions.try_start_attack(0.10, 0.05, 0.20))
+	actions.tick(0.12)
+	actions.reset()
+	_expect_true(failures, "reset returns attack controller to free", actions.is_free())
+	_expect_true(
+		failures,
+		"reset discards pending attack activation",
+		not actions.consume_attack_activation()
+	)
 
 
 static func _test_live_player_activation(tree: SceneTree, failures: Array[String]) -> void:
