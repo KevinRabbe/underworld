@@ -288,7 +288,9 @@ func _request_attack() -> void:
 	if action_controller.is_free():
 		_start_attack_from_intent(intent)
 		return
-	input_buffer.push(&"attack", intent)
+	# A buffered attack is not committed yet. Remember only the button intent;
+	# weapon and facing are resolved when the controller becomes free.
+	input_buffer.push(&"attack")
 
 
 func _build_attack_intent() -> Dictionary:
@@ -369,7 +371,9 @@ func _try_consume_buffered_action() -> void:
 	var payload: Dictionary = intent.get("payload", {})
 	match StringName(intent.get("action", &"")):
 		&"attack":
-			_start_attack_from_intent(payload)
+			var live_attack_intent: Dictionary = _build_attack_intent()
+			if not live_attack_intent.is_empty():
+				_start_attack_from_intent(live_attack_intent)
 		&"dodge":
 			_start_dodge(payload.get("direction", Vector3.ZERO))
 		&"parry":
