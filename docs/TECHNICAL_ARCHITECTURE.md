@@ -22,19 +22,34 @@ Surface and underground may use different spatial indexing/streaming grids inter
 
 ## 3. Deterministic staged generation — LOCKED
 
-Each major generation stage receives deterministic derived seeds rather than sharing mutable global RNG state.
+Persistent generation uses the architecture in `DETERMINISTIC_SEED_DOMAINS.md`.
 
-Conceptual seed derivation:
+Randomness is derived conceptually from:
 
-`world_seed -> region_seed -> network_seed -> node/edge/special-location seed`
+```text
+world seed
++ seed-schema version
++ immutable named domain ID
++ explicit domain revision
++ semantic StableAddress
++ optional semantic subkey
+```
+
+rather than from a mutable chain such as `world RNG -> region RNG -> network RNG -> node RNG`.
 
 Requirements:
 
 - generation order must not change results;
 - worker scheduling must not change results;
-- loading chunks in a different order must not change results;
-- unrelated generator changes should be isolated where possible by independent seed domains;
-- generated IDs must not depend on accepted-array ordering.
+- loading chunks/regions in a different order must not change results;
+- accepted/rejected candidate count must not shift sibling randomness;
+- unrelated generator changes should be isolated by independent seed domains;
+- topology and detailed geometry randomness are separate compatibility domains;
+- generated IDs must not depend on RNG state or accepted-array ordering;
+- cross-region candidates use canonical ownership/addressing before seed derivation;
+- persistent generation uses a project-owned/frozen deterministic RNG/value contract with hard-coded compatibility test vectors before production saves depend on it.
+
+The global generator version is a compatibility manifest and is **not** automatically mixed into every seed. Local domain revisions allow one generation subsystem to change without automatically reshuffling unrelated systems.
 
 ## 4. World-definition data model — DIRECTIONAL
 
@@ -43,17 +58,21 @@ The architecture should support data similar to:
 ### `WorldDefinition`
 
 - world seed;
-- generation version;
+- schema version;
+- generator version/manifest reference;
+- seed-schema version;
 - references/addresses for macro surface and underground regions.
 
 ### `UndergroundRegionDefinition`
 
 - stable region ID;
-- deterministic seed;
+- semantic stable address;
 - world-space bounds/anchor;
 - dominant depth profile(s);
 - network references;
 - high-level special-location references.
+
+A cached derived seed may be stored for convenience, but semantic identity/address + domain contract remains the source of truth.
 
 ### `CaveNetworkDefinition`
 
@@ -74,7 +93,7 @@ Potential fields:
 - approximate bounds/radius;
 - depth/profile blend;
 - semantic type/tags;
-- deterministic local seed.
+- optional cached deterministic local values derived from its stable address/domains.
 
 ### `CaveEdgeDefinition`
 
@@ -87,7 +106,7 @@ Potential fields:
 - connection class: primary, proximity connection, deliberate topology loop, vertical transition, entrance path, etc.;
 - path/control information;
 - width/verticality tendencies;
-- deterministic local seed.
+- optional cached deterministic local values derived from its stable address/domains.
 
 ### `EntranceDefinition`
 
@@ -96,7 +115,7 @@ Potential fields:
 - connected network/node;
 - connection depth;
 - entrance/descent profile;
-- deterministic local seed.
+- optional cached deterministic local values derived from its stable address/domains.
 
 The exact GDScript resource/class layout is **OPEN** until implementation planning, but the graph/data split is locked.
 
@@ -118,6 +137,8 @@ A profile should eventually control distributions such as:
 
 Profiles may blend spatially. A cave may transition continuously across depths.
 
+Random variation used by these profiles must come from stable-address seed domains rather than shared RNG state.
+
 ## 6. Secondary connectivity pass — LOCKED
 
 Primary cave topology is generated first.
@@ -133,6 +154,8 @@ This system must be able to:
 - vary behavior by depth/region profile;
 - record the resulting edge as a normal stable world-definition object.
 
+Candidate enumeration, random scoring terms and tie resolution must be deterministic and canonical. Cross-region candidates have one owner/address before seed derivation.
+
 Do not bake the ~10% connectivity philosophy into random tunnel generation alone.
 
 ## 7. Geometry generation — LOCKED DIRECTION
@@ -142,6 +165,8 @@ Initial Underworld geometry should be chamber/tunnel based, not unrestricted des
 Geometry generation consumes graph definitions and produces streamable geometry descriptions/runtime meshes.
 
 Structural cave geometry and locally modifiable/excavatable material must be distinguishable at the data level.
+
+Geometry randomness is separated from topology randomness so future remeshing/tunnel-shape changes do not automatically reshuffle graph connectivity.
 
 ## 8. Runtime streaming tiers — LOCKED
 
@@ -160,21 +185,21 @@ No design should require all underground networks to exist as live Godot nodes s
 
 ## 9. Stable procedural identities — LOCKED
 
-Persistent procedural objects need deterministic IDs derived from stable generation addresses, not array indices.
+Persistent procedural objects use the architecture in `STABLE_PROCEDURAL_IDS.md`.
+
+Identity derives from stable candidate/generation addresses, not accepted-array indexes, runtime nodes, runtime positions or RNG-call order.
 
 Conceptual hierarchy:
 
 `world / region / network / node-or-edge / local-object-key`
 
-The exact string/binary representation is **OPEN**.
-
 A generator density change must not silently rename unrelated persistent objects.
 
-This rule also applies to surface procedural objects. Existing prototype index-based IDs are technical debt to migrate before generator tuning makes them unsafe.
+This rule also applies to surface procedural objects. Existing prototype index-based IDs must be migrated before incompatible generator tuning makes the legacy mapping unsafe.
 
 ## 10. Persistence model — LOCKED
 
-Untouched procedural world data is regenerated from seed and generation version.
+Untouched procedural world data is regenerated from seed and compatible generation contracts.
 
 Save data stores deltas such as:
 
@@ -190,13 +215,17 @@ Do not save complete untouched cave networks/chunks merely because they were vis
 
 Save migrations must be versioned and testable.
 
+The persistence/versioning document will define how generator-version manifests, seed-schema versions and per-domain revisions interact with old worlds.
+
 ## 11. Threading boundary — LOCKED DIRECTION
 
 Pure deterministic generation/data work may run on worker threads.
 
 Godot scene-tree mutation, node creation and physics-server-facing scene setup must remain on the appropriate main-thread boundary unless Godot explicitly guarantees otherwise.
 
-The existing surface prototype already follows this general pattern; the Underworld architecture should preserve it.
+No shared mutable generation RNG crosses worker boundaries. Each generation task derives local randomness from stable addresses/domains.
+
+The existing surface prototype already follows the general data-worker/runtime-main-thread split; the Underworld architecture should preserve and formalize it.
 
 ## 12. Validation hooks — LOCKED
 
@@ -205,8 +234,12 @@ Every generated graph/data object should expose enough information for headless 
 A failing generation test must be reproducible from at least:
 
 - world seed;
-- generation version;
-- region/network stable ID;
+- seed-schema version;
+- generator version/manifest;
+- relevant seed domain/revision where applicable;
+- region/network/object stable ID/address;
 - validation failure reason.
+
+Canonical generation fingerprints and fixed seed/RNG test vectors are part of the compatibility suite.
 
 Architecture is incomplete if correctness can only be checked by manually walking through the rendered world.
