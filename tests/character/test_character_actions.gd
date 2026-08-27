@@ -10,6 +10,7 @@ static func run() -> Array[String]:
 	_test_dodge_contract(failures)
 	_test_parry_contract(failures)
 	_test_block_contract(failures)
+	_test_tool_action_contract(failures)
 	return failures
 
 
@@ -38,6 +39,7 @@ static func _test_dodge_contract(failures: Array[String]) -> void:
 	_expect_true(failures, "dodge has startup before iframes", not actions.is_dodge_iframe_active())
 	_expect_true(failures, "cannot parry during dodge", not actions.try_start_parry())
 	_expect_true(failures, "cannot block during dodge", not actions.try_start_block())
+	_expect_true(failures, "cannot use tool during dodge", not actions.try_start_tool_action(0.38))
 	actions.tick(0.10)
 	_expect_true(failures, "dodge iframes become active", actions.is_dodge_iframe_active())
 	_expect_true(failures, "dodge curve produces movement", actions.get_dodge_speed() > 0.0)
@@ -55,6 +57,7 @@ static func _test_parry_contract(failures: Array[String]) -> void:
 	_expect_close(failures, "parry spends stamina", stamina.current_stamina, 85.0)
 	_expect_true(failures, "parry startup is not active", not actions.is_parry_active())
 	_expect_true(failures, "cannot block during parry", not actions.try_start_block())
+	_expect_true(failures, "cannot use tool during parry", not actions.try_start_tool_action(0.38))
 	actions.tick(0.07)
 	_expect_true(failures, "parry active window opens", actions.is_parry_active())
 	actions.tick(0.12)
@@ -75,6 +78,7 @@ static func _test_block_contract(failures: Array[String]) -> void:
 	_expect_close(failures, "raising guard has no upfront cost", stamina.current_stamina, 100.0)
 	_expect_true(failures, "cannot dodge while blocking", not actions.try_start_dodge(Vector3.RIGHT))
 	_expect_true(failures, "cannot parry while blocking", not actions.try_start_parry())
+	_expect_true(failures, "cannot use tool while blocking", not actions.try_start_tool_action(0.38))
 	_expect_true(failures, "block absorbs affordable impact", actions.try_absorb_block(17.5))
 	_expect_close(failures, "block spends impact stamina", stamina.current_stamina, 82.5)
 	actions.stop_block()
@@ -86,6 +90,22 @@ static func _test_block_contract(failures: Array[String]) -> void:
 	_expect_true(failures, "guard break returns action controller to free", actions.is_free())
 	_expect_close(failures, "guard break drains remaining stamina", stamina.current_stamina, 0.0)
 	_expect_true(failures, "zero-stamina guard cannot be raised", not actions.try_start_block())
+
+
+static func _test_tool_action_contract(failures: Array[String]) -> void:
+	var stamina = StaminaScript.new()
+	var actions = ActionControllerScript.new(stamina)
+	_expect_true(failures, "tool action starts", actions.try_start_tool_action(0.38))
+	_expect_true(failures, "tool action enters committed state", actions.is_using_tool())
+	_expect_close(failures, "tool action has no automatic stamina cost", stamina.current_stamina, 100.0)
+	_expect_true(failures, "cannot dodge during tool action", not actions.try_start_dodge(Vector3.RIGHT))
+	_expect_true(failures, "cannot parry during tool action", not actions.try_start_parry())
+	_expect_true(failures, "cannot block during tool action", not actions.try_start_block())
+	_expect_true(failures, "cannot overlap another tool action", not actions.try_start_tool_action(0.20))
+	actions.tick(0.20)
+	_expect_true(failures, "tool action remains committed before duration", actions.is_using_tool())
+	actions.tick(0.18)
+	_expect_true(failures, "tool action returns to free at duration", actions.is_free())
 
 
 static func _expect_true(failures: Array[String], label: String, condition: bool) -> void:
