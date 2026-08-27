@@ -61,6 +61,7 @@ Existing root-level documents remain authoritative until they are deliberately m
 - `40_content/CONTENT_CATEGORIES.md` — controlled hierarchical classification rules.
 - `40_content/CONTENT_CAPABILITIES.md` — behavioral composition contracts.
 - `40_content/CONTENT_REFERENCES.md` — typed semantic reference and cycle rules.
+- `40_content/CONTENT_FAMILIES.md` — directional map of major future item, creature, structure, worldgen, gameplay-data and presentation-data families.
 - `40_content/RULEBOOK_TEMPLATE.md` — reusable family-rulebook template.
 - `40_content/animations/ANIMATION_SET_RULEBOOK.md` — first family-specific rulebook; animation implementation remains deferred.
 
