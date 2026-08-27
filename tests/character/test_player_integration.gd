@@ -167,6 +167,39 @@ static func run(tree: SceneTree) -> Array[String]:
 		normal_health_before - 10
 	)
 
+	# Accepted LMB/RMB-style swings now own a short committed action state instead
+	# of existing only as a visual/cooldown side effect.
+	actions.call("reset")
+	stamina.call("reset")
+	player.set("tool_use_cooldown_timer", 0.0)
+	_expect_true(failures, "live player tool action starts", bool(player.call("_begin_tool_action")))
+	_expect_equal(
+		failures,
+		"live player exposes USING_TOOL state",
+		String(player.call("get_action_state_name")),
+		"USING_TOOL"
+	)
+	_expect_true(
+		failures,
+		"live tool commitment rejects dodge",
+		not bool(actions.call("try_start_dodge", Vector3.RIGHT))
+	)
+	_expect_true(failures, "live tool commitment rejects parry", not bool(actions.call("try_start_parry")))
+	_expect_true(failures, "live tool commitment rejects block", not bool(actions.call("try_start_block")))
+	_expect_close(failures, "tool commitment itself costs no stamina", float(player.call("get_stamina")), 100.0)
+	actions.call("tick", 0.20)
+	player.call("_update_tool_use_feedback", 0.20)
+	_expect_true(failures, "live tool action remains committed mid-swing", bool(actions.call("is_using_tool")))
+	actions.call("tick", 0.18)
+	player.call("_update_tool_use_feedback", 0.18)
+	_expect_true(failures, "live tool action ends with existing cooldown", bool(actions.call("is_free")))
+	_expect_close(
+		failures,
+		"tool cooldown and commitment finish together",
+		float(player.get("tool_use_cooldown_timer")),
+		0.0
+	)
+
 	fixture_root.free()
 	return failures
 
