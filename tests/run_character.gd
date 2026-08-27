@@ -11,7 +11,7 @@ func _init() -> void:
 	failures.append_array(MannequinTests.run())
 	failures.append_array(CharacterActionTests.run())
 	failures.append_array(PlayerIntegrationTests.run())
-	failures.append_array(BurrowerDefenseTests.run())
+	failures.append_array(BurrowerDefenseTests.run(self))
 
 	if failures.is_empty():
 		print("[CHARACTER VALIDATION] PASS")
