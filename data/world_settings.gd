@@ -40,8 +40,9 @@ class_name UnderworldWorldSettings
 @export_range(0.0, 1.0, 0.01) var rock_density: float = 0.30
 
 @export_group("Loose Pickups")
-# Pickups use the already-generated terrain masks, so this can be reasonably
-# dense without adding more world-noise sampling.
+# Pickup density is intentionally frozen for v0.05 because collected pickup
+# persistence currently uses deterministic array indices. The next migration
+# moves pickups to stable cell IDs before density is retuned.
 @export_range(2, 12, 1) var pickup_vertex_step: int = 5
 @export_range(0.0, 1.0, 0.01) var branch_pickup_density: float = 0.16
 @export_range(0.0, 1.0, 0.01) var loose_stone_pickup_density: float = 0.13
@@ -56,6 +57,7 @@ class_name UnderworldWorldSettings
 
 @export_group("Harvesting")
 @export_range(2.0, 8.0, 0.25) var harvest_range: float = 4.5
+@export_range(0.10, 1.0, 0.05) var tool_use_cooldown: float = 0.38
 @export_range(1, 10, 1) var tree_hits_with_axe: int = 3
 @export_range(1, 10, 1) var rock_hits_with_pickaxe: int = 4
 @export_range(1, 20, 1) var tree_wood_yield: int = 4
