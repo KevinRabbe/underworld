@@ -153,9 +153,15 @@ static func _local_candidates(context, region_plan, bundle, nodes: Array) -> Arr
 			var max_length: float = profile.x * 92.0 + profile.y * 152.0 + profile.z * 178.0
 			if length > max_length:
 				continue
-			var class_name := "secondary_loop" if same_network else "cross_network_connection"
+			var connection_class: String = (
+				"secondary_loop" if same_network else "cross_network_connection"
+			)
 			var address = StableAddress.secondary_connector(
-				region_plan.stable_address, a.stable_address, b.stable_address, class_name, 0
+				region_plan.stable_address,
+				a.stable_address,
+				b.stable_address,
+				connection_class,
+				0
 			)
 			var topology: float = (
 				clampf(float(hops - 2) / 5.0, 0.0, 1.0) if same_network else 1.0
@@ -181,7 +187,7 @@ static func _local_candidates(context, region_plan, bundle, nodes: Array) -> Arr
 				tendency *= 1.12
 			var probability := clampf(tendency * (0.55 + score * 0.70), 0.0, 0.36)
 			result.append(_candidate(
-				context, address, class_name, a, b, region_plan.stable_id, "",
+				context, address, connection_class, a, b, region_plan.stable_id, "",
 				length, delta.y, hops, profile, score, probability, true
 			))
 	result.sort_custom(_score_greater)
@@ -212,7 +218,9 @@ static func _accept_local(region_plan, bundle, nodes: Array, candidates: Array) 
 			continue
 		if int(degree.get(b_id, 0)) >= MAX_SECONDARY_DEGREE:
 			continue
-		var key := candidate["class"] + "\n" + _pair(candidate["a_network"], candidate["b_network"])
+		var key: String = str(candidate["class"]) + "\n" + _pair(
+			candidate["a_network"], candidate["b_network"]
+		)
 		if network_pairs.has(key):
 			continue
 		candidate["accepted"] = true
@@ -284,14 +292,25 @@ static func _cross_candidates(context, region_plan, primary_topology, view: Dict
 
 
 static func _candidate(
-	context, address, class_name: String, a, b, owner_id: String, remote_region_id: String,
-	length: float, vertical_delta: float, hops: int, profile: Vector3, score: float,
-	probability: float, owned: bool
+	context,
+	address,
+	connection_class: String,
+	a,
+	b,
+	owner_id: String,
+	remote_region_id: String,
+	length: float,
+	vertical_delta: float,
+	hops: int,
+	profile: Vector3,
+	score: float,
+	probability: float,
+	owned: bool
 ) -> Dictionary:
 	return {
 		"address_object": address,
 		"address": address.canonical_text(),
-		"class": class_name,
+		"class": connection_class,
 		"a_id": a.stable_id,
 		"b_id": b.stable_id,
 		"a_network": a.owning_network_id,
@@ -307,7 +326,7 @@ static func _candidate(
 		"roll": SeedDeriver.random_unit(
 			context.world_seed, address,
 			SeedDomains.get_domain(SeedDomains.UG_SECONDARY_EXISTS),
-			"cross-accept" if class_name == "cross_region_connection" else "accept"
+			"cross-accept" if connection_class == "cross_region_connection" else "accept"
 		),
 		"accepted": false,
 		"owned": owned,
