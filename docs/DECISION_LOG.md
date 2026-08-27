@@ -119,6 +119,46 @@ This file records explicit design/architecture decisions. It is append-oriented:
 
 - Generated graphs require canonical sorted debug serialization/fingerprints so identical seed/version input can be compared automatically across runs, load order and thread scheduling.
 
+## 2026-08-27 — Stable procedural ID checkpoint
+
+### Candidate identity — LOCKED
+
+- Persistent generated identity belongs to a deterministic candidate/address, not to accepted-array index, runtime Node, MultiMesh instance index or RNG-consumption order.
+- Rejected candidates must not renumber accepted sibling identities.
+- Runtime indexes may be used as transient lookup caches but are never persisted as world identity.
+
+### World scope and stable addresses — LOCKED
+
+- `WorldId`, semantic `StableAddress` and persisted `StableId` are separate concepts.
+- Save-local stable IDs do not need to repeat the world seed; references outside one world/save are scoped by `(WorldId, StableId)`.
+- Identity components use integer/categorical generation addresses rather than floating-point world position.
+
+### Surface addressing — LOCKED DIRECTION
+
+- Persistent surface objects use deterministic global candidate domains/cells plus fixed semantic candidate slots.
+- Surface chunks remain streaming/storage boundaries rather than fundamental object identity.
+- Tree/rock and loose-pickup candidate domains may use different lattices without sharing indexes.
+
+### Underground addressing — LOCKED
+
+- Underground identities follow deterministic region -> network candidate -> node/edge/entrance/special-location ownership/lineage.
+- Network IDs are based on fixed candidate slots, not accepted network order.
+- Node child identities use fixed generation candidate slots/lineage rather than compact accepted sibling indexes.
+- Undirected connector endpoint order is canonicalized.
+- Cross-region connectors use exactly one canonical deterministic owner.
+
+### Stable IDs and RNG — LOCKED
+
+- IDs do not come from mutable RNG state.
+- The preferred dependency direction is stable address -> stable ID and stable address -> named-domain local RNG seed.
+- The detailed seed-domain derivation is the next architecture task.
+
+### Legacy prototype migration — LOCKED DIRECTION
+
+- Save version 2 legacy IDs are `chunk_x:chunk_z:type:accepted_index` and must not be reinterpreted directly after generation changes.
+- Before incompatible surface decoration/pickup tuning, implement a one-time migration adapter that regenerates referenced chunks under the frozen legacy-v2 generation contract, maps accepted indexes back to deterministic candidate addresses, and writes upgraded stable IDs.
+- Unresolvable legacy IDs are reported/skipped rather than applied to a possibly wrong object.
+
 ## Open decisions at this checkpoint
 
 The following remain intentionally open and must not become permanent accidentally:
@@ -132,6 +172,7 @@ The following remain intentionally open and must not become permanent accidental
 - exact underground water/structure/ecology content;
 - final logistics/transport systems;
 - exact macro underground region size/address encoding;
-- exact stable-ID string/binary representation;
+- exact stable-ID text/binary encoding and whether release builds retain readable addresses;
+- exact global surface candidate-lattice spacing/domain versioning;
 - exact cave geometry/spline/meshing algorithm;
 - exact underground runtime streaming-cell dimensions and cache thresholds.
