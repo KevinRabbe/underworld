@@ -1,16 +1,70 @@
 # Repository Layout Validation
 
-Status: **DIRECTIONAL validation contract; implementation deferred**
+Status: **STAGE 1 IMPLEMENTED AND ENFORCED IN CI**
 
-The repository/file architecture should eventually be partially machine-enforced so structural drift is caught before hundreds of files accumulate in the wrong layer.
+The repository/file architecture is partially machine-enforced so structural drift is caught before many files accumulate in the wrong layer.
 
 This validation complements content, character and deterministic worldgen validation. It does not replace code review or architectural judgment.
 
+## Current implementation
+
+The executable policy lives in:
+
+```text
+tools/ci/repository_layout_policy.json
+tools/ci/validate_repository_layout.py
+.github/workflows/repository-layout-validation.yml
+```
+
+The policy file is the migration-state source of truth for root placement. A root may be canonical, temporarily legacy-allowed, or forbidden.
+
+Current migration state:
+
+```text
+canonical:
+  .github/
+  addons/
+  app/
+  content/
+  core/
+  docs/
+  gameplay/
+  presentation/
+  tests/
+  third_party/
+  tools/
+  world/
+  worldgen/
+
+legacy_allowed:
+  combat/
+  data/
+
+forbidden:
+  game/
+  player/
+  scenes/
+  scripts/
+```
+
+`game/` and `player/` became forbidden after their staged migrations completed. `combat/` and `data/` remain temporary compatibility roots until their mixed prototype responsibilities are split and migrated deliberately.
+
+Stage 1 CI currently enforces:
+
+- tracked files may only enter reviewed top-level ownership roots;
+- retired `game/` and `player/` roots may not return;
+- Godot resource references may not use `res://game/` or `res://player/`;
+- production/runtime roots may not import from `tests/` or `tools/`;
+- `worldgen/` may not import concrete runtime/app/presentation domains;
+- `core/` may not import concrete game domains;
+- the validator reports which temporary legacy roots are still present.
+
+The checker intentionally uses simple path/reference rules. It does not attempt to parse architectural intent from class names or infer ownership from implementation details.
+
 ## What can be validated mechanically
 
-Future layout validation may check:
+The validator may grow to check:
 
-- forbidden generic top-level roots such as `scripts/`, `scenes/` or new unreviewed `data/` dumps;
 - expected top-level ownership roots;
 - content-definition files remain under approved `content/` families;
 - production/runtime code does not live under `tests/` or `tools/`;
@@ -36,18 +90,7 @@ Those remain architecture-review decisions.
 
 ## Migration-aware validation
 
-The repository currently contains prototype roots such as:
-
-```text
-player/
-combat/
-game/
-data/
-```
-
-These are explicitly allowed during staged migration.
-
-A layout validator must therefore support a compatibility allowlist/transition policy rather than immediately failing all current paths.
+The validator supports staged migration instead of requiring a mass rename.
 
 Conceptual migration state:
 
@@ -58,20 +101,22 @@ canonical
 forbidden
 ```
 
-Once one legacy root has been fully migrated and all active branches/reference paths are updated, that root can move from `legacy_allowed` to `forbidden`.
+The current machine policy represents `canonical`, `legacy_allowed`, and `forbidden` directly. A `migrating` state is represented operationally by a dedicated migration branch/PR while the source root remains legacy-allowed until the atomic move is complete.
 
-Do not keep legacy paths allowed forever after their migration is complete.
+Once one legacy root has been fully migrated and all active references are updated, move that root from `legacy_allowed_roots` to `forbidden_roots` in the policy.
+
+Do not keep legacy paths allowed after their migration is complete.
 
 ## Import/dependency validation
 
-A future static dependency checker may inspect script preload/load/extends references and flag clearly forbidden root dependencies.
+Static dependency checking inspects resource-path references in Godot text resources and flags only clearly forbidden root dependencies.
 
 Examples:
 
 ```text
 runtime gameplay → tests/       ERROR
 runtime gameplay → tools/       ERROR
-worldgen → player/               ERROR
+worldgen → gameplay/             ERROR
 worldgen → presentation/         ERROR
 core → gameplay/                 ERROR
 ```
@@ -88,7 +133,7 @@ A semantic ID rename must remain an explicit migration even if the file path did
 
 ## Naming diagnostics
 
-Potential lint warnings/errors may include patterns such as:
+Potential future lint warnings/errors may include patterns such as:
 
 ```text
 *_final.*
@@ -107,41 +152,41 @@ These should begin as warnings where false positives are plausible.
 
 Git does not track empty directories.
 
-Validation should not require the full destination tree to exist before real files require it.
+Validation must not require the full destination tree to exist before real files require it.
 
 The architecture defines legal placement; it does not require empty placeholder folders.
 
-## Canonical summary target
+## CI output
 
-A future CI check could report:
+A successful run reports a compact summary similar to:
 
 ```text
 [REPOSITORY LAYOUT] PASS
-production files: 184
-content definitions: 527
-presentation assets: 1134
-test files: 92
-tool files: 14
-forbidden root dependencies: 0
-legacy path violations: 0
-naming errors: 0
+  policy version: 1
+  tracked files: 184
+  production files: 84
+  test files: 42
+  tool files: 2
+  legacy roots present: combat, data
+  forbidden root dependencies: 0
+  retired path violations: 0
 ```
 
-Exact counts/output are implementation details.
+Exact counts are informational and are not compatibility contracts.
 
 ## Staged implementation
 
-Recommended order:
+Current progress:
 
-1. document the canonical tree and legacy migration map;
-2. implement content-registry/content validation first;
-3. add a lightweight root/path policy checker;
-4. add forbidden production → tests/tools dependency checks;
-5. tighten legacy path rules only after actual domain migrations;
-6. add richer static dependency checks only where they produce reliable signal.
+1. canonical tree and legacy migration map — **done**;
+2. lightweight root/path policy checker — **done**;
+3. forbidden production → tests/tools dependency checks — **done**;
+4. tighten legacy path rules after actual domain migrations — **active, domain by domain**;
+5. content-registry/content validation — **future family cycle**;
+6. richer static dependency checks — **only where they produce reliable signal**.
 
 ## Merge policy
 
-Once repository-layout validation exists and a path family has been declared canonical, new changes should not introduce avoidable files into retired legacy locations.
+Once a path family has been declared canonical and the old root is marked forbidden, new changes must not reintroduce that retired location.
 
-The validator should prevent drift, not force unnecessary mass renames.
+The validator prevents structural drift. It must not be used to force unrelated mass renames or to replace architecture review.
