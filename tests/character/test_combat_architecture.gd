@@ -44,16 +44,6 @@ static func run() -> Array[String]:
 		"application composes canonical encounter controller",
 		"res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd" in app_source
 	)
-	_expect_true(
-		failures,
-		"application no longer composes legacy combat manager",
-		not "res://combat/combat_manager.gd" in app_source
-	)
-	_expect_true(
-		failures,
-		"legacy mixed combat manager is retired",
-		not FileAccess.file_exists("res://combat/combat_manager.gd")
-	)
 
 	resolver.free()
 	encounters.free()

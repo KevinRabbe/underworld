@@ -1,6 +1,6 @@
 extends RefCounted
 
-const EnemyScript := preload("res://combat/enemy.gd")
+const EnemyScript := preload("res://gameplay/creatures/underworld/burrower/burrower.gd")
 
 
 class DefensiveTarget:

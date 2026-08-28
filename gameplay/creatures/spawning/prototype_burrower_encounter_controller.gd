@@ -1,7 +1,7 @@
 extends Node3D
 class_name UnderworldPrototypeBurrowerEncounterController
 
-const EnemyScript := preload("res://combat/enemy.gd")
+const EnemyScript := preload("res://gameplay/creatures/underworld/burrower/burrower.gd")
 
 const TARGET_ENEMY_COUNT := 4
 const SPAWN_MIN_DISTANCE := 18.0

@@ -16,16 +16,17 @@
     "worldgen"
   ],
   "legacy_allowed_roots": [
-    "combat",
     "data"
   ],
   "forbidden_roots": [
+    "combat",
     "game",
     "player",
     "scenes",
     "scripts"
   ],
   "retired_resource_prefixes": [
+    "res://combat/",
     "res://game/",
     "res://player/"
   ],
@@ -40,7 +41,6 @@
         "presentation",
         "world",
         "worldgen",
-        "combat",
         "data"
       ],
       "forbidden_prefixes": [
