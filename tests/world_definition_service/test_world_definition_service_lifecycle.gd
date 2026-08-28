@@ -4,29 +4,49 @@ const StableAddress := preload("res://worldgen/identity/stable_address.gd")
 const StableId := preload("res://worldgen/identity/stable_id.gd")
 const WorldGenerationContext := preload("res://worldgen/pipeline/world_generation_context.gd")
 const WorldDefinitionService := preload("res://worldgen/services/world_definition_service.gd")
+const SurfaceEntranceDescriptor := preload("res://worldgen/graph/surface_entrance_integration_descriptor.gd")
 const SampleGraphFixture := preload("res://tests/foundation/sample_graph_fixture.gd")
 
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
-	_test_configure_clears_cache(failures)
+	_test_configure_clears_cache_and_surface_descriptors(failures)
 	_test_store_get_has_evict(failures)
 	_test_stable_id_address_mismatch_rejected(failures)
 	_test_negative_region_address(failures)
 	_test_request_determinism(failures)
 	_test_cache_order_does_not_rekey_regions(failures)
+	_test_surface_descriptor_registration_query_and_order(failures)
+	_test_surface_descriptor_membership_isolation(failures)
+	_test_empty_surface_descriptor_region_id_rejected(failures)
+	_test_region_eviction_preserves_surface_descriptors(failures)
 	return failures
 
 
-static func _test_configure_clears_cache(failures: Array[String]) -> void:
+static func _test_configure_clears_cache_and_surface_descriptors(failures: Array[String]) -> void:
 	var service = WorldDefinitionService.new()
 	var first_context = WorldGenerationContext.new(10101)
 	var second_context = WorldGenerationContext.new(20202)
 	_expect_empty(failures, "initial configure", service.configure(first_context))
 
 	var bundle = _bundle_for_region(0, 0)
-	_expect_empty(failures, "store before reconfigure", service.store_finalized_region(bundle))
+	var descriptor = _descriptor(
+		"entrance:configure",
+		bundle.region_definition.stable_id,
+		AABB(Vector3(0, 0, 0), Vector3(4, 4, 4))
+	)
+	_expect_empty(
+		failures,
+		"store before reconfigure",
+		service.store_finalized_region(bundle, [descriptor])
+	)
 	_expect_equal(failures, "cache populated before reconfigure", service.cached_region_count(), 1)
+	_expect_equal(
+		failures,
+		"surface descriptor populated before reconfigure",
+		service.query_surface_entrances(AABB(Vector3(-1, -1, -1), Vector3(8, 8, 8))).size(),
+		1
+	)
 
 	_expect_empty(failures, "second configure", service.configure(second_context))
 	_expect_equal(failures, "configure clears cache", service.cached_region_count(), 0)
@@ -34,6 +54,11 @@ static func _test_configure_clears_cache(failures: Array[String]) -> void:
 		failures,
 		"configure clears address lookup",
 		not service.has_region(StableAddress.underground_region(0, 0))
+	)
+	_expect_true(
+		failures,
+		"configure clears surface descriptor store",
+		service.query_surface_entrances(AABB(Vector3(-1, -1, -1), Vector3(8, 8, 8))).is_empty()
 	)
 	_expect_equal(failures, "configure replaces context", service.generation_context, second_context)
 
@@ -166,6 +191,127 @@ static func _test_cache_order_does_not_rekey_regions(failures: Array[String]) ->
 	_expect_equal(failures, "reverse-order cache count", second_service.cached_region_count(), 2)
 
 
+static func _test_surface_descriptor_registration_query_and_order(failures: Array[String]) -> void:
+	var service = WorldDefinitionService.new()
+	_expect_empty(failures, "surface registration configure", service.configure(WorldGenerationContext.new(80808)))
+
+	var bundle = _bundle_for_region(1, 2)
+	var region_a_id: String = bundle.region_definition.stable_id
+	var region_b_id: String = _region_id_for(-3, 7)
+	var near_z = _descriptor(
+		"entrance:z",
+		region_a_id,
+		AABB(Vector3(0, 0, 0), Vector3(4, 4, 4))
+	)
+	var near_a = _descriptor(
+		"entrance:a",
+		region_b_id,
+		AABB(Vector3(6, 0, 0), Vector3(4, 4, 4))
+	)
+	var far_m = _descriptor(
+		"entrance:m",
+		region_a_id,
+		AABB(Vector3(64, 0, 64), Vector3(4, 4, 4))
+	)
+
+	_expect_empty(
+		failures,
+		"finalized region registers descriptors",
+		service.store_finalized_region(bundle, [near_z, far_m])
+	)
+	_expect_empty(
+		failures,
+		"explicit descriptor registration",
+		service.store_surface_entrance_descriptors(region_b_id, [near_a])
+	)
+
+	var result: Array = service.query_surface_entrances(
+		AABB(Vector3(-1, -1, -1), Vector3(12, 8, 8))
+	)
+	_expect_equal(failures, "surface overlap filtering count", result.size(), 2)
+	if result.size() == 2:
+		_expect_equal(failures, "surface query canonical first id", result[0].entrance_id, "entrance:a")
+		_expect_equal(failures, "surface query canonical second id", result[1].entrance_id, "entrance:z")
+
+
+static func _test_surface_descriptor_membership_isolation(failures: Array[String]) -> void:
+	var service = WorldDefinitionService.new()
+	_expect_empty(failures, "surface isolation configure", service.configure(WorldGenerationContext.new(90909)))
+	var region_id: String = _region_id_for(8, -4)
+	var stored = _descriptor(
+		"entrance:stored",
+		region_id,
+		AABB(Vector3(0, 0, 0), Vector3(4, 4, 4))
+	)
+	var added_after_store = _descriptor(
+		"entrance:later",
+		region_id,
+		AABB(Vector3(0, 0, 0), Vector3(4, 4, 4))
+	)
+	var caller_array: Array = [stored]
+	_expect_empty(
+		failures,
+		"surface membership store",
+		service.store_surface_entrance_descriptors(region_id, caller_array)
+	)
+	caller_array.clear()
+	caller_array.append(added_after_store)
+
+	var result: Array = service.query_surface_entrances(
+		AABB(Vector3(-1, -1, -1), Vector3(8, 8, 8))
+	)
+	_expect_equal(failures, "stored descriptor membership isolated from caller array", result.size(), 1)
+	if result.size() == 1:
+		_expect_equal(failures, "stored descriptor membership preserved", result[0], stored)
+
+
+static func _test_empty_surface_descriptor_region_id_rejected(failures: Array[String]) -> void:
+	var service = WorldDefinitionService.new()
+	_expect_empty(failures, "empty region configure", service.configure(WorldGenerationContext.new(100100)))
+	var descriptor = _descriptor(
+		"entrance:invalid-owner",
+		"",
+		AABB(Vector3(0, 0, 0), Vector3(4, 4, 4))
+	)
+	var store_failures: Array[String] = service.store_surface_entrance_descriptors("", [descriptor])
+	_expect_contains(
+		failures,
+		"empty surface descriptor region id rejected",
+		store_failures,
+		"requires a region id"
+	)
+	_expect_true(
+		failures,
+		"rejected empty region does not populate descriptors",
+		service.query_surface_entrances(AABB(Vector3(-1, -1, -1), Vector3(8, 8, 8))).is_empty()
+	)
+
+
+static func _test_region_eviction_preserves_surface_descriptors(failures: Array[String]) -> void:
+	var service = WorldDefinitionService.new()
+	_expect_empty(failures, "eviction ownership configure", service.configure(WorldGenerationContext.new(110110)))
+	var address = StableAddress.underground_region(3, -5)
+	var bundle = _bundle_for_region(3, -5)
+	var descriptor = _descriptor(
+		"entrance:eviction",
+		bundle.region_definition.stable_id,
+		AABB(Vector3(0, 0, 0), Vector3(4, 4, 4))
+	)
+	_expect_empty(
+		failures,
+		"eviction ownership store",
+		service.store_finalized_region(bundle, [descriptor])
+	)
+	_expect_true(failures, "eviction ownership region evicts", service.evict_region(address))
+	_expect_true(failures, "eviction ownership region cache removed", not service.has_region(address))
+	var result: Array = service.query_surface_entrances(
+		AABB(Vector3(-1, -1, -1), Vector3(8, 8, 8))
+	)
+	_expect_equal(failures, "region eviction does not own surface descriptor lifecycle", result.size(), 1)
+	if result.size() == 1:
+		_expect_equal(failures, "surface descriptor survives region eviction", result[0], descriptor)
+
+
 static func _bundle_for_region(region_x: int, region_z: int):
 	var bundle = SampleGraphFixture.build()
 	var address = StableAddress.underground_region(region_x, region_z)
@@ -173,6 +319,26 @@ static func _bundle_for_region(region_x: int, region_z: int):
 	bundle.region_definition.stable_id = StableId.from_address(address).value()
 	bundle.region_definition.region_coord = Vector2i(region_x, region_z)
 	return bundle
+
+
+static func _region_id_for(region_x: int, region_z: int) -> String:
+	return StableId.from_address(StableAddress.underground_region(region_x, region_z)).value()
+
+
+static func _descriptor(entrance_id: String, region_id: String, opening_bounds: AABB):
+	var surface_position := opening_bounds.position + opening_bounds.size * 0.5
+	return SurfaceEntranceDescriptor.new(
+		entrance_id,
+		region_id,
+		surface_position,
+		Vector3(0, -1, 0),
+		opening_bounds,
+		1.0,
+		"network:" + entrance_id,
+		"node:" + entrance_id,
+		surface_position + Vector3(0, -8, 0),
+		"gradual"
+	)
 
 
 static func _expect_contains(
