@@ -3,6 +3,7 @@ class_name UnderworldCaveVoxelFieldRequest
 
 const Plan := preload("res://worldgen/geometry/geometry_cell_plan.gd")
 const Config := preload("res://worldgen/geometry/geometry_cell_partition_config.gd")
+const Provenance := preload("res://worldgen/pipeline/generation_provenance.gd")
 
 var geometry_cell_plan
 var partition_configuration
@@ -23,7 +24,7 @@ func _init(
 	iso_level = iso_level_value
 	input_fingerprint = ""
 	if geometry_cell_plan != null and geometry_cell_plan is Plan:
-		input_fingerprint = geometry_cell_plan.fingerprint
+		input_fingerprint = geometry_cell_plan.fingerprint + ":" + (provenance.fingerprint if provenance != null and provenance is Provenance else "")
 
 
 func validate() -> Array[String]:
@@ -39,4 +40,8 @@ func validate() -> Array[String]:
 			failures.append("CaveVoxelFieldRequest plan has no cell address")
 		if geometry_cell_plan.fingerprint.is_empty():
 			failures.append("CaveVoxelFieldRequest plan fingerprint is empty")
+	if provenance == null or not (provenance is Provenance):
+		failures.append("CaveVoxelFieldRequest requires GenerationProvenance")
+	elif provenance.fingerprint.is_empty():
+		failures.append("CaveVoxelFieldRequest provenance fingerprint is empty")
 	return failures

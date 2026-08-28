@@ -7,12 +7,16 @@ const Config := preload("res://worldgen/geometry/geometry_cell_partition_config.
 const Request := preload("res://worldgen/geometry/cave_voxel_field_request.gd")
 const Mesher := preload("res://worldgen/geometry/cave_voxel_mesher.gd")
 const Boundary := preload("res://worldgen/geometry/cave_mesh_realization_boundary.gd")
+const Context := preload("res://worldgen/pipeline/world_generation_context.gd")
+const MeshData := preload("res://worldgen/geometry/cave_mesh_data.gd")
 
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
 	var plan := _plan(Vector3i(-1, 0, 2), ["chamber", "tunnel"])
-	var result = Mesher.build(Request.new(plan, Config.new()))
+	var context := Context.new(7)
+	var provenance = context.make_provenance("geometry_cell_partition", "region", "address", ["plan-source"])
+	var result = Mesher.build(Request.new(plan, Config.new(), provenance))
 	_expect(failures, "chamber and tunnel mesh build succeeds", result.success)
 	if result.success:
 		_expect(failures, "mesh buffers have triangles", result.data.indices.size() > 0)
@@ -20,17 +24,23 @@ static func run() -> Array[String]:
 		_expect(failures, "mesh normals are unit and finite", _valid_normals(result.data))
 		var realized: Dictionary = Boundary.realize_main_thread(result.data)
 		_expect(failures, "main-thread realization succeeds", realized.success)
-		_expect(failures, "realization preserves source fingerprint", realized.input_fingerprint == plan.fingerprint)
+		_expect(failures, "realization preserves source fingerprint", realized.input_fingerprint == plan.fingerprint + ":" + provenance.fingerprint)
 		_expect(failures, "stale realization is rejected", not Boundary.realize_main_thread(result.data, null, "stale").success)
+		var changed_vertices: PackedVector3Array = result.data.vertices.duplicate()
+		changed_vertices[0] += Vector3(0.25, 0.0, 0.0)
+		var changed_data = MeshData.new(plan.cell_address, result.data.world_bounds, changed_vertices, result.data.indices, result.data.normals, result.data.uvs, result.data.source_descriptor_ids, result.data.source_fragment_ids, result.data.input_fingerprint, result.data.metrics)
+		_expect(failures, "mesh output identity includes buffer contents", changed_data.output_fingerprint != result.data.output_fingerprint)
 	var reversed := _plan(Vector3i(-1, 0, 2), ["tunnel", "chamber"])
-	var second = Mesher.build(Request.new(reversed, Config.new()))
+	var second = Mesher.build(Request.new(reversed, Config.new(), provenance))
 	_expect(failures, "reordered fragments build", second.success)
 	if second.success:
 		_expect(failures, "reordered fragments reproduce buffers", second.data.fingerprint == result.data.fingerprint)
 	var malformed := _plan(Vector3i.ZERO, ["chamber"])
 	malformed.fragments.append(null)
-	var bad = Mesher.build(Request.new(malformed, Config.new()))
+	var bad = Mesher.build(Request.new(malformed, Config.new(), provenance))
 	_expect(failures, "malformed fragment is rejected", not bad.success)
+	var missing_provenance = Mesher.build(Request.new(plan, Config.new()))
+	_expect(failures, "missing mesh provenance is rejected", not missing_provenance.success)
 	return failures
 
 

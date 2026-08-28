@@ -24,6 +24,8 @@ func validate() -> Array[String]:
 	var failures: Array[String] = []
 	if WorldIdScript.parse(world_id) == null:
 		failures.append("WorldGenerationContext has invalid WorldId")
+	elif world_id != WorldIdScript.from_seed(world_seed).value():
+		failures.append("WorldGenerationContext world_id does not match world_seed")
 	if generator_manifest == null:
 		failures.append("WorldGenerationContext is missing GeneratorManifest")
 		return failures
@@ -71,3 +73,9 @@ func validate_provenance(provenance, expected_stage: String = "", expected_regio
 	if provenance.stage_contract_revision != stage_contract_revision(provenance.stage_id):
 		failures.append("GenerationProvenance stage revision does not match current manifest")
 	return failures
+
+
+func validate_required_sources(provenance, expected_sources: Array) -> Array[String]:
+	if provenance == null or not (provenance is Provenance):
+		return ["GenerationProvenance is missing or has the wrong type"]
+	return provenance.requires_sources(expected_sources)

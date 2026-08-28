@@ -2,255 +2,290 @@
 
 Status: **repository-governance contract**
 
-This document defines the enforceable merge gate for `main`. It complements the pull task board; it does not replace architecture review, dependency review, or exact-head validation.
+This document defines the intended enforceable merge gate for `main`. It complements the pull task board; it does not replace architecture review, dependency review, protected-roadmap ownership, or exact-head validation.
 
-## Why this exists
-
-`main` has repeatedly advanced while PM/dependency acceptance was still unresolved because draft state, comments, and green CI were process signals rather than repository-enforced rules.
-
-The target policy is:
+## Target policy
 
 ```text
 required broad CI
-+ trusted exact-head PM acceptance status
++ exact-current-head PM acceptance
 + non-draft PR
 + pull-request-only main updates
 = merge eligible
 ```
 
-Green CI is necessary but never sufficient by itself.
+Green CI is necessary but is never sufficient by itself.
 
-## Required status contexts
+## Required `main` status contexts
 
-The active `main` ruleset must require these exact contexts:
+Configure the final `main` ruleset to require these exact contexts:
 
-| Owner | Required context |
+| Source | Required context |
 | --- | --- |
 | Character Validation | `Godot character contracts` |
 | Repository Layout Validation | `Repository layout contracts` |
-| Deterministic Worldgen aggregate | `Godot headless contracts` |
-| Trusted PM Acceptance Gate | `PM acceptance` |
+| Deterministic Worldgen Validation aggregate | `Godot headless contracts` |
+| trusted PM acceptance publisher | `PM acceptance` |
 
-The ten deterministic Worldgen matrix jobs are intentionally **not** configured individually as required branch contexts. They are covered by the stable aggregate `Godot headless contracts` job.
+The deterministic workflow intentionally runs ten matrix shards, but the ruleset must require the single stable aggregate context `Godot headless contracts`, not shard-specific names.
 
-## Deterministic Worldgen stable aggregate
+## Deterministic aggregate contract
 
-`.github/workflows/foundation-validation.yml` preserves the full deterministic campaign as ten 25-seed shards starting at:
-
-```text
-1, 26, 51, 76, 101, 126, 151, 176, 201, 226
-```
-
-Each shard still runs fast foundation contracts and 25 seeds across a 3×3 region neighborhood. Together they preserve the complete 250-seed × 9-region = 2,250-case campaign.
-
-After every shard completes, one `if: always()` aggregator job named exactly:
+`.github/workflows/foundation-validation.yml` preserves the complete deterministic campaign as ten shards:
 
 ```text
-Godot headless contracts
+start seeds: 1, 26, 51, 76, 101, 126, 151, 176, 201, 226
+count per shard: 25
+region radius: 1 = 3x3 regions
 ```
 
-runs and succeeds only when the matrix result is `success`. A cancelled or failed shard therefore makes the stable aggregate fail. The ruleset must require the stable aggregate, not shard-specific names.
+Together this remains 250 seeds × 9 regions = 2,250 seed/region cases.
 
-## Trusted PM acceptance authority
+Each shard runs the fast deterministic contracts followed by its 25-seed batch. A final job:
 
-The machine-readable PM signal is the pull-request label:
+```text
+name: Godot headless contracts
+needs: deterministic-foundation
+if: always()
+```
+
+fails unless the matrix result is `success`. This gives branch rules one stable context while preserving all ten shards and fail-fast-disabled campaign execution.
+
+Do not replace the aggregate by requiring every generated matrix check name manually.
+
+## PM acceptance signal
+
+The operational review signal is the pull-request label:
 
 ```text
 pm-accepted
 ```
 
-The label alone is **not** the required branch context. The required context is the commit status:
+The authoritative status context is:
 
 ```text
 PM acceptance
 ```
 
-That status is published by `.github/workflows/pm-acceptance-gate.yml` from `pull_request_target` default-branch workflow code.
+That status is published directly to the exact current PR-head SHA by trusted `pull_request_target` workflow code from the default branch.
 
-### Security boundary
+The workflow does not use a PR-head `pull_request` job as the authority for this status.
 
-The trusted workflow:
+## Trusted exact-head publisher
 
-- runs only from the base/default-branch workflow definition;
-- never checks out the pull request;
-- never executes PR-controlled scripts, Actions, or repository code;
-- uses only GitHub API metadata for the PR;
-- has narrowly scoped `pull-requests: read`, `issues: write`, and `statuses: write` permissions;
-- publishes `PM acceptance` directly onto `${{ github.event.pull_request.head.sha }}`.
+`.github/workflows/pm-acceptance-gate.yml` runs only on `pull_request_target` for:
 
-A pull request that edits the gate workflow cannot redefine the authoritative gate used for its own event. Until new gate code is merged to the default branch, the existing default-branch version remains authoritative.
+- opened;
+- reopened;
+- synchronize;
+- labeled;
+- unlabeled;
+- ready-for-review;
+- converted-to-draft.
 
-### Event coverage
+The trusted job:
 
-The trusted workflow reevaluates on:
+1. never checks out the PR branch;
+2. never executes scripts, actions, binaries, or other content from the PR branch;
+3. queries the live pull request through the GitHub API;
+4. resolves the live head SHA, draft state, and current labels;
+5. ignores an event whose payload head has already been superseded by a newer live head;
+6. publishes the `PM acceptance` commit status directly to the exact live PR-head SHA using `statuses: write`;
+7. on `synchronize`, removes stale `pm-accepted` and publishes failure immediately in the same trusted job.
+
+The job uses only narrowly scoped permissions:
 
 ```text
-opened
-reopened
-synchronize
-labeled
-unlabeled
-ready_for_review
-converted_to_draft
+pull-requests: read
+issues: write
+statuses: write
 ```
 
-For non-`synchronize` events, it queries the live PR from GitHub and succeeds only when:
+There is no checkout step.
 
-1. the event head is still the exact current PR head;
-2. the PR is not a draft; and
-3. `pm-accepted` is present on the live PR.
+## Why the superseded-event guard matters
 
-Otherwise it publishes a failing `PM acceptance` status to the event head.
+GitHub events and workflow jobs can complete out of order.
 
-## Exact-head invalidation
+For example, a delayed `labeled` event for SHA A must never be able to observe newer SHA B and publish acceptance for B.
 
-A PM acceptance applies only to one exact PR head.
+The workflow therefore compares:
 
-On every `synchronize` event, the trusted workflow does all of the following in the same job:
+```text
+event head SHA
+vs.
+live PR head SHA from GitHub API
+```
 
-1. reads the current PR metadata from GitHub;
-2. removes stale `pm-accepted` when present;
-3. verifies the stale label is absent;
-4. directly publishes `PM acceptance = failure` on the synchronized event head;
-5. does not rely on label removal recursively triggering a second workflow.
+If they differ, that run performs no acceptance mutation and publishes no status. The event belonging to the newer head evaluates that head independently.
 
-A later explicit `pm-accepted` label event is required before the new current head can receive `PM acceptance = success`.
+This prevents an older event from granting acceptance to a commit it did not represent.
 
-If another commit races ahead while an older event is running, the older event can only publish failure for its own superseded SHA. The newer synchronize event owns invalidation for the newer head.
+## Synchronize invalidation
+
+For accepted SHA A followed by a pushed SHA B:
+
+```text
+SHA A + pm-accepted + PM acceptance=success
+        ↓
+new commit SHA B pushed
+        ↓
+pull_request_target:synchronize
+        ↓
+trusted default-branch workflow queries live SHA B
+        ↓
+stale pm-accepted removed if present
+        ↓
+PM acceptance=failure published directly to SHA B
+        ↓
+PM reviews SHA B and explicitly re-adds pm-accepted
+        ↓
+pull_request_target:labeled evaluates SHA B
+        ↓
+PM acceptance may become success
+```
+
+The synchronize run does not depend on its label removal recursively starting another workflow. Failure is published directly in the same trusted job.
+
+If GitHub suppresses workflow recursion for changes made with `GITHUB_TOKEN`, the invariant still holds.
+
+## Pass/fail semantics
+
+`PM acceptance` is `failure` when:
+
+- the current PR is draft;
+- `pm-accepted` is absent; or
+- the event is `synchronize`, because a new commit invalidates prior acceptance.
+
+It is `success` only when the exact evaluated head is current, the PR is non-draft, and `pm-accepted` is present.
+
+Workers must never add `pm-accepted` to their own handoff PR merely to make the gate green.
 
 ## Same-principal limitation
 
-The current PM and worker automation operate through the same GitHub owner/app permission surface.
+The current repository workflow uses the same GitHub owner/app permission surface for PM and worker activity.
 
-Therefore `pm-accepted` is an **operational workflow-control signal**, not cryptographic actor separation. Any actor with equivalent issue-write permission could theoretically add the label.
+Therefore `pm-accepted` is an **operational workflow-control signal**, not cryptographic actor separation.
 
-This gate still prevents ordinary automation from treating broad CI alone as merge authorization and exact-head invalidation is machine-enforced. A stronger actor-separated PM authorization boundary requires a distinct GitHub account, App, team, environment, or another owner-controlled mechanism with separate credentials.
+A principal with equivalent repository write permissions could theoretically apply the label or alter repository settings. This mechanism protects normal process from accidental or automation-driven merges that treat green CI as sufficient; it is not designed to resist a malicious repository owner or another equally privileged principal.
 
-Do not describe the current label model as stronger than that.
+True actor-separated PM authorization requires a distinct account, GitHub App, team, environment approval, or another owner-controlled credential ordinary workers do not possess.
+
+Do not claim stronger security than the current identity model provides.
+
+## Why no required approving review yet
+
+GitHub does not allow a user to approve their own PR. Requiring one approving review while PM and workers share the same principal would deadlock self-authored PRs rather than create meaningful separation.
+
+The initial enforceable design therefore combines required checks with the operational `pm-accepted` signal.
 
 ## Required `main` ruleset
 
-Create one active branch ruleset targeting only the default branch / `refs/heads/main`.
+Create one active branch ruleset targeting the default branch / `refs/heads/main`.
 
-```text
-Ruleset name: Underworld main merge gate
-Enforcement: Active
-Target: default branch (`main`)
-```
+Required behavior:
 
-### Pull request requirement
+- require a pull request before merging;
+- require `Godot character contracts`;
+- require `Repository layout contracts`;
+- require `Godot headless contracts`;
+- require `PM acceptance`;
+- block ordinary direct pushes to `main`;
+- block force pushes;
+- block branch deletion;
+- do not require a self-approval rule that the current same-account workflow cannot satisfy;
+- do not give ordinary workers or Actions workflows permanent bypass rights.
 
-Enable **Require a pull request before merging**.
+Required checks must apply to the current PR head. Success on an older SHA is not acceptance for a newer SHA.
 
-Do not require one approving review while PM and workers use the same GitHub identity; GitHub self-approval would deadlock that workflow. The four required status contexts are the first enforceable landing gate.
+## Draft behavior
 
-### Required status checks
+Draft PRs cannot satisfy `PM acceptance`, even if the label is present.
 
-Require exactly:
-
-```text
-Godot character contracts
-Repository layout contracts
-Godot headless contracts
-PM acceptance
-```
-
-Verify the names from live GitHub output before saving the ruleset. Do not configure obsolete matrix names or workflow display names by assumption.
-
-### Direct update restrictions
-
-Normal project workflow must not be able to push directly to `main`, force-push `main`, or delete `main`. All routine changes land through pull requests.
-
-### Bypass policy
-
-There is no routine bypass actor. Do not grant blanket bypass to all admins, all Actions workflows, or ordinary worker automation merely for convenience.
+GitHub also treats draft PRs as non-merge-ready. The explicit failing PM status makes the repository's own acceptance state visible and machine-readable.
 
 ## Acceptance lifecycle
-
-Normal flow:
 
 ```text
 worker opens draft PR
         ↓
-required broad CI runs
+broad CI runs
         ↓
-worker handoff reaches REVIEW
+worker hands off to REVIEW
         ↓
-PM reviews scope/dependencies/current exact head
+PM reviews exact current head
         ↓
 PR becomes non-draft when appropriate
         ↓
 PM adds pm-accepted
         ↓
-trusted default-branch workflow publishes
-PM acceptance = success on exact head
+trusted default-branch workflow publishes PM acceptance=success on that SHA
         ↓
-all four required contexts green
+all other required contexts green on same SHA
         ↓
-merge allowed by active ruleset
+active ruleset allows merge
 ```
 
-Any new commit returns to:
-
-```text
-PM acceptance = failure
-pm-accepted removed
-```
-
-until the new head is reviewed and accepted again.
+Any new implementation commit returns the current head to failure until it is explicitly reviewed again.
 
 ## Emergency bypass policy
 
-Emergency bypass is intentionally explicit and temporary:
+There is no routine bypass actor.
 
-1. repository owner identifies an actual repository-blocking emergency;
-2. record the reason and affected PR/commit on the PM board;
-3. temporarily alter/disable only the minimum ruleset behavior required;
-4. perform the emergency action;
-5. restore the active ruleset immediately;
-6. verify `main` protection again and record the result.
+For an actual repository-blocking emergency:
 
-Emergency bypass is not for skipping dependency order, architecture review, long CI, or a failed PM gate.
+1. record the reason and affected PR/commit on the PM board;
+2. temporarily alter or bypass only the minimum rule necessary using repository-owner authority;
+3. perform the emergency action;
+4. restore the active ruleset immediately;
+5. verify `main` is protected again;
+6. record the verification result.
 
-## Required verification campaign
+Emergency bypass is not for skipping architecture review, dependency order, deterministic validation, PM acceptance, or protected-roadmap ownership.
 
-After the support workflows are merged and the owner activates the ruleset, use a disposable documentation-only PR to verify behavior.
+## Required post-merge verification campaign
+
+The trusted `pull_request_target` workflow cannot be fully exercised until its workflow file exists on the default branch, because GitHub deliberately executes the default-branch version of that workflow.
+
+After the support PR is accepted and merged, and after the repository owner activates the ruleset, use a throwaway documentation-only PR.
 
 ### Case 1 — broad CI green, no PM acceptance
 
 Expected:
 
 ```text
-Character = green
-Repository Layout = green
-Godot headless contracts = green
-PM acceptance = failing
-merge = blocked
-```
-
-### Case 2 — accepted current exact head
-
-Mark the PR non-draft and add `pm-accepted`.
-
-Expected:
-
-```text
-PM acceptance = success on exact current head
-all required contexts = green
-merge = allowed
-```
-
-### Case 3 — accepted SHA A, then push SHA B
-
-Expected immediately for SHA B:
-
-```text
-pm-accepted removed
+broad CI = green
 PM acceptance = failure
 merge = blocked
 ```
 
-Re-acceptance is required for SHA B.
+### Case 2 — accepted current head
+
+Make the PR non-draft and apply `pm-accepted` after review.
+
+Expected:
+
+```text
+Godot character contracts = success
+Repository layout contracts = success
+Godot headless contracts = success
+PM acceptance = success
+merge = allowed
+```
+
+### Case 3 — exact-head invalidation
+
+From accepted SHA A, push harmless SHA B.
+
+Expected:
+
+```text
+trusted synchronize job removes stale pm-accepted
+PM acceptance=failure is published directly to SHA B
+SHA B remains blocked until explicit re-acceptance
+```
+
+Also confirm no delayed event for SHA A can publish acceptance to SHA B.
 
 ### Case 4 — draft transition
 
@@ -263,21 +298,7 @@ PM acceptance = failure
 merge = blocked
 ```
 
-### Case 5 — Worldgen shard failure
-
-Use a controlled validation fixture or intentionally failing temporary test branch that causes one deterministic shard to fail.
-
-Expected:
-
-```text
-one or more shard jobs = failure
-Godot headless contracts = failure
-merge = blocked
-```
-
-Do not weaken or skip the remaining shards to make this test convenient.
-
-### Case 6 — direct push
+### Case 5 — direct push
 
 Attempt a harmless normal direct push to `main` without administrative bypass.
 
@@ -288,47 +309,61 @@ push rejected
 main unchanged
 ```
 
-## Connector/tooling limitation
+### Case 6 — deterministic aggregate
 
-The current ChatGPT GitHub connector can read repository rulesets/protection but does not expose a write action for creating or changing them.
+Confirm all ten deterministic shard jobs execute and the exact stable context:
 
-Therefore #118 has two phases:
+```text
+Godot headless contracts
+```
 
-1. **in-repository support** — trusted PM status workflow, stable Worldgen aggregate, and this exact ruleset contract;
-2. **repository-owner activation** — create/enable the GitHub ruleset and run the end-to-end campaign.
+is successful only when the matrix succeeds.
 
-The task is not DONE until phase 2 is verified.
+## Connector limitation
 
-## Ruleset activation checklist
+The connected GitHub tooling can read rulesets/protection but does not expose a write action for creating or activating the repository ruleset.
 
-- [ ] `Underworld main merge gate` exists and is Active
-- [ ] target is only default branch / `main`
-- [ ] pull request required before merge
-- [ ] direct push restricted for normal workflow
-- [ ] force push blocked
-- [ ] branch deletion blocked
-- [ ] `Godot character contracts` required
-- [ ] `Repository layout contracts` required
-- [ ] `Godot headless contracts` required
-- [ ] `PM acceptance` required
-- [ ] required context names match live GitHub output
-- [ ] no ordinary worker/Actions bypass actor configured
-- [ ] no self-approval requirement deadlocks the current same-account model
-- [ ] exact-head invalidation campaign passed
-- [ ] failed-shard aggregate campaign passed
-- [ ] direct-push rejection verified
+Therefore #118 has two layers:
+
+1. in-repository workflow/documentation support;
+2. repository-owner ruleset activation plus the verification campaign above.
+
+Until owner activation is complete, policy remains operational rather than technically enforced on `main`.
+
+## Owner activation checklist
+
+- [ ] `Underworld main merge gate` exists and is Active;
+- [ ] target is only default branch / `main`;
+- [ ] pull request required before merge;
+- [ ] direct push restricted for normal workflow;
+- [ ] force push blocked;
+- [ ] branch deletion blocked;
+- [ ] `Godot character contracts` required;
+- [ ] `Repository layout contracts` required;
+- [ ] stable `Godot headless contracts` aggregate required;
+- [ ] `PM acceptance` required;
+- [ ] no ordinary Actions/worker bypass configured;
+- [ ] no self-approval rule that deadlocks the same-account workflow;
+- [ ] synchronize invalidation observed successfully;
+- [ ] superseded-event guard observed or inspected;
+- [ ] draft behavior observed;
+- [ ] direct-push rejection observed.
 
 ## Invariants
 
-1. Broad CI is necessary but never sufficient by itself.
-2. Authoritative PM status comes from trusted default-branch code, not candidate PR workflow code.
-3. `PM acceptance` is bound to one exact PR-head SHA.
-4. Every synchronize invalidates acceptance directly and removes stale acceptance metadata.
-5. Draft PRs cannot satisfy PM acceptance.
-6. The stable Worldgen aggregate covers the complete ten-shard deterministic campaign.
-7. Normal updates to `main` use pull requests only.
-8. Force pushes and branch deletion are not normal workflow.
-9. Same-principal label control is operational, not cryptographic actor separation.
-10. Emergency bypass is temporary, explicit, and recorded.
-11. Ruleset enforcement never authorizes violating architecture/dependency contracts.
-12. No protected MAP-009→MAP-015 production/runtime behavior is changed by this governance mechanism.
+1. Green CI is necessary but never sufficient by itself.
+2. `PM acceptance` is published only by trusted default-branch `pull_request_target` code.
+3. The trusted workflow never checks out or executes PR-controlled code.
+4. Draft PRs cannot satisfy PM acceptance.
+5. Every current-head synchronize invalidates prior PM acceptance directly.
+6. Stale label removal does not depend on recursive workflow events.
+7. Superseded old-head events cannot publish success onto a newer head.
+8. Re-acceptance is explicit and applies only to the then-current head.
+9. `pm-accepted` is an operational signal, not actor-separated security under the current same-principal model.
+10. The full deterministic campaign remains ten 25-seed shards covering 2,250 seed/region cases.
+11. `Godot headless contracts` is the stable aggregate required by branch rules.
+12. Normal updates to `main` use pull requests only.
+13. Force pushes and branch deletion are not normal workflow.
+14. Emergency bypass is temporary, explicit, narrow, and recorded.
+15. Governance rules never authorize violating architecture, dependency, or protected-roadmap contracts.
+16. No MAP-009→MAP-015 production/runtime contract is changed by this governance mechanism.

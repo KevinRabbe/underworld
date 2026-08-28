@@ -29,6 +29,8 @@ func _init(
 
 func validate() -> Array[String]:
 	var failures: Array[String] = []
+	if world_context == null:
+		failures.append("GeometryCellPartitionRequest requires WorldGenerationContext")
 	if cave_geometry_result == null or not (cave_geometry_result is CaveGeometryResult):
 		failures.append("GeometryCellPartitionRequest requires CaveGeometryResult")
 	if region_finalization_result == null or not (region_finalization_result is FinalizationResult):
