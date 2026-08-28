@@ -7,6 +7,7 @@ var node_candidate_metadata: Array = []
 var boundary_candidate_metadata: Array = []
 var topology_metrics: Dictionary = {}
 var fingerprint: String = ""
+var provenance
 
 
 func _init(
@@ -15,7 +16,8 @@ func _init(
 	node_candidate_metadata_value: Array,
 	boundary_candidate_metadata_value: Array,
 	topology_metrics_value: Dictionary,
-	fingerprint_value: String
+	fingerprint_value: String,
+	provenance_value = null
 ) -> void:
 	bundle = bundle_value
 	network_candidate_metadata = network_candidate_metadata_value.duplicate(true)
@@ -23,3 +25,4 @@ func _init(
 	boundary_candidate_metadata = boundary_candidate_metadata_value.duplicate(true)
 	topology_metrics = topology_metrics_value.duplicate(true)
 	fingerprint = fingerprint_value
+	provenance = provenance_value

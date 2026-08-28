@@ -26,6 +26,18 @@ static func generate(context, region_plan, connectivity_result):
 	var failures: Array[String] = context.validate()
 	if not failures.is_empty():
 		return StageResult.fail("special_location_hooks", failures)
+	failures.append_array(context.validate_provenance(
+		region_plan.provenance, "macro_region", region_plan.stable_id
+	))
+	failures.append_array(context.validate_provenance(
+		connectivity_result.provenance, "secondary_connectivity", region_plan.stable_id
+	))
+	if connectivity_result.provenance != null and region_plan.provenance != null:
+		failures.append_array(context.validate_required_sources(
+			connectivity_result.provenance, [region_plan.provenance.fingerprint]
+		))
+	if not failures.is_empty():
+		return StageResult.fail("special_location_hooks", failures)
 	var source = connectivity_result.bundle
 	if source.region_definition.stable_id != region_plan.stable_id:
 		return StageResult.fail("special_location_hooks", ["Hook inputs refer to different regions"])
@@ -137,10 +149,17 @@ static func generate(context, region_plan, connectivity_result):
 		"candidates": metadata,
 		"metrics": metrics,
 	})
+	var provenance = context.make_provenance(
+		"special_location_hooks",
+		region.stable_id,
+		region.stable_address.canonical_text(),
+		[region_plan.provenance.fingerprint, connectivity_result.provenance.fingerprint]
+	)
 	return StageResult.ok(
 		"special_location_hooks",
-		HookResult.new(bundle, metadata, metrics, fingerprint),
-		fingerprint
+		HookResult.new(bundle, metadata, metrics, fingerprint, provenance),
+		fingerprint,
+		provenance
 	)
 
 

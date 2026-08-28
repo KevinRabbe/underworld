@@ -5,6 +5,7 @@ var player
 var survival
 var combat_resolver
 var encounter_controller
+var underworld_runtime
 var settings
 var label: Label
 var crosshair: Label
@@ -19,7 +20,8 @@ func configure(
 	world_settings,
 	survival_controller = null,
 	combat_resolver_node = null,
-	encounter_controller_node = null
+	encounter_controller_node = null,
+	underworld_runtime_node = null
 ) -> void:
 	world = world_node
 	player = player_node
@@ -27,6 +29,7 @@ func configure(
 	survival = survival_controller
 	combat_resolver = combat_resolver_node
 	encounter_controller = encounter_controller_node
+	underworld_runtime = underworld_runtime_node
 
 
 func _ready() -> void:
@@ -125,6 +128,35 @@ func _refresh_text() -> void:
 		active_enemies = encounter_controller.get_active_enemy_count()
 	if combat_resolver != null:
 		combat_message = combat_resolver.get_last_combat_message()
+	var underworld_text := ""
+	if underworld_runtime != null and underworld_runtime.streamer != null:
+		var underworld_cell = underworld_runtime.streamer.observer_cell(position)
+		var underworld_key := "gcell1:r1:x%d:y%d:z%d" % [underworld_cell.x, underworld_cell.y, underworld_cell.z]
+		var underworld_record = underworld_runtime.streamer.records.get(underworld_key)
+		var tier_text := "none"
+		if underworld_record != null:
+			var ready: Array[String] = []
+			for tier in underworld_record.readiness.keys():
+				if bool(underworld_record.readiness[tier]): ready.append(str(tier))
+			ready.sort()
+			tier_text = ",".join(ready) if not ready.is_empty() else "none"
+		var entrance_text := "none"
+		if not underworld_runtime.gates.is_empty():
+			var entrance_ids: Array[String] = []
+			for value in underworld_runtime.gates.keys(): entrance_ids.append(str(value))
+			entrance_ids.sort()
+			entrance_text = entrance_ids[0]
+		underworld_text = (
+			"Underworld: %s\n" % entrance_text
+			+ "  Cell: %s   Tiers: %s   Owners: %d   Queued: %d   Stale: %d\n" % [
+				underworld_key, tier_text, underworld_runtime.streamer.active_owner_count(),
+				underworld_runtime.streamer.queued_count, underworld_runtime.streamer.stale_result_count
+			]
+			+ "  World: %s   Manifest: %s\n" % [underworld_runtime.world_id, underworld_runtime.generator_manifest_id]
+			+ "  Source: %s\n" % (underworld_record.source_fingerprint if underworld_record != null else "none")
+			+ "  Provenance: %s\n" % (underworld_record.provenance_fingerprint if underworld_record != null else "none")
+			+ "  Bootstrap: %s\n" % underworld_runtime.last_bootstrap_fingerprint
+		)
 
 	label.text = (
 		"UNDERWORLD — prototype character foundation\n"
@@ -160,6 +192,7 @@ func _refresh_text() -> void:
 			stamina_current, stamina_max, action_state
 		]
 		+ "Worker: %s\n" % worker_state
+		+ underworld_text
 		+ "Chunk CPU: %.2f ms   Max: %.2f ms\n" % [
 			world.get_last_generation_ms(), world.get_max_generation_ms()
 		]
