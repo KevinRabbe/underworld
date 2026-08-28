@@ -79,6 +79,16 @@ static func run() -> Report:
 		var fixture_record = streamer.records.get(address.canonical_text())
 		fixture_released = fixture_released and fixture_record != null and fixture_record.demands.is_empty() and fixture_record.state == "dormant"
 	_expect(report, "fixture cells release after normal demand transition", fixture_released)
+	var movement := Streamer.new("world:movement", "manifest:movement")
+	movement.collision_activate_radius = 1
+	movement.collision_release_radius = 2
+	var next_cell := Address.new(Vector3i(1, 0, 0))
+	movement.update_observer(Vector3(0.25, 0.25, 0.25), "movement")
+	var next_record = movement.records.get(next_cell.canonical_text())
+	_expect(report, "normal observer prefetches next-cell collision", next_record != null and next_record.demand_count("collision") == 1)
+	movement.update_observer(Vector3(32.25, 0.25, 0.25), "movement")
+	_expect(report, "normal movement keeps destination collision demanded", next_record.demand_count("collision") == 1)
+	report.events.append("movement-collision|" + str(next_record.demand_count("collision")))
 	report.events.append("gate|" + str(gate.is_open())); report.fingerprint = _fingerprint({"counters": report.counters, "events": report.events}); return report
 
 static func _fingerprint(value: Dictionary) -> String:
