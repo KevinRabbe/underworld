@@ -166,7 +166,9 @@ static func _stage_summaries(cases: Array) -> Dictionary:
 
 
 static func _summarize_samples(samples: Array[float]) -> Dictionary:
-	var sorted: Array[float] = samples.duplicate()
+	var sorted: Array[float] = []
+	for value in samples:
+		sorted.append(float(value))
 	sorted.sort()
 	var total: float = 0.0
 	for value in sorted:
@@ -179,10 +181,11 @@ static func _summarize_samples(samples: Array[float]) -> Dictionary:
 	if count > 0:
 		minimum = sorted[0]
 		maximum = sorted[count - 1]
+		var midpoint: int = floori(float(count) / 2.0)
 		if count % 2 == 1:
-			median = sorted[count / 2]
+			median = sorted[midpoint]
 		else:
-			median = (sorted[count / 2 - 1] + sorted[count / 2]) * 0.5
+			median = (sorted[midpoint - 1] + sorted[midpoint]) * 0.5
 		var p95_index: int = clampi(int(ceil(float(count) * 0.95)) - 1, 0, count - 1)
 		p95 = sorted[p95_index]
 	return {
