@@ -1,0 +1,92 @@
+{
+  "policy_version": 1,
+  "canonical_roots": [
+    ".github",
+    "addons",
+    "app",
+    "content",
+    "core",
+    "docs",
+    "gameplay",
+    "presentation",
+    "tests",
+    "third_party",
+    "tools",
+    "world",
+    "worldgen"
+  ],
+  "legacy_allowed_roots": [
+    "combat",
+    "data"
+  ],
+  "forbidden_roots": [
+    "game",
+    "player",
+    "scenes",
+    "scripts"
+  ],
+  "retired_resource_prefixes": [
+    "res://game/",
+    "res://player/"
+  ],
+  "dependency_rules": [
+    {
+      "name": "production_must_not_import_tests_or_tools",
+      "source_roots": [
+        "app",
+        "content",
+        "core",
+        "gameplay",
+        "presentation",
+        "world",
+        "worldgen",
+        "combat",
+        "data"
+      ],
+      "forbidden_prefixes": [
+        "res://tests/",
+        "res://tools/"
+      ]
+    },
+    {
+      "name": "worldgen_must_remain_runtime_independent",
+      "source_roots": [
+        "worldgen"
+      ],
+      "forbidden_prefixes": [
+        "res://app/",
+        "res://combat/",
+        "res://data/",
+        "res://gameplay/",
+        "res://presentation/",
+        "res://world/"
+      ]
+    },
+    {
+      "name": "core_must_not_depend_on_concrete_domains",
+      "source_roots": [
+        "core"
+      ],
+      "forbidden_prefixes": [
+        "res://app/",
+        "res://combat/",
+        "res://content/",
+        "res://data/",
+        "res://gameplay/",
+        "res://presentation/",
+        "res://world/",
+        "res://worldgen/"
+      ]
+    }
+  ],
+  "dependency_exceptions": [
+    {
+      "rule": "worldgen_must_remain_runtime_independent",
+      "source_path": "worldgen/migration/legacy_v2_surface_resolver.gd",
+      "allowed_prefixes": [
+        "res://world/"
+      ],
+      "reason": "Frozen prototype-v2 save migration must replay the legacy surface generators exactly."
+    }
+  ]
+}

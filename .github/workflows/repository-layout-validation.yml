@@ -1,0 +1,24 @@
+name: Repository Layout Validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'architecture/*'
+
+permissions:
+  contents: read
+
+jobs:
+  repository-layout:
+    name: Repository layout contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run repository layout contracts
+        run: python3 tools/ci/validate_repository_layout.py
