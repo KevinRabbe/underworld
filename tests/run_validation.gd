@@ -7,9 +7,11 @@ const LegacyV2MigrationTests := preload("res://tests/foundation/test_legacy_v2_m
 const ServiceBoundaryTests := preload("res://tests/foundation/test_service_boundaries.gd")
 const PrimaryTopologyTests := preload("res://tests/topology/test_primary_topology.gd")
 const EntranceGenerationTests := preload("res://tests/entrances/test_entrance_generation.gd")
+const SecondaryConnectivityTests := preload("res://tests/connectivity/test_secondary_connectivity.gd")
 const ReproductionProbe := preload("res://worldgen/validation/reproduction_probe.gd")
 const TopologyProbe := preload("res://worldgen/validation/topology_reproduction_probe.gd")
 const EntranceProbe := preload("res://worldgen/validation/entrance_reproduction_probe.gd")
+const ConnectivityProbe := preload("res://worldgen/validation/secondary_connectivity_reproduction_probe.gd")
 const SampleGraphFixture := preload("res://tests/foundation/sample_graph_fixture.gd")
 const GraphValidator := preload("res://worldgen/validation/graph_validator.gd")
 const GraphCanonicalizer := preload("res://worldgen/validation/graph_canonicalizer.gd")
@@ -30,6 +32,8 @@ func _init() -> void:
 			_run_topology_reproduction(args)
 		"entrance-repro":
 			_run_entrance_reproduction(args)
+		"connectivity-repro":
+			_run_connectivity_reproduction(args)
 		"batch":
 			_run_batch(args)
 		_:
@@ -47,6 +51,7 @@ func _run_fast() -> void:
 	failures.append_array(ServiceBoundaryTests.run())
 	failures.append_array(PrimaryTopologyTests.run())
 	failures.append_array(EntranceGenerationTests.run())
+	failures.append_array(SecondaryConnectivityTests.run())
 	_finish("fast", failures)
 
 
@@ -111,12 +116,12 @@ func _run_batch(args: Dictionary) -> void:
 		for region_z in range(-region_radius, region_radius + 1):
 			for region_x in range(-region_radius, region_radius + 1):
 				var region := Vector2i(region_x, region_z)
-				var first: Dictionary = EntranceProbe.build(world_seed, region)
-				var second: Dictionary = EntranceProbe.build(world_seed, region)
+				var first: Dictionary = ConnectivityProbe.build(world_seed, region)
+				var second: Dictionary = ConnectivityProbe.build(world_seed, region)
 				cases += 1
 				if not bool(first.get("success", false)) or not bool(second.get("success", false)):
 					failures.append(
-						"topology probe failed seed=%d region=(%d,%d) first=%s second=%s" % [
+						"connectivity probe failed seed=%d region=(%d,%d) first=%s second=%s" % [
 							world_seed,
 							region_x,
 							region_z,
@@ -127,7 +132,7 @@ func _run_batch(args: Dictionary) -> void:
 					continue
 				if first["fingerprint"] != second["fingerprint"]:
 					failures.append(
-						"non-deterministic probe seed=%d region=(%d,%d) first=%s second=%s" % [
+						"non-deterministic connectivity seed=%d region=(%d,%d) first=%s second=%s" % [
 							world_seed,
 							region_x,
 							region_z,
@@ -204,6 +209,34 @@ func _run_entrance_reproduction(args: Dictionary) -> void:
 	quit(0)
 
 
+func _run_connectivity_reproduction(args: Dictionary) -> void:
+	var world_seed: int = int(args.get("seed", "12345"))
+	var region_x: int = int(args.get("region-x", "0"))
+	var region_z: int = int(args.get("region-z", "0"))
+	var expected: String = str(args.get("expect", ""))
+	var probe: Dictionary = ConnectivityProbe.build(world_seed, Vector2i(region_x, region_z))
+	if not bool(probe.get("success", false)):
+		printerr("[CONNECTIVITY REPRO] FAIL stage=%s diagnostics=%s" % [
+			probe.get("stage", "unknown"), probe.get("diagnostics", []),
+		])
+		quit(1)
+		return
+	var fingerprint: String = str(probe["fingerprint"])
+	print("[CONNECTIVITY REPRO]")
+	print("  seed=%d" % world_seed)
+	print("  region=(%d,%d)" % [region_x, region_z])
+	print("  macro_fingerprint=%s" % probe["macro_fingerprint"])
+	print("  topology_fingerprint=%s" % probe["topology_fingerprint"])
+	print("  entrance_fingerprint=%s" % probe["entrance_fingerprint"])
+	print("  connectivity_fingerprint=%s" % fingerprint)
+	print("  metrics=%s" % probe["metrics"])
+	if not expected.is_empty() and fingerprint != expected:
+		printerr("[CONNECTIVITY REPRO] expected=%s actual=%s" % [expected, fingerprint])
+		quit(1)
+		return
+	quit(0)
+
+
 func _finish(label: String, failures: Array[String]) -> void:
 	if failures.is_empty():
 		print("[VALIDATION] PASS %s" % label)
@@ -238,4 +271,5 @@ static func _print_usage() -> void:
 	print("  --mode=repro --seed=12345 --region-x=0 --region-z=0 [--expect=probe-sha256:...]")
 	print("  --mode=topology-repro --seed=12345 --region-x=0 --region-z=0 [--expect=topology-sha256:...]")
 	print("  --mode=entrance-repro --seed=12345 --region-x=0 --region-z=0 [--expect=entrances-sha256:...]")
+	print("  --mode=connectivity-repro --seed=12345 --region-x=0 --region-z=0 [--expect=connectivity-sha256:...]")
 	print("  --mode=batch --start-seed=1 --count=100 --region-radius=1")
