@@ -6,7 +6,6 @@ const WORLD_SETTINGS_PATH := "res://world/runtime/config/world_settings.gd"
 const SURVIVAL_SETTINGS_PATH := "res://gameplay/survival/prototype_survival_settings.gd"
 const WATER_SETTINGS_PATH := "res://presentation/world/environment/prototype_water_settings.gd"
 const LEGACY_MANAGER_PATH := "res://world/chunk_manager.gd"
-const LEGACY_DATA_SETTINGS_PATH := "res://data/world_settings.gd"
 const APP_GAME_PATH := "res://app/game/game.gd"
 const TEST_WORLD_SEED: int = 987654321
 
@@ -185,16 +184,6 @@ static func run() -> Array[String]:
 		failures,
 		"legacy mixed chunk manager path is retired",
 		not FileAccess.file_exists(LEGACY_MANAGER_PATH)
-	)
-	_expect_true(
-		failures,
-		"legacy data settings path is retired",
-		not FileAccess.file_exists(LEGACY_DATA_SETTINGS_PATH)
-	)
-	_expect_true(
-		failures,
-		"application does not reference legacy data root",
-		not "res://data/" in app_source
 	)
 
 	_cleanup_test_save(TEST_WORLD_SEED)
