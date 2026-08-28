@@ -140,7 +140,10 @@ func update_player_position(position: Vector3) -> void:
 				break
 		for address in handoff.cell_addresses:
 			if near:
-				streamer.set_demand(address, "entrance:" + entrance_id, ["definition", "fragment_plan", "voxel_geometry", "render", "collision"], handoff.fingerprint, "")
+				# The entrance pin established the accepted surface-plan/partition
+				# identity. Refresh only desired tiers here; never relabel a live
+				# cell with the handoff fingerprint and invalidate its generation.
+				streamer.set_demand(address, "entrance:" + entrance_id, ["definition", "fragment_plan", "voxel_geometry", "render", "collision"])
 			else:
 				streamer.release_entrance(address, entrance_id)
 		_update_gates()

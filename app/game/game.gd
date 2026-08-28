@@ -12,6 +12,7 @@ const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
 const UnderworldRuntimeControllerScript := preload("res://worldgen/runtime/underworld_cave_runtime_controller.gd")
 const WorldIdScript := preload("res://worldgen/identity/world_id.gd")
 const GeneratorManifestScript := preload("res://worldgen/versioning/generator_manifest.gd")
+const Map015FixtureScript := preload("res://worldgen/validation/map015_fixture.gd")
 
 var world_settings
 var survival_settings
@@ -53,8 +54,8 @@ func _create_underworld_runtime() -> void:
 	var manifest_id: String = GeneratorManifestScript.foundation_default().manifest_id()
 	underworld_runtime.configure(world_id, manifest_id, player)
 	if enable_map015_fixture:
-		var entrance_id: String = "sid1:sa1|2:ug|6:region|1:0|1:0|8:entrance|4:slot|1:0"
-		var diagnostics: Array[String] = underworld_runtime.bootstrap_fixture(1, Vector2i.ZERO, entrance_id)
+		var entrance_id: String = Map015FixtureScript.ENTRANCE_ID
+		var diagnostics: Array[String] = underworld_runtime.bootstrap_fixture(1, Map015FixtureScript.REGION, entrance_id)
 		if diagnostics.is_empty():
 			spawn_xz = underworld_runtime.last_bootstrap_surface_position
 			world.generate_initial(spawn_xz)
@@ -180,6 +181,7 @@ func _create_debug_hud() -> void:
 		world_settings,
 		survival,
 		combat_resolver,
-		encounter_controller
+		encounter_controller,
+		underworld_runtime
 	)
 	add_child(debug_hud)

@@ -6,7 +6,7 @@ const Macro := preload("res://worldgen/underworld/macro_region_generator.gd")
 const Topology := preload("res://worldgen/underworld/primary_topology_generator.gd")
 const Entrances := preload("res://worldgen/underworld/entrance_generator.gd")
 const SurfacePlan := preload("res://worldgen/surface/surface_entrance_chunk_plan.gd")
-const GeometryProbe := preload("res://worldgen/validation/cave_geometry_reproduction_probe.gd")
+const GeometryProbe := preload("res://worldgen/validation/geometry_cell_reproduction_probe.gd")
 
 func _init() -> void:
 	for seed in range(1, 257):
@@ -28,8 +28,16 @@ func _init() -> void:
 					if not plan_result.success: continue
 					var plan = plan_result.data
 					var geometry = GeometryProbe.build(seed, region)
-					var nonempty := int(geometry.get("metrics", {}).get("chamber_count", 0)) + int(geometry.get("metrics", {}).get("tunnel_count", 0)) > 0
-					if plan.underground_cells.size() >= 4 and nonempty:
-						print("MAP015 fixture seed=%d region=(%d,%d) entrance=%s entrance_fp=%s geometry_fp=%s cells=%d" % [seed, x, z, descriptor.entrance_id, entrances.fingerprint, geometry.get("fingerprint", ""), plan.underground_cells.size()])
+					var usable_cells: Dictionary = {}
+					for summary in geometry.get("cell_plans", []):
+						if int(summary.get("fragment_count", 0)) > 0:
+							usable_cells[str(summary.get("cell", ""))] = true
+					var all_cells_usable := true
+					for cell in plan.underground_cells:
+						if not usable_cells.has(cell.canonical_text()):
+							all_cells_usable = false
+							break
+					if plan.underground_cells.size() >= 4 and all_cells_usable:
+						print("MAP015 fixture seed=%d region=(%d,%d) entrance=%s entrance_fp=%s geometry_fp=%s cells=%d" % [seed, x, z, descriptor.entrance_id, entrances.fingerprint, geometry.get("geometry_fingerprint", geometry.get("fingerprint", "")), plan.underground_cells.size()])
 						quit(0); return
 	print("MAP015 fixture not found"); quit(1)
