@@ -2,7 +2,8 @@ extends CanvasLayer
 
 var world
 var player
-var combat
+var combat_resolver
+var encounter_controller
 var settings: UnderworldWorldSettings
 var label: Label
 var crosshair: Label
@@ -15,12 +16,14 @@ func configure(
 	world_node,
 	player_node,
 	world_settings: UnderworldWorldSettings,
-	combat_node = null
+	combat_resolver_node = null,
+	encounter_controller_node = null
 ) -> void:
 	world = world_node
 	player = player_node
 	settings = world_settings
-	combat = combat_node
+	combat_resolver = combat_resolver_node
+	encounter_controller = encounter_controller_node
 
 
 func _ready() -> void:
@@ -106,9 +109,10 @@ func _refresh_text() -> void:
 	var action_state: String = player.get_action_state_name()
 	var active_enemies: int = 0
 	var combat_message: String = "Combat unavailable"
-	if combat != null:
-		active_enemies = combat.get_active_enemy_count()
-		combat_message = combat.get_last_combat_message()
+	if encounter_controller != null:
+		active_enemies = encounter_controller.get_active_enemy_count()
+	if combat_resolver != null:
+		combat_message = combat_resolver.get_last_combat_message()
 
 	label.text = (
 		"UNDERWORLD — prototype character foundation\n"

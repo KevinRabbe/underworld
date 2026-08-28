@@ -3,13 +3,15 @@ extends Node3D
 const WorldSettingsScript := preload("res://data/world_settings.gd")
 const ChunkManagerScript := preload("res://world/chunk_manager.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
-const CombatManagerScript := preload("res://combat/combat_manager.gd")
+const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
+const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
 const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
 
 var settings: UnderworldWorldSettings
 var world
 var player
-var combat
+var combat_resolver
+var encounter_controller
 var debug_hud
 var water_surface: MeshInstance3D
 var spawn_xz: Vector3 = Vector3.ZERO
@@ -106,15 +108,26 @@ func _create_player() -> void:
 
 
 func _create_combat() -> void:
-	combat = CombatManagerScript.new()
-	combat.name = "Combat"
-	add_child(combat)
-	combat.configure(world, player, settings)
-	player.attack_requested.connect(combat.try_attack)
+	combat_resolver = CombatResolverScript.new()
+	combat_resolver.name = "CombatResolver"
+	add_child(combat_resolver)
+	combat_resolver.configure(player)
+	player.attack_requested.connect(combat_resolver.try_attack)
+
+	encounter_controller = BurrowerEncounterControllerScript.new()
+	encounter_controller.name = "BurrowerEncounters"
+	add_child(encounter_controller)
+	encounter_controller.configure(world, player, settings)
 
 
 func _create_debug_hud() -> void:
 	debug_hud = DebugHudScript.new()
 	debug_hud.name = "DebugHUD"
-	debug_hud.configure(world, player, settings, combat)
+	debug_hud.configure(
+		world,
+		player,
+		settings,
+		combat_resolver,
+		encounter_controller
+	)
 	add_child(debug_hud)

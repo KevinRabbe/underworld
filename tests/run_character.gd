@@ -6,6 +6,7 @@ const PlayerIntegrationTests := preload("res://tests/character/test_player_integ
 const BurrowerDefenseTests := preload("res://tests/character/test_burrower_defense.gd")
 const AttackContractTests := preload("res://tests/character/test_attack_contract.gd")
 const InputBufferTests := preload("res://tests/character/test_input_buffer.gd")
+const CombatArchitectureTests := preload("res://tests/character/test_combat_architecture.gd")
 
 
 func _init() -> void:
@@ -22,6 +23,7 @@ func _run_tests() -> void:
 	failures.append_array(BurrowerDefenseTests.run(self))
 	failures.append_array(AttackContractTests.run(self))
 	failures.append_array(InputBufferTests.run(self))
+	failures.append_array(CombatArchitectureTests.run())
 
 	if failures.is_empty():
 		print("[CHARACTER VALIDATION] PASS")
@@ -31,6 +33,7 @@ func _run_tests() -> void:
 		print("  Burrower parry stagger / dodge / block distinction passed")
 		print("  phased attack definition / startup-active-recovery contracts passed")
 		print("  one-slot expiring combat input buffer contracts passed")
+		print("  combat resolution / encounter ownership split contracts passed")
 		quit(0)
 		return
 
