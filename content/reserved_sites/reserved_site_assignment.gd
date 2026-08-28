@@ -9,7 +9,7 @@ var site_bounds: AABB
 var content_id: String
 var categories: Array[String] = []
 var rulebook_revision: int
-var definition_revision: int
+var content_schema_revision: int
 var assignment_fingerprint: String
 var definition_metadata: Dictionary
 
@@ -20,7 +20,7 @@ func _init(
 	content_id_value: String,
 	categories_value: Array,
 	rulebook_revision_value: int,
-	definition_revision_value: int,
+	content_schema_revision_value: int,
 	assignment_fingerprint_value: String,
 	definition_metadata_value: Dictionary = {}
 ) -> void:
@@ -31,7 +31,7 @@ func _init(
 		categories.append(str(value))
 	categories.sort()
 	rulebook_revision = rulebook_revision_value
-	definition_revision = definition_revision_value
+	content_schema_revision = content_schema_revision_value
 	assignment_fingerprint = assignment_fingerprint_value
 	definition_metadata = definition_metadata_value.duplicate(true)
 
@@ -43,7 +43,7 @@ func canonical_data() -> Dictionary:
 		"content_id": content_id,
 		"categories": categories.duplicate(),
 		"rulebook_revision": rulebook_revision,
-		"definition_revision": definition_revision,
+		"content_schema_revision": content_schema_revision,
 		"assignment_fingerprint": assignment_fingerprint,
 		"definition_metadata": definition_metadata.duplicate(true),
 	}

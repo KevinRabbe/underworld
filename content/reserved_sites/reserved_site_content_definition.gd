@@ -1,30 +1,33 @@
-extends RefCounted
+extends "res://core/content/registry/content_definition.gd"
 class_name ReservedSiteContentDefinition
 
 ## Authored semantic content eligible for assignment to a deterministic reserved site.
-## This definition deliberately owns no procedural StableId and imports no worldgen code.
+## Generic semantic identity/revision behavior comes from the accepted ContentDefinition contract.
+## This subtype owns only reserved-site-specific classification, eligibility and weighting.
 
-var content_id: String
+const ContentId := preload("res://core/content/identity/content_id.gd")
+
 var categories: Array[String] = []
 var eligible_hook_categories: Array[String] = []
-var selection_weight: int
-var definition_revision: int
-var minimum_profile: Vector3
-var maximum_profile: Vector3
-var metadata: Dictionary
+var selection_weight: int = 1
+var minimum_profile: Vector3 = Vector3.ZERO
+var maximum_profile: Vector3 = Vector3.ONE
+var metadata: Dictionary = {}
 
 
 func _init(
-	content_id_value: String,
+	content_id_value: String = "",
 	categories_value: Array = [],
 	eligible_hook_categories_value: Array = [],
 	selection_weight_value: int = 1,
-	definition_revision_value: int = 1,
+	schema_revision_value: int = 1,
 	minimum_profile_value: Vector3 = Vector3.ZERO,
 	maximum_profile_value: Vector3 = Vector3.ONE,
 	metadata_value: Dictionary = {}
 ) -> void:
 	content_id = content_id_value
+	definition_family = ContentId.family_of(content_id_value)
+	schema_revision = schema_revision_value
 	for value in categories_value:
 		categories.append(str(value))
 	categories.sort()
@@ -35,22 +38,23 @@ func _init(
 			eligible_hook_categories.append(str(value))
 	eligible_hook_categories.sort()
 	selection_weight = selection_weight_value
-	definition_revision = definition_revision_value
 	minimum_profile = minimum_profile_value
 	maximum_profile = maximum_profile_value
 	metadata = metadata_value.duplicate(true)
 
 
-func validate() -> Array[String]:
-	var failures: Array[String] = []
-	if not _valid_semantic_id(content_id):
-		failures.append("Reserved-site content_id must be a lowercase dot-separated semantic content ID")
+func validate_definition() -> Array[String]:
+	var failures: Array[String] = super.validate_definition()
 	if categories.is_empty():
 		failures.append("Reserved-site content definition requires at least one category.* schema ID")
 	var seen_categories: Dictionary = {}
 	for category in categories:
-		if not category.begins_with("category.") or not _valid_semantic_id(category):
-			failures.append("Invalid reserved-site category: %s" % category)
+		if (
+			category != category.strip_edges()
+			or not category.begins_with("category.")
+			or category.length() <= "category.".length()
+		):
+			failures.append("Invalid reserved-site category reference: %s" % category)
 		elif seen_categories.has(category):
 			failures.append("Duplicate reserved-site category: %s" % category)
 		seen_categories[category] = true
@@ -58,15 +62,13 @@ func validate() -> Array[String]:
 		failures.append("Reserved-site content definition requires eligible hook categories")
 	var seen_hooks: Dictionary = {}
 	for hook_category in eligible_hook_categories:
-		if not _valid_token(hook_category):
+		if not _valid_hook_category(hook_category):
 			failures.append("Invalid reserved-site hook category: %s" % hook_category)
 		elif seen_hooks.has(hook_category):
 			failures.append("Duplicate reserved-site hook category: %s" % hook_category)
 		seen_hooks[hook_category] = true
 	if selection_weight <= 0:
 		failures.append("Reserved-site selection_weight must be positive")
-	if definition_revision <= 0:
-		failures.append("Reserved-site definition_revision must be positive")
 	if not _profile_in_unit_range(minimum_profile) or not _profile_in_unit_range(maximum_profile):
 		failures.append("Reserved-site profile eligibility must stay within [0, 1]")
 	if (
@@ -98,39 +100,19 @@ func matches_hook(hook) -> bool:
 	)
 
 
-func canonical_data() -> Dictionary:
-	return {
-		"content_id": content_id,
-		"categories": categories.duplicate(),
-		"eligible_hook_categories": eligible_hook_categories.duplicate(),
-		"selection_weight": selection_weight,
-		"definition_revision": definition_revision,
-		"minimum_profile": minimum_profile,
-		"maximum_profile": maximum_profile,
-		"metadata": metadata.duplicate(true),
-	}
+func canonical_descriptor() -> Dictionary:
+	var descriptor: Dictionary = super.canonical_descriptor()
+	descriptor["categories"] = categories.duplicate()
+	descriptor["eligible_hook_categories"] = eligible_hook_categories.duplicate()
+	descriptor["selection_weight"] = selection_weight
+	descriptor["minimum_profile"] = minimum_profile
+	descriptor["maximum_profile"] = maximum_profile
+	descriptor["metadata"] = metadata.duplicate(true)
+	return descriptor
 
 
-static func _valid_semantic_id(value: String) -> bool:
-	if value.is_empty() or value != value.to_lower() or value.find(".") <= 0:
-		return false
-	if value.begins_with(".") or value.ends_with(".") or value.contains(".."):
-		return false
-	for index in range(value.length()):
-		var codepoint: int = value.unicode_at(index)
-		var valid := (
-			(codepoint >= 97 and codepoint <= 122)
-			or (codepoint >= 48 and codepoint <= 57)
-			or codepoint == 95
-			or codepoint == 46
-		)
-		if not valid:
-			return false
-	return true
-
-
-static func _valid_token(value: String) -> bool:
-	if value.is_empty() or value != value.to_lower():
+static func _valid_hook_category(value: String) -> bool:
+	if value.is_empty() or value != value.to_lower() or value != value.strip_edges():
 		return false
 	for index in range(value.length()):
 		var codepoint: int = value.unicode_at(index)

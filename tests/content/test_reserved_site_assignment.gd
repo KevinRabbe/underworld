@@ -2,17 +2,53 @@ extends RefCounted
 
 const StableAddress := preload("res://worldgen/identity/stable_address.gd")
 const HookDefinition := preload("res://worldgen/graph/special_location_hook_definition.gd")
+const ContentId := preload("res://core/content/identity/content_id.gd")
+const ContentDefinition := preload("res://core/content/registry/content_definition.gd")
+const ContentRegistry := preload("res://core/content/registry/content_registry.gd")
 const Definition := preload("res://content/reserved_sites/reserved_site_content_definition.gd")
 const Service := preload("res://content/reserved_sites/reserved_site_assignment_service.gd")
 
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_definition_uses_core_content_contract(failures)
 	_test_assignment_preserves_procedural_site(failures)
 	_test_assignment_order_independence(failures)
 	_test_ineligible_and_invalid_definitions_fail(failures)
 	_test_rulebook_revision_participates_in_assignment_identity(failures)
 	return failures
+
+
+static func _test_definition_uses_core_content_contract(failures: Array[String]) -> void:
+	var definition = Definition.new(
+		"structure.underworld.registry_probe",
+		["category.structure", "category.structure.underworld", "category.structure.underworld.landmark"],
+		["reserved_site"],
+		2,
+		3
+	)
+	_expect_true(failures, "reserved-site definition inherits ContentDefinition", definition is ContentDefinition)
+	_expect_true(failures, "reserved-site content ID uses canonical ContentId", ContentId.is_valid(definition.content_id))
+	_expect_equal(failures, "definition family derives from canonical content ID", definition.definition_family, "structure")
+	_expect_equal(failures, "reserved-site definition uses inherited schema revision", definition.schema_revision, 3)
+	_expect_true(failures, "reserved-site subtype validates through ContentDefinition", definition.validate_definition().is_empty())
+
+	var registry = ContentRegistry.new()
+	var registry_failures: Array[String] = registry.index_definitions([definition])
+	_expect_true(failures, "ContentRegistry accepts reserved-site ContentDefinition subtype", registry_failures.is_empty())
+	var resolved: Dictionary = registry.resolve(definition.content_id, "structure")
+	_expect_true(
+		failures,
+		"ContentRegistry resolves reserved-site subtype without diagnostics",
+		resolved.get("diagnostics", []).is_empty()
+	)
+	_expect_true(failures, "ContentRegistry preserves reserved-site definition object", resolved.get("definition") == definition)
+	var manifest: Array[Dictionary] = registry.canonical_manifest()
+	_expect_equal(failures, "ContentRegistry manifest contains reserved-site subtype", manifest.size(), 1)
+	if not manifest.is_empty():
+		_expect_equal(failures, "manifest keeps inherited family", manifest[0].get("definition_family"), "structure")
+		_expect_equal(failures, "manifest keeps inherited schema revision", manifest[0].get("schema_revision"), 3)
+		_expect_true(failures, "manifest extends with reserved-site categories", manifest[0].has("categories"))
 
 
 static func _test_assignment_preserves_procedural_site(failures: Array[String]) -> void:
@@ -44,6 +80,7 @@ static func _test_assignment_preserves_procedural_site(failures: Array[String]) 
 	_expect_equal(failures, "procedural StableId is preserved", assignment.site_stable_id, hook.stable_id)
 	_expect_equal(failures, "reserved bounds are preserved", assignment.site_bounds, hook.reserved_bounds)
 	_expect_equal(failures, "semantic content ID is assigned", assignment.content_id, definition.content_id)
+	_expect_equal(failures, "assignment snapshots canonical schema revision", assignment.content_schema_revision, definition.schema_revision)
 	_expect_true(failures, "semantic ID remains distinct from procedural StableId", assignment.content_id != assignment.site_stable_id)
 	_expect_true(failures, "assignment fingerprint has its own namespace", assignment.assignment_fingerprint.begins_with("rsa1:"))
 	_expect_true(
@@ -116,8 +153,23 @@ static func _test_ineligible_and_invalid_definitions_fail(failures: Array[String
 	_expect_true(failures, "invalid semantic content ID is rejected", not bool(invalid_result.get("success", true)))
 	_expect_true(
 		failures,
-		"invalid semantic ID reports the content contract",
-		_contains_diagnostic(invalid_result.get("diagnostics", []), "semantic content ID")
+		"invalid semantic ID reports canonical ContentId diagnostics",
+		_contains_diagnostic(invalid_result.get("diagnostics", []), "content id")
+	)
+
+	var invalid_revision = Definition.new(
+		"structure.underworld.invalid_revision",
+		["category.structure"],
+		["reserved_site"],
+		1,
+		0
+	)
+	var revision_result: Dictionary = Service.assign([hook], [invalid_revision], 1)
+	_expect_true(failures, "invalid schema revision is rejected by ContentDefinition", not bool(revision_result.get("success", true)))
+	_expect_true(
+		failures,
+		"invalid schema revision reports canonical ContentDefinition diagnostics",
+		_contains_diagnostic(revision_result.get("diagnostics", []), "schema revision")
 	)
 
 	var profile_limited = Definition.new(
@@ -153,6 +205,7 @@ static func _test_rulebook_revision_participates_in_assignment_identity(failures
 	_expect_equal(failures, "rulebook revision does not alter site StableId", first.site_stable_id, second.site_stable_id)
 	_expect_equal(failures, "rulebook revision does not alter reserved bounds", first.site_bounds, second.site_bounds)
 	_expect_equal(failures, "rulebook revision does not alter semantic definition", first.content_id, second.content_id)
+	_expect_equal(failures, "rulebook revision does not alter content schema revision", first.content_schema_revision, second.content_schema_revision)
 	_expect_true(
 		failures,
 		"rulebook revision changes compatibility-sensitive assignment fingerprint",

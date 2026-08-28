@@ -18,9 +18,12 @@ static func assign(hooks: Array, definitions: Array, rulebook_revision: int = 1)
 		if definition == null or not (definition is Definition):
 			failures.append("Reserved-site assignment received a non-definition value")
 			continue
-		var definition_failures: Array[String] = definition.validate()
+		var definition_failures: Array[String] = definition.validate_definition()
+		var label: String = str(definition.content_id)
+		if label.is_empty():
+			label = "<unidentified-definition>"
 		for failure in definition_failures:
-			failures.append("%s: %s" % [definition.content_id, failure])
+			failures.append("%s: %s" % [label, failure])
 		if definition_ids.has(definition.content_id):
 			failures.append("Duplicate reserved-site content_id: %s" % definition.content_id)
 		else:
@@ -76,7 +79,7 @@ static func assign(hooks: Array, definitions: Array, rulebook_revision: int = 1)
 			selected.content_id,
 			selected.categories,
 			rulebook_revision,
-			selected.definition_revision,
+			selected.schema_revision,
 			fingerprint,
 			selected.metadata
 		))
@@ -100,7 +103,7 @@ static func _select_definition(hook, eligible: Array, rulebook_revision: int):
 		total_weight += definition.selection_weight
 		manifest_parts.append("%s@%d#%d" % [
 			definition.content_id,
-			definition.definition_revision,
+			definition.schema_revision,
 			definition.selection_weight,
 		])
 	if total_weight <= 0:
@@ -124,12 +127,12 @@ static func _select_definition(hook, eligible: Array, rulebook_revision: int):
 static func _assignment_fingerprint(hook, definition, rulebook_revision: int) -> String:
 	var categories: Array[String] = definition.categories.duplicate()
 	categories.sort()
-	var payload := "reserved-site-assignment-v%d|rules=%d|site=%s|content=%s|definition=%d|categories=%s" % [
+	var payload := "reserved-site-assignment-v%d|rules=%d|site=%s|content=%s|schema=%d|categories=%s" % [
 		CONTRACT_REVISION,
 		rulebook_revision,
 		str(hook.get("stable_id")),
 		definition.content_id,
-		definition.definition_revision,
+		definition.schema_revision,
 		_join_strings(categories, ","),
 	]
 	return "rsa1:" + payload.sha256_text()
