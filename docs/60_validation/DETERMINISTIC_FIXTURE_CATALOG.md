@@ -1,0 +1,66 @@
+# Deterministic Fixture and Reproducibility Catalog
+
+Status: **QA-002 baseline catalog**
+
+This document inventories committed deterministic fixtures and reproducible selector sets. It complements [VALIDATION_MATRIX.md](VALIDATION_MATRIX.md): the matrix explains **how and when to run validation**, while this catalog records **which stable fixtures exist, what invariant each fixture targets, and whether the fixture is accepted-main or only preserved elsewhere**.
+
+The catalog is descriptive. It does not create new acceptance gates, seeds, expected fingerprints, or MAP-016 requirements.
+
+## Status legend
+
+- **accepted-main** — fixture or corpus exists in current accepted repository code and may be used as evidence for its owning suite;
+- **post-M2 pending** — selector is intentionally reserved for a post-M2 acceptance activity and must not be treated as already accepted evidence;
+- **audit-branch-only** — fixture exists only on a preserved/reopened audit branch or historical PR, not on current `main`.
+
+## Catalog
+
+| Fixture / corpus | Status | Exact selector or synthetic input | Owning contract and intended invariant | Authoritative source | Manual reproduction |
+| --- | --- | --- | --- | --- | --- |
+| MAP-015 committed traversal fixture | **accepted-main** | seed `1`; region `(0, -1)`; entrance slot `2`; entrance StableId `sid1:sa1|2:ug|6:region|1:0|2:-1|8:entrance|4:slot|1:2` | MAP-015 surface-to-underworld bootstrap: the selected entrance must retain its accepted entrance/geometry fingerprints, produce at least four prefetched geometry cells, open the traversal gate only with ready collision, traverse underground cells and reproduce the same bootstrap fingerprint on rebuild | [`worldgen/validation/map015_fixture.gd`](../../worldgen/validation/map015_fixture.gd), [`tests/geometry/test_map015_fixture.gd`](../../tests/geometry/test_map015_fixture.gd), [`tests/geometry/test_map015_runtime_bootstrap.gd`](../../tests/geometry/test_map015_runtime_bootstrap.gd) | **Yes for deterministic CLI reproduction.** Visual/manual traversal acceptance is separately reserved by OBS-001; see the MAP-016 relationship below. |
+| MAP-014 runtime integration harness | **accepted-main** | synthetic entrance `entrance:fixture`; surface descriptor at `(8, 8, 8)` with underground connection `(40, -8, 8)`; source `fixture:map014:A`; provenance `provenance:map014:A` | MAP-014 runtime integration: real surface-plan handoff drives multi-cell demand; reversed completions are accepted only when authoritative; stale/undemanded results are rejected; realized collision gates traversal; release and movement hysteresis remain deterministic | [`worldgen/runtime/runtime_validation_harness.gd`](../../worldgen/runtime/runtime_validation_harness.gd), [MAP-014 / #45](https://github.com/KevinRabbe/underworld/issues/45) | **Yes, automated.** `tests/run_validation.gd` exposes the `runtime-harness` mode. It is not a visual traversal fixture. |
+| MAP-014 positive movement route | **accepted-main** | observer `(0.25, 0.25, 0.25)` then `(32.25, 0.25, 0.25)`; destination geometry cell `(1, 0, 0)` | Normal observer movement must prefetch and retain destination-cell collision through the configured activation/release hysteresis | [`worldgen/runtime/runtime_validation_harness.gd`](../../worldgen/runtime/runtime_validation_harness.gd) | **Automated only.** Use the owning runtime harness rather than copying the route into production/manual code. |
+| MAP-014 negative-coordinate route check | **accepted-main** | observer `(-32.25, 0.25, -32.25)` must map to geometry cell `(-2, 0, -2)` | Negative world coordinates must floor/map to canonical negative geometry-cell ownership rather than truncate toward zero | [`worldgen/runtime/runtime_validation_harness.gd`](../../worldgen/runtime/runtime_validation_harness.gd) | **Automated only.** Safe as a deterministic diagnostic through the runtime harness. |
+| Runtime-cell lifecycle rejection fixture | **accepted-main** | primary cell `(-2, 3, -4)`; negative observer `(-64.1, 96.0, -128.1)` -> `(-3, 3, -5)`; additional cells `(4, 0, 0)`, `(3, 0, 0)`, `(0, 0, 0)` | Generation changes, stale results, wrong source fingerprints, undemanded tiers, release/pin ownership, reconfiguration invalidation, idempotent polling, and render/geometry hysteresis must fail or transition deterministically | [`tests/geometry/test_runtime_cell_lifecycle.gd`](../../tests/geometry/test_runtime_cell_lifecycle.gd) | **Automated only.** These are synthetic lifecycle unit fixtures embedded in the fast suite, not a world-navigation route. |
+| Boundary-spanning surface entrance | **accepted-main** | entrance `entrance:test` at `(-2, 8, -2)` with opening AABB origin `(-6, 0, -6)`, size `(8, 4, 8)`; adjacent chunks start at `(-16, 0, -16)` and `(0, 0, -16)` | Neighboring surface chunks must derive the same immediate underground demand for one opening, and rebuilding/reordering must preserve fingerprints | [`tests/geometry/test_surface_entrance_integration.gd`](../../tests/geometry/test_surface_entrance_integration.gd) | **Automated only.** Synthetic descriptor/chunk fixture. |
+| Configured cell-boundary entrance | **accepted-main** | entrance `entrance:boundary` at `(31, 8, 31)`; opening AABB origin `(30, 0, 30)`, size `(2, 2, 2)`; partition policy cell size `(16, 16, 16)`, voxel pitch `0.5`, `32` cubes/axis, halo `1` | Surface handoff must cross the configured cell boundary and include a neighbor with `x == 1` or `z == 1`; non-default partition policy must affect mapping explicitly | [`tests/geometry/test_surface_entrance_integration.gd`](../../tests/geometry/test_surface_entrance_integration.gd) | **Automated only.** Synthetic boundary fixture. |
+| Geometry-cell crossing / mirrored continuation | **accepted-main** | context seed `123`; chamber center `(32, 0, 0)`, half-extents `(4, 2, 2)` crossing cells `(0, 0, 0)` and `(1, 0, 0)` | Cross-cell fragments must expose mirrored `+x/-x` continuation and exactly one canonical owner; deliberately deleting the right-side `-x` continuation must be rejected | [`tests/geometry/test_geometry_cells.gd`](../../tests/geometry/test_geometry_cells.gd) | **Automated only.** The malformed continuation is intentionally invalid test data. |
+| Geometry-cell negative-coordinate fixture | **accepted-main** | context seed `123`; chamber center `(-33, -33, -33)`, half-extents `(4, 4, 4)` | Partitioning must represent negative cell coordinates canonically; changing from default cell policy to `(16,16,16)` / `0.5` / `32` / halo `1` must change partition identity without changing source-geometry identity | [`tests/geometry/test_geometry_cells.gd`](../../tests/geometry/test_geometry_cells.gd) | **Automated only.** Synthetic geometry descriptor. |
+| Provenance coherent negative-region fixture | **accepted-main** | seed `424242`; region `(-2, 3)` | Macro -> topology -> entrances -> connectivity -> hooks -> finalization -> geometry must carry provenance accepted by the same generation context | [`tests/foundation/test_generation_provenance.gd`](../../tests/foundation/test_generation_provenance.gd) | **Automated only.** Useful when debugging ancestry or negative-region provenance. |
+| Provenance malformed/mixed-context family | **accepted-main** | seeds `10101` and `20202` at region `(0,0)`; alternate macro manifest revision; context seed `77` mutation; exact-parent boundary seed `314159`, region `(0,0)` | Mixed seed/manifest inputs, duplicate ancestry, mutated world identity, substituted/extra parents, and non-coherent exact ancestry must fail closed | [`tests/foundation/test_generation_provenance.gd`](../../tests/foundation/test_generation_provenance.gd) | **Automated only.** These values deliberately construct invalid provenance; do not use them as authored world data. |
+| Collision/traversal-gate rejection fixture | **accepted-main** | cell `(-1, 0, -2)`; one-triangle mesh; source `plan`; provenance `prov`; stale source literal `stale`; null and wrong-type collision payloads | Collision preparation/realization must succeed for valid mesh data, stale realization identity must fail, gate must stay closed before collision readiness, and null/wrong payloads must be rejected | [`tests/geometry/test_collision_and_gate.gd`](../../tests/geometry/test_collision_and_gate.gd) | **Automated only.** Synthetic collision boundary fixture. |
+| Deterministic cave-geometry campaign | **accepted-main** | ten shards starting at seeds `1, 26, 51, 76, 101, 126, 151, 176, 201, 226`; `25` seeds/shard = seeds `1..250`; region radius `1` = all `(x,z)` combinations from `-1..1`; `250 × 9 = 2,250` cases | Every seed/region geometry probe is built twice and must succeed with identical fingerprints. The stable `Godot headless contracts` aggregate also requires the content-registry contract job | [`.github/workflows/foundation-validation.yml`](../../.github/workflows/foundation-validation.yml), [`tests/run_validation.gd`](../../tests/run_validation.gd) | **Yes, automated.** This is a campaign corpus, not one manual world fixture; use the matrix/workflow rather than hand-enumerating cases. |
+| TEST-056 seed/coordinate edge-case corpus | **audit-branch-only** | seeds `0`, `1`, `-1`, `2^62-1`, `-2^62`; regions around the `0/-1` transition and large/mixed coordinates at `±32768` | Reopened audit verifies Stage-1..4 replay, forward/reverse corpus order, and StableAddress/StableId behavior at numeric/coordinate extremes | [TEST-056 / #57](https://github.com/KevinRabbe/underworld/issues/57), historical PR #69 / branch `test/worldgen-edge-case-corpus` | **No as current-main evidence.** The audit test path is absent from current `main`; use only when explicitly refreshing/reviewing #57. |
+
+## MAP-015 and MAP-016 manual-fixture relationship
+
+MAP-016 does **not** define a new traversal selector. Its protected manual observation reuses the accepted MAP-015 fixture:
+
+- seed `1`;
+- region `(0, -1)`;
+- entrance slot `2`.
+
+[OBS-001 / #160](https://github.com/KevinRabbe/underworld/issues/160) reserves the visual route `surface -> generated opening -> several underground cells -> same entrance back out` for Codex **after MAP-016 automated acceptance is green on the exact candidate head**. General workers must not treat that blocked observation as an independent task or as current MAP-016 acceptance evidence.
+
+The committed MAP-015 fixture remains valid deterministic input before and after the representation replacement; MAP-016 is expected to change runtime mesh realization, not this fixture's semantic selector contract.
+
+## Direct reproduction entry points
+
+Only use direct fixture modes already exposed by [`tests/run_validation.gd`](../../tests/run_validation.gd). Full command/cadence ownership remains in [VALIDATION_MATRIX.md](VALIDATION_MATRIX.md).
+
+- `--mode=map015-fixture` validates the committed MAP-015 selector/fingerprints.
+- `--mode=runtime-harness` executes the accepted MAP-014 integration harness and reports its deterministic harness fingerprint/counters.
+- `--mode=batch` is the generic cave-geometry reproduction campaign entry point; CI supplies the accepted ten-shard `1..250` corpus.
+
+Synthetic fixtures such as malformed provenance, stale lifecycle results, unmirrored continuations, and invalid collision payloads are intentionally internal test constructions. They should be reproduced through their owning test suite rather than promoted into gameplay fixtures.
+
+## Classification rules for future entries
+
+Add a fixture here only when its selector or synthetic input is committed in repository source or an explicitly preserved audit branch. Record the owning contract and status instead of copying implementation logic.
+
+Do not:
+
+- invent a new seed/coordinate because it seems representative;
+- copy a historical PR selector into **accepted-main** unless the source actually exists on current `main`;
+- treat a malformed rejection fixture as valid world/content data;
+- change expected fingerprints from this catalog;
+- redefine protected MAP-016 or OBS-001 acceptance requirements here.
