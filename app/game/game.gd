@@ -9,6 +9,9 @@ const PlayerScript := preload("res://gameplay/player/player.gd")
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
 const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
+const UnderworldRuntimeControllerScript := preload("res://worldgen/runtime/underworld_cave_runtime_controller.gd")
+const WorldIdScript := preload("res://worldgen/identity/world_id.gd")
+const GeneratorManifestScript := preload("res://worldgen/versioning/generator_manifest.gd")
 
 var world_settings
 var survival_settings
@@ -20,6 +23,7 @@ var combat_resolver
 var encounter_controller
 var debug_hud
 var water_surface: MeshInstance3D
+var underworld_runtime
 var spawn_xz: Vector3 = Vector3.ZERO
 
 
@@ -27,6 +31,7 @@ func _ready() -> void:
 	_setup_environment()
 	_create_world()
 	_create_player()
+	_create_underworld_runtime()
 	_create_combat()
 	_create_debug_hud()
 
@@ -35,6 +40,17 @@ func _process(_delta: float) -> void:
 	if water_surface != null and player != null:
 		water_surface.global_position.x = player.global_position.x
 		water_surface.global_position.z = player.global_position.z
+	if underworld_runtime != null and player != null:
+		underworld_runtime.update_player_position(player.global_position)
+
+
+func _create_underworld_runtime() -> void:
+	underworld_runtime = UnderworldRuntimeControllerScript.new()
+	underworld_runtime.name = "UnderworldRuntime"
+	add_child(underworld_runtime)
+	var world_id: String = WorldIdScript.from_seed(world_settings.world_seed).value()
+	var manifest_id: String = GeneratorManifestScript.foundation_default().manifest_id()
+	underworld_runtime.configure(world_id, manifest_id, player)
 
 
 func _setup_environment() -> void:
