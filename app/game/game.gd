@@ -1,6 +1,8 @@
 extends Node3D
 
-const WorldSettingsScript := preload("res://data/world_settings.gd")
+const WorldSettingsScript := preload("res://world/runtime/config/world_settings.gd")
+const SurvivalSettingsScript := preload("res://gameplay/survival/prototype_survival_settings.gd")
+const WaterSettingsScript := preload("res://presentation/world/environment/prototype_water_settings.gd")
 const SurfaceChunkStreamerScript := preload("res://world/runtime/streaming/surface_chunk_streamer.gd")
 const PrototypeSurvivalControllerScript := preload("res://gameplay/survival/prototype_survival_controller.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
@@ -8,7 +10,9 @@ const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_r
 const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
 const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
 
-var settings
+var world_settings
+var survival_settings
+var water_settings
 var world
 var survival
 var player
@@ -55,11 +59,13 @@ func _setup_environment() -> void:
 
 
 func _create_world() -> void:
-	settings = WorldSettingsScript.new()
+	world_settings = WorldSettingsScript.new()
+	survival_settings = SurvivalSettingsScript.new()
+	water_settings = WaterSettingsScript.new()
 
 	world = SurfaceChunkStreamerScript.new()
 	world.name = "SurfaceWorld"
-	world.configure(settings)
+	world.configure(world_settings)
 	add_child(world)
 
 	# Prototype survival currently owns the version-2 save orchestration. It loads
@@ -67,12 +73,12 @@ func _create_world() -> void:
 	survival = PrototypeSurvivalControllerScript.new()
 	survival.name = "PrototypeSurvival"
 	add_child(survival)
-	survival.configure(world, settings)
+	survival.configure(world, survival_settings, world_settings.world_seed)
 
 	var preferred_spawn: Vector3 = Vector3(
-		settings.chunk_size * 0.5,
+		world_settings.chunk_size * 0.5,
 		0.0,
-		settings.chunk_size * 0.5
+		world_settings.chunk_size * 0.5
 	)
 	spawn_xz = world.find_spawn_xz(preferred_spawn)
 	world.generate_initial(spawn_xz)
@@ -84,7 +90,7 @@ func _create_water_surface() -> void:
 	water_surface.name = "PrototypeSea"
 
 	var plane: PlaneMesh = PlaneMesh.new()
-	plane.size = Vector2(settings.water_plane_size, settings.water_plane_size)
+	plane.size = Vector2(water_settings.water_plane_size, water_settings.water_plane_size)
 	water_surface.mesh = plane
 
 	var water_material: StandardMaterial3D = StandardMaterial3D.new()
@@ -93,7 +99,11 @@ func _create_water_surface() -> void:
 	water_material.metallic = 0.05
 	water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	water_surface.material_override = water_material
-	water_surface.position = Vector3(spawn_xz.x, settings.sea_level + 0.03, spawn_xz.z)
+	water_surface.position = Vector3(
+		spawn_xz.x,
+		world_settings.sea_level + 0.03,
+		spawn_xz.z
+	)
 	add_child(water_surface)
 
 
@@ -106,8 +116,8 @@ func _create_player() -> void:
 	var spawn_position: Vector3 = Vector3(spawn_xz.x, spawn_height + 3.0, spawn_xz.z)
 	player.global_position = spawn_position
 	player.set_respawn_position(spawn_position)
-	player.set_harvest_range(settings.harvest_range)
-	player.set_tool_use_cooldown(settings.tool_use_cooldown)
+	player.set_harvest_range(survival_settings.harvest_range)
+	player.set_tool_use_cooldown(survival_settings.tool_use_cooldown)
 	player.harvest_requested.connect(survival.try_harvest)
 	player.hotbar_slot_requested.connect(survival.select_hotbar_slot)
 	player.craft_requested.connect(survival.request_craft)
@@ -127,7 +137,7 @@ func _create_combat() -> void:
 	encounter_controller = BurrowerEncounterControllerScript.new()
 	encounter_controller.name = "BurrowerEncounters"
 	add_child(encounter_controller)
-	encounter_controller.configure(world, player, settings)
+	encounter_controller.configure(world, player, world_settings)
 
 
 func _create_debug_hud() -> void:
@@ -136,7 +146,7 @@ func _create_debug_hud() -> void:
 	debug_hud.configure(
 		world,
 		player,
-		settings,
+		world_settings,
 		survival,
 		combat_resolver,
 		encounter_controller
