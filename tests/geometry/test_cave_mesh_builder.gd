@@ -21,13 +21,24 @@ static func run() -> Array[String]:
 	var result = Mesher.build(Request.new(plan, Config.new(), provenance, 0.0, partition, context))
 	_expect(failures, "chamber and tunnel mesh build succeeds", result.success)
 	if result.success:
+		_expect(failures, "versioned marching-cubes table has 256 cases", Mesher.MARCHING_CUBES_TABLE.size() == 256)
+		_expect(failures, "versioned edge table has 256 cases", Mesher.MARCHING_CUBES_EDGE_TABLE.size() == 256)
+		var table_valid := true
+		for table_case in Mesher.MARCHING_CUBES_TABLE:
+			for triangle in table_case:
+				if triangle.size() != 3 or triangle[0] < 0 or triangle[0] > 11 or triangle[1] < 0 or triangle[1] > 11 or triangle[2] < 0 or triangle[2] > 11: table_valid = false
+		_expect(failures, "marching-cubes cases contain valid edge triples", table_valid)
 		_expect(failures, "mesh buffers have triangles", result.data.indices.size() > 0)
+		_expect(failures, "mesh uses global signed-distance extraction", result.data.metrics.get("extraction_mode", "") == "global_signed_distance_marching_cubes")
+		_expect(failures, "mesh records configured pitch", is_equal_approx(float(result.data.metrics.get("sample_pitch", 0.0)), Config.DEFAULT_VOXEL_PITCH))
 		_expect(failures, "mesh indices are valid", _valid_indices(result.data))
 		_expect(failures, "mesh normals are unit and finite", _valid_normals(result.data))
 		var realized: Dictionary = Boundary.realize_main_thread(result.data)
 		_expect(failures, "main-thread realization succeeds", realized.success)
 		_expect(failures, "realization preserves source fingerprint", realized.input_fingerprint == result.data.input_fingerprint)
 		_expect(failures, "stale realization is rejected", not Boundary.realize_main_thread(result.data, null, "stale").success)
+		var repeated = Mesher.build(Request.new(plan, Config.new(), provenance, 0.0, partition, context))
+		_expect(failures, "repeated extraction reproduces exact fingerprint", repeated.success and repeated.data.fingerprint == result.data.fingerprint)
 		var changed_vertices: PackedVector3Array = result.data.vertices.duplicate()
 		changed_vertices[0] += Vector3(0.25, 0.0, 0.0)
 		var changed_data = MeshData.new(plan.cell_address, result.data.world_bounds, changed_vertices, result.data.indices, result.data.normals, result.data.uvs, result.data.source_descriptor_ids, result.data.source_fragment_ids, result.data.input_fingerprint, result.data.metrics)
@@ -51,6 +62,12 @@ static func run() -> Array[String]:
 	var unrelated = context.make_provenance("geometry_cell_partition", "other-region", "other-address", ["plan-source"])
 	var unrelated_request = Mesher.build(Request.new(plan, Config.new(), unrelated, 0.0, partition, context))
 	_expect(failures, "unrelated partition provenance is rejected", not unrelated_request.success)
+	var empty_plan := _plan(Vector3i(3, -2, 1), [])
+	var empty_partition = _partition_result(empty_plan, Config.new(), provenance)
+	var empty = Mesher.build(Request.new(empty_plan, Config.new(), provenance, 0.0, empty_partition, context))
+	_expect(failures, "empty cells remain valid mesh results", empty.success)
+	if empty.success:
+		_expect(failures, "empty cell emits no triangles", empty.data.indices.is_empty())
 	return failures
 
 
