@@ -3,7 +3,7 @@ extends RefCounted
 const StaminaScript := preload("res://gameplay/player/components/stamina_component.gd")
 const ActionControllerScript := preload("res://gameplay/player/actions/player_action_controller.gd")
 const AttackCatalogScript := preload("res://combat/player_attack_catalog.gd")
-const CombatManagerScript := preload("res://combat/combat_manager.gd")
+const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
 
 
@@ -159,17 +159,17 @@ static func _test_live_player_activation(tree: SceneTree, failures: Array[String
 			16
 		)
 
-		# Exercise the actual CombatManager execution consumer in a live World3D.
+		# Exercise the isolated combat-resolution consumer in a live World3D.
 		# No enemy exists in this fixture, so a valid execution should resolve as
 		# a clean miss rather than parser/runtime failure.
-		var combat: Node = CombatManagerScript.new()
-		fixture_root.add_child(combat)
-		combat.set("player", player)
-		combat.call("try_attack", captured[0])
+		var combat_resolver: Node = CombatResolverScript.new()
+		fixture_root.add_child(combat_resolver)
+		combat_resolver.call("configure", player)
+		combat_resolver.call("try_attack", captured[0])
 		_expect_equal(
 			failures,
-			"CombatManager consumes supplied execution",
-			String(combat.call("get_last_combat_message")),
+			"CombatResolver consumes supplied execution",
+			String(combat_resolver.call("get_last_combat_message")),
 			"Attack missed"
 		)
 
