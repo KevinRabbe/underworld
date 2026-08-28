@@ -1,51 +1,20 @@
-extends Resource
+extends "res://worldgen/surface/prototype_surface_settings.gd"
 class_name UnderworldWorldSettings
 
-@export var world_seed: int = 12345
-@export var chunk_size: float = 128.0
-@export var vertices_per_side: int = 65
+# Temporary prototype runtime aggregate.
+#
+# Deterministic surface-generation values are inherited from
+# UnderworldPrototypeSurfaceSettings. This file now owns only live streaming,
+# interaction/gameplay, physics and presentation configuration and remains under
+# the legacy data/ root until those runtime responsibilities are split by domain.
+
+@export_group("Surface Streaming")
 @export var load_radius: int = 2
 @export var unload_radius: int = 3
 @export var collision_radius: int = 1
 @export var max_chunks_generated_per_frame: int = 1
 
-@export_group("World Shape")
-@export var sea_level: float = 0.0
-@export var base_height: float = 8.0
-@export var continental_frequency: float = 0.00055
-@export var continental_amplitude: float = 18.0
-@export var rolling_frequency: float = 0.0026
-@export var rolling_amplitude: float = 6.0
-@export var flatland_frequency: float = 0.00145
-@export var flatland_strength: float = 0.90
-@export var ridge_frequency: float = 0.00135
-@export var ridge_region_frequency: float = 0.00075
-@export var ridge_amplitude: float = 22.0
-@export var valley_frequency: float = 0.00115
-@export var valley_depth: float = 10.0
-@export var detail_frequency: float = 0.012
-@export var detail_amplitude: float = 1.2
-
-@export_group("Environment Masks")
-@export var moisture_frequency: float = 0.0022
-@export var forest_frequency: float = 0.0028
-@export var rock_frequency: float = 0.0055
-@export var shore_band: float = 2.5
-
-@export_group("Prototype Decoration")
-@export_range(2, 12, 1) var decoration_vertex_step: int = 3
-@export_range(0.0, 1.0, 0.01) var tree_threshold: float = 0.40
-@export_range(0.0, 1.0, 0.01) var tree_density: float = 0.38
-@export_range(0.0, 1.0, 0.01) var rock_threshold: float = 0.55
-@export_range(0.0, 1.0, 0.01) var rock_density: float = 0.30
-
-@export_group("Loose Pickups")
-# Pickup density is intentionally frozen for v0.05 because collected pickup
-# persistence currently uses deterministic array indices. The next migration
-# moves pickups to stable cell IDs before density is retuned.
-@export_range(2, 12, 1) var pickup_vertex_step: int = 5
-@export_range(0.0, 1.0, 0.01) var branch_pickup_density: float = 0.16
-@export_range(0.0, 1.0, 0.01) var loose_stone_pickup_density: float = 0.13
+@export_group("Loose Pickup Runtime")
 @export_range(0.5, 3.0, 0.1) var pickup_collect_radius: float = 1.5
 
 @export_group("World Object Physics")

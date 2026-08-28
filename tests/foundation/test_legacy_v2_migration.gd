@@ -1,6 +1,6 @@
 extends RefCounted
 
-const WorldSettingsScript := preload("res://data/world_settings.gd")
+const SurfaceSettingsScript := preload("res://worldgen/surface/prototype_surface_settings.gd")
 const LegacyResolverScript := preload("res://worldgen/migration/legacy_v2_surface_resolver.gd")
 const MigratorScript := preload("res://worldgen/migration/prototype_v2_save_migrator.gd")
 const StableIdScript := preload("res://worldgen/identity/stable_id.gd")
@@ -15,7 +15,7 @@ static func run() -> Array[String]:
 	if fixture.is_empty():
 		return failures
 
-	var settings = WorldSettingsScript.new()
+	var settings = SurfaceSettingsScript.new()
 	settings.world_seed = int(fixture["world_seed"])
 
 	var resolver = LegacyResolverScript.new()
