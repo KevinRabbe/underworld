@@ -10,30 +10,79 @@ on:
       - unlabeled
       - ready_for_review
       - converted_to_draft
+  pull_request_target:
+    types:
+      - synchronize
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
+  invalidate-stale-acceptance:
+    if: github.event_name == 'pull_request_target'
+    name: Invalidate stale PM acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Remove stale pm-accepted label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HAD_PM_ACCEPTANCE: ${{ contains(github.event.pull_request.labels.*.name, 'pm-accepted') }}
+        run: |
+          set -euo pipefail
+
+          if [ "$HAD_PM_ACCEPTANCE" = "true" ]; then
+            gh api --method DELETE \
+              "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels/pm-accepted" \
+              >/dev/null 2>&1 || true
+          fi
+
+          current_labels="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" \
+            --jq '.[].name')"
+
+          if printf '%s\n' "$current_labels" | grep -Fxq 'pm-accepted'; then
+            echo "Failed to invalidate stale pm-accepted label after synchronize."
+            exit 1
+          fi
+
+          echo "Stale PM acceptance is absent for the synchronized head."
+
   pm-acceptance:
+    if: github.event_name == 'pull_request'
     name: PM acceptance
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    permissions:
+      contents: read
 
     steps:
-      - name: Enforce PM acceptance state
+      - name: Enforce exact-head PM acceptance state
         env:
+          EVENT_ACTION: ${{ github.event.action }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
           HAS_PM_ACCEPTANCE: ${{ contains(github.event.pull_request.labels.*.name, 'pm-accepted') }}
         run: |
+          set -euo pipefail
+
+          if [ "$EVENT_ACTION" = "synchronize" ]; then
+            echo "A new commit invalidates PM acceptance for this head."
+            echo "The trusted pull_request_target path removes any stale pm-accepted label."
+            exit 1
+          fi
+
           if [ "$IS_DRAFT" = "true" ]; then
             echo "PR is still draft; PM acceptance cannot pass."
             exit 1
           fi
 
           if [ "$HAS_PM_ACCEPTANCE" != "true" ]; then
-            echo "Missing required pm-accepted label."
+            echo "Missing required pm-accepted label for the current PR head."
             exit 1
           fi
 
-          echo "PM acceptance gate passed."
+          echo "PM acceptance gate passed for the current PR head."

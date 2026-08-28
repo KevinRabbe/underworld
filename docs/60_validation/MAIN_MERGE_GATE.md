@@ -2,11 +2,11 @@
 
 Status: **repository-governance contract**
 
-This document defines the enforceable merge gate for `main`. It complements the pull task board; it does not replace architecture review, dependency review or exact-head validation.
+This document defines the enforceable merge gate for `main`. It complements the pull task board; it does not replace architecture review, dependency review, protected-roadmap ownership, or exact-head validation.
 
 ## Why this exists
 
-GitHub currently reports `main` as unprotected and the repository has no active rulesets. That allowed protected-roadmap PRs to merge even while the PM board still recorded unresolved dependency/review gates.
+GitHub has allowed `main` to advance while PM/dependency gates were still unresolved because those gates were process signals rather than repository rules.
 
 Green CI is necessary, but green CI alone must not authorize a merge.
 
@@ -14,7 +14,7 @@ The target policy is:
 
 ```text
 required broad CI
-+ explicit PM acceptance
++ exact-current-head PM acceptance
 + non-draft PR
 + pull-request-only main updates
 = merge eligible
@@ -22,7 +22,7 @@ required broad CI
 
 ## Required PR checks
 
-The `main` ruleset must require these check-run contexts on every pull request:
+The `main` ruleset must require these check-run contexts:
 
 | Workflow | Required check-run context |
 | --- | --- |
@@ -31,38 +31,115 @@ The `main` ruleset must require these check-run contexts on every pull request:
 | Deterministic Worldgen Validation | `Godot headless contracts` |
 | PM Acceptance Gate | `PM acceptance` |
 
-The existing three validation workflows already run for every pull request. The PM Acceptance Gate is defined in `.github/workflows/pm-acceptance-gate.yml`.
-
-Do not configure only the workflow display names when GitHub asks for a required status-check context; select the actual check-run contexts shown above.
+Do not configure only workflow display names when GitHub asks for required status-check contexts; select the check-run contexts above.
 
 ## PM acceptance signal
 
-The explicit machine-readable acceptance signal is the pull-request label:
+The machine-readable operational signal is the pull-request label:
 
 ```text
 pm-accepted
 ```
 
-The `PM acceptance` check fails when either:
+The `PM acceptance` check fails when any of the following is true:
 
-- the PR is still a draft; or
-- the `pm-accepted` label is absent.
+- the PR is a draft;
+- `pm-accepted` is absent; or
+- the triggering action is `synchronize`, meaning the PR head changed.
 
-It reruns when the PR is opened/reopened, synchronized, labeled/unlabeled, marked ready for review, or converted back to draft.
+A new commit therefore cannot inherit a passing PM-acceptance check from an earlier head.
 
-### Operational ownership
+## Exact-head invalidation
+
+`.github/workflows/pm-acceptance-gate.yml` deliberately uses two event boundaries in one workflow.
+
+### PR-head gate — `pull_request`
+
+The required `PM acceptance` check runs on the pull-request head for:
+
+- opened;
+- reopened;
+- synchronize;
+- labeled;
+- unlabeled;
+- ready-for-review;
+- converted-to-draft.
+
+On every `synchronize` event it fails **unconditionally**, even if the event payload still contains `pm-accepted`.
+
+This prevents event-ordering from leaving the new head with a passing required check merely because GitHub labels persist across commits.
+
+### Trusted invalidator — `pull_request_target`
+
+A separate job runs only for `pull_request_target: synchronize`.
+
+It:
+
+- uses the workflow definition from the trusted default branch;
+- receives only the permissions needed to read repository metadata and mutate issue/PR labels;
+- does **not** check out PR code;
+- does **not** execute scripts, actions, binaries, or other content from the PR branch;
+- removes `pm-accepted` if it survived the head change;
+- verifies the label is absent after invalidation.
+
+The invalidator's label removal triggers an `unlabeled` PR event, so the PR-head gate evaluates the same current head again and remains failing because acceptance is absent.
+
+Only a later explicit re-addition of `pm-accepted` may make the current head pass.
+
+### Event-order invariant
+
+For an accepted SHA A followed by a pushed SHA B:
+
+```text
+SHA A + pm-accepted
+        ↓
+new commit pushed
+        ↓
+pull_request:synchronize on SHA B
+        ↓
+PM acceptance = FAIL regardless of label state
+        ↓
+pull_request_target:synchronize removes stale pm-accepted
+        ↓
+pull_request:unlabeled on SHA B
+        ↓
+PM acceptance = FAIL
+        ↓
+PM reviews SHA B and re-adds pm-accepted
+        ↓
+pull_request:labeled on SHA B
+        ↓
+PM acceptance may PASS
+```
+
+This is the required exact-current-head behavior.
+
+## Operational ownership and security boundary
 
 Workers must never add `pm-accepted` to their own handoff PRs merely to make CI green.
 
-The label means the PM has reviewed the current handoff state and accepts the PR for landing, subject to the required checks remaining green.
+The label means the PM role has reviewed the current head and accepts it for landing, subject to every other required check and dependency gate remaining satisfied.
 
-Because PM and worker activity currently use the same GitHub account, GitHub review identity cannot distinguish those roles. Requiring an approving review would deadlock self-authored PRs because GitHub does not allow self-approval. The label/check mechanism therefore represents the role transition without relying on a separate reviewer identity.
+However, this repository currently uses the same GitHub owner/app permission surface for PM and worker activity. Therefore:
 
-This is a workflow-control boundary, not a cryptographic separation between two GitHub users. If the project later moves PM approval to a distinct GitHub App/account/team, the acceptance signal should be upgraded accordingly.
+- `pm-accepted` is an **operational workflow-control signal**;
+- it is **not** a cryptographic or actor-separated authorization boundary;
+- any principal with sufficient issue/PR-write permission could theoretically apply the label;
+- the mechanism prevents ordinary automated or accidental merges from treating green CI alone as acceptance, but it does not defend against a malicious repository owner or another equally privileged principal.
 
-## Required `main` branch ruleset
+True actor-separated PM authorization requires a distinct GitHub account, App, team, environment approval, or another owner-controlled mechanism whose credentials ordinary workers do not possess.
 
-Create one active branch ruleset targeting the default branch / `refs/heads/main` with the following behavior.
+The project should upgrade to such a boundary if/when separate identities are available.
+
+## Why no required approving review yet
+
+GitHub does not permit a user to approve their own PR. With the present same-account workflow, requiring one approving review would deadlock self-authored PRs rather than establish meaningful role separation.
+
+Therefore this first enforceable gate uses required status checks plus the operational `pm-accepted` signal.
+
+## Required `main` ruleset
+
+Create one active branch ruleset targeting only `refs/heads/main` / the default branch.
 
 ### Target
 
@@ -76,9 +153,9 @@ Target: default branch (`main`)
 
 Enable **Require a pull request before merging**.
 
-Do not require one approving review while the repository uses the same GitHub identity for PM and worker PRs. The four required checks, including `PM acceptance`, are the enforceable landing gate.
+Do not require one approving review while PM and workers share the same GitHub principal.
 
-If GitHub offers a setting to require conversation resolution, enable it once the project starts using blocking inline review threads consistently. It is not required for this first gate.
+If GitHub conversation-resolution requirements become part of the review process later, enable them as a separate deliberate decision.
 
 ### Required status checks
 
@@ -91,29 +168,25 @@ Godot headless contracts
 PM acceptance
 ```
 
-Required checks must pass on the current PR head. Stale success from an earlier head is not acceptance.
-
-Do not enable a broad bypass that allows ordinary automation to merge with required checks pending or failing.
+Required checks must pass on the current PR head. Success from an earlier SHA is never acceptance for a later SHA.
 
 ### Direct update restrictions
 
-Enable protections that prevent normal workflow from:
+Normal workflow must not be able to:
 
-- pushing directly to `main`;
-- force-pushing `main`;
-- deleting `main`.
+- push directly to `main`;
+- force-push `main`;
+- delete `main`.
 
-All routine changes land through pull requests.
+All routine updates land through pull requests.
 
-### Draft behavior
+### Bypass policy
 
-GitHub already prevents ordinary merging of draft PRs. The PM Acceptance Gate independently fails for draft PRs so the required check state also makes the rule explicit and testable.
+Do not give ordinary workers, ordinary Actions workflows, or broad automation identities a permanent ruleset bypass.
 
-A PR converted back to draft must lose merge eligibility immediately even if it still carries `pm-accepted`; the gate fails until it is ready for review again.
+Repository-owner administrative capability remains inherently powerful; treat its use as emergency authority, not normal merge flow.
 
 ## Acceptance lifecycle
-
-Normal worker/PM flow:
 
 ```text
 worker opens draft PR
@@ -122,65 +195,62 @@ required CI runs
         ↓
 worker handoff reaches REVIEW
         ↓
-PM reviews scope/dependencies/content
+PM reviews exact current head
         ↓
 PR marked ready for review when appropriate
         ↓
 PM adds pm-accepted
         ↓
-PM acceptance check passes
+PM acceptance passes for that head
         ↓
-all required checks green on exact head
+all other required checks green on same head
         ↓
-merge allowed by ruleset
+merge allowed by active ruleset
 ```
 
-### New commits after PM acceptance
+If any implementation commit is pushed after acceptance, the synchronize path invalidates acceptance automatically. Manual label-removal discipline is not relied upon.
 
-A new commit must be treated as a new exact-head review state.
+## Draft behavior
 
-Operational rule: remove `pm-accepted` before or immediately when additional implementation commits are pushed after acceptance. The PM may re-add it after reviewing the new head.
+Draft PRs cannot satisfy the PM gate even if `pm-accepted` is present.
 
-The workflow reruns on `synchronize`; however a GitHub label remains attached across commits. Therefore the human/automation process must remove stale acceptance when a previously accepted PR changes materially.
-
-A future stronger implementation may automate label removal on synchronize if a separate trusted PM identity/app becomes available. Do not let an untrusted PR workflow mutate the acceptance label.
+Converting an accepted PR back to draft therefore immediately removes merge eligibility at the required-check level.
 
 ## Emergency bypass policy
 
 There is no routine bypass actor.
 
-Do **not** give all repository admins, all Actions workflows or the ordinary worker account a permanent ruleset bypass merely for convenience.
-
-Emergency procedure is intentionally explicit:
+Emergency procedure:
 
 1. repository owner identifies an actual repository-blocking emergency;
 2. record the reason and affected PR/commit on the PM board;
-3. temporarily alter/disable the ruleset only for the minimum action required;
-4. perform the emergency change;
+3. temporarily alter or disable only the minimum rule necessary;
+4. perform the emergency action;
 5. restore the active ruleset immediately;
-6. verify `main` is protected again and record the result.
+6. verify `main` is protected again;
+7. record the verification result.
 
-Emergency bypass is not for skipping architecture review, long CI, dependency order or a failed PM gate.
+Emergency bypass is not for skipping architecture review, dependency order, long CI, a failed PM gate, or protected-roadmap ownership.
 
 ## Required verification campaign
 
-After the in-repo gate workflow is merged and the owner activates the GitHub ruleset, verify behavior rather than assuming configuration is correct.
+The trusted `pull_request_target` invalidator cannot be fully exercised until its workflow exists on the default branch, because `pull_request_target` deliberately uses default-branch workflow code.
 
-Use a throwaway branch/PR with a documentation-only change so no protected production behavior is involved.
+After this support is merged and the repository owner activates the ruleset, use a throwaway documentation-only PR for the complete campaign.
 
-### Case 1 — green CI without PM acceptance
+### Case 1 — green broad CI without acceptance
 
 Expected:
 
 ```text
 broad CI = green
-PM acceptance = failing (no pm-accepted label)
+PM acceptance = failing
 merge = blocked
 ```
 
-### Case 2 — PM accepted and green
+### Case 2 — PM accepted current head
 
-Mark the PR ready for review and add `pm-accepted`.
+Make the PR non-draft and add `pm-accepted` after review.
 
 Expected:
 
@@ -190,11 +260,23 @@ PM acceptance = green
 merge = allowed
 ```
 
-Do not actually merge the throwaway PR if the test can be completed by observing merge eligibility.
+### Case 3 — exact-head invalidation
 
-### Case 3 — draft PR
+From the accepted state, push a harmless new commit.
 
-Convert the PR to draft.
+Expected:
+
+```text
+pull_request:synchronize = PM acceptance FAIL on new head
+pull_request_target:synchronize = stale pm-accepted removed
+new head remains blocked until explicit re-acceptance
+```
+
+Verify the final current-head required context cannot remain green because of event ordering.
+
+### Case 4 — draft transition
+
+Convert an accepted PR back to draft.
 
 Expected:
 
@@ -203,9 +285,9 @@ PM acceptance = failing
 merge = blocked
 ```
 
-### Case 4 — direct push
+### Case 5 — direct push
 
-Attempt a harmless normal direct push to `main` from the ordinary workflow identity only after preserving the branch state locally/remotely.
+Attempt a harmless normal direct push to `main` without administrative bypass.
 
 Expected:
 
@@ -214,25 +296,21 @@ push rejected by GitHub ruleset
 main unchanged
 ```
 
-Do not use an administrative bypass for this test.
-
 ## Connector/tooling limitation
 
-The current ChatGPT GitHub connector can read repository rulesets but does not expose a write action for branch protection/ruleset settings.
+The current connected GitHub tooling can read repository rulesets and protection state but does not expose a write action for creating/enabling those settings.
 
-Therefore this task has two distinct parts:
+Therefore #118 has two layers:
 
-1. **in-repository support** — workflow + documented exact configuration; can be implemented through the connector;
-2. **repository-owner activation** — create/enable the ruleset in GitHub settings and run the verification campaign; cannot be completed through the currently exposed connector actions.
+1. **in-repository support** — exact-head workflow and documented configuration;
+2. **repository-owner activation** — enable the actual GitHub ruleset and run the end-to-end campaign.
 
-Until owner activation is complete, the PM board remains authoritative but technically non-enforceable.
+Until owner activation is complete, PM/dependency policy remains operational rather than technically enforced on `main`.
 
 ## Ruleset activation checklist
 
-Repository owner should verify all of the following in GitHub settings:
-
-- [ ] ruleset `Underworld main merge gate` exists and is Active;
-- [ ] target is only the default branch / `main`;
+- [ ] `Underworld main merge gate` exists and is Active;
+- [ ] target is only default branch / `main`;
 - [ ] pull request required before merge;
 - [ ] direct push restricted for normal workflow;
 - [ ] force push blocked;
@@ -241,18 +319,21 @@ Repository owner should verify all of the following in GitHub settings:
 - [ ] `Repository layout contracts` required;
 - [ ] `Godot headless contracts` required;
 - [ ] `PM acceptance` required;
-- [ ] no ordinary Actions/worker bypass actor configured;
-- [ ] no self-approval review requirement that deadlocks the current account model;
-- [ ] four verification cases above observed and recorded.
+- [ ] no ordinary Actions/worker bypass configured;
+- [ ] no self-approval rule that deadlocks the same-account workflow;
+- [ ] exact-head invalidation campaign observed successfully;
+- [ ] draft and direct-push cases observed successfully.
 
 ## Invariants
 
 1. Green CI is necessary but never sufficient by itself.
 2. Draft PRs cannot satisfy PM acceptance.
-3. `pm-accepted` represents explicit PM landing approval, not worker implementation completion.
-4. Required checks apply to the exact current PR head.
-5. Normal updates to `main` use pull requests only.
-6. Force pushes and branch deletion are not part of normal workflow.
-7. Emergency bypass is temporary, explicit and recorded.
-8. Ruleset enforcement does not authorize violating architecture or dependency contracts.
-9. No protected MAP-009→MAP-015 production/runtime contract is changed by this governance mechanism.
+3. Every synchronize event invalidates acceptance for the new head.
+4. Stale `pm-accepted` is removed by trusted default-branch workflow code without executing PR-controlled code.
+5. Re-acceptance is explicit and applies only to the then-current head.
+6. `pm-accepted` is an operational signal, not actor-separated security under the current same-principal model.
+7. Normal updates to `main` use pull requests only.
+8. Force pushes and branch deletion are not normal workflow.
+9. Emergency bypass is temporary, explicit, narrow, and recorded.
+10. Ruleset enforcement never authorizes violating architecture, dependency, or protected-roadmap contracts.
+11. No MAP-009→MAP-015 production/runtime contract is changed by this governance mechanism.
