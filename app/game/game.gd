@@ -7,7 +7,7 @@ const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_r
 const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
 const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
 
-var settings: UnderworldWorldSettings
+var settings
 var world
 var player
 var combat_resolver

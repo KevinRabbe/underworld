@@ -4,7 +4,7 @@ var world
 var player
 var combat_resolver
 var encounter_controller
-var settings: UnderworldWorldSettings
+var settings
 var label: Label
 var crosshair: Label
 var survival_label: Label
@@ -15,7 +15,7 @@ var visible_debug: bool = true
 func configure(
 	world_node,
 	player_node,
-	world_settings: UnderworldWorldSettings,
+	world_settings,
 	combat_resolver_node = null,
 	encounter_controller_node = null
 ) -> void:
