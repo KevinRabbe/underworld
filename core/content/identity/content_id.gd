@@ -12,6 +12,9 @@ static func validate(value: String) -> Array[String]:
 	if value != value.strip_edges():
 		failures.append("content id must not contain leading/trailing whitespace: %s" % value)
 		return failures
+	if value.begins_with(".") or value.ends_with(".") or value.contains(".."):
+		failures.append("content id must not contain empty semantic tokens: %s" % value)
+		return failures
 
 	var tokens: PackedStringArray = value.split(".", false)
 	if tokens.size() < 2:
