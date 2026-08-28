@@ -114,6 +114,8 @@ func _refresh_text() -> void:
 	var has_axe: bool = survival.has_tool("stone_axe")
 	var has_pickaxe: bool = survival.has_tool("stone_pickaxe")
 	var equipped: String = survival.get_equipped_tool()
+	var axe_cost: Vector2i = survival.get_crafting_cost("stone_axe")
+	var pickaxe_cost: Vector2i = survival.get_crafting_cost("stone_pickaxe")
 	var stamina_current: float = player.get_stamina()
 	var stamina_max: float = player.get_max_stamina()
 	var action_state: String = player.get_action_state_name()
@@ -182,8 +184,8 @@ func _refresh_text() -> void:
 		+ slot_1 + "    " + slot_2 + "    " + slot_3 + "\n"
 		+ "Wood %d   Stone %d    C: craft Axe (%dW/%dS)    V: craft Pickaxe (%dW/%dS)\n" % [
 			resources.x, resources.y,
-			settings.stone_axe_wood_cost, settings.stone_axe_stone_cost,
-			settings.stone_pickaxe_wood_cost, settings.stone_pickaxe_stone_cost
+			axe_cost.x, axe_cost.y,
+			pickaxe_cost.x, pickaxe_cost.y
 		]
 		+ "LMB: harvest   |   RMB: melee   |   Ctrl: dodge   |   Q: frontal parry   |   F: frontal block"
 	)

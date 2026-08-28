@@ -2,15 +2,19 @@ extends RefCounted
 
 const SurvivalScript := preload("res://gameplay/survival/prototype_survival_controller.gd")
 const STREAMER_PATH := "res://world/runtime/streaming/surface_chunk_streamer.gd"
+const WORLD_SETTINGS_PATH := "res://world/runtime/config/world_settings.gd"
+const SURVIVAL_SETTINGS_PATH := "res://gameplay/survival/prototype_survival_settings.gd"
+const WATER_SETTINGS_PATH := "res://presentation/world/environment/prototype_water_settings.gd"
 const LEGACY_MANAGER_PATH := "res://world/chunk_manager.gd"
+const LEGACY_DATA_SETTINGS_PATH := "res://" + "data/world_settings.gd"
 const APP_GAME_PATH := "res://app/game/game.gd"
+const TEST_WORLD_SEED: int = 987654321
 
 
 class FakeSettings:
 	extends RefCounted
-	var world_seed: int = 987654321
-	var world_object_update_interval: float = 0.15
 	var pickup_collect_radius: float = 1.5
+	var pickup_collect_interval: float = 0.15
 	var tree_hits_with_axe: int = 3
 	var rock_hits_with_pickaxe: int = 4
 	var tree_wood_yield: int = 4
@@ -72,8 +76,8 @@ static func run() -> Array[String]:
 	var world = FakeWorld.new()
 	var survival = SurvivalScript.new()
 
-	_cleanup_test_save(settings.world_seed)
-	survival.configure(world, settings)
+	_cleanup_test_save(TEST_WORLD_SEED)
+	survival.configure(world, settings, TEST_WORLD_SEED)
 
 	_expect_true(
 		failures,
@@ -84,6 +88,11 @@ static func run() -> Array[String]:
 		failures,
 		"survival owns crafting",
 		survival.has_method("request_craft")
+	)
+	_expect_true(
+		failures,
+		"survival exposes recipe costs without leaking settings",
+		survival.has_method("get_crafting_cost")
 	)
 	_expect_true(
 		failures,
@@ -116,33 +125,56 @@ static func run() -> Array[String]:
 		"streamer owns spatial pickup extraction",
 		"func collect_nearby_pickups" in streamer_source
 	)
-	_expect_true(
-		failures,
-		"streamer does not own crafting",
-		not "func request_craft" in streamer_source
-	)
+	_expect_true(failures, "streamer does not own crafting", not "func request_craft" in streamer_source)
 	_expect_true(
 		failures,
 		"streamer does not own resource inventory",
 		not "gathered_wood" in streamer_source and not "gathered_stone" in streamer_source
 	)
+	_expect_true(failures, "streamer does not own hotbar state", not "selected_hotbar_slot" in streamer_source)
+
+	var world_settings_source: String = FileAccess.get_file_as_string(WORLD_SETTINGS_PATH)
+	var survival_settings_source: String = FileAccess.get_file_as_string(SURVIVAL_SETTINGS_PATH)
+	var water_settings_source: String = FileAccess.get_file_as_string(WATER_SETTINGS_PATH)
+	_expect_true(failures, "world runtime settings are canonical", not world_settings_source.is_empty())
+	_expect_true(failures, "survival settings are canonical", not survival_settings_source.is_empty())
+	_expect_true(failures, "water settings are canonical", not water_settings_source.is_empty())
 	_expect_true(
 		failures,
-		"streamer does not own hotbar state",
-		not "selected_hotbar_slot" in streamer_source
+		"world settings do not own crafting",
+		not "stone_axe_wood_cost" in world_settings_source
+	)
+	_expect_true(
+		failures,
+		"world settings do not own water presentation",
+		not "water_plane_size" in world_settings_source
+	)
+	_expect_true(
+		failures,
+		"survival settings do not own streaming",
+		not "load_radius" in survival_settings_source
+	)
+	_expect_true(
+		failures,
+		"water settings do not own gameplay",
+		not "harvest_range" in water_settings_source
 	)
 
 	var app_source: String = FileAccess.get_file_as_string(APP_GAME_PATH)
 	_expect_true(failures, "application composition source is readable", not app_source.is_empty())
-	_expect_true(
-		failures,
-		"application composes canonical surface streamer",
-		STREAMER_PATH in app_source
-	)
+	_expect_true(failures, "application composes canonical surface streamer", STREAMER_PATH in app_source)
 	_expect_true(
 		failures,
 		"application composes prototype survival controller",
 		"res://gameplay/survival/prototype_survival_controller.gd" in app_source
+	)
+	_expect_true(failures, "application composes world settings", WORLD_SETTINGS_PATH in app_source)
+	_expect_true(failures, "application composes survival settings", SURVIVAL_SETTINGS_PATH in app_source)
+	_expect_true(failures, "application composes water settings", WATER_SETTINGS_PATH in app_source)
+	_expect_true(
+		failures,
+		"application does not reference retired data settings",
+		not LEGACY_DATA_SETTINGS_PATH in app_source
 	)
 	_expect_true(
 		failures,
@@ -159,8 +191,13 @@ static func run() -> Array[String]:
 		"legacy mixed chunk manager path is retired",
 		not FileAccess.file_exists(LEGACY_MANAGER_PATH)
 	)
+	_expect_true(
+		failures,
+		"legacy data settings path is retired",
+		not FileAccess.file_exists(LEGACY_DATA_SETTINGS_PATH)
+	)
 
-	_cleanup_test_save(settings.world_seed)
+	_cleanup_test_save(TEST_WORLD_SEED)
 	survival.free()
 	return failures
 
