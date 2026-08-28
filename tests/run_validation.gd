@@ -5,13 +5,27 @@ const DeterministicRandomTests := preload("res://tests/foundation/test_determini
 const ManifestAndGraphTests := preload("res://tests/foundation/test_manifest_and_graph.gd")
 const LegacyV2MigrationTests := preload("res://tests/foundation/test_legacy_v2_migration.gd")
 const ServiceBoundaryTests := preload("res://tests/foundation/test_service_boundaries.gd")
+const ProvenanceTests := preload("res://tests/foundation/test_generation_provenance.gd")
+const CaveMeshTests := preload("res://tests/geometry/test_cave_mesh_builder.gd")
+const RuntimeCellTests := preload("res://tests/geometry/test_runtime_cell_lifecycle.gd")
+const SurfaceEntranceTests := preload("res://tests/geometry/test_surface_entrance_integration.gd")
+const CollisionTests := preload("res://tests/geometry/test_collision_and_gate.gd")
+const RuntimeHarnessTests := preload("res://tests/geometry/test_runtime_validation_harness.gd")
+const CaveRuntimeControllerTests := preload("res://tests/geometry/test_cave_runtime_controller.gd")
+const Map015RuntimeBootstrapTests := preload("res://tests/geometry/test_map015_runtime_bootstrap.gd")
+const RuntimeHarness := preload("res://worldgen/runtime/runtime_validation_harness.gd")
+const Map015FixtureTests := preload("res://tests/geometry/test_map015_fixture.gd")
 const PrimaryTopologyTests := preload("res://tests/topology/test_primary_topology.gd")
 const EntranceGenerationTests := preload("res://tests/entrances/test_entrance_generation.gd")
 const SecondaryConnectivityTests := preload("res://tests/connectivity/test_secondary_connectivity.gd")
+const CaveGeometryTests := preload("res://tests/geometry/test_cave_geometry.gd")
+const GeometryCellTests := preload("res://tests/geometry/test_geometry_cells.gd")
 const ReproductionProbe := preload("res://worldgen/validation/reproduction_probe.gd")
 const TopologyProbe := preload("res://worldgen/validation/topology_reproduction_probe.gd")
 const EntranceProbe := preload("res://worldgen/validation/entrance_reproduction_probe.gd")
 const ConnectivityProbe := preload("res://worldgen/validation/secondary_connectivity_reproduction_probe.gd")
+const GeometryProbe := preload("res://worldgen/validation/cave_geometry_reproduction_probe.gd")
+const GeometryCellProbe := preload("res://worldgen/validation/geometry_cell_reproduction_probe.gd")
 const SampleGraphFixture := preload("res://tests/foundation/sample_graph_fixture.gd")
 const GraphValidator := preload("res://worldgen/validation/graph_validator.gd")
 const GraphCanonicalizer := preload("res://worldgen/validation/graph_canonicalizer.gd")
@@ -34,8 +48,18 @@ func _init() -> void:
 			_run_entrance_reproduction(args)
 		"connectivity-repro":
 			_run_connectivity_reproduction(args)
+		"geometry-repro":
+			_run_geometry_reproduction(args)
+		"geometry-cell-repro":
+			_run_geometry_cell_reproduction(args)
+		"runtime-harness":
+			_run_runtime_harness(args)
+		"map015-fixture":
+			_finish("map015-fixture", Map015FixtureTests.run())
 		"batch":
 			_run_batch(args)
+		"geometry-cell-batch":
+			_run_geometry_cell_batch(args)
 		_:
 			printerr("[VALIDATION] unknown mode: %s" % mode)
 			_print_usage()
@@ -49,10 +73,35 @@ func _run_fast() -> void:
 	failures.append_array(ManifestAndGraphTests.run())
 	failures.append_array(LegacyV2MigrationTests.run())
 	failures.append_array(ServiceBoundaryTests.run())
+	failures.append_array(ProvenanceTests.run())
+	failures.append_array(CaveMeshTests.run())
+	failures.append_array(RuntimeCellTests.run())
+	failures.append_array(SurfaceEntranceTests.run())
+	failures.append_array(CollisionTests.run())
+	failures.append_array(RuntimeHarnessTests.run())
+	failures.append_array(CaveRuntimeControllerTests.run())
+	failures.append_array(Map015RuntimeBootstrapTests.run())
 	failures.append_array(PrimaryTopologyTests.run())
 	failures.append_array(EntranceGenerationTests.run())
 	failures.append_array(SecondaryConnectivityTests.run())
+	failures.append_array(CaveGeometryTests.run())
+	failures.append_array(GeometryCellTests.run())
 	_finish("fast", failures)
+
+
+func _run_runtime_harness(args: Dictionary) -> void:
+	var report = RuntimeHarness.run()
+	var expected: String = str(args.get("expect", ""))
+	print("[RUNTIME HARNESS]")
+	print("  fingerprint=%s" % report.fingerprint)
+	print("  counters=%s" % report.counters)
+	if not report.failures.is_empty():
+		_finish("runtime-harness", report.failures)
+		return
+	if not expected.is_empty() and report.fingerprint != expected:
+		_finish("runtime-harness", ["fingerprint mismatch: expected=%s actual=%s" % [expected, report.fingerprint]])
+		return
+	_finish("runtime-harness", [])
 
 
 func _run_fixture(fixture_name: String) -> void:
@@ -116,12 +165,12 @@ func _run_batch(args: Dictionary) -> void:
 		for region_z in range(-region_radius, region_radius + 1):
 			for region_x in range(-region_radius, region_radius + 1):
 				var region := Vector2i(region_x, region_z)
-				var first: Dictionary = ConnectivityProbe.build(world_seed, region)
-				var second: Dictionary = ConnectivityProbe.build(world_seed, region)
+				var first: Dictionary = GeometryProbe.build(world_seed, region)
+				var second: Dictionary = GeometryProbe.build(world_seed, region)
 				cases += 1
 				if not bool(first.get("success", false)) or not bool(second.get("success", false)):
 					failures.append(
-						"connectivity probe failed seed=%d region=(%d,%d) first=%s second=%s" % [
+						"geometry probe failed seed=%d region=(%d,%d) first=%s second=%s" % [
 							world_seed,
 							region_x,
 							region_z,
@@ -132,7 +181,7 @@ func _run_batch(args: Dictionary) -> void:
 					continue
 				if first["fingerprint"] != second["fingerprint"]:
 					failures.append(
-						"non-deterministic connectivity seed=%d region=(%d,%d) first=%s second=%s" % [
+						"non-deterministic geometry seed=%d region=(%d,%d) first=%s second=%s" % [
 							world_seed,
 							region_x,
 							region_z,
@@ -156,6 +205,34 @@ func _run_batch(args: Dictionary) -> void:
 		]
 	)
 	_finish("batch", failures)
+
+
+func _run_geometry_cell_batch(args: Dictionary) -> void:
+	var start_seed: int = int(args.get("start-seed", "1"))
+	var seed_count: int = maxi(int(args.get("count", "100")), 1)
+	var region_radius: int = maxi(int(args.get("region-radius", "1")), 0)
+	var failures: Array[String] = []
+	var cases := 0
+	var fingerprints: Dictionary = {}
+	for seed_offset in range(seed_count):
+		var world_seed := start_seed + seed_offset
+		for region_z in range(-region_radius, region_radius + 1):
+			for region_x in range(-region_radius, region_radius + 1):
+				var region := Vector2i(region_x, region_z)
+				var first: Dictionary = GeometryCellProbe.build(world_seed, region)
+				var second: Dictionary = GeometryCellProbe.build(world_seed, region)
+				cases += 1
+				if not bool(first.get("success", false)) or not bool(second.get("success", false)):
+					failures.append("geometry-cell probe failed seed=%d region=(%d,%d)" % [world_seed, region_x, region_z])
+					continue
+				if first["fingerprint"] != second["fingerprint"]:
+					failures.append("non-deterministic geometry-cell seed=%d region=(%d,%d)" % [world_seed, region_x, region_z])
+					continue
+				fingerprints["%d:%d:%d" % [world_seed, region_x, region_z]] = first["fingerprint"]
+	print("[VALIDATION GEOMETRY CELL BATCH] cases=%d seeds=%d start_seed=%d radius=%d unique_cases=%d" % [
+		cases, seed_count, start_seed, region_radius, fingerprints.size(),
+	])
+	_finish("geometry-cell-batch", failures)
 
 
 func _run_topology_reproduction(args: Dictionary) -> void:
@@ -237,6 +314,61 @@ func _run_connectivity_reproduction(args: Dictionary) -> void:
 	quit(0)
 
 
+func _run_geometry_reproduction(args: Dictionary) -> void:
+	var world_seed: int = int(args.get("seed", "12345"))
+	var region_x: int = int(args.get("region-x", "0"))
+	var region_z: int = int(args.get("region-z", "0"))
+	var expected: String = str(args.get("expect", ""))
+	var probe: Dictionary = GeometryProbe.build(world_seed, Vector2i(region_x, region_z))
+	if not bool(probe.get("success", false)):
+		printerr("[GEOMETRY REPRO] FAIL stage=%s diagnostics=%s" % [
+			probe.get("stage", "unknown"), probe.get("diagnostics", []),
+		])
+		quit(1)
+		return
+	var fingerprint: String = str(probe["fingerprint"])
+	print("[GEOMETRY REPRO]")
+	print("  seed=%d" % world_seed)
+	print("  region=(%d,%d)" % [region_x, region_z])
+	print("  macro_fingerprint=%s" % probe["macro_fingerprint"])
+	print("  topology_fingerprint=%s" % probe["topology_fingerprint"])
+	print("  entrance_fingerprint=%s" % probe["entrance_fingerprint"])
+	print("  connectivity_fingerprint=%s" % probe["connectivity_fingerprint"])
+	print("  geometry_fingerprint=%s" % fingerprint)
+	print("  metrics=%s" % probe["metrics"])
+	if not expected.is_empty() and fingerprint != expected:
+		printerr("[GEOMETRY REPRO] expected=%s actual=%s" % [expected, fingerprint])
+		quit(1)
+		return
+	quit(0)
+
+
+func _run_geometry_cell_reproduction(args: Dictionary) -> void:
+	var world_seed: int = int(args.get("seed", "12345"))
+	var region_x: int = int(args.get("region-x", "0"))
+	var region_z: int = int(args.get("region-z", "0"))
+	var expected: String = str(args.get("expect", ""))
+	var probe: Dictionary = GeometryCellProbe.build(world_seed, Vector2i(region_x, region_z))
+	if not bool(probe.get("success", false)):
+		printerr("[GEOMETRY CELL REPRO] FAIL stage=%s diagnostics=%s" % [
+			probe.get("stage", "unknown"), probe.get("diagnostics", []),
+		])
+		quit(1)
+		return
+	var fingerprint: String = str(probe["fingerprint"])
+	print("[GEOMETRY CELL REPRO]")
+	print("  seed=%d" % world_seed)
+	print("  region=(%d,%d)" % [region_x, region_z])
+	print("  geometry_fingerprint=%s" % probe["geometry_fingerprint"])
+	print("  partition_fingerprint=%s" % fingerprint)
+	print("  metrics=%s" % probe["metrics"])
+	if not expected.is_empty() and fingerprint != expected:
+		printerr("[GEOMETRY CELL REPRO] expected=%s actual=%s" % [expected, fingerprint])
+		quit(1)
+		return
+	quit(0)
+
+
 func _finish(label: String, failures: Array[String]) -> void:
 	if failures.is_empty():
 		print("[VALIDATION] PASS %s" % label)
@@ -272,4 +404,7 @@ static func _print_usage() -> void:
 	print("  --mode=topology-repro --seed=12345 --region-x=0 --region-z=0 [--expect=topology-sha256:...]")
 	print("  --mode=entrance-repro --seed=12345 --region-x=0 --region-z=0 [--expect=entrances-sha256:...]")
 	print("  --mode=connectivity-repro --seed=12345 --region-x=0 --region-z=0 [--expect=connectivity-sha256:...]")
+	print("  --mode=geometry-repro --seed=12345 --region-x=0 --region-z=0 [--expect=geometry-sha256:...]")
+	print("  --mode=geometry-cell-repro --seed=12345 --region-x=0 --region-z=0 [--expect=gpartition-result1:sha256:...]")
 	print("  --mode=batch --start-seed=1 --count=100 --region-radius=1")
+	print("  --mode=geometry-cell-batch --start-seed=1 --count=250 --region-radius=1")

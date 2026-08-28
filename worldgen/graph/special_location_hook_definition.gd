@@ -36,3 +36,18 @@ func _init(
 	reserved_bounds = reserved_bounds_value
 	profile_blend = profile_blend_value
 	generation_metadata = Identity.copy_dictionary(generation_metadata_value)
+
+
+func canonical_data() -> Dictionary:
+	return {
+		"stable_address": stable_address.canonical_text(),
+		"stable_id": stable_id,
+		"owning_region_id": owning_region_id,
+		"anchor_node_id": anchor_node_id,
+		"anchor_edge_id": anchor_edge_id,
+		"free_world_anchor": free_world_anchor,
+		"semantic_category": semantic_category,
+		"reserved_bounds": reserved_bounds,
+		"profile_blend": profile_blend,
+		"generation_metadata": generation_metadata,
+	}
