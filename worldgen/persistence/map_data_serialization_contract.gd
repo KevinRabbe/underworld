@@ -228,8 +228,11 @@ static func _validate_exact_keys(
 
 static func _validate_json_value(value, path: String, failures: Array[String]) -> void:
 	match typeof(value):
-		TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING:
+		TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_STRING:
 			return
+		TYPE_FLOAT:
+			if not is_finite(float(value)):
+				failures.append("%s contains non-finite float" % path)
 		TYPE_ARRAY:
 			for index in range(value.size()):
 				_validate_json_value(value[index], "%s[%d]" % [path, index], failures)

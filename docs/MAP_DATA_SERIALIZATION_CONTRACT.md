@@ -79,6 +79,8 @@ Logical integer values inside `deltas` therefore use a type-preserving wire tag:
 
 The value is a canonical signed decimal string. Decode restores the tag to a native Godot `int` before the envelope is exposed to persistence consumers. Native logical floats remain ordinary JSON numbers. The reserved `$underworld_int64` key is rejected in logical delta dictionaries so user state cannot be confused with the wire encoding.
 
+Logical floats must be finite. `NaN`, positive infinity, and negative infinity are rejected recursively before wire conversion, with a diagnostic that identifies the exact delta path. This prevents implementation-specific non-JSON numeric tokens from entering canonical save data.
+
 `save_schema_version` remains a normal readable JSON number because its type is fixed by the schema; decode normalizes an exact integral JSON number back to a native integer before validation.
 
 Only JSON-safe logical values are accepted in the serialized delta payload:
@@ -136,6 +138,10 @@ Unknown newer/older versions are rejected explicitly. Migration policy belongs t
 - world header and delta round-trip;
 - signed 64-bit seed preservation through JSON beyond the `2^53` interoperability boundary;
 - native integer delta types surviving JSON round-trip;
+- fractional and whole-valued native floats surviving as `TYPE_FLOAT`;
+- recursive rejection of non-finite floats with exact delta paths;
+- reserved integer wire-tag collisions and malformed wire tags;
+- positive and negative signed 64-bit seed extrema;
 - byte-identical canonical JSON for equivalent state with different insertion order;
 - `WorldDeltaStore` reload;
 - corrupt WorldId and seed mismatch rejection;
