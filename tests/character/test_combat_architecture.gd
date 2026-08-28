@@ -1,15 +1,14 @@
 extends RefCounted
 
-const AppGameScript := preload("res://app/game/game.gd")
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const EncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
+const APP_GAME_PATH := "res://app/game/game.gd"
 
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
 	var resolver: Node = CombatResolverScript.new()
 	var encounters: Node = EncounterControllerScript.new()
-	var app: Node = AppGameScript.new()
 
 	_expect_true(failures, "combat resolver owns attack resolution", resolver.has_method("try_attack"))
 	_expect_true(
@@ -32,16 +31,32 @@ static func run() -> Array[String]:
 		"encounter controller does not resolve player attacks",
 		not encounters.has_method("try_attack")
 	)
-	_expect_true(failures, "application composition script compiles", app != null)
+
+	var app_source: String = FileAccess.get_file_as_string(APP_GAME_PATH)
+	_expect_true(failures, "application composition source is readable", not app_source.is_empty())
+	_expect_true(
+		failures,
+		"application composes canonical combat resolver",
+		"res://gameplay/combat/resolution/combat_resolver.gd" in app_source
+	)
+	_expect_true(
+		failures,
+		"application composes canonical encounter controller",
+		"res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd" in app_source
+	)
+	_expect_true(
+		failures,
+		"application no longer composes legacy combat manager",
+		not "res://combat/combat_manager.gd" in app_source
+	)
 	_expect_true(
 		failures,
 		"legacy mixed combat manager is retired",
-		not ResourceLoader.exists("res://combat/combat_manager.gd")
+		not FileAccess.file_exists("res://combat/combat_manager.gd")
 	)
 
 	resolver.free()
 	encounters.free()
-	app.free()
 	return failures
 
 
