@@ -6,6 +6,7 @@ const GenerationStageResult := preload("res://worldgen/pipeline/generation_stage
 const WorldDefinitionService := preload("res://worldgen/services/world_definition_service.gd")
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
 const SampleGraphFixture := preload("res://tests/foundation/sample_graph_fixture.gd")
+const ReservedSiteAssignmentTests := preload("res://tests/content/test_reserved_site_assignment.gd")
 
 
 static func run() -> Array[String]:
@@ -66,4 +67,5 @@ static func run() -> Array[String]:
 	if int(reloaded.get_object_state(destroyed_id).get("hits", -1)) != 2:
 		failures.append("WorldDeltaStore snapshot reload lost object state")
 
+	failures.append_array(ReservedSiteAssignmentTests.run())
 	return failures
