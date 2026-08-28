@@ -11,6 +11,7 @@ func _init() -> void:
 		print("  configure/cache lifecycle contracts passed")
 		print("  StableAddress/StableId cache ownership contracts passed")
 		print("  deterministic request/order-independence contracts passed")
+		print("  surface entrance descriptor store/query lifecycle contracts passed")
 		quit(0)
 		return
 
