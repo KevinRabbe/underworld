@@ -6,6 +6,7 @@ var entrance_candidate_metadata: Array
 var surface_integration_descriptors: Array
 var entrance_metrics: Dictionary
 var fingerprint: String
+var provenance
 
 
 func _init(
@@ -13,10 +14,12 @@ func _init(
 	candidate_metadata_value: Array,
 	descriptors_value: Array,
 	metrics_value: Dictionary,
-	fingerprint_value: String
+	fingerprint_value: String,
+	provenance_value = null
 ) -> void:
 	bundle = bundle_value
 	entrance_candidate_metadata = candidate_metadata_value.duplicate(true)
 	surface_integration_descriptors = descriptors_value.duplicate()
 	entrance_metrics = metrics_value.duplicate(true)
 	fingerprint = fingerprint_value
+	provenance = provenance_value

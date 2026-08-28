@@ -438,7 +438,7 @@ func _build_chunk_from_data(coord: Vector2i, data: Dictionary, data_ms: float) -
 	)
 
 	var needs_collision: bool = _is_within_collision_radius(coord, current_player_chunk)
-	chunk.build(
+	chunk.call("build",
 		coord,
 		data,
 		terrain_material,
