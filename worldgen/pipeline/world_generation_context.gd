@@ -79,3 +79,9 @@ func validate_required_sources(provenance, expected_sources: Array) -> Array[Str
 	if provenance == null or not (provenance is Provenance):
 		return ["GenerationProvenance is missing or has the wrong type"]
 	return provenance.requires_sources(expected_sources)
+
+
+func validate_exact_sources(provenance, expected_sources: Array) -> Array[String]:
+	if provenance == null or not (provenance is Provenance):
+		return ["GenerationProvenance is missing or has the wrong type"]
+	return provenance.validate_exact_sources(expected_sources)
