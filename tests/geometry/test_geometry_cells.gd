@@ -20,6 +20,7 @@ static func run() -> Array[String]:
 	_test_exact_boundaries_and_continuation(failures)
 	_test_negative_cells_and_configuration(failures)
 	_test_configuration_identity_mutation(failures)
+	_test_unmirrored_continuation_rejected(failures)
 	_test_type_and_region_validation(failures)
 	return failures
 
@@ -110,6 +111,26 @@ static func _test_configuration_identity_mutation(failures: Array[String]) -> vo
 	configuration.cubes_per_axis = 32
 	_expect_true(failures, "mutated configuration identity is rejected", not configuration.validate().is_empty())
 	_expect_equal(failures, "mutation does not rewrite cached identity", configuration.fingerprint, original)
+
+
+static func _test_unmirrored_continuation_rejected(failures: Array[String]) -> void:
+	var crossing_result = _partition(_crossing_fixture(), Config.new())
+	_expect_true(failures, "malformed-continuation fixture partitions", crossing_result.success)
+	if not crossing_result.success:
+		return
+	var malformed_plans: Array = crossing_result.data.plans.duplicate()
+	var right = _find_fragment(malformed_plans, "chamber", Vector3i(1, 0, 0))
+	_expect_true(failures, "malformed-continuation right fragment exists", right != null)
+	if right == null:
+		return
+	right.continuation_mask.erase("-x")
+	var validation: Array[String] = Partitioner._validate_plans(malformed_plans)
+	var rejected := false
+	for failure in validation:
+		if str(failure).contains("Unmirrored geometry-cell continuation"):
+			rejected = true
+			break
+	_expect_true(failures, "unmirrored continuation is rejected", rejected)
 
 
 static func _fixture() -> Dictionary:
