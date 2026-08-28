@@ -202,7 +202,7 @@ static func _expect_equal(failures: Array[String], label: String, actual, expect
 		failures.append("%s expected=%s actual=%s" % [label, str(expected), str(actual)])
 
 
-static func _finish(failures: Array[String]) -> void:
+func _finish(failures: Array[String]) -> void:
 	if failures.is_empty():
 		print("[WORLDGEN INSPECTOR] PASS")
 		quit(0)
