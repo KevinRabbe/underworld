@@ -7,6 +7,7 @@ var tunnel_descriptors: Array
 var reserved_site_descriptors: Array
 var geometry_metrics: Dictionary
 var fingerprint: String
+var provenance
 
 
 func _init(
@@ -14,7 +15,8 @@ func _init(
 	chamber_descriptors_value: Array,
 	tunnel_descriptors_value: Array,
 	metrics_value: Dictionary,
-	fingerprint_value: String
+	fingerprint_value: String,
+	provenance_value = null
 ) -> void:
 	bundle = bundle_value
 	chamber_descriptors = chamber_descriptors_value.duplicate()
@@ -24,3 +26,4 @@ func _init(
 		reserved_site_descriptors = bundle_value.special_location_hooks.duplicate()
 	geometry_metrics = metrics_value.duplicate(true)
 	fingerprint = fingerprint_value
+	provenance = provenance_value

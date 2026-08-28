@@ -1,0 +1,93 @@
+name: Stable ID Audit
+
+on:
+  pull_request:
+    paths:
+      - 'tools/stable_id_audit/**'
+      - 'worldgen/identity/**'
+      - '.github/workflows/stable-id-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Godot stable identity audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Run large identity corpus
+        shell: bash
+        run: |
+          set -o pipefail
+          audit_log="$(mktemp)"
+          output_dir="$RUNNER_TEMP/underworld-stable-id-audit"
+          godot --headless --path . --quit-after 1 \
+            --script res://tools/stable_id_audit/run_stable_id_audit.gd -- \
+            --out-dir="$output_dir" --basename=stable_id_audit 2>&1 \
+            | tee "$audit_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$audit_log"; then
+            exit 1
+          fi
+          grep -Fq '[STABLE ID AUDIT] PASS' "$audit_log"
+          test -s "$output_dir/stable_id_audit.json"
+          test -s "$output_dir/stable_id_audit.txt"
+
+      - name: Validate audit report
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ['RUNNER_TEMP']) / 'underworld-stable-id-audit' / 'stable_id_audit.json'
+          report = json.loads(path.read_text(encoding='utf-8'))
+          assert report['schema'] == 'underworld-stable-id-audit-v1'
+          assert report['corpus_revision'] == 'stable-id-audit-corpus-v1'
+          assert report['success'] is True
+          assert report['expected_case_count'] == 34969
+          assert report['case_count'] == 34969
+          assert report['reproduction_checks'] == 34969
+          assert report['collision_count'] == 0
+          assert report['failure_count'] == 0
+          required = {
+              'underground_region', 'network', 'node', 'primary_edge', 'entrance',
+              'entrance_anchor', 'entrance_path_edge', 'secondary_connector',
+              'special_location', 'generated_child', 'surface_candidate',
+          }
+          assert required == set(report['family_counts'])
+          assert report['endpoint_order_checks'] > 0
+          PY
+
+      - name: Publish job summary
+        shell: bash
+        run: |
+          {
+            echo '## StableAddress / StableId large-corpus audit'
+            echo '```text'
+            cat "$RUNNER_TEMP/underworld-stable-id-audit/stable_id_audit.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload audit reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: stable-id-audit
+          path: |
+            ${{ runner.temp }}/underworld-stable-id-audit/stable_id_audit.json
+            ${{ runner.temp }}/underworld-stable-id-audit/stable_id_audit.txt
+          if-no-files-found: error
+          retention-days: 14

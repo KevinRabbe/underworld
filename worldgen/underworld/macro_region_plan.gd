@@ -13,6 +13,7 @@ var topology_tendencies: Dictionary
 var network_candidate_slots: Array[int]
 var special_candidate_slots: Array[int]
 var entrance_candidate_slots: Array[int]
+var provenance
 
 
 func _init(
@@ -24,7 +25,8 @@ func _init(
 	topology_tendencies_value: Dictionary,
 	network_candidate_slots_value: Array[int],
 	special_candidate_slots_value: Array[int],
-	entrance_candidate_slots_value: Array[int] = []
+	entrance_candidate_slots_value: Array[int] = [],
+	provenance_value = null
 ) -> void:
 	stable_address = Identity.copy_address(address)
 	stable_id = Identity.id_value(stable_address)
@@ -36,6 +38,7 @@ func _init(
 	network_candidate_slots = network_candidate_slots_value.duplicate()
 	special_candidate_slots = special_candidate_slots_value.duplicate()
 	entrance_candidate_slots = entrance_candidate_slots_value.duplicate()
+	provenance = provenance_value
 
 
 func canonical_data() -> Dictionary:
