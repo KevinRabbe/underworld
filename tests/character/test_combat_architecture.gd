@@ -1,5 +1,9 @@
 extends RefCounted
 
+# Fresh headless imports do not have the editor's global script-class cache yet.
+# Load the settings schema before the app composition script so its typed
+# UnderworldWorldSettings members resolve exactly as they do in a normal project import.
+const WorldSettingsScript := preload("res://data/world_settings.gd")
 const AppGameScript := preload("res://app/game/game.gd")
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const EncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
@@ -11,6 +15,7 @@ static func run() -> Array[String]:
 	var encounters: Node = EncounterControllerScript.new()
 	var app: Node = AppGameScript.new()
 
+	_expect_true(failures, "world settings schema preloads", WorldSettingsScript != null)
 	_expect_true(failures, "combat resolver owns attack resolution", resolver.has_method("try_attack"))
 	_expect_true(
 		failures,
