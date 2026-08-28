@@ -18,6 +18,7 @@ static func run() -> Array[String]:
 	_test_determinism_and_order(failures)
 	_test_exact_boundaries_and_continuation(failures)
 	_test_negative_cells_and_configuration(failures)
+	_test_configuration_identity_mutation(failures)
 	_test_type_and_region_validation(failures)
 	return failures
 
@@ -97,6 +98,15 @@ static func _test_type_and_region_validation(failures: Array[String]) -> void:
 	var other_finalization := FinalizationResult.new(other_bundle, [], [], {}, "finalization-other")
 	var mismatched = Partitioner.partition(fixture.geometry, other_finalization, Config.new())
 	_expect_true(failures, "mismatched region input is rejected", not mismatched.success)
+
+
+static func _test_configuration_identity_mutation(failures: Array[String]) -> void:
+	var configuration := Config.new()
+	var original := configuration.fingerprint
+	configuration.cell_size = Vector3(16.0, 16.0, 16.0)
+	configuration.cubes_per_axis = 32
+	_expect_true(failures, "mutated configuration identity is rejected", not configuration.validate().is_empty())
+	_expect_equal(failures, "mutation does not rewrite cached identity", configuration.fingerprint, original)
 
 
 static func _fixture() -> Dictionary:
