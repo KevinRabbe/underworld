@@ -10,7 +10,7 @@ func _init() -> void:
 	if failures.is_empty():
 		print("[GENERATOR MANIFEST VALIDATION] PASS")
 		print("  revision dictionary insertion order is canonical")
-		print("  stage/profile/contract revision mutations change manifest identity")
+		print("  stage/profile/surface/underworld/provenance revision mutations change manifest identity")
 		print("  invalid revisions and mutable-copy leakage are rejected")
 		quit(0)
 		return
