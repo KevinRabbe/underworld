@@ -65,16 +65,11 @@ The checker intentionally uses simple path/reference rules. It does not attempt 
 
 Dependency exceptions must be explicit, file-specific, prefix-specific and carry a reason in `repository_layout_policy.json`. The validator checks that every exception references a real source file and a real forbidden prefix.
 
-Current exception:
+There are currently **no active dependency exceptions**.
 
-```text
-worldgen/migration/legacy_v2_surface_resolver.gd
-  may reference res://world/
-```
+The former `worldgen/migration/legacy_v2_surface_resolver.gd → res://world/` exception was removed when the frozen prototype-v2 terrain and pickup generators were moved into `worldgen/surface/`. The compatibility replay still reproduces the legacy generator behavior, but it now does so entirely inside the deterministic worldgen boundary.
 
-Reason: the frozen prototype-v2 save migration must replay the legacy terrain and pickup generators exactly to map old accepted-index IDs to stable semantic IDs. This exception does **not** permit other `worldgen/` files to depend on `world/`, and it does not permit that resolver to import gameplay, presentation, combat or app code.
-
-Remove the exception when the legacy-v2 replay path is retired or isolated behind a pure compatibility package.
+Do not add a new exception merely to simplify a migration. Prefer moving or extracting the dependency into its owning boundary when that can be done without changing the compatibility contract.
 
 ## What can be validated mechanically
 
@@ -183,7 +178,7 @@ A successful run reports a compact summary similar to:
   test files: 42
   tool files: 2
   legacy roots present: data
-  dependency exceptions used: 1
+  dependency exceptions used: 0
   forbidden root dependencies: 0
   retired path violations: 0
 ```
@@ -197,7 +192,7 @@ Current progress:
 1. canonical tree and legacy migration map — **done**;
 2. lightweight root/path policy checker — **done**;
 3. forbidden production → tests/tools dependency checks — **done**;
-4. narrow, validated migration exceptions — **done**;
+4. narrow, validated migration exceptions — **done; currently zero active exceptions**;
 5. tighten legacy path rules after actual domain migrations — **active, domain by domain**;
 6. content-registry/content validation — **future family cycle**;
 7. richer static dependency checks — **only where they produce reliable signal**.
