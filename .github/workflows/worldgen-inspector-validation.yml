@@ -89,5 +89,11 @@ jobs:
           grep -Fq '[WORLDGEN ATLAS] PASS' "$export_log"
           test -s "$output_dir/ci_atlas.json"
           test -s "$output_dir/ci_atlas.svg"
+          test -s "$output_dir/ci_atlas.elevation_x.svg"
+          test -s "$output_dir/ci_atlas.elevation_z.svg"
           grep -Fq 'underworld-topology-atlas-v1' "$output_dir/ci_atlas.json"
           test "$(grep -o 'class=\"region-frame\"' "$output_dir/ci_atlas.svg" | wc -l)" -eq 9
+          test "$(grep -o 'class=\"elevation-region-frame\"' "$output_dir/ci_atlas.elevation_x.svg" | wc -l)" -eq 9
+          test "$(grep -o 'class=\"elevation-region-frame\"' "$output_dir/ci_atlas.elevation_z.svg" | wc -l)" -eq 9
+          grep -Fq 'X / depth' "$output_dir/ci_atlas.elevation_x.svg"
+          grep -Fq 'Z / depth' "$output_dir/ci_atlas.elevation_z.svg"
