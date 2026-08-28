@@ -155,7 +155,7 @@ static func generate(context, region_plan, primary_topology, entrance_result, ne
 		"secondary_connectivity",
 		region.stable_id,
 		region.stable_address.canonical_text(),
-		[region_plan.provenance.fingerprint, primary_topology.provenance.fingerprint, entrance_result.provenance.fingerprint]
+		_neighbor_source_fingerprints(region_plan, primary_topology, entrance_result, neighbor_views)
 	)
 	return StageResult.ok(
 		"secondary_connectivity",
@@ -163,6 +163,25 @@ static func generate(context, region_plan, primary_topology, entrance_result, ne
 		fingerprint,
 		provenance
 	)
+
+
+static func _neighbor_source_fingerprints(region_plan, primary_topology, entrance_result, neighbor_views: Array) -> Array[String]:
+	var sources: Array[String] = [
+		region_plan.provenance.fingerprint,
+		primary_topology.provenance.fingerprint,
+		entrance_result.provenance.fingerprint,
+	]
+	for view in _normalized_neighbors(region_plan, neighbor_views):
+		if not (view is Dictionary):
+			continue
+		var neighbor_plan = view.get("region_plan")
+		var neighbor_topology = view.get("primary_topology")
+		if neighbor_plan != null and neighbor_plan.provenance != null:
+			sources.append(neighbor_plan.provenance.fingerprint)
+		if neighbor_topology != null and neighbor_topology.provenance != null:
+			sources.append(neighbor_topology.provenance.fingerprint)
+	sources.sort()
+	return sources
 
 
 static func _local_candidates(context, region_plan, bundle, nodes: Array) -> Array:

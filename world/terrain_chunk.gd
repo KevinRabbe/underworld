@@ -5,7 +5,7 @@ var _collision_body: StaticBody3D
 var _collision_heights: PackedFloat32Array = PackedFloat32Array()
 var _collision_resolution: int = 0
 var _collision_spacing: float = 1.0
-var _settings: UnderworldWorldSettings
+var _settings
 var _decoration_assets: Dictionary = {}
 
 var moisture: PackedFloat32Array = PackedFloat32Array()
@@ -43,7 +43,7 @@ func build(
 	data: Dictionary,
 	terrain_material: Material,
 	decoration_assets: Dictionary,
-	world_settings: UnderworldWorldSettings,
+	world_settings,
 	destroyed_objects: Dictionary,
 	with_collision: bool
 ) -> void:

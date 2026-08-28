@@ -24,9 +24,9 @@ static func generate(request):
 	if request.world_context != null:
 		failures.append_array(request.world_context.validate_provenance(geometry.provenance, "geometry_description"))
 		failures.append_array(request.world_context.validate_provenance(finalization.provenance, "region_finalization"))
-		if geometry.provenance != null and finalization.provenance != null:
-			failures.append_array(request.world_context.validate_required_sources(
-				geometry.provenance, [finalization.provenance.fingerprint]
+		if geometry.provenance != null:
+			failures.append_array(request.world_context.validate_exact_sources(
+				geometry.provenance, request.expected_geometry_source_fingerprints
 			))
 		if not failures.is_empty():
 			return StageResult.fail("geometry_cell_partition", failures)
@@ -148,8 +148,8 @@ static func generate(request):
 	return StageResult.ok("geometry_cell_partition", result, result.fingerprint, result.provenance)
 
 
-static func partition(geometry_result, finalization_result, configuration = null, requested_cells: Array = [], context = null):
-	var request := Request.new(geometry_result, finalization_result, configuration, requested_cells, context)
+static func partition(geometry_result, finalization_result, configuration = null, requested_cells: Array = [], context = null, expected_geometry_sources: Array = []):
+	var request := Request.new(geometry_result, finalization_result, configuration, requested_cells, context, expected_geometry_sources)
 	return generate(request)
 
 
@@ -383,6 +383,7 @@ static func _validate_plans(plans: Array) -> Array[String]:
 		if plans_by_coordinate.has(plan_key):
 			failures.append("Duplicate geometry cell plan: " + plan.cell_address.canonical_text())
 		plans_by_coordinate[plan_key] = plan
+	for plan in plans:
 		for fragment in plan.fragments:
 			if fragment_ids.has(fragment.fragment_id):
 				failures.append("Duplicate geometry cell fragment: " + fragment.fragment_id)

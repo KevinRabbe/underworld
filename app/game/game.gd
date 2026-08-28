@@ -9,6 +9,9 @@ const PlayerScript := preload("res://gameplay/player/player.gd")
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
 const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
+const UnderworldRuntimeControllerScript := preload("res://worldgen/runtime/underworld_cave_runtime_controller.gd")
+const WorldIdScript := preload("res://worldgen/identity/world_id.gd")
+const GeneratorManifestScript := preload("res://worldgen/versioning/generator_manifest.gd")
 
 var world_settings
 var survival_settings
@@ -20,13 +23,16 @@ var combat_resolver
 var encounter_controller
 var debug_hud
 var water_surface: MeshInstance3D
+var underworld_runtime
 var spawn_xz: Vector3 = Vector3.ZERO
+@export var enable_map015_fixture: bool = false
 
 
 func _ready() -> void:
 	_setup_environment()
 	_create_world()
 	_create_player()
+	_create_underworld_runtime()
 	_create_combat()
 	_create_debug_hud()
 
@@ -35,6 +41,29 @@ func _process(_delta: float) -> void:
 	if water_surface != null and player != null:
 		water_surface.global_position.x = player.global_position.x
 		water_surface.global_position.z = player.global_position.z
+	if underworld_runtime != null and player != null:
+		underworld_runtime.update_player_position(player.global_position)
+
+
+func _create_underworld_runtime() -> void:
+	underworld_runtime = UnderworldRuntimeControllerScript.new()
+	underworld_runtime.name = "UnderworldRuntime"
+	add_child(underworld_runtime)
+	var world_id: String = WorldIdScript.from_seed(world_settings.world_seed).value()
+	var manifest_id: String = GeneratorManifestScript.foundation_default().manifest_id()
+	underworld_runtime.configure(world_id, manifest_id, player)
+	if enable_map015_fixture:
+		var entrance_id: String = "sid1:sa1|2:ug|6:region|1:0|1:0|8:entrance|4:slot|1:0"
+		var diagnostics: Array[String] = underworld_runtime.bootstrap_fixture(1, Vector2i.ZERO, entrance_id)
+		if diagnostics.is_empty():
+			spawn_xz = underworld_runtime.last_bootstrap_surface_position
+			world.generate_initial(spawn_xz)
+			var surface_height: float = world.get_height_at_world(spawn_xz.x, spawn_xz.z)
+			player.global_position = Vector3(spawn_xz.x, surface_height + 3.0, spawn_xz.z)
+			player.set_respawn_position(player.global_position)
+			if water_surface != null:
+				water_surface.position.x = spawn_xz.x
+				water_surface.position.z = spawn_xz.z
 
 
 func _setup_environment() -> void:
@@ -60,6 +89,8 @@ func _setup_environment() -> void:
 
 func _create_world() -> void:
 	world_settings = WorldSettingsScript.new()
+	if enable_map015_fixture:
+		world_settings.world_seed = 1
 	survival_settings = SurvivalSettingsScript.new()
 	water_settings = WaterSettingsScript.new()
 

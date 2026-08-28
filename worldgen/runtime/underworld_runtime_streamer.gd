@@ -15,6 +15,8 @@ var geometry_activate_radius: int = 2
 var geometry_release_radius: int = 3
 var render_activate_radius: int = 1
 var render_release_radius: int = 2
+var collision_activate_radius: int = 1
+var collision_release_radius: int = 2
 var max_active_voxel_workers: int = 2
 var world_id: String = ""
 var generator_manifest_id: String = ""
@@ -33,6 +35,9 @@ func _init(world_id_value: String = "", manifest_id_value: String = "", executor
 
 func demand_cell(address, source: String, tiers: Array, source_fingerprint: String = "", provenance_fingerprint: String = ""):
 	var record = _record(address)
+	var identity_changed: bool = (not source_fingerprint.is_empty() and not record.source_fingerprint.is_empty() and source_fingerprint != record.source_fingerprint) or (not provenance_fingerprint.is_empty() and not record.provenance_fingerprint.is_empty() and provenance_fingerprint != record.provenance_fingerprint)
+	if identity_changed:
+		_invalidate_generation(record)
 	var lease: Dictionary = record.demands.get(source, {})
 	for tier in tiers:
 		var tier_name := str(tier)
@@ -40,6 +45,31 @@ func demand_cell(address, source: String, tiers: Array, source_fingerprint: Stri
 			continue
 		lease[tier_name] = int(lease.get(tier_name, 0)) + 1
 	record.demands[source] = lease
+	record.release_pending = false
+	if not source_fingerprint.is_empty():
+		record.source_fingerprint = source_fingerprint
+	if not provenance_fingerprint.is_empty():
+		record.provenance_fingerprint = provenance_fingerprint
+	if record.state == "dormant":
+		record.state = "requested"
+	_queue_if_needed(record)
+	return record
+
+
+func set_demand(address, source: String, tiers: Array, source_fingerprint: String = "", provenance_fingerprint: String = ""):
+	var record = _record(address)
+	var identity_changed: bool = (not source_fingerprint.is_empty() and not record.source_fingerprint.is_empty() and source_fingerprint != record.source_fingerprint) or (not provenance_fingerprint.is_empty() and not record.provenance_fingerprint.is_empty() and provenance_fingerprint != record.provenance_fingerprint)
+	if identity_changed:
+		_invalidate_generation(record)
+	var lease: Dictionary = {}
+	for tier in tiers:
+		var tier_name := str(tier)
+		if TIERS.has(tier_name):
+			lease[tier_name] = 1
+	if lease.is_empty():
+		record.demands.erase(source)
+	else:
+		record.demands[source] = lease
 	record.release_pending = false
 	if not source_fingerprint.is_empty():
 		record.source_fingerprint = source_fingerprint
@@ -98,7 +128,9 @@ func update_observer(position: Vector3, source: String = "player") -> void:
 					tiers.append("voxel_geometry")
 				if distance <= render_activate_radius:
 					tiers.append("render")
-				demand_cell(Address.new(coordinate), source, tiers)
+				if distance <= collision_activate_radius:
+					tiers.append("collision")
+				set_demand(Address.new(coordinate), source, tiers)
 	for record in records.values():
 		if not record.demands.has(source):
 			continue
@@ -106,6 +138,8 @@ func update_observer(position: Vector3, source: String = "player") -> void:
 		var release_tiers: Array[String] = []
 		if distance > render_release_radius:
 			release_tiers.append("render")
+		if distance > collision_release_radius:
+			release_tiers.append("collision")
 		if distance > geometry_release_radius:
 			release_tiers.append_array(["fragment_plan", "voxel_geometry"])
 		if distance > definition_release_radius:
@@ -119,16 +153,16 @@ func accept_result(result) -> bool:
 		stale_result_count += 1
 		return false
 	var record = _record(result.cell_address)
+	if result.world_id.is_empty() or result.generator_manifest_id.is_empty() or result.source_fingerprint.is_empty() or result.provenance_fingerprint.is_empty():
+		stale_result_count += 1
+		return false
 	if result.generation != record.generation or record.release_pending:
 		stale_result_count += 1
 		return false
-	if not result.world_id.is_empty() and result.world_id != world_id:
+	if result.world_id != world_id or result.generator_manifest_id != generator_manifest_id:
 		stale_result_count += 1
 		return false
-	if not result.generator_manifest_id.is_empty() and result.generator_manifest_id != generator_manifest_id:
-		stale_result_count += 1
-		return false
-	if not record.demands.has("player") and record.demands.is_empty():
+	if record.demands.is_empty() or record.demand_count(result.tier) <= 0:
 		stale_result_count += 1
 		return false
 	if not record.source_fingerprint.is_empty() and result.source_fingerprint != record.source_fingerprint:
@@ -140,12 +174,17 @@ func accept_result(result) -> bool:
 	if not TIERS.has(result.tier):
 		stale_result_count += 1
 		return false
+	if result.tier == "collision" and result.payload == null:
+		stale_result_count += 1
+		return false
 	record.queued[result.tier] = false
 	if not result.success:
 		record.diagnostics.append_array(result.diagnostics)
 		record.state = "failed"
 		return false
 	record.readiness[result.tier] = true
+	if result.tier == "collision":
+		record.collision_handle = result.payload
 	_update_state(record)
 	return true
 
@@ -157,6 +196,7 @@ func release_cell(address) -> bool:
 	record.generation += 1
 	record.release_pending = true
 	record.runtime_handle = null
+	record.collision_handle = null
 	record.readiness = {"definition": false, "fragment_plan": false, "voxel_geometry": false, "render": false, "collision": false, "simulation": false}
 	record.queued.clear()
 	record.state = "dormant"
@@ -169,6 +209,8 @@ func reconfigure(world_id_value: String, manifest_id_value: String) -> void:
 	generator_manifest_id = manifest_id_value
 	for record in records.values():
 		record.generation += 1
+		record.runtime_handle = null
+		record.collision_handle = null
 		record.readiness = {"definition": false, "fragment_plan": false, "voxel_geometry": false, "render": false, "collision": false, "simulation": false}
 		record.queued.clear()
 		record.state = "requested" if not record.demands.is_empty() else "dormant"
@@ -192,6 +234,16 @@ func _record(address):
 	if not records.has(key):
 		records[key] = Record.new(address)
 	return records[key]
+
+
+func _invalidate_generation(record) -> void:
+	record.generation += 1
+	record.readiness = {"definition": false, "fragment_plan": false, "voxel_geometry": false, "render": false, "collision": false, "simulation": false}
+	record.queued.clear()
+	record.runtime_handle = null
+	record.collision_handle = null
+	record.release_pending = false
+	record.state = "requested"
 
 
 func _queue_if_needed(record) -> void:
