@@ -77,6 +77,29 @@ static func _test_neighbor_order_independence(failures: Array[String]) -> void:
 			built["result"].fingerprint,
 			rerun.data.fingerprint
 		)
+		_expect_equal(
+			failures,
+			"neighbor scheduling order cannot change connectivity provenance",
+			built["result"].provenance.fingerprint,
+			rerun.data.provenance.fingerprint
+		)
+		for view in built["neighbor_views"]:
+			if not (view is Dictionary):
+				continue
+			var neighbor_plan = view.get("region_plan")
+			var neighbor_topology = view.get("primary_topology")
+			if neighbor_plan != null and neighbor_plan.provenance != null:
+				_expect_true(
+					failures,
+					"connectivity provenance records neighbor macro ancestry",
+					built["result"].provenance.source_stage_fingerprints.has(neighbor_plan.provenance.fingerprint)
+				)
+			if neighbor_topology != null and neighbor_topology.provenance != null:
+				_expect_true(
+					failures,
+					"connectivity provenance records neighbor topology ancestry",
+					built["result"].provenance.source_stage_fingerprints.has(neighbor_topology.provenance.fingerprint)
+				)
 
 
 static func _test_bounded_distribution(failures: Array[String]) -> void:
