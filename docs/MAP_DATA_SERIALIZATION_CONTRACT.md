@@ -65,11 +65,23 @@ player_created_objects
 
 They match the logical `WorldDeltaStore` boundary. This schema defines their envelope and round-trip behavior; it does not define the eventual binary terrain-delta format or player-created object identity policy.
 
-## Canonical JSON
+## Canonical JSON and numeric types
 
 `MapDataSerializationContract` emits compact canonical JSON with dictionary keys sorted recursively. Equivalent logical state therefore produces byte-identical JSON independent of dictionary insertion order.
 
-Only JSON-safe values are accepted in the serialized delta payload:
+Godot 4.7 parses ordinary JSON numbers as floating-point values. Durable state can legitimately distinguish an integer from a float, so the wire format must not silently turn `2` into `2.0` on load.
+
+Logical integer values inside `deltas` therefore use a type-preserving wire tag:
+
+```json
+{"$underworld_int64":"2"}
+```
+
+The value is a canonical signed decimal string. Decode restores the tag to a native Godot `int` before the envelope is exposed to persistence consumers. Native logical floats remain ordinary JSON numbers. The reserved `$underworld_int64` key is rejected in logical delta dictionaries so user state cannot be confused with the wire encoding.
+
+`save_schema_version` remains a normal readable JSON number because its type is fixed by the schema; decode normalizes an exact integral JSON number back to a native integer before validation.
+
+Only JSON-safe logical values are accepted in the serialized delta payload:
 
 ```text
 null
@@ -91,9 +103,11 @@ Decode is intentionally staged:
 
 ```text
 JSON text
-  -> parse
+  -> parse wire representation
+  -> restore typed delta integers
+  -> normalize schema-version type
   -> validate schema + world identity
-  -> validated envelope
+  -> validated logical envelope
   -> load delta payload into WorldDeltaStore
 ```
 
@@ -121,6 +135,7 @@ Unknown newer/older versions are rejected explicitly. Migration policy belongs t
 
 - world header and delta round-trip;
 - signed 64-bit seed preservation through JSON beyond the `2^53` interoperability boundary;
+- native integer delta types surviving JSON round-trip;
 - byte-identical canonical JSON for equivalent state with different insertion order;
 - `WorldDeltaStore` reload;
 - corrupt WorldId and seed mismatch rejection;
