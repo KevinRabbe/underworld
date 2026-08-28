@@ -383,6 +383,7 @@ static func _validate_plans(plans: Array) -> Array[String]:
 		if plans_by_coordinate.has(plan_key):
 			failures.append("Duplicate geometry cell plan: " + plan.cell_address.canonical_text())
 		plans_by_coordinate[plan_key] = plan
+	for plan in plans:
 		for fragment in plan.fragments:
 			if fragment_ids.has(fragment.fragment_id):
 				failures.append("Duplicate geometry cell fragment: " + fragment.fragment_id)
