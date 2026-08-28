@@ -75,10 +75,16 @@ static func generate(context, region_coord: Vector2i):
 		special_slots,
 		entrance_slots
 	)
+	var fingerprint: String = CanonicalValue.fingerprint(plan.canonical_data())
+	var provenance = context.make_provenance(
+		"macro_region", plan.stable_id, plan.stable_address.canonical_text(), []
+	)
+	plan.provenance = provenance
 	return StageResult.ok(
 		"macro_region",
 		plan,
-		CanonicalValue.fingerprint(plan.canonical_data())
+		fingerprint,
+		provenance
 	)
 
 

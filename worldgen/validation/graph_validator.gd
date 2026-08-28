@@ -40,6 +40,79 @@ static func validate_region_bundle(bundle) -> Array[String]:
 	return failures
 
 
+static func validate_external_edge_references(bundle, references: Array) -> Array[String]:
+	var failures: Array[String] = validate_region_bundle(bundle)
+	if bundle == null or bundle.region_definition == null:
+		return failures
+
+	var region = bundle.region_definition
+	var nodes: Dictionary = {}
+	for node in bundle.nodes:
+		if node != null and not str(node.stable_id).is_empty():
+			nodes[str(node.stable_id)] = node
+	var edges: Dictionary = {}
+	for edge in bundle.edges:
+		if edge != null and not str(edge.stable_id).is_empty():
+			edges[str(edge.stable_id)] = edge
+
+	var seen: Dictionary = {}
+	for reference in references:
+		if reference == null:
+			failures.append("Null external edge reference")
+			continue
+
+		var edge_id: String = str(reference.edge_stable_id)
+		if reference.edge_stable_address == null:
+			failures.append("External edge reference has null StableAddress")
+		else:
+			var expected = StableId.from_address(reference.edge_stable_address)
+			if expected == null:
+				failures.append("External edge reference has invalid StableAddress")
+			elif edge_id != expected.value():
+				failures.append(
+					"External edge reference StableId does not match StableAddress: " + edge_id
+				)
+
+		if edge_id.is_empty():
+			failures.append("External edge reference has empty edge StableId")
+		elif seen.has(edge_id):
+			failures.append("Duplicate external edge reference: " + edge_id)
+		else:
+			seen[edge_id] = true
+
+		if str(reference.connection_class) != "cross_region_connection":
+			failures.append("External edge reference has wrong connection class: " + edge_id)
+		if str(reference.local_region_id) != str(region.stable_id):
+			failures.append("External edge reference has wrong local region: " + edge_id)
+		if str(reference.owner_region_id).is_empty():
+			failures.append("External edge reference has empty owner region: " + edge_id)
+		if str(reference.remote_region_id).is_empty():
+			failures.append("External edge reference has empty remote region: " + edge_id)
+		if str(reference.owner_region_id) == str(region.stable_id):
+			failures.append("External edge reference is locally owned: " + edge_id)
+		if str(reference.remote_region_id) != str(reference.owner_region_id):
+			failures.append(
+				"External edge reference remote region must match owner region: " + edge_id
+			)
+
+		var local_endpoint_id: String = str(reference.local_endpoint_node_id)
+		var remote_endpoint_id: String = str(reference.remote_endpoint_node_id)
+		if local_endpoint_id.is_empty():
+			failures.append("External edge reference has empty local endpoint: " + edge_id)
+		elif not nodes.has(local_endpoint_id):
+			failures.append("External edge reference local endpoint is missing: " + edge_id)
+		if remote_endpoint_id.is_empty():
+			failures.append("External edge reference has empty remote endpoint: " + edge_id)
+		elif nodes.has(remote_endpoint_id):
+			failures.append("External edge reference remote endpoint resolves locally: " + edge_id)
+		if not local_endpoint_id.is_empty() and local_endpoint_id == remote_endpoint_id:
+			failures.append("External edge reference connects endpoint to itself: " + edge_id)
+		if not edge_id.is_empty() and edges.has(edge_id):
+			failures.append("External edge reference is also materialized locally: " + edge_id)
+
+	return failures
+
+
 static func _index_definitions(
 	definitions: Array,
 	label: String,
@@ -276,11 +349,31 @@ static func _validate_edges(
 		if edge.endpoint_b_node_id < edge.endpoint_a_node_id:
 			failures.append("Edge endpoint order is not canonical: " + edge_id)
 
-		var allows_external: bool = edge.connection_class == "cross_region_connection"
-		if not nodes.has(edge.endpoint_a_node_id) and not allows_external:
-			failures.append("Edge endpoint A is missing: " + edge_id)
-		if not nodes.has(edge.endpoint_b_node_id) and not allows_external:
-			failures.append("Edge endpoint B is missing: " + edge_id)
+		if edge.connection_class == "cross_region_connection":
+			var local_endpoint_count: int = 0
+			if nodes.has(edge.endpoint_a_node_id):
+				local_endpoint_count += 1
+			if nodes.has(edge.endpoint_b_node_id):
+				local_endpoint_count += 1
+			if local_endpoint_count != 1:
+				failures.append(
+					"Cross-region edge must have exactly one local endpoint: %s local_count=%d" % [
+						edge_id,
+						local_endpoint_count,
+					]
+				)
+			var remote_region_id: String = str(
+				edge.topology_parameters.get("remote_region_id", "")
+			)
+			if remote_region_id.is_empty():
+				failures.append("Cross-region edge has empty remote region: " + edge_id)
+			elif remote_region_id == str(region.stable_id):
+				failures.append("Cross-region edge remote region points to owner: " + edge_id)
+		else:
+			if not nodes.has(edge.endpoint_a_node_id):
+				failures.append("Edge endpoint A is missing: " + edge_id)
+			if not nodes.has(edge.endpoint_b_node_id):
+				failures.append("Edge endpoint B is missing: " + edge_id)
 		if edge.connection_class.is_empty():
 			failures.append("Edge has empty connection_class: " + edge_id)
 		_validate_unique_strings(edge.tags, "edge tags " + edge_id, failures)

@@ -32,6 +32,13 @@ static func generate(context, region_plan, surface_sampler = null):
 	failures.append_array(context.validate())
 	if not failures.is_empty():
 		return StageResult.fail("primary_topology", failures)
+	failures.append_array(context.validate_provenance(
+		region_plan.provenance,
+		"macro_region",
+		region_plan.stable_id
+	))
+	if not failures.is_empty():
+		return StageResult.fail("primary_topology", failures)
 	if surface_sampler == null:
 		surface_sampler = SurfaceSampler.new(context.world_seed)
 
@@ -120,9 +127,15 @@ static func generate(context, region_plan, surface_sampler = null):
 		node_candidates,
 		boundary_candidates,
 		topology_metrics,
-		fingerprint
+		fingerprint,
+		context.make_provenance(
+			"primary_topology",
+			region.stable_id,
+			region.stable_address.canonical_text(),
+			[region_plan.provenance.fingerprint]
+		)
 	)
-	return StageResult.ok("primary_topology", result, fingerprint)
+	return StageResult.ok("primary_topology", result, fingerprint, result.provenance)
 
 
 static func _generate_network(

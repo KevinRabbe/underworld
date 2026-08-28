@@ -6,11 +6,13 @@ const StableIdScript := preload("res://worldgen/identity/stable_id.gd")
 
 var generation_context
 var _region_bundles_by_id: Dictionary = {}
+var _surface_entrances_by_region_id: Dictionary = {}
 
 
 func configure(context) -> Array[String]:
 	generation_context = context
 	_region_bundles_by_id.clear()
+	_surface_entrances_by_region_id.clear()
 	if generation_context == null:
 		return ["WorldDefinitionService requires WorldGenerationContext"]
 	return generation_context.validate()
@@ -28,7 +30,7 @@ func get_region_if_ready(region_address):
 	return _region_bundles_by_id.get(region_id)
 
 
-func store_finalized_region(region_bundle) -> Array[String]:
+func store_finalized_region(region_bundle, surface_descriptors: Array = []) -> Array[String]:
 	var failures: Array[String] = []
 	if generation_context == null:
 		return ["WorldDefinitionService is not configured"]
@@ -45,7 +47,26 @@ func store_finalized_region(region_bundle) -> Array[String]:
 		return failures
 
 	_region_bundles_by_id[region.stable_id] = region_bundle
+	if not surface_descriptors.is_empty():
+		_surface_entrances_by_region_id[region.stable_id] = surface_descriptors.duplicate()
 	return failures
+
+
+func store_surface_entrance_descriptors(region_id: String, descriptors: Array) -> Array[String]:
+	if region_id.is_empty():
+		return ["WorldDefinitionService requires a region id for entrance descriptors"]
+	_surface_entrances_by_region_id[region_id] = descriptors.duplicate()
+	return []
+
+
+func query_surface_entrances(world_bounds: AABB) -> Array:
+	var result: Array = []
+	for descriptors in _surface_entrances_by_region_id.values():
+		for descriptor in descriptors:
+			if descriptor != null and descriptor.overlaps_world_bounds(world_bounds):
+				result.append(descriptor)
+	result.sort_custom(func(a, b): return str(a.entrance_id) < str(b.entrance_id))
+	return result
 
 
 func evict_region(region_address) -> bool:

@@ -34,6 +34,16 @@ static func generate(context, region_plan, primary_topology, surface_sampler = n
 	failures.append_array(context.validate())
 	if not failures.is_empty():
 		return StageResult.fail("entrance_generation", failures)
+	var expected_region_id: String = region_plan.stable_id
+	failures.append_array(context.validate_provenance(
+		region_plan.provenance, "macro_region", expected_region_id
+	))
+	failures.append_array(context.validate_provenance(
+		primary_topology.provenance, "primary_topology", expected_region_id,
+		[region_plan.provenance.fingerprint]
+	))
+	if not failures.is_empty():
+		return StageResult.fail("entrance_generation", failures)
 	if surface_sampler == null:
 		surface_sampler = SurfaceSampler.new(context.world_seed)
 
@@ -164,10 +174,17 @@ static func generate(context, region_plan, primary_topology, surface_sampler = n
 		"metrics": metrics,
 	}
 	var fingerprint: String = "entrances-" + CanonicalValue.fingerprint(fingerprint_data)
+	var provenance = context.make_provenance(
+		"entrance_selection",
+		region.stable_id,
+		region.stable_address.canonical_text(),
+		[region_plan.provenance.fingerprint, primary_topology.provenance.fingerprint]
+	)
 	return StageResult.ok(
 		"entrance_generation",
-		EntranceResult.new(bundle, candidate_metadata, descriptors, metrics, fingerprint),
-		fingerprint
+		EntranceResult.new(bundle, candidate_metadata, descriptors, metrics, fingerprint, provenance),
+		fingerprint,
+		provenance
 	)
 
 
