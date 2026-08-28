@@ -9,6 +9,7 @@ var owning_region_id: String
 var root_node_id: String
 var node_ids: Array[String]
 var primary_edge_ids: Array[String]
+var entrance_path_edge_ids: Array[String]
 var attached_entrance_ids: Array[String]
 var topology_metrics: Dictionary
 
@@ -20,7 +21,8 @@ func _init(
 	node_ids_value: Array = [],
 	primary_edge_ids_value: Array = [],
 	attached_entrance_ids_value: Array = [],
-	topology_metrics_value: Dictionary = {}
+	topology_metrics_value: Dictionary = {},
+	entrance_path_edge_ids_value: Array = []
 ) -> void:
 	stable_address = Identity.copy_address(address)
 	stable_id = Identity.id_value(stable_address)
@@ -28,5 +30,6 @@ func _init(
 	root_node_id = root_node_id_value
 	node_ids = Identity.copy_string_array(node_ids_value)
 	primary_edge_ids = Identity.copy_string_array(primary_edge_ids_value)
+	entrance_path_edge_ids = Identity.copy_string_array(entrance_path_edge_ids_value)
 	attached_entrance_ids = Identity.copy_string_array(attached_entrance_ids_value)
 	topology_metrics = Identity.copy_dictionary(topology_metrics_value)

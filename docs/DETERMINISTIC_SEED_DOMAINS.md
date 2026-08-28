@@ -573,6 +573,11 @@ ug.entrance.geometry_tendency
 
 The same stable entrance slot can keep its identity even if some generated properties are revised under an intentional generator update.
 
+The v0.10 registry implements these concerns as `ug.entrance.selection`,
+`ug.entrance.profile`, `ug.entrance.surface` and `ug.entrance.geometry` domains.
+Topology target/depth scoring is part of selection; surface candidate variation
+is isolated from descent-profile selection.
+
 ### 13.6 Secondary connectivity
 
 A secondary connector candidate uses its canonical ordered endpoints/owner address.

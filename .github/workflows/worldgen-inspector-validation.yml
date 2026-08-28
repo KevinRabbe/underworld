@@ -1,0 +1,99 @@
+name: Worldgen Inspector Validation
+
+on:
+  pull_request:
+    paths:
+      - 'tools/worldgen/**'
+      - 'worldgen/**'
+      - '.github/workflows/worldgen-inspector-validation.yml'
+  push:
+    branches:
+      - 'tools/**'
+
+permissions:
+  contents: read
+
+jobs:
+  inspector-contracts:
+    name: Godot topology inspector contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Run inspector contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tools/worldgen/run_topology_inspector_contracts.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[WORLDGEN INSPECTOR] PASS' "$validation_log"
+
+      - name: Run atlas contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tools/worldgen/run_topology_atlas_contracts.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[WORLDGEN ATLAS] PASS' "$validation_log"
+
+      - name: Export sample snapshot
+        run: |
+          set -o pipefail
+          export_log="$(mktemp)"
+          output_dir="/tmp/underworld-worldgen-inspector"
+          godot --headless --path . --quit-after 1 \
+            --script res://tools/worldgen/export_topology_snapshot.gd -- \
+            --seed=12345 --region-x=0 --region-z=0 \
+            --out-dir="$output_dir" --basename=ci_sample 2>&1 \
+            | tee "$export_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$export_log"; then
+            exit 1
+          fi
+          grep -Fq '[WORLDGEN SNAPSHOT] PASS' "$export_log"
+          test -s "$output_dir/ci_sample.json"
+          test -s "$output_dir/ci_sample.svg"
+          grep -Fq 'underworld-topology-snapshot-v1' "$output_dir/ci_sample.json"
+          grep -Fq '<svg' "$output_dir/ci_sample.svg"
+
+      - name: Export sample 3x3 atlas
+        run: |
+          set -o pipefail
+          export_log="$(mktemp)"
+          output_dir="/tmp/underworld-worldgen-inspector"
+          godot --headless --path . --quit-after 1 \
+            --script res://tools/worldgen/export_topology_atlas.gd -- \
+            --seed=12345 --center-x=0 --center-z=0 --radius=1 \
+            --out-dir="$output_dir" --basename=ci_atlas 2>&1 \
+            | tee "$export_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$export_log"; then
+            exit 1
+          fi
+          grep -Fq '[WORLDGEN ATLAS] PASS' "$export_log"
+          test -s "$output_dir/ci_atlas.json"
+          test -s "$output_dir/ci_atlas.svg"
+          test -s "$output_dir/ci_atlas.elevation_x.svg"
+          test -s "$output_dir/ci_atlas.elevation_z.svg"
+          grep -Fq 'underworld-topology-atlas-v1' "$output_dir/ci_atlas.json"
+          test "$(grep -o 'class=\"region-frame\"' "$output_dir/ci_atlas.svg" | wc -l)" -eq 9
+          test "$(grep -o 'class=\"elevation-region-frame\"' "$output_dir/ci_atlas.elevation_x.svg" | wc -l)" -eq 9
+          test "$(grep -o 'class=\"elevation-region-frame\"' "$output_dir/ci_atlas.elevation_z.svg" | wc -l)" -eq 9
+          grep -Fq 'X / depth' "$output_dir/ci_atlas.elevation_x.svg"
+          grep -Fq 'Z / depth' "$output_dir/ci_atlas.elevation_z.svg"

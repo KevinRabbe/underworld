@@ -4,6 +4,7 @@ signal equipped_tool_changed(tool_id: String)
 
 var settings
 var world
+var world_seed: int = 0
 var player: Node3D
 
 var object_hit_progress: Dictionary = {}
@@ -17,9 +18,10 @@ var last_action_message: String = "Walk over loose branches and stones"
 var pickup_update_timer: float = 0.0
 
 
-func configure(world_node, world_settings) -> void:
+func configure(world_node, survival_settings, seed: int) -> void:
 	world = world_node
-	settings = world_settings
+	settings = survival_settings
+	world_seed = seed
 	_load_state()
 
 
@@ -36,9 +38,7 @@ func _process(delta: float) -> void:
 	if pickup_update_timer > 0.0:
 		return
 
-	# Preserve the prototype cadence that previously shared the world-object
-	# physics timer. A later settings split may give pickup collection its own rate.
-	pickup_update_timer = maxf(settings.world_object_update_interval, 0.05)
+	pickup_update_timer = maxf(settings.pickup_collect_interval, 0.05)
 	_collect_nearby_pickups()
 
 
@@ -236,8 +236,16 @@ func has_tool(tool_id: String) -> bool:
 	return tool_id == "hands"
 
 
+func get_crafting_cost(recipe_id: String) -> Vector2i:
+	if recipe_id == "stone_axe":
+		return Vector2i(settings.stone_axe_wood_cost, settings.stone_axe_stone_cost)
+	if recipe_id == "stone_pickaxe":
+		return Vector2i(settings.stone_pickaxe_wood_cost, settings.stone_pickaxe_stone_cost)
+	return Vector2i.ZERO
+
+
 func _get_save_path() -> String:
-	return "user://underworld_seed_%d.json" % settings.world_seed
+	return "user://underworld_seed_%d.json" % world_seed
 
 
 func _reset_state() -> void:
@@ -269,7 +277,7 @@ func _load_state() -> void:
 		return
 
 	var save_data: Dictionary = parsed
-	if int(save_data.get("world_seed", -1)) != settings.world_seed:
+	if int(save_data.get("world_seed", -1)) != world_seed:
 		return
 
 	var destroyed_list: Array = save_data.get("destroyed_objects", [])
@@ -304,7 +312,7 @@ func _save_state() -> void:
 
 	var save_data: Dictionary = {
 		"version": 2,
-		"world_seed": settings.world_seed,
+		"world_seed": world_seed,
 		"destroyed_objects": destroyed_list,
 		"wood": gathered_wood,
 		"stone": gathered_stone,
