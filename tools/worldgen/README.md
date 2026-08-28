@@ -41,6 +41,13 @@ godot --headless --path . \
 
 `radius=1` produces a 3×3 atlas. `radius=0` produces one region and the current safety cap is `radius=4`, which produces a 9×9 atlas.
 
+One atlas command emits four artifacts from the exact same deterministic region data:
+
+- `.json` — canonical multi-region topology data;
+- `.svg` — top-down X/Z atlas;
+- `.elevation_x.svg` — X versus world-Y depth view;
+- `.elevation_z.svg` — Z versus world-Y depth view.
+
 The atlas JSON contains:
 
 - canonical row-major region snapshots;
@@ -48,7 +55,20 @@ The atlas JSON contains:
 - aggregate region/network/node/edge/boundary-candidate counts;
 - the seed, center coordinate, radius and grid dimensions.
 
-The atlas SVG preserves the same node depth-profile colors and vertical-transition dashes as the single-region view. Each region is drawn in its own fixed cell and boundary candidates receive cyan directional ticks. This makes it easier to inspect broad cave distribution and potential cross-region relationships without changing or querying production generators differently.
+### Top-down atlas
+
+The top-down SVG preserves the same node depth-profile colors and vertical-transition dashes as the single-region view. Each region is drawn in its own fixed cell and boundary candidates receive cyan directional ticks. This makes it easier to inspect broad cave distribution and potential cross-region relationships without changing or querying production generators differently.
+
+### Elevation atlases
+
+The two elevation SVGs preserve the same region-cell layout as the top-down atlas while changing the projection inside each cell:
+
+- `elevation_x` plots world X horizontally and world Y vertically;
+- `elevation_z` plots world Z horizontally and world Y vertically.
+
+This makes vertical topology visible without collapsing neighboring regions into one ambiguous side projection. Nodes retain their shallow/mid/deep dominant-profile colors, vertical-transition edges remain dashed and slightly heavier, and hover metadata includes full XYZ world coordinates.
+
+Each cell also shows three faint geometric depth bands. These bands divide the region's vertical bounds into equal thirds for visual orientation only; they do not redefine the production shallow/mid/deep grammar or consume any generation data.
 
 Optional atlas arguments:
 
@@ -102,9 +122,9 @@ godot --headless --path . --quit-after 1 \
   --script res://tools/worldgen/run_topology_atlas_contracts.gd
 ```
 
-The contracts check deterministic JSON/SVG output, topology metric coverage, canonical ordering, edge/node references, region bounds, normalized profile weights, atlas aggregate counts, radius limits and negative seed/region coordinates.
+The contracts check deterministic JSON/SVG output, topology metric coverage, canonical ordering, edge/node references, region bounds, normalized profile weights, atlas aggregate counts, radius limits, negative seed/region coordinates, deterministic X/depth and Z/depth rendering, complete node coverage and valid elevation axes.
 
-A dedicated `Worldgen Inspector Validation` workflow exports both a real single-region snapshot and a 3×3 atlas on GitHub Actions.
+A dedicated `Worldgen Inspector Validation` workflow exports a real single-region snapshot plus a 3×3 top-down/X-depth/Z-depth atlas on GitHub Actions.
 
 ## Future extension
 
