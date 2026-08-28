@@ -174,6 +174,9 @@ func accept_result(result) -> bool:
 	if result.tier == "collision" and result.payload == null:
 		stale_result_count += 1
 		return false
+	if result.tier == "collision" and not (result.payload is ConcavePolygonShape3D):
+		stale_result_count += 1
+		return false
 	record.queued[result.tier] = false
 	if not result.success:
 		record.diagnostics.append_array(result.diagnostics)
