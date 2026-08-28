@@ -13,6 +13,7 @@ var seed_schema_version: int
 var stable_address_schema_version: int
 var surface_contract_revision: int
 var underworld_contract_revision: int
+var provenance_contract_revision: int
 var _stage_revisions: Dictionary = {}
 var _profile_revisions: Dictionary = {}
 
@@ -21,12 +22,14 @@ func _init(
 	stage_revisions: Dictionary = {},
 	profile_revisions: Dictionary = {},
 	surface_revision: int = 1,
-	underworld_revision: int = 1
+	underworld_revision: int = 1,
+	provenance_revision: int = 1
 ) -> void:
 	seed_schema_version = SeedDeriver.SEED_SCHEMA_VERSION
 	stable_address_schema_version = StableAddress.SCHEMA_VERSION
 	surface_contract_revision = surface_revision
 	underworld_contract_revision = underworld_revision
+	provenance_contract_revision = provenance_revision
 
 	for key in stage_revisions.keys():
 		_stage_revisions[str(key)] = int(stage_revisions[key])
@@ -54,6 +57,8 @@ func canonical_text() -> String:
 	result = _append(result, str(surface_contract_revision))
 	result = _append(result, "underworld-contract")
 	result = _append(result, str(underworld_contract_revision))
+	result = _append(result, "provenance-contract")
+	result = _append(result, str(provenance_contract_revision))
 
 	var stage_keys: Array = _stage_revisions.keys()
 	stage_keys.sort()
@@ -106,6 +111,8 @@ func validate() -> Array[String]:
 		failures.append("GeneratorManifest surface contract revision must be positive")
 	if underworld_contract_revision <= 0:
 		failures.append("GeneratorManifest Underworld contract revision must be positive")
+	if provenance_contract_revision <= 0:
+		failures.append("GeneratorManifest provenance contract revision must be positive")
 
 	failures.append_array(_validate_revision_map("stage", _stage_revisions))
 	failures.append_array(_validate_revision_map("profile", _profile_revisions))

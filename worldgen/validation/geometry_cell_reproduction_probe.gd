@@ -20,7 +20,9 @@ static func build(world_seed: int, region_coord: Vector2i) -> Dictionary:
 			"stage": "cave_geometry",
 			"diagnostics": geometry.diagnostics,
 		}
-	var partition = Partitioner.partition(geometry.data, inputs["finalized"], Config.new())
+	var partition = Partitioner.partition(
+		geometry.data, inputs["finalized"], Config.new(), [], inputs["context"]
+	)
 	if not partition.success:
 		return {
 			"success": false,
@@ -33,7 +35,21 @@ static func build(world_seed: int, region_coord: Vector2i) -> Dictionary:
 		"geometry_fingerprint": geometry.fingerprint,
 		"finalization_fingerprint": inputs["finalization_fingerprint"],
 		"configuration_fingerprint": partition.data.configuration_fingerprint,
+		"provenance_chain": _provenance_chain(inputs, geometry.data, partition.data),
 		"metrics": partition.data.metrics,
 		"diagnostics": [],
 	}
+
+
+static func _provenance_chain(inputs: Dictionary, geometry_data, partition_data) -> Dictionary:
+	var chain: Dictionary = {}
+	for key in ["macro", "primary", "entrance", "connectivity", "hooks", "finalized"]:
+		var value = inputs.get(key)
+		if value != null and value.provenance != null:
+			chain[key] = value.provenance.fingerprint
+	if geometry_data != null and geometry_data.provenance != null:
+		chain["geometry"] = geometry_data.provenance.fingerprint
+	if partition_data != null and partition_data.provenance != null:
+		chain["geometry_cell_partition"] = partition_data.provenance.fingerprint
+	return chain
 

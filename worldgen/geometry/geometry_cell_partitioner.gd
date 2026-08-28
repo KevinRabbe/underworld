@@ -21,6 +21,11 @@ static func generate(request):
 		return StageResult.fail("geometry_cell_partition", failures)
 	var geometry = request.cave_geometry_result
 	var finalization = request.region_finalization_result
+	if request.world_context != null:
+		failures.append_array(request.world_context.validate_provenance(geometry.provenance, "geometry_description"))
+		failures.append_array(request.world_context.validate_provenance(finalization.provenance, "region_finalization"))
+		if not failures.is_empty():
+			return StageResult.fail("geometry_cell_partition", failures)
 	if geometry.bundle == null or finalization.bundle == null:
 		return StageResult.fail("geometry_cell_partition", ["Partition inputs must contain finalized graph bundles"])
 	var geometry_region_id: String = str(geometry.bundle.region_definition.stable_id)
@@ -133,18 +138,30 @@ static func generate(request):
 		geometry.fingerprint,
 		finalization.fingerprint,
 		metrics,
-		[]
+		[],
+		_request_provenance(request, geometry, finalization)
 	)
-	return StageResult.ok("geometry_cell_partition", result, result.fingerprint)
+	return StageResult.ok("geometry_cell_partition", result, result.fingerprint, result.provenance)
 
 
-static func partition(geometry_result, finalization_result, configuration = null, requested_cells: Array = []):
-	var request := Request.new(geometry_result, finalization_result, configuration, requested_cells)
+static func partition(geometry_result, finalization_result, configuration = null, requested_cells: Array = [], context = null):
+	var request := Request.new(geometry_result, finalization_result, configuration, requested_cells, context)
 	return generate(request)
 
 
 static func build(request):
 	return generate(request)
+
+
+static func _request_provenance(request, geometry, finalization):
+	if request.world_context == null or geometry.provenance == null or finalization.provenance == null:
+		return null
+	return request.world_context.make_provenance(
+		"geometry_cell_partition",
+		str(geometry.bundle.region_definition.stable_id),
+		geometry.bundle.region_definition.stable_address.canonical_text(),
+		[geometry.provenance.fingerprint, finalization.provenance.fingerprint]
+	)
 
 
 static func _sources(geometry, finalization) -> Array:

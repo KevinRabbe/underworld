@@ -12,6 +12,7 @@ var source_finalization_fingerprint: String
 var metrics: Dictionary
 var diagnostics: Array[String]
 var fingerprint: String
+var provenance
 
 
 func _init(
@@ -20,7 +21,8 @@ func _init(
 	geometry_fingerprint_value: String,
 	finalization_fingerprint_value: String,
 	metrics_value: Dictionary = {},
-	diagnostics_value: Array[String] = []
+	diagnostics_value: Array[String] = [],
+	provenance_value = null
 ) -> void:
 	plans = plans_value.duplicate()
 	cell_plans = plans
@@ -29,6 +31,7 @@ func _init(
 	source_finalization_fingerprint = finalization_fingerprint_value
 	metrics = metrics_value.duplicate(true)
 	diagnostics = diagnostics_value.duplicate()
+	provenance = provenance_value
 	var plan_data: Array = []
 	for plan in plans:
 		if plan is Plan:

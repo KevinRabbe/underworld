@@ -35,6 +35,28 @@ static func generate(context, region_plan, finalization_result, neighbor_views: 
 	var failures: Array[String] = context.validate()
 	if not failures.is_empty():
 		return StageResult.fail("cave_geometry", failures)
+	failures.append_array(context.validate_provenance(
+		region_plan.provenance, "macro_region", region_plan.stable_id
+	))
+	failures.append_array(context.validate_provenance(
+		finalization_result.provenance, "region_finalization", region_plan.stable_id
+	))
+	for view in neighbor_views:
+		if not (view is Dictionary):
+			continue
+		var neighbor_plan = view.get("region_plan")
+		var neighbor_topology = view.get("primary_topology")
+		if neighbor_plan != null and neighbor_plan.provenance != null:
+			failures.append_array(context.validate_provenance(
+				neighbor_plan.provenance, "macro_region", neighbor_plan.stable_id
+			))
+		if neighbor_topology != null and neighbor_plan != null and neighbor_topology.provenance != null:
+			failures.append_array(context.validate_provenance(
+				neighbor_topology.provenance, "primary_topology", neighbor_plan.stable_id,
+				[neighbor_plan.provenance.fingerprint]
+			))
+	if not failures.is_empty():
+		return StageResult.fail("cave_geometry", failures)
 
 	var source = finalization_result.bundle
 	if source.region_definition.stable_id != region_plan.stable_id:
@@ -108,10 +130,17 @@ static func generate(context, region_plan, finalization_result, neighbor_views: 
 		"tunnels": tunnel_data,
 		"metrics": metrics,
 	})
+	var provenance = context.make_provenance(
+		"geometry_description",
+		region_plan.stable_id,
+		region_plan.stable_address.canonical_text(),
+		[region_plan.provenance.fingerprint, finalization_result.provenance.fingerprint]
+	)
 	return StageResult.ok(
 		"cave_geometry",
-		GeometryResult.new(source, chambers, tunnels, metrics, fingerprint),
-		fingerprint
+		GeometryResult.new(source, chambers, tunnels, metrics, fingerprint, provenance),
+		fingerprint,
+		provenance
 	)
 
 
