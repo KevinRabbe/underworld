@@ -124,6 +124,18 @@ func requires_sources(expected_sources: Array) -> Array[String]:
 	return failures
 
 
+func validate_exact_sources(expected_sources: Array) -> Array[String]:
+	var expected: Array[String] = []
+	for value in expected_sources:
+		expected.append(str(value))
+	expected.sort()
+	var actual: Array[String] = source_stage_fingerprints.duplicate()
+	actual.sort()
+	if actual != expected:
+		return ["GenerationProvenance source fingerprint set mismatch"]
+	return []
+
+
 func canonical_data() -> Dictionary:
 	return {
 		"contract_revision": CONTRACT_REVISION,

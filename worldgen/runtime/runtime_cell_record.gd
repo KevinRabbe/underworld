@@ -17,6 +17,7 @@ var queued: Dictionary = {}
 var source_fingerprint: String = ""
 var provenance_fingerprint: String = ""
 var runtime_handle = null
+var collision_handle = null
 var state: String = "dormant"
 var diagnostics: Array[String] = []
 var release_pending: bool = false
