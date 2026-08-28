@@ -109,6 +109,39 @@ func probe(address) -> float:
     require(not violations, f"valid named domain call produced violations: {violations}")
 
 
+def test_magic_deterministic_rng_context_rejected() -> None:
+    registered = {"DOMAIN_A", "DOMAIN_B"}
+    source = """extends RefCounted
+func probe(address):
+    return DeterministicRng.from_context(
+        42,
+        address,
+        0x010001,
+        \"probe\"
+    )
+"""
+    violations = audit.audit_source_text("worldgen/probe_rng.gd", source, registered)
+    require(
+        "magic-deterministic-rng-domain" in codes(violations),
+        "numeric DeterministicRng.from_context domain was not reported",
+    )
+
+
+def test_named_deterministic_rng_context_passes() -> None:
+    registered = {"DOMAIN_A", "DOMAIN_B"}
+    source = """extends RefCounted
+func probe(address):
+    return DeterministicRng.from_context(
+        42,
+        address,
+        SeedDomains.get_domain(SeedDomains.DOMAIN_B),
+        \"probe\"
+    )
+"""
+    violations = audit.audit_source_text("worldgen/probe_rng.gd", source, registered)
+    require(not violations, f"valid DeterministicRng.from_context domain produced violations: {violations}")
+
+
 def main() -> int:
     tests = [
         test_valid_registry_and_machine_order,
@@ -118,6 +151,8 @@ def main() -> int:
         test_direct_registry_numeric_id_rejected,
         test_magic_and_unknown_callsites_rejected,
         test_named_registry_callsites_pass,
+        test_magic_deterministic_rng_context_rejected,
+        test_named_deterministic_rng_context_passes,
     ]
     for test in tests:
         test()
@@ -125,7 +160,7 @@ def main() -> int:
     print("[SEED DOMAIN AUDIT TEST] PASS")
     print(f"  focused contracts: {len(tests)}")
     print("  duplicate ID/name and revision failures detected")
-    print("  magic/undeclared call-site diagnostics detected")
+    print("  SeedDomains, SeedDeriver, and DeterministicRng domain call-site diagnostics detected")
     print("  machine registry schema/order stable")
     return 0
 
