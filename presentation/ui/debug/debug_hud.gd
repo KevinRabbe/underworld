@@ -2,6 +2,7 @@ extends CanvasLayer
 
 var world
 var player
+var survival
 var combat_resolver
 var encounter_controller
 var settings
@@ -16,12 +17,14 @@ func configure(
 	world_node,
 	player_node,
 	world_settings,
+	survival_controller = null,
 	combat_resolver_node = null,
 	encounter_controller_node = null
 ) -> void:
 	world = world_node
 	player = player_node
 	settings = world_settings
+	survival = survival_controller
 	combat_resolver = combat_resolver_node
 	encounter_controller = encounter_controller_node
 
@@ -88,7 +91,14 @@ func _update_layout() -> void:
 
 
 func _refresh_text() -> void:
-	if label == null or survival_label == null or world == null or player == null or settings == null:
+	if (
+		label == null
+		or survival_label == null
+		or world == null
+		or player == null
+		or settings == null
+		or survival == null
+	):
 		return
 
 	var position: Vector3 = player.global_position
@@ -99,11 +109,11 @@ func _refresh_text() -> void:
 	var decoration_counts: Vector2i = world.get_current_decoration_counts()
 	var pickup_counts: Vector2i = world.get_current_pickup_counts()
 	var active_world_objects: int = world.get_active_world_object_count()
-	var resources: Vector2i = world.get_resource_counts()
-	var selected_slot: int = world.get_selected_hotbar_slot()
-	var has_axe: bool = world.has_tool("stone_axe")
-	var has_pickaxe: bool = world.has_tool("stone_pickaxe")
-	var equipped: String = world.get_equipped_tool()
+	var resources: Vector2i = survival.get_resource_counts()
+	var selected_slot: int = survival.get_selected_hotbar_slot()
+	var has_axe: bool = survival.has_tool("stone_axe")
+	var has_pickaxe: bool = survival.has_tool("stone_pickaxe")
+	var equipped: String = survival.get_equipped_tool()
 	var stamina_current: float = player.get_stamina()
 	var stamina_max: float = player.get_max_stamina()
 	var action_state: String = player.get_action_state_name()
@@ -141,7 +151,7 @@ func _refresh_text() -> void:
 			resources.x, resources.y, world.get_destroyed_object_count()
 		]
 		+ "Equipped: %s   Harvest: %s\n" % [
-			_tool_display_name(equipped), world.get_last_harvest_message()
+			_tool_display_name(equipped), survival.get_last_harvest_message()
 		]
 		+ "Combat: %s   Active enemies: %d\n" % [combat_message, active_enemies]
 		+ "Character: STA %.0f/%.0f   Action: %s\n" % [
