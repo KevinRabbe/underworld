@@ -1,0 +1,39 @@
+name: PM Acceptance Gate
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+      - unlabeled
+      - ready_for_review
+      - converted_to_draft
+
+permissions:
+  contents: read
+
+jobs:
+  pm-acceptance:
+    name: PM acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Enforce PM acceptance state
+        env:
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+          HAS_PM_ACCEPTANCE: ${{ contains(github.event.pull_request.labels.*.name, 'pm-accepted') }}
+        run: |
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "PR is still draft; PM acceptance cannot pass."
+            exit 1
+          fi
+
+          if [ "$HAS_PM_ACCEPTANCE" != "true" ]; then
+            echo "Missing required pm-accepted label."
+            exit 1
+          fi
+
+          echo "PM acceptance gate passed."
