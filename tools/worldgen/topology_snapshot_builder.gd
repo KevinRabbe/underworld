@@ -18,14 +18,26 @@ static func build(world_seed: int, region_coord: Vector2i) -> Dictionary:
 
 	return {
 		"success": true,
-		"snapshot": _snapshot(world_seed, macro_stage.data, topology_stage.data),
+		"snapshot": _snapshot(
+			world_seed,
+			macro_stage.data,
+			topology_stage.data,
+			macro_stage.fingerprint,
+			topology_stage.fingerprint
+		),
 		"macro_fingerprint": macro_stage.fingerprint,
 		"topology_fingerprint": topology_stage.fingerprint,
 		"diagnostics": [],
 	}
 
 
-static func _snapshot(world_seed: int, region_plan, topology) -> Dictionary:
+static func _snapshot(
+	world_seed: int,
+	region_plan,
+	topology,
+	macro_fingerprint: String,
+	topology_fingerprint: String
+) -> Dictionary:
 	var bundle = topology.bundle
 	var networks: Array = bundle.networks.duplicate()
 	var nodes: Array = bundle.nodes.duplicate()
@@ -87,8 +99,8 @@ static func _snapshot(world_seed: int, region_plan, topology) -> Dictionary:
 			"profile_bias": _vector3(region_plan.profile_bias),
 			"topology_tendencies": _json_safe(region_plan.topology_tendencies),
 		},
-		"macro_fingerprint": "" if region_plan == null else "available-in-build-result",
-		"topology_fingerprint": topology.fingerprint,
+		"macro_fingerprint": macro_fingerprint,
+		"topology_fingerprint": topology_fingerprint,
 		"metrics": _json_safe(topology.topology_metrics),
 		"networks": network_data,
 		"nodes": node_data,
