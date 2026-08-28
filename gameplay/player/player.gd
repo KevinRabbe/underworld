@@ -10,7 +10,7 @@ const PrototypeMannequinScript := preload("res://presentation/characters/player/
 const StaminaComponentScript := preload("res://gameplay/player/components/stamina_component.gd")
 const PlayerActionControllerScript := preload("res://gameplay/player/actions/player_action_controller.gd")
 const PlayerInputBufferScript := preload("res://gameplay/player/input/player_input_buffer.gd")
-const AttackCatalogScript := preload("res://combat/player_attack_catalog.gd")
+const AttackCatalogScript := preload("res://gameplay/combat/attacks/player_attack_catalog.gd")
 
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 10.0
