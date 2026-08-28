@@ -6,6 +6,7 @@ const WorldDeltaStoreScript := preload("res://worldgen/persistence/world_delta_s
 
 const SAVE_SCHEMA_VERSION: int = 3
 const SCHEMA_NAME: String = "underworld-map-save-v3"
+const INT64_WIRE_TAG: String = "$underworld_int64"
 const REQUIRED_TOP_LEVEL_KEYS: Array[String] = ["deltas", "save_schema_version", "schema", "world"]
 const REQUIRED_WORLD_KEYS: Array[String] = [
 	"generator_manifest_canonical",
@@ -66,10 +67,12 @@ static func validate_envelope(envelope: Dictionary) -> Array[String]:
 	_validate_exact_keys("root", envelope, REQUIRED_TOP_LEVEL_KEYS, failures)
 	if str(envelope.get("schema", "")) != SCHEMA_NAME:
 		failures.append("Unsupported map save schema name")
-	if int(envelope.get("save_schema_version", -1)) != SAVE_SCHEMA_VERSION:
+	var schema_version_variant = envelope.get("save_schema_version", null)
+	if not schema_version_variant is int:
+		failures.append("save_schema_version must be an integer")
+	elif int(schema_version_variant) != SAVE_SCHEMA_VERSION:
 		failures.append(
-			"Unsupported save_schema_version: %s" %
-			str(envelope.get("save_schema_version", "missing"))
+			"Unsupported save_schema_version: %s" % str(schema_version_variant)
 		)
 
 	var world_variant = envelope.get("world", null)
@@ -92,9 +95,15 @@ static func canonical_json(envelope: Dictionary) -> Dictionary:
 	var failures: Array[String] = validate_envelope(envelope)
 	if not failures.is_empty():
 		return _failure(failures)
+
+	# Godot's JSON parser materializes JSON numbers as floats. Preserve the
+	# logical int/float distinction inside durable deltas with a small typed
+	# wire representation, while keeping the in-memory envelope ergonomic.
+	var wire_envelope: Dictionary = envelope.duplicate(true)
+	wire_envelope["deltas"] = _to_wire_value(envelope["deltas"])
 	return {
 		"success": true,
-		"json": _encode_json_value(envelope),
+		"json": _encode_json_value(wire_envelope),
 		"diagnostics": [],
 	}
 
@@ -128,13 +137,21 @@ static func decode(json_text: String) -> Dictionary:
 		])
 	if not json.data is Dictionary:
 		return _failure(["Map save JSON root must be an object"])
-	var envelope: Dictionary = json.data
-	var failures: Array[String] = validate_envelope(envelope)
+
+	var envelope: Dictionary = json.data.duplicate(true)
+	var failures: Array[String] = []
+	_normalize_wire_schema_version(envelope, failures)
+	if envelope.get("deltas", null) is Dictionary:
+		envelope["deltas"] = _from_wire_value(envelope["deltas"], "deltas", failures)
+	if not failures.is_empty():
+		return _failure(failures)
+
+	failures.append_array(validate_envelope(envelope))
 	if not failures.is_empty():
 		return _failure(failures)
 	return {
 		"success": true,
-		"envelope": envelope.duplicate(true),
+		"envelope": envelope,
 		"diagnostics": [],
 	}
 
@@ -222,9 +239,86 @@ static func _validate_json_value(value, path: String, failures: Array[String]) -
 					failures.append("%s contains non-string JSON key" % path)
 					continue
 				var key: String = str(key_variant)
+				if key == INT64_WIRE_TAG:
+					failures.append("%s uses reserved serialization key %s" % [path, INT64_WIRE_TAG])
+					continue
 				_validate_json_value(value[key_variant], "%s.%s" % [path, key], failures)
 		_:
 			failures.append("%s contains unsupported JSON Variant type %d" % [path, typeof(value)])
+
+
+static func _to_wire_value(value):
+	match typeof(value):
+		TYPE_INT:
+			return {INT64_WIRE_TAG: str(int(value))}
+		TYPE_ARRAY:
+			var result: Array = []
+			for item in value:
+				result.append(_to_wire_value(item))
+			return result
+		TYPE_DICTIONARY:
+			var result: Dictionary = {}
+			for key_variant in value.keys():
+				var key: String = str(key_variant)
+				result[key] = _to_wire_value(value[key_variant])
+			return result
+		_:
+			return value
+
+
+static func _from_wire_value(value, path: String, failures: Array[String]):
+	match typeof(value):
+		TYPE_ARRAY:
+			var result: Array = []
+			for index in range(value.size()):
+				result.append(_from_wire_value(value[index], "%s[%d]" % [path, index], failures))
+			return result
+		TYPE_DICTIONARY:
+			var dictionary: Dictionary = value
+			if dictionary.has(INT64_WIRE_TAG):
+				if dictionary.size() != 1:
+					failures.append("%s has malformed %s integer tag" % [path, INT64_WIRE_TAG])
+					return null
+				var integer_variant = dictionary[INT64_WIRE_TAG]
+				if not integer_variant is String:
+					failures.append("%s integer tag must contain a decimal string" % path)
+					return null
+				var integer_text: String = str(integer_variant)
+				if integer_text.is_empty() or not integer_text.is_valid_int():
+					failures.append("%s integer tag is not a valid 64-bit decimal integer" % path)
+					return null
+				var integer_value: int = int(integer_text)
+				if str(integer_value) != integer_text:
+					failures.append("%s integer tag is not in canonical decimal form" % path)
+					return null
+				return integer_value
+			var result: Dictionary = {}
+			for key_variant in dictionary.keys():
+				if not key_variant is String:
+					failures.append("%s contains non-string JSON key" % path)
+					continue
+				var key: String = str(key_variant)
+				result[key] = _from_wire_value(
+					dictionary[key_variant],
+					"%s.%s" % [path, key],
+					failures
+				)
+			return result
+		_:
+			return value
+
+
+static func _normalize_wire_schema_version(envelope: Dictionary, failures: Array[String]) -> void:
+	var version_variant = envelope.get("save_schema_version", null)
+	if version_variant is int:
+		return
+	if version_variant is float:
+		var version_float: float = float(version_variant)
+		var version_int: int = int(version_float)
+		if version_float == float(version_int):
+			envelope["save_schema_version"] = version_int
+			return
+	failures.append("save_schema_version is not an exact integer")
 
 
 static func _encode_json_value(value) -> String:
