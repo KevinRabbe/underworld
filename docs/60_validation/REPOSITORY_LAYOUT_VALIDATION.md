@@ -37,23 +37,23 @@ canonical:
   worldgen/
 
 legacy_allowed:
-  combat/
   data/
 
 forbidden:
+  combat/
   game/
   player/
   scenes/
   scripts/
 ```
 
-`game/` and `player/` became forbidden after their staged migrations completed. `combat/` and `data/` remain temporary compatibility roots until their mixed prototype responsibilities are split and migrated deliberately.
+`game/`, `player/` and `combat/` became forbidden after their staged migrations completed. `data/` remains the only temporary top-level compatibility root until its prototype settings/data responsibilities are split and migrated deliberately.
 
 Stage 1 CI currently enforces:
 
 - tracked files may only enter reviewed top-level ownership roots;
-- retired `game/` and `player/` roots may not return;
-- Godot resource references may not use `res://game/` or `res://player/`;
+- retired `combat/`, `game/` and `player/` roots may not return;
+- Godot resource references may not use `res://combat/`, `res://game/` or `res://player/`;
 - production/runtime roots may not import from `tests/` or `tools/`;
 - `worldgen/` may not import concrete runtime/app/presentation domains;
 - `core/` may not import concrete game domains;
@@ -182,7 +182,7 @@ A successful run reports a compact summary similar to:
   production files: 84
   test files: 42
   tool files: 2
-  legacy roots present: combat, data
+  legacy roots present: data
   dependency exceptions used: 1
   forbidden root dependencies: 0
   retired path violations: 0
