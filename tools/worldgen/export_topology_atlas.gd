@@ -2,6 +2,7 @@ extends SceneTree
 
 const AtlasBuilder := preload("res://tools/worldgen/topology_atlas_builder.gd")
 const AtlasSvg := preload("res://tools/worldgen/topology_atlas_svg.gd")
+const ElevationSvg := preload("res://tools/worldgen/topology_elevation_svg.gd")
 
 
 func _init() -> void:
@@ -41,8 +42,12 @@ func _init() -> void:
 	var atlas: Dictionary = built["atlas"]
 	var json_text: String = JSON.stringify(atlas, "\t", true, true) + "\n"
 	var svg_text: String = AtlasSvg.render(atlas)
+	var elevation_x_text: String = ElevationSvg.render(atlas, "x")
+	var elevation_z_text: String = ElevationSvg.render(atlas, "z")
 	var json_path: String = _join(out_dir, basename + ".json")
 	var svg_path: String = _join(out_dir, basename + ".svg")
+	var elevation_x_path: String = _join(out_dir, basename + ".elevation_x.svg")
+	var elevation_z_path: String = _join(out_dir, basename + ".elevation_z.svg")
 
 	var json_error: Error = _write_text(json_path, json_text)
 	if json_error != OK:
@@ -51,7 +56,17 @@ func _init() -> void:
 		return
 	var svg_error: Error = _write_text(svg_path, svg_text)
 	if svg_error != OK:
-		printerr("[WORLDGEN ATLAS] cannot write SVG: %s error=%d" % [svg_path, svg_error])
+		printerr("[WORLDGEN ATLAS] cannot write top-down SVG: %s error=%d" % [svg_path, svg_error])
+		quit(1)
+		return
+	var elevation_x_error: Error = _write_text(elevation_x_path, elevation_x_text)
+	if elevation_x_error != OK:
+		printerr("[WORLDGEN ATLAS] cannot write X/depth SVG: %s error=%d" % [elevation_x_path, elevation_x_error])
+		quit(1)
+		return
+	var elevation_z_error: Error = _write_text(elevation_z_path, elevation_z_text)
+	if elevation_z_error != OK:
+		printerr("[WORLDGEN ATLAS] cannot write Z/depth SVG: %s error=%d" % [elevation_z_path, elevation_z_error])
 		quit(1)
 		return
 
@@ -66,7 +81,9 @@ func _init() -> void:
 		str(totals.get("boundary_candidate_count", 0)),
 	])
 	print("  json=%s" % ProjectSettings.globalize_path(json_path))
-	print("  svg=%s" % ProjectSettings.globalize_path(svg_path))
+	print("  top_down_svg=%s" % ProjectSettings.globalize_path(svg_path))
+	print("  elevation_x_svg=%s" % ProjectSettings.globalize_path(elevation_x_path))
+	print("  elevation_z_svg=%s" % ProjectSettings.globalize_path(elevation_z_path))
 	quit(0)
 
 
@@ -116,3 +133,4 @@ static func _print_usage() -> void:
 	print("  godot --headless --path . --script res://tools/worldgen/export_topology_atlas.gd -- \\")
 	print("    --seed=12345 --center-x=0 --center-z=0 --radius=1 [--out-dir=user://worldgen_snapshots] [--basename=name]")
 	print("  radius=0 renders one region; radius=1 renders 3x3; maximum radius=4 renders 9x9")
+	print("  outputs: JSON, top-down SVG, X/depth SVG, Z/depth SVG")
