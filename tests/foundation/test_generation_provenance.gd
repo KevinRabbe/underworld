@@ -72,6 +72,8 @@ static func _test_mutation_and_required_ancestry(failures: Array[String]) -> voi
 	_expect_true(failures, "mutated provenance is rejected", not provenance.validate().is_empty())
 	_expect_true(failures, "provenance fingerprint remains original", provenance.fingerprint == original)
 	_expect_true(failures, "required ancestry rejects substituted parent", not provenance.requires_sources(["parent:b"]).is_empty())
+	_expect_true(failures, "exact ancestry rejects unrelated extra parent", not provenance.validate_exact_sources(["parent:a", "parent:b"]).is_empty())
+	_expect_true(failures, "exact ancestry accepts canonical order", provenance.validate_exact_sources(["parent:a"]).is_empty())
 	context.world_id = "world:wrong"
 	_expect_true(failures, "context world id must match seed", not context.validate().is_empty())
 

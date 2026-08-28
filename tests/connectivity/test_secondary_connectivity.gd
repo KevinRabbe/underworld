@@ -13,6 +13,7 @@ static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_local_determinism_and_immutability(failures)
 	_test_neighbor_order_independence(failures)
+	_test_stale_neighbor_rejected(failures)
 	_test_bounded_distribution(failures)
 	_test_cross_region_canonical_ownership(failures)
 	_test_negative_region(failures)
@@ -83,23 +84,41 @@ static func _test_neighbor_order_independence(failures: Array[String]) -> void:
 			built["result"].provenance.fingerprint,
 			rerun.data.provenance.fingerprint
 		)
-		for view in built["neighbor_views"]:
-			if not (view is Dictionary):
+		for neighbor_view in built["neighbor_views"]:
+			if not (neighbor_view is Dictionary):
 				continue
-			var neighbor_plan = view.get("region_plan")
-			var neighbor_topology = view.get("primary_topology")
-			if neighbor_plan != null and neighbor_plan.provenance != null:
+			var neighbor_plan_check = neighbor_view.get("region_plan")
+			var neighbor_topology_check = neighbor_view.get("primary_topology")
+			if neighbor_plan_check != null and neighbor_plan_check.provenance != null:
 				_expect_true(
 					failures,
 					"connectivity provenance records neighbor macro ancestry",
-					built["result"].provenance.source_stage_fingerprints.has(neighbor_plan.provenance.fingerprint)
+					built["result"].provenance.source_stage_fingerprints.has(neighbor_plan_check.provenance.fingerprint)
 				)
-			if neighbor_topology != null and neighbor_topology.provenance != null:
+			if neighbor_topology_check != null and neighbor_topology_check.provenance != null:
 				_expect_true(
 					failures,
 					"connectivity provenance records neighbor topology ancestry",
-					built["result"].provenance.source_stage_fingerprints.has(neighbor_topology.provenance.fingerprint)
+					built["result"].provenance.source_stage_fingerprints.has(neighbor_topology_check.provenance.fingerprint)
 				)
+
+
+static func _test_stale_neighbor_rejected(failures: Array[String]) -> void:
+	var built: Dictionary = _build(24681357, Vector2i(2, -3), true)
+	if not bool(built.get("success", false)):
+		failures.append("stale-neighbor fixture failed")
+		return
+	var view = built["neighbor_views"][0]
+	var neighbor_plan = view["region_plan"]
+	var original = neighbor_plan.provenance
+	neighbor_plan.provenance = built["context"].make_provenance(
+		"macro_region", neighbor_plan.stable_id, neighbor_plan.stable_address.canonical_text(), ["stale-neighbor-parent"]
+	)
+	var rejected = ConnectivityGenerator.generate(
+		built["context"], built["macro"], built["topology"], built["entrances"], built["neighbor_views"]
+	)
+	neighbor_plan.provenance = original
+	_expect_true(failures, "changed neighbor ancestry is rejected", not rejected.success)
 
 
 static func _test_bounded_distribution(failures: Array[String]) -> void:

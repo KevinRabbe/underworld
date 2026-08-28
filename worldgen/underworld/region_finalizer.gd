@@ -63,7 +63,10 @@ static func generate(
 			if input_provenance != null:
 				failures.append_array(context.validate_required_sources(input_provenance, [region_plan.provenance.fingerprint]))
 	if hook_result.provenance != null and connectivity_result.provenance != null:
-		failures.append_array(context.validate_required_sources(hook_result.provenance, [connectivity_result.provenance.fingerprint]))
+		failures.append_array(context.validate_exact_sources(
+			hook_result.provenance,
+			[region_plan.provenance.fingerprint, connectivity_result.provenance.fingerprint]
+		))
 	if connectivity_result.provenance != null and entrance_result.provenance != null:
 		failures.append_array(context.validate_required_sources(connectivity_result.provenance, [entrance_result.provenance.fingerprint]))
 	if not failures.is_empty():

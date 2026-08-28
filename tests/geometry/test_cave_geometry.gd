@@ -17,6 +17,7 @@ static func run() -> Array[String]:
 	_test_finalization_boundary(failures)
 	_test_finalizer_input_types(failures)
 	_test_neighbor_order_independence(failures)
+	_test_stale_neighbor_rejected(failures)
 	_test_negative_region(failures)
 	return failures
 
@@ -232,6 +233,30 @@ static func _test_neighbor_order_independence(failures: Array[String]) -> void:
 		forward["geometry"].fingerprint,
 		reversed["geometry"].fingerprint
 	)
+	_expect_equal(
+		failures,
+		"neighbor scheduling order cannot change geometry provenance",
+		forward["geometry"].provenance.fingerprint,
+		reversed["geometry"].provenance.fingerprint
+	)
+
+
+static func _test_stale_neighbor_rejected(failures: Array[String]) -> void:
+	var built: Dictionary = _build(24681357, Vector2i(2, -3), true)
+	if not bool(built.get("success", false)):
+		failures.append("geometry stale-neighbor fixture failed")
+		return
+	var view = built["neighbor_views"][0]
+	var neighbor_plan = view["region_plan"]
+	var original = neighbor_plan.provenance
+	neighbor_plan.provenance = built["context"].make_provenance(
+		"macro_region", neighbor_plan.stable_id, neighbor_plan.stable_address.canonical_text(), ["stale-neighbor-parent"]
+	)
+	var rejected = GeometryGenerator.generate(
+		built["context"], built["macro"], built["finalized"], built["neighbor_views"]
+	)
+	neighbor_plan.provenance = original
+	_expect_true(failures, "changed geometry neighbor ancestry is rejected", not rejected.success)
 
 
 static func _test_negative_region(failures: Array[String]) -> void:
