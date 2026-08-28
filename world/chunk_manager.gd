@@ -2,9 +2,9 @@ extends Node3D
 
 signal equipped_tool_changed(tool_id: String)
 
-const TerrainGeneratorScript := preload("res://world/terrain_generator.gd")
+const TerrainGeneratorScript := preload("res://worldgen/surface/terrain_generator.gd")
 const TerrainChunkScript := preload("res://world/terrain_chunk.gd")
-const PickupGeneratorScript := preload("res://world/pickup_generator.gd")
+const PickupGeneratorScript := preload("res://worldgen/surface/pickup_generator.gd")
 
 var settings: UnderworldWorldSettings
 var main_generator
