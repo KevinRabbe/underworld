@@ -40,7 +40,9 @@ static func build_envelope(context, delta_store) -> Dictionary:
 		"schema": SCHEMA_NAME,
 		"save_schema_version": SAVE_SCHEMA_VERSION,
 		"world": {
-			"world_seed": int(header.get("world_seed", 0)),
+			# Identity-critical 64-bit seeds are serialized as canonical decimal
+			# strings so JSON consumers cannot round them through IEEE-754 doubles.
+			"world_seed": str(int(header.get("world_seed", 0))),
 			"world_id": str(header.get("world_id", "")),
 			"generator_manifest_id": str(header.get("generator_manifest_id", "")),
 			"generator_manifest_canonical": str(
@@ -156,10 +158,18 @@ static func load_delta_store(envelope: Dictionary) -> Dictionary:
 static func _validate_world_header(world: Dictionary, failures: Array[String]) -> void:
 	_validate_exact_keys("world", world, REQUIRED_WORLD_KEYS, failures)
 	var world_seed_variant = world.get("world_seed", null)
-	if not world_seed_variant is int:
-		failures.append("world.world_seed must be an integer")
+	if not world_seed_variant is String:
+		failures.append("world.world_seed must be a canonical decimal string")
 		return
-	var world_seed: int = int(world_seed_variant)
+	var world_seed_text: String = str(world_seed_variant)
+	if world_seed_text.is_empty() or not world_seed_text.is_valid_int():
+		failures.append("world.world_seed is not a valid 64-bit decimal integer")
+		return
+	var world_seed: int = int(world_seed_text)
+	if str(world_seed) != world_seed_text:
+		failures.append("world.world_seed is not in canonical decimal form")
+		return
+
 	var world_id: String = str(world.get("world_id", ""))
 	if WorldIdScript.parse(world_id) == null:
 		failures.append("world.world_id is invalid")
