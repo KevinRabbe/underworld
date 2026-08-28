@@ -32,7 +32,6 @@ jobs:
     timeout-minutes: 2
     permissions:
       pull-requests: read
-      issues: write
       statuses: write
 
     steps:
@@ -68,8 +67,8 @@ jobs:
           current_json="$(read_pr)"
           current_head_sha="$(jq -r '.head.sha' <<<"$current_json")"
 
-          # A delayed event for an older head must not mutate labels or publish
-          # acceptance state for the newer head.
+          # A delayed event for an older head must not mutate acceptance state
+          # for the newer head.
           if [ "$current_head_sha" != "$EVENT_HEAD_SHA" ]; then
             echo "Ignoring superseded ${EVENT_ACTION} event for ${EVENT_HEAD_SHA}; live head is ${current_head_sha}."
             exit 0
@@ -77,32 +76,27 @@ jobs:
 
           case "$EVENT_ACTION" in
             synchronize)
-              # Fail the exact new head before metadata cleanup. If this run is
-              # cancelled after publication, the head remains fail-closed.
+              # Exact-head safety does not depend on mutating PR labels. The new
+              # SHA is failed directly and a fresh explicit pm-accepted label
+              # event is required before success can ever be published again.
               publish_status "$EVENT_HEAD_SHA" failure "New commit requires explicit PM re-acceptance"
-
-              has_acceptance="$(jq -r '[.labels[].name] | index("pm-accepted") != null' <<<"$current_json")"
-              if [ "$has_acceptance" = "true" ]; then
-                gh api --method DELETE \
-                  "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels/pm-accepted" \
-                  >/dev/null
-              fi
 
               decision_json="$(read_pr)"
               decision_head="$(jq -r '.head.sha' <<<"$decision_json")"
               if [ "$decision_head" != "$EVENT_HEAD_SHA" ]; then
-                echo "Synchronize event was superseded during metadata cleanup; newer head owns acceptance state."
+                echo "Synchronize event was superseded after failure publication; newer head owns acceptance state."
                 exit 0
               fi
 
               remaining_acceptance="$(jq -r '[.labels[].name] | index("pm-accepted") != null' <<<"$decision_json")"
               if [ "$remaining_acceptance" = "true" ]; then
-                publish_status "$EVENT_HEAD_SHA" failure "New commit requires PM re-acceptance; stale label remains"
-                echo "Failed to invalidate stale pm-accepted label."
-                exit 1
+                echo "pm-accepted remains as stale metadata from the prior head."
+                echo "PM must remove and re-add it after reviewing this head to create the only grant-capable labeled event."
+              else
+                echo "No stale pm-accepted metadata is present."
               fi
 
-              echo "Synchronized head is fail-closed and stale PM metadata is clear."
+              echo "Synchronized head is fail-closed and requires a fresh explicit acceptance event."
               ;;
 
             converted_to_draft|opened|reopened|ready_for_review)
