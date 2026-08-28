@@ -2,7 +2,7 @@ extends RefCounted
 
 const StaminaScript := preload("res://gameplay/player/components/stamina_component.gd")
 const ActionControllerScript := preload("res://gameplay/player/actions/player_action_controller.gd")
-const AttackCatalogScript := preload("res://combat/player_attack_catalog.gd")
+const AttackCatalogScript := preload("res://gameplay/combat/attacks/player_attack_catalog.gd")
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
 
