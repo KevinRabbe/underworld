@@ -1,4 +1,12 @@
-name: PM Acceptance Metadata Guard
+name: Operational PM Acceptance Gate
+
+# SECURITY BOUNDARY:
+# This workflow is trusted default-branch code and never executes PR-controlled
+# content, but the `PM acceptance` commit-status context is NOT source-isolated
+# from other same-repository GitHub Actions workflows. A PR-controlled workflow
+# with statuses: write runs as the same GitHub Actions App and can mint the same
+# context name. This is therefore an operational same-principal guard, not a
+# cryptographic/actor-separated authorization boundary. See MAIN_MERGE_GATE.md.
 
 on:
   pull_request_target:
@@ -13,33 +21,29 @@ on:
 
 permissions: {}
 
-# This workflow is deliberately NOT the authoritative PM acceptance publisher.
-# Same-repository pull_request workflows run under the GitHub Actions App and
-# can request statuses:write, so any status emitted by Actions is source-spoofable
-# relative to another Actions workflow. The required `PM acceptance` context is
-# reserved for a distinct external GitHub App and must be source-bound to that
-# App in the main ruleset.
 concurrency:
-  group: pm-acceptance-metadata-${{ github.repository }}-${{ github.event.pull_request.number }}
+  group: pm-acceptance-${{ github.repository }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  acceptance-metadata-guard:
-    name: PM acceptance metadata guard
+  operational-pm-acceptance:
+    name: Operational PM acceptance publisher
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
       pull-requests: read
       issues: write
+      statuses: write
 
     steps:
-      - name: Keep pm-accepted metadata fail-closed
+      - name: Coordinate exact-head PM acceptance state
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_LABEL: ${{ github.event.label.name }}
           EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
 
@@ -47,56 +51,139 @@ jobs:
             gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}"
           }
 
-          remove_acceptance_if_present() {
-            local pr_json="$1"
-            local has_acceptance
-            has_acceptance="$(jq -r '[.labels[].name] | index("pm-accepted") != null' <<<"$pr_json")"
-            if [ "$has_acceptance" = "true" ]; then
-              gh api --method DELETE \
-                "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels/pm-accepted" \
-                >/dev/null
-            fi
+          publish_status() {
+            local sha="$1"
+            local state="$2"
+            local description="$3"
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/statuses/${sha}" \
+              -f state="$state" \
+              -f context='PM acceptance' \
+              -f description="$description" \
+              -f target_url="$RUN_URL" \
+              >/dev/null
+            echo "Published PM acceptance=${state} for ${sha}: ${description}"
           }
 
           current_json="$(read_pr)"
           current_head_sha="$(jq -r '.head.sha' <<<"$current_json")"
 
-          # Never let an event for an older head mutate metadata on a newer head.
+          # A delayed event for an older head must not mutate labels or publish
+          # acceptance state for the newer head.
           if [ "$current_head_sha" != "$EVENT_HEAD_SHA" ]; then
             echo "Ignoring superseded ${EVENT_ACTION} event for ${EVENT_HEAD_SHA}; live head is ${current_head_sha}."
             exit 0
           fi
 
           case "$EVENT_ACTION" in
-            synchronize|reopened|ready_for_review|converted_to_draft)
-              # These transitions invalidate any earlier approval metadata. The
-              # external PM App independently publishes authoritative failure on
-              # the exact head and must not depend on this cleanup succeeding.
-              remove_acceptance_if_present "$current_json"
+            synchronize)
+              has_acceptance="$(jq -r '[.labels[].name] | index("pm-accepted") != null' <<<"$current_json")"
+              if [ "$has_acceptance" = "true" ]; then
+                gh api --method DELETE \
+                  "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels/pm-accepted" \
+                  >/dev/null
+              fi
+
+              decision_json="$(read_pr)"
+              decision_head="$(jq -r '.head.sha' <<<"$decision_json")"
+              if [ "$decision_head" != "$EVENT_HEAD_SHA" ]; then
+                echo "Synchronize event was superseded before its decision point; newer head owns acceptance state."
+                exit 0
+              fi
+
+              remaining_acceptance="$(jq -r '[.labels[].name] | index("pm-accepted") != null' <<<"$decision_json")"
+              if [ "$remaining_acceptance" = "true" ]; then
+                publish_status "$EVENT_HEAD_SHA" failure "New commit requires PM re-acceptance; stale label remains"
+                echo "Failed to invalidate stale pm-accepted label."
+                exit 1
+              fi
+
+              publish_status "$EVENT_HEAD_SHA" failure "New commit requires explicit PM re-acceptance"
               ;;
 
-            labeled)
-              if [ "$EVENT_LABEL" = "pm-accepted" ]; then
-                decision_json="$(read_pr)"
-                decision_head="$(jq -r '.head.sha' <<<"$decision_json")"
-                is_draft="$(jq -r '.draft' <<<"$decision_json")"
+            converted_to_draft|opened|reopened|ready_for_review)
+              # Lifecycle transitions never manufacture acceptance from a label
+              # that happens to persist. A fresh explicit pm-accepted label event
+              # is the only grant path.
+              decision_json="$(read_pr)"
+              decision_head="$(jq -r '.head.sha' <<<"$decision_json")"
+              if [ "$decision_head" != "$EVENT_HEAD_SHA" ]; then
+                echo "Lifecycle event was superseded before its decision point."
+                exit 0
+              fi
+              publish_status "$EVENT_HEAD_SHA" failure "Explicit PM acceptance is required for this exact head"
+              ;;
 
-                if [ "$decision_head" != "$EVENT_HEAD_SHA" ]; then
-                  echo "Acceptance label event was superseded before validation."
-                  exit 0
-                fi
+            unlabeled)
+              decision_json="$(read_pr)"
+              decision_head="$(jq -r '.head.sha' <<<"$decision_json")"
+              if [ "$decision_head" != "$EVENT_HEAD_SHA" ]; then
+                echo "Unlabeled event was superseded before its decision point."
+                exit 0
+              fi
 
-                # Approval metadata applied to a draft is never retained. A new
-                # explicit acceptance action is required after the PR is ready.
-                if [ "$is_draft" = "true" ]; then
-                  remove_acceptance_if_present "$decision_json"
-                fi
+              is_draft="$(jq -r '.draft' <<<"$decision_json")"
+              has_acceptance="$(jq -r '[.labels[].name] | index("pm-accepted") != null' <<<"$decision_json")"
+              if [ "$EVENT_LABEL" = "pm-accepted" ] || [ "$is_draft" = "true" ] || [ "$has_acceptance" != "true" ]; then
+                publish_status "$EVENT_HEAD_SHA" failure "PM acceptance is absent or revoked for this exact head"
+              else
+                echo "Unrelated label removal cannot grant or revoke a still-valid PM acceptance state."
               fi
               ;;
 
-            opened|unlabeled)
-              # No mutation required. The external App evaluates exact-head
-              # acceptance independently and is the only required-status source.
+            labeled)
+              if [ "$EVENT_LABEL" != "pm-accepted" ]; then
+                decision_json="$(read_pr)"
+                decision_head="$(jq -r '.head.sha' <<<"$decision_json")"
+                if [ "$decision_head" != "$EVENT_HEAD_SHA" ]; then
+                  echo "Unrelated labeled event was superseded before its decision point."
+                  exit 0
+                fi
+
+                is_draft="$(jq -r '.draft' <<<"$decision_json")"
+                has_acceptance="$(jq -r '[.labels[].name] | index("pm-accepted") != null' <<<"$decision_json")"
+                if [ "$is_draft" = "true" ] || [ "$has_acceptance" != "true" ]; then
+                  publish_status "$EVENT_HEAD_SHA" failure "PM acceptance is not currently valid for this exact head"
+                else
+                  echo "Unrelated label event cannot grant PM acceptance; existing status is left unchanged."
+                fi
+                exit 0
+              fi
+
+              # Only an explicit pm-accepted label event can grant success.
+              decision_json="$(read_pr)"
+              decision_head="$(jq -r '.head.sha' <<<"$decision_json")"
+              is_draft="$(jq -r '.draft' <<<"$decision_json")"
+              has_acceptance="$(jq -r '[.labels[].name] | index("pm-accepted") != null' <<<"$decision_json")"
+
+              if [ "$decision_head" != "$EVENT_HEAD_SHA" ]; then
+                echo "Acceptance event was superseded before its decision point."
+                exit 0
+              fi
+              if [ "$is_draft" = "true" ]; then
+                publish_status "$EVENT_HEAD_SHA" failure "Draft PR cannot be PM-accepted"
+                exit 0
+              fi
+              if [ "$has_acceptance" != "true" ]; then
+                publish_status "$EVENT_HEAD_SHA" failure "pm-accepted was removed before the grant decision"
+                exit 0
+              fi
+
+              publish_status "$EVENT_HEAD_SHA" success "PM explicitly accepted this exact PR head"
+
+              # Re-read after success publication. If acceptance was removed or
+              # the PR became draft while this run was deciding, immediately
+              # overwrite success with failure. Any later state change also
+              # emits its own coordinated event and supersedes this run.
+              verify_json="$(read_pr)"
+              verify_head="$(jq -r '.head.sha' <<<"$verify_json")"
+              verify_draft="$(jq -r '.draft' <<<"$verify_json")"
+              verify_acceptance="$(jq -r '[.labels[].name] | index("pm-accepted") != null' <<<"$verify_json")"
+
+              if [ "$verify_head" != "$EVENT_HEAD_SHA" ] || [ "$verify_draft" = "true" ] || [ "$verify_acceptance" != "true" ]; then
+                publish_status "$EVENT_HEAD_SHA" failure "PM acceptance changed during grant evaluation"
+                exit 0
+              fi
               ;;
 
             *)
@@ -104,23 +191,3 @@ jobs:
               exit 1
               ;;
           esac
-
-          verify_json="$(read_pr)"
-          verify_head="$(jq -r '.head.sha' <<<"$verify_json")"
-          if [ "$verify_head" != "$EVENT_HEAD_SHA" ]; then
-            echo "PR advanced during metadata guard; newer event owns the new head."
-            exit 0
-          fi
-
-          if [ "$EVENT_ACTION" = "synchronize" ] || \
-             [ "$EVENT_ACTION" = "reopened" ] || \
-             [ "$EVENT_ACTION" = "ready_for_review" ] || \
-             [ "$EVENT_ACTION" = "converted_to_draft" ]; then
-            remaining="$(jq -r '[.labels[].name] | index("pm-accepted") != null' <<<"$verify_json")"
-            if [ "$remaining" = "true" ]; then
-              echo "Stale pm-accepted metadata remains after ${EVENT_ACTION}."
-              exit 1
-            fi
-          fi
-
-          echo "PM metadata guard complete. Authoritative status must come from the external PM App."
