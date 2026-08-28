@@ -2,9 +2,9 @@ extends Node3D
 
 signal equipped_tool_changed(tool_id: String)
 
-const TerrainGeneratorScript := preload("res://worldgen/surface/terrain_generator.gd")
+const TerrainGeneratorScript := preload("res://world/terrain_generator.gd")
 const TerrainChunkScript := preload("res://world/terrain_chunk.gd")
-const PickupGeneratorScript := preload("res://worldgen/surface/pickup_generator.gd")
+const PickupGeneratorScript := preload("res://world/pickup_generator.gd")
 
 var settings: UnderworldWorldSettings
 var main_generator
@@ -286,14 +286,14 @@ func select_hotbar_slot(slot: int) -> void:
 				last_action_message = "Stone Axe not crafted — press C"
 				return
 			selected_hotbar_slot = 2
-				equipped_tool = "stone_axe"
+			equipped_tool = "stone_axe"
 			last_action_message = "Stone Axe equipped"
 		3:
 			if not has_stone_pickaxe:
 				last_action_message = "Stone Pickaxe not crafted — press V"
 				return
 			selected_hotbar_slot = 3
-				equipped_tool = "stone_pickaxe"
+			equipped_tool = "stone_pickaxe"
 			last_action_message = "Stone Pickaxe equipped"
 		_:
 			return
