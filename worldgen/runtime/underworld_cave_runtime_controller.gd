@@ -95,7 +95,7 @@ func bootstrap_fixture(world_seed: int, region: Vector2i, entrance_id: String) -
 	var registration_failures := register_surface_plan(surface_result.data, provenance.fingerprint if provenance != null else "")
 	if not registration_failures.is_empty(): return _bootstrap_fail(registration_failures)
 	for plan in partition.data.plans:
-		var voxel_request := VoxelRequest.new(plan, cell_config, provenance)
+		var voxel_request := VoxelRequest.new(plan, cell_config, provenance, 0.0, partition.data, context)
 		var mesh_stage = VoxelMesher.build(voxel_request)
 		if not mesh_stage.success: return _bootstrap_fail(mesh_stage.diagnostics)
 		if not accept_mesh_data(mesh_stage.data): return _bootstrap_fail(["Mesh realization failed for " + plan.cell_address.canonical_text()])
