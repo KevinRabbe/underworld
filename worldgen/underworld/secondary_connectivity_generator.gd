@@ -171,7 +171,7 @@ static func _neighbor_source_fingerprints(region_plan, primary_topology, entranc
 		primary_topology.provenance.fingerprint,
 		entrance_result.provenance.fingerprint,
 	]
-	for view in neighbor_views:
+	for view in _normalized_neighbors(region_plan, neighbor_views):
 		if not (view is Dictionary):
 			continue
 		var neighbor_plan = view.get("region_plan")

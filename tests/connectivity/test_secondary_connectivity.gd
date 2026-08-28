@@ -14,6 +14,7 @@ static func run() -> Array[String]:
 	_test_local_determinism_and_immutability(failures)
 	_test_neighbor_order_independence(failures)
 	_test_stale_neighbor_rejected(failures)
+	_test_irrelevant_neighbor_does_not_change_identity(failures)
 	_test_bounded_distribution(failures)
 	_test_cross_region_canonical_ownership(failures)
 	_test_negative_region(failures)
@@ -119,6 +120,22 @@ static func _test_stale_neighbor_rejected(failures: Array[String]) -> void:
 	)
 	neighbor_plan.provenance = original
 	_expect_true(failures, "changed neighbor ancestry is rejected", not rejected.success)
+
+
+static func _test_irrelevant_neighbor_does_not_change_identity(failures: Array[String]) -> void:
+	var built: Dictionary = _build(24681357, Vector2i(2, -3), true)
+	if not bool(built.get("success", false)):
+		failures.append("irrelevant-neighbor fixture failed")
+		return
+	var extra_views: Array = built["neighbor_views"].duplicate()
+	extra_views.append(built["neighbor_views"][0])
+	var rerun = ConnectivityGenerator.generate(
+		built["context"], built["macro"], built["topology"], built["entrances"], extra_views
+	)
+	_expect_true(failures, "irrelevant duplicate neighbor succeeds", rerun.success)
+	if rerun.success:
+		_expect_equal(failures, "irrelevant duplicate does not change connectivity", built["result"].fingerprint, rerun.data.fingerprint)
+		_expect_equal(failures, "irrelevant duplicate does not change provenance", built["result"].provenance.fingerprint, rerun.data.provenance.fingerprint)
 
 
 static func _test_bounded_distribution(failures: Array[String]) -> void:

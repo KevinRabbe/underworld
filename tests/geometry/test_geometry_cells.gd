@@ -93,14 +93,14 @@ static func _test_type_and_region_validation(failures: Array[String]) -> void:
 	var fixture := _fixture()
 	var missing_context = Partitioner.partition(fixture.geometry, fixture.finalization, Config.new())
 	_expect_true(failures, "authoritative partition requires context", not missing_context.success)
-	var wrong = Partitioner.partition(fixture.finalization, fixture.finalization, Config.new(), [], fixture.context)
+	var wrong = Partitioner.partition(fixture.finalization, fixture.finalization, Config.new(), [], fixture.context, fixture.geometry.provenance.source_stage_fingerprints)
 	_expect_true(failures, "wrong geometry input type is rejected", not wrong.success)
 	var source_bundle = SampleGraphFixture.build()
 	var other_region_address = StableAddress.underground_region(99, 99)
 	var other_region = RegionDefinition.new(other_region_address, Vector2i(99, 99), Vector3.ZERO, AABB(Vector3.ZERO, Vector3.ONE))
 	var other_bundle = RegionGraphBundle.new(other_region)
 	var other_finalization := FinalizationResult.new(other_bundle, [], [], {}, "finalization-other")
-	var mismatched = Partitioner.partition(fixture.geometry, other_finalization, Config.new(), [], fixture.context)
+	var mismatched = Partitioner.partition(fixture.geometry, other_finalization, Config.new(), [], fixture.context, fixture.geometry.provenance.source_stage_fingerprints)
 	_expect_true(failures, "mismatched region input is rejected", not mismatched.success)
 
 
@@ -195,7 +195,7 @@ static func _negative_fixture() -> Dictionary:
 
 
 static func _partition(fixture: Dictionary, config, cells: Array = []) -> Object:
-	return Partitioner.partition(fixture.geometry, fixture.finalization, config, cells, fixture.context)
+	return Partitioner.partition(fixture.geometry, fixture.finalization, config, cells, fixture.context, fixture.geometry.provenance.source_stage_fingerprints)
 
 
 static func _find_fragment(plans: Array, kind: String, coordinate: Vector3i):
