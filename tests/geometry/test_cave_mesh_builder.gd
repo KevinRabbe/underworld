@@ -68,6 +68,12 @@ static func run() -> Array[String]:
 	_expect(failures, "empty cells remain valid mesh results", empty.success)
 	if empty.success:
 		_expect(failures, "empty cell emits no triangles", empty.data.indices.is_empty())
+	var surface_plan := _surface_plan(Vector3i.ZERO)
+	var surface_partition = _partition_result(surface_plan, Config.new(), provenance)
+	var surface_result = Mesher.build(Request.new(surface_plan, Config.new(), provenance, 0.0, surface_partition, context))
+	_expect(failures, "analytic chamber surface builds", surface_result.success and surface_result.data.indices.size() > 0)
+	if surface_result.success:
+		_expect(failures, "marching-cubes vertices are canonically reused", _unique_positions(surface_result.data.vertices) == surface_result.data.vertices.size())
 	return failures
 
 
@@ -88,6 +94,15 @@ static func _plan(coordinate: Vector3i, kinds: Array) -> Plan:
 	return Plan.new(address, fragments, [], [], "geometry", "finalization")
 
 
+static func _surface_plan(coordinate: Vector3i) -> Plan:
+	var address := Address.new(coordinate)
+	var cell := AABB(Vector3(coordinate) * 32.0, Vector3(32, 32, 32))
+	var clipped := AABB(Vector3(5, 5, 5), Vector3(22, 22, 22))
+	var metadata := {"center": Vector3(16, 16, 16), "dimensions": Vector3(22, 18, 20), "shape_family": "ellipsoid", "rotation_y": 0.0}
+	var fragment := Fragment.new("gfrag1:surface-chamber", "stable:surface-chamber", "chamber", address, cell, clipped, true, metadata, {}, "source:surface-chamber", {})
+	return Plan.new(address, [fragment], [], [], "geometry", "finalization")
+
+
 static func _valid_indices(data) -> bool:
 	if data.indices.size() % 3 != 0:
 		return false
@@ -102,6 +117,13 @@ static func _valid_normals(data) -> bool:
 		if not normal.is_finite() or absf(normal.length() - 1.0) > 0.0001:
 			return false
 	return true
+
+
+static func _unique_positions(values: PackedVector3Array) -> int:
+	var seen := {}
+	for value in values:
+		seen["%.6f:%.6f:%.6f" % [value.x, value.y, value.z]] = true
+	return seen.size()
 
 
 static func _expect(failures: Array[String], label: String, condition: bool) -> void:

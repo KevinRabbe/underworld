@@ -118,6 +118,9 @@ static func _append_triangle(a: Vector3, b: Vector3, c: Vector3, edge_keys: Arra
 	var swap := b
 	b = c
 	c = swap
+	var key_swap = edge_keys[1]
+	edge_keys[1] = edge_keys[2]
+	edge_keys[2] = key_swap
 	var inward_normal := -(c - a).cross(b - a).normalized()
 	var ids: Array[int] = []
 	for point_index in 3:
