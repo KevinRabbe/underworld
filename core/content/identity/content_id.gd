@@ -2,6 +2,7 @@ extends RefCounted
 
 const _LOWER := "abcdefghijklmnopqrstuvwxyz"
 const _TOKEN_CHARS := "abcdefghijklmnopqrstuvwxyz0123456789_"
+const _RESERVED_SCHEMA_FAMILIES := ["category", "capability"]
 
 
 static func validate(value: String) -> Array[String]:
@@ -24,6 +25,12 @@ static func validate(value: String) -> Array[String]:
 	for token in tokens:
 		if not _is_ascii_token(token):
 			failures.append("content id contains invalid token '%s': %s" % [token, value])
+	if not failures.is_empty():
+		return failures
+
+	var family: String = str(tokens[0])
+	if _RESERVED_SCHEMA_FAMILIES.has(family):
+		failures.append("content id family is reserved for schema ids: %s" % family)
 	return failures
 
 
@@ -44,6 +51,9 @@ static func validate_family(value: String) -> Array[String]:
 		return failures
 	if not _is_ascii_token(value):
 		failures.append("definition family must be one lowercase ASCII semantic token: %s" % value)
+		return failures
+	if _RESERVED_SCHEMA_FAMILIES.has(value):
+		failures.append("definition family is reserved for schema ids: %s" % value)
 	return failures
 
 

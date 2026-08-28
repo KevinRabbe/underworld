@@ -1,0 +1,67 @@
+extends RefCounted
+
+const CATEGORY_NAMESPACE := "category"
+const CAPABILITY_NAMESPACE := "capability"
+const _LOWER := "abcdefghijklmnopqrstuvwxyz"
+const _TOKEN_CHARS := "abcdefghijklmnopqrstuvwxyz0123456789_"
+
+
+static func validate_category(value: String) -> Array[String]:
+	return _validate(value, CATEGORY_NAMESPACE)
+
+
+static func validate_capability(value: String) -> Array[String]:
+	return _validate(value, CAPABILITY_NAMESPACE)
+
+
+static func is_valid_category(value: String) -> bool:
+	return validate_category(value).is_empty()
+
+
+static func is_valid_capability(value: String) -> bool:
+	return validate_capability(value).is_empty()
+
+
+static func namespace_of(value: String) -> String:
+	if is_valid_category(value):
+		return CATEGORY_NAMESPACE
+	if is_valid_capability(value):
+		return CAPABILITY_NAMESPACE
+	return ""
+
+
+static func _validate(value: String, expected_namespace: String) -> Array[String]:
+	var failures: Array[String] = []
+	if value.is_empty():
+		failures.append("%s schema id is empty" % expected_namespace)
+		return failures
+	if value != value.strip_edges():
+		failures.append("%s schema id must not contain leading/trailing whitespace: %s" % [expected_namespace, value])
+		return failures
+	if value.begins_with(".") or value.ends_with(".") or value.contains(".."):
+		failures.append("%s schema id must not contain empty semantic tokens: %s" % [expected_namespace, value])
+		return failures
+
+	var tokens: PackedStringArray = value.split(".", false)
+	if tokens.size() < 2:
+		failures.append("%s schema id must contain namespace and member tokens: %s" % [expected_namespace, value])
+		return failures
+	if tokens[0] != expected_namespace:
+		failures.append("schema id must use '%s.' namespace: %s" % [expected_namespace, value])
+		return failures
+
+	for token in tokens:
+		if not _is_ascii_token(token):
+			failures.append("%s schema id contains invalid token '%s': %s" % [expected_namespace, token, value])
+	return failures
+
+
+static func _is_ascii_token(token: String) -> bool:
+	if token.is_empty():
+		return false
+	if _LOWER.find(token.substr(0, 1)) < 0:
+		return false
+	for index in range(token.length()):
+		if _TOKEN_CHARS.find(token.substr(index, 1)) < 0:
+			return false
+	return true
