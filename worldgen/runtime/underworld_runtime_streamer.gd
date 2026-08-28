@@ -15,6 +15,8 @@ var geometry_activate_radius: int = 2
 var geometry_release_radius: int = 3
 var render_activate_radius: int = 1
 var render_release_radius: int = 2
+var collision_activate_radius: int = 1
+var collision_release_radius: int = 2
 var max_active_voxel_workers: int = 2
 var world_id: String = ""
 var generator_manifest_id: String = ""
@@ -126,7 +128,9 @@ func update_observer(position: Vector3, source: String = "player") -> void:
 					tiers.append("voxel_geometry")
 				if distance <= render_activate_radius:
 					tiers.append("render")
-					set_demand(Address.new(coordinate), source, tiers)
+				if distance <= collision_activate_radius:
+					tiers.append("collision")
+				set_demand(Address.new(coordinate), source, tiers)
 	for record in records.values():
 		if not record.demands.has(source):
 			continue
@@ -134,6 +138,8 @@ func update_observer(position: Vector3, source: String = "player") -> void:
 		var release_tiers: Array[String] = []
 		if distance > render_release_radius:
 			release_tiers.append("render")
+		if distance > collision_release_radius:
+			release_tiers.append("collision")
 		if distance > geometry_release_radius:
 			release_tiers.append_array(["fragment_plan", "voxel_geometry"])
 		if distance > definition_release_radius:
@@ -153,16 +159,10 @@ func accept_result(result) -> bool:
 	if result.generation != record.generation or record.release_pending:
 		stale_result_count += 1
 		return false
-	if not result.world_id.is_empty() and result.world_id != world_id:
+	if result.world_id != world_id or result.generator_manifest_id != generator_manifest_id:
 		stale_result_count += 1
 		return false
-	if not result.generator_manifest_id.is_empty() and result.generator_manifest_id != generator_manifest_id:
-		stale_result_count += 1
-		return false
-	if not record.demands.has("player") and record.demands.is_empty():
-		stale_result_count += 1
-		return false
-	if record.demand_count(result.tier) <= 0:
+	if record.demands.is_empty() or record.demand_count(result.tier) <= 0:
 		stale_result_count += 1
 		return false
 	if not record.source_fingerprint.is_empty() and result.source_fingerprint != record.source_fingerprint:
@@ -174,12 +174,17 @@ func accept_result(result) -> bool:
 	if not TIERS.has(result.tier):
 		stale_result_count += 1
 		return false
+	if result.tier == "collision" and result.payload == null:
+		stale_result_count += 1
+		return false
 	record.queued[result.tier] = false
 	if not result.success:
 		record.diagnostics.append_array(result.diagnostics)
 		record.state = "failed"
 		return false
 	record.readiness[result.tier] = true
+	if result.tier == "collision":
+		record.collision_handle = result.payload
 	_update_state(record)
 	return true
 
@@ -191,6 +196,7 @@ func release_cell(address) -> bool:
 	record.generation += 1
 	record.release_pending = true
 	record.runtime_handle = null
+	record.collision_handle = null
 	record.readiness = {"definition": false, "fragment_plan": false, "voxel_geometry": false, "render": false, "collision": false, "simulation": false}
 	record.queued.clear()
 	record.state = "dormant"
@@ -203,6 +209,8 @@ func reconfigure(world_id_value: String, manifest_id_value: String) -> void:
 	generator_manifest_id = manifest_id_value
 	for record in records.values():
 		record.generation += 1
+		record.runtime_handle = null
+		record.collision_handle = null
 		record.readiness = {"definition": false, "fragment_plan": false, "voxel_geometry": false, "render": false, "collision": false, "simulation": false}
 		record.queued.clear()
 		record.state = "requested" if not record.demands.is_empty() else "dormant"
@@ -233,6 +241,7 @@ func _invalidate_generation(record) -> void:
 	record.readiness = {"definition": false, "fragment_plan": false, "voxel_geometry": false, "render": false, "collision": false, "simulation": false}
 	record.queued.clear()
 	record.runtime_handle = null
+	record.collision_handle = null
 	record.release_pending = false
 	record.state = "requested"
 
