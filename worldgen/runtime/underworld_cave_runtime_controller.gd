@@ -38,6 +38,7 @@ var collision_nodes: Dictionary = {}
 var _material: Material
 var last_bootstrap_fingerprint: String = ""
 var last_bootstrap_diagnostics: Array[String] = []
+var last_bootstrap_surface_position: Vector3 = Vector3.ZERO
 
 func configure(world_id_value: String, manifest_id_value: String, player_value: Node3D = null, executor = null) -> void:
 	world_id = world_id_value
@@ -65,6 +66,7 @@ func bootstrap_fixture(world_seed: int, region: Vector2i, entrance_id: String) -
 	for descriptor in entrances.data.surface_integration_descriptors:
 		if str(descriptor.entrance_id) == entrance_id: selected = descriptor; break
 	if selected == null: return _bootstrap_fail(["Fixture entrance was not found: " + entrance_id])
+	last_bootstrap_surface_position = selected.surface_world_position
 	var neighbor_views: Array = []
 	for offset in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
 		var neighbor_macro = MacroGenerator.generate(context, region + offset)
