@@ -1,0 +1,32 @@
+name: Seed Domain Audit
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'validation/seed-domain-*'
+
+permissions:
+  contents: read
+
+jobs:
+  seed-domain-audit:
+    name: Seed-domain registry and call-site audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run focused audit contracts
+        run: python3 tools/ci/test_seed_domain_audit.py
+
+      - name: Audit production seed domains
+        run: python3 tools/ci/seed_domain_audit.py
+
+      - name: Verify machine-readable audit output
+        run: |
+          python3 tools/ci/seed_domain_audit.py --json > /tmp/seed-domain-audit.json
+          python3 -m json.tool /tmp/seed-domain-audit.json > /dev/null
