@@ -17,8 +17,15 @@ static func _test_buffer_component(failures: Array[String]) -> void:
 	_expect_true(failures, "blank action is rejected", not buffer.push(&""))
 	_expect_true(failures, "non-positive lifetime is rejected", not buffer.push(&"attack", {}, 0.0))
 
-	var original_payload: Dictionary = {"direction": Vector3.RIGHT, "nested": {"value": 3}}
-	_expect_true(failures, "valid input enters one-slot buffer", buffer.push(&"dodge", original_payload, 0.12))
+	var original_payload: Dictionary = {
+		"direction": Vector3.RIGHT,
+		"nested": {"value": 3},
+	}
+	_expect_true(
+		failures,
+		"valid input enters one-slot buffer",
+		buffer.push(&"dodge", original_payload, 0.12)
+	)
 	original_payload["nested"]["value"] = 99
 	_expect_equal(failures, "buffer exposes pending action", buffer.peek_action(), &"dodge")
 	buffer.tick(0.119)
@@ -35,11 +42,17 @@ static func _test_buffer_component(failures: Array[String]) -> void:
 	buffer.push(&"parry", {"sequence": 2}, 0.12)
 	_expect_equal(failures, "newest input replaces older slot", buffer.peek_action(), &"parry")
 	var replacement: Dictionary = buffer.consume()
-	_expect_equal(failures, "replacement keeps newest payload", int(Dictionary(replacement.get("payload", {})).get("sequence", 0)), 2)
+	_expect_equal(
+		failures,
+		"replacement keeps newest payload",
+		int(Dictionary(replacement.get("payload", {})).get("sequence", 0)),
+		2
+	)
 
 	buffer.push(&"dodge", {}, 0.12)
 	buffer.tick(0.121)
 	_expect_true(failures, "expired input is discarded", not buffer.has_pending())
+
 	buffer.push(&"attack", {}, 0.12)
 	buffer.reset()
 	_expect_true(failures, "hard reset clears input buffer", not buffer.has_pending())
@@ -57,16 +70,32 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 	player.call("set_equipped_tool", "stone_axe")
 
 	var captured: Array[Dictionary] = []
-	player.connect("attack_requested", func(execution: Dictionary) -> void: captured.append(execution.duplicate(true)))
+	player.connect(
+		"attack_requested",
+		func(execution: Dictionary) -> void:
+			captured.append(execution.duplicate(true))
+	)
 
 	var actions = player.get("action_controller")
 	var buffer = player.get("input_buffer")
-	_expect_true(failures, "fixture commitment starts", bool(actions.call("try_start_tool_action", 0.10)))
+	_expect_true(
+		failures,
+		"fixture commitment starts",
+		bool(actions.call("try_start_tool_action", 0.10))
+	)
 	player.call("_request_attack")
-	_expect_equal(failures, "busy attack input enters buffer", String(player.call("get_buffered_action_name")), "attack")
+	_expect_equal(
+		failures,
+		"busy attack input enters buffer",
+		String(player.call("get_buffered_action_name")),
+		"attack"
+	)
 	_expect_equal(failures, "buffered attack does not start immediately", String(actions.call("state_name")), "USING_TOOL")
 	_expect_equal(failures, "buffered attack emits nothing immediately", captured.size(), 0)
 
+	# A buffered attack is not committed yet. Current weapon and facing are
+	# deliberately resolved when the old action ends, so late camera/tool changes
+	# remain responsive rather than being frozen 120 ms early.
 	player.call("set_equipped_tool", "stone_pickaxe")
 	var camera_yaw = player.get("camera_yaw")
 	camera_yaw.set("rotation", Vector3(0.0, 0.45, 0.0))
@@ -81,19 +110,39 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 	actions.call("tick", 0.051)
 	buffer.call("tick", 0.051)
 	player.call("_try_consume_buffered_action")
-	_expect_equal(failures, "buffered attack starts when controller becomes free", String(actions.call("state_name")), "ATTACKING/STARTUP")
+	_expect_equal(
+		failures,
+		"buffered attack starts when controller becomes free",
+		String(actions.call("state_name")),
+		"ATTACKING/STARTUP"
+	)
 	_expect_equal(failures, "buffer slot clears after consumption", String(player.call("get_buffered_action_name")), "")
-	_expect_vector_close(failures, "buffered attack uses execution-time facing", player.get("pending_attack_direction"), expected_direction)
+	_expect_vector_close(
+		failures,
+		"buffered attack uses execution-time facing",
+		player.get("pending_attack_direction"),
+		expected_direction
+	)
 
 	actions.call("tick", 0.15)
 	player.call("_resolve_pending_attack_activation")
 	_expect_equal(failures, "buffered attack emits once at active boundary", captured.size(), 1)
 	if captured.size() == 1:
-		_expect_equal(failures, "buffered attack uses execution-time weapon", captured[0].get("attack_id"), &"stone_pickaxe_light")
+		_expect_equal(
+			failures,
+			"buffered attack uses execution-time weapon",
+			captured[0].get("attack_id"),
+			&"stone_pickaxe_light"
+		)
 
+	# Respawn/reset is a hard boundary: buffered input must never leak through it.
 	actions.call("reset")
 	player.call("set_equipped_tool", "stone_axe")
-	_expect_true(failures, "second fixture commitment starts", bool(actions.call("try_start_tool_action", 0.20)))
+	_expect_true(
+		failures,
+		"second fixture commitment starts",
+		bool(actions.call("try_start_tool_action", 0.20))
+	)
 	player.call("_request_attack")
 	_expect_equal(failures, "pre-reset buffer exists", String(player.call("get_buffered_action_name")), "attack")
 	player.call("_respawn_after_defeat")
@@ -108,11 +157,21 @@ static func _expect_true(failures: Array[String], label: String, condition: bool
 		failures.append(label)
 
 
-static func _expect_equal(failures: Array[String], label: String, actual: Variant, expected: Variant) -> void:
+static func _expect_equal(
+	failures: Array[String],
+	label: String,
+	actual: Variant,
+	expected: Variant
+) -> void:
 	if actual != expected:
 		failures.append("%s — expected %s, got %s" % [label, str(expected), str(actual)])
 
 
-static func _expect_vector_close(failures: Array[String], label: String, actual: Vector3, expected: Vector3) -> void:
+static func _expect_vector_close(
+	failures: Array[String],
+	label: String,
+	actual: Vector3,
+	expected: Vector3
+) -> void:
 	if not actual.is_equal_approx(expected):
 		failures.append("%s — expected %s, got %s" % [label, str(expected), str(actual)])

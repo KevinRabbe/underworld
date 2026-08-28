@@ -40,10 +40,14 @@ static func run() -> Array[String]:
 		and mannequin.get_tool_visual_root().get_parent() == mannequin.get_socket(&"hand_r")
 	)
 
+	# Exercise every placeholder pose in headless Godot. These are contract tests,
+	# not visual-quality tests.
 	mannequin.play_attack()
 	_advance(mannequin, 0.50)
 	_expect_equal(failures, "attack pose returns to neutral", mannequin.current_action, mannequin.ACTION_NONE)
 
+	# Combat definitions may supply different total durations. The mannequin must
+	# consume that duration instead of owning a second copy of attack timing.
 	mannequin.play_attack(0.70)
 	_advance(mannequin, 0.45)
 	_expect_equal(
@@ -72,6 +76,8 @@ static func run() -> Array[String]:
 	_advance(mannequin, 0.35)
 	_expect_equal(failures, "hit pose returns to neutral", mannequin.current_action, mannequin.ACTION_NONE)
 
+	# Guard is a held visual layer, not a timed action. It survives locomotion
+	# updates until the gameplay layer releases it.
 	mannequin.set_blocking(true)
 	mannequin.update_visual(1.0 / 60.0, Vector3(1.0, 0.0, 2.0), true, false)
 	_expect_true(failures, "held guard pose becomes active", mannequin.is_block_pose_active())
@@ -85,6 +91,7 @@ static func run() -> Array[String]:
 	mannequin.update_visual(1.0 / 60.0, Vector3.ZERO, true, false)
 	_expect_true(failures, "held guard pose clears", not mannequin.is_block_pose_active())
 
+	# Locomotion updates must also tolerate grounded/airborne and sprint states.
 	mannequin.update_visual(1.0 / 60.0, Vector3(0.0, 0.0, 6.0), true, false)
 	mannequin.update_visual(1.0 / 60.0, Vector3(1.0, 0.0, 9.0), true, true)
 	mannequin.update_visual(1.0 / 60.0, Vector3.ZERO, false, false)
