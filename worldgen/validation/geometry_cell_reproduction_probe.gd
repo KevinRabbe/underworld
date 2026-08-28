@@ -21,7 +21,7 @@ static func build(world_seed: int, region_coord: Vector2i) -> Dictionary:
 			"diagnostics": geometry.diagnostics,
 		}
 	var partition = Partitioner.partition(
-		geometry.data, inputs["finalized"], Config.new(), [], inputs["context"], geometry.data.provenance.source_stage_fingerprints
+		geometry.data, inputs["finalized"], Config.new(), [], inputs["context"], GeometryGenerator.expected_provenance_sources(inputs["macro"], inputs["finalized"], inputs["neighbor_views"])
 	)
 	if not partition.success:
 		return {

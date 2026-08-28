@@ -21,6 +21,7 @@ static func run() -> Array[String]:
 	_test_negative_cells_and_configuration(failures)
 	_test_configuration_identity_mutation(failures)
 	_test_unmirrored_continuation_rejected(failures)
+	_test_partition_rejects_extra_geometry_parent(failures)
 	_test_type_and_region_validation(failures)
 	return failures
 
@@ -131,6 +132,36 @@ static func _test_unmirrored_continuation_rejected(failures: Array[String]) -> v
 			rejected = true
 			break
 	_expect_true(failures, "unmirrored continuation is rejected", rejected)
+
+
+static func _test_partition_rejects_extra_geometry_parent(failures: Array[String]) -> void:
+	var fixture := _fixture()
+	var expected: Array = fixture.geometry.provenance.source_stage_fingerprints.duplicate()
+	var actual: Array = expected.duplicate()
+	actual.append("unrelated:valid")
+	var extra_provenance = fixture.context.make_provenance(
+		"geometry_description",
+		fixture.geometry.bundle.region_definition.stable_id,
+		fixture.geometry.bundle.region_definition.stable_address.canonical_text(),
+		actual
+	)
+	var malformed_geometry := GeometryResult.new(
+		fixture.geometry.bundle,
+		fixture.geometry.chamber_descriptors,
+		fixture.geometry.tunnel_descriptors,
+		fixture.geometry.geometry_metrics,
+		fixture.geometry.fingerprint,
+		extra_provenance
+	)
+	var result = Partitioner.partition(
+		malformed_geometry,
+		fixture.finalization,
+		Config.new(),
+		[],
+		fixture.context,
+		expected
+	)
+	_expect_true(failures, "partition boundary rejects extra geometry parent", not result.success)
 
 
 static func _fixture() -> Dictionary:

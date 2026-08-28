@@ -163,6 +163,13 @@ static func _neighbor_source_fingerprints(region_plan, finalization_result, neig
 	return sources
 
 
+static func expected_provenance_sources(region_plan, finalization_result, neighbor_views: Array = []) -> Array[String]:
+	if region_plan == null or finalization_result == null or finalization_result.bundle == null:
+		return []
+	var effective_neighbors := _effective_neighbor_views(region_plan, finalization_result.bundle, neighbor_views)
+	return _neighbor_source_fingerprints(region_plan, finalization_result, effective_neighbors)
+
+
 static func _effective_neighbor_views(region_plan, bundle, neighbor_views: Array) -> Array:
 	var result: Array = []
 	var seen: Dictionary = {}

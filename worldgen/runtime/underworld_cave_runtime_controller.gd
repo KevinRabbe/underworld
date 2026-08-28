@@ -87,7 +87,8 @@ func bootstrap_fixture(world_seed: int, region: Vector2i, entrance_id: String) -
 	var surface_result = SurfacePlan.build(bounds, [selected], Vector2i(16, 16), entrances.fingerprint, cell_config)
 	if not surface_result.success: return _bootstrap_fail(surface_result.diagnostics)
 	var handoff = surface_result.data.demand_handoffs[0]
-	var partition_request := PartitionRequest.new(geometry.data, finalized.data, cell_config, handoff.cell_addresses, context, geometry.data.provenance.source_stage_fingerprints)
+	var expected_geometry_sources := GeometryGenerator.expected_provenance_sources(macro.data, finalized.data, neighbor_views)
+	var partition_request := PartitionRequest.new(geometry.data, finalized.data, cell_config, handoff.cell_addresses, context, expected_geometry_sources)
 	var partition = Partitioner.generate(partition_request)
 	if not partition.success: return _bootstrap_fail(partition.diagnostics)
 	var provenance = partition.provenance

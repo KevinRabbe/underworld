@@ -284,8 +284,26 @@ static func _test_irrelevant_neighbor_does_not_change_identity(failures: Array[S
 	if not bool(built.get("success", false)):
 		failures.append("geometry irrelevant-neighbor fixture failed")
 		return
+	var endpoint_ids: Dictionary = {}
+	for edge in built["finalized"].bundle.edges:
+		if edge != null:
+			endpoint_ids[edge.endpoint_a_node_id] = true
+			endpoint_ids[edge.endpoint_b_node_id] = true
+	var non_contributing = null
+	for candidate in built["neighbor_views"]:
+		var contributes := false
+		for node in candidate["primary_topology"].bundle.nodes:
+			if node != null and endpoint_ids.has(node.stable_id):
+				contributes = true
+				break
+		if not contributes:
+			non_contributing = candidate
+			break
+	_expect_true(failures, "non-contributing adjacent neighbor exists", non_contributing != null)
+	if non_contributing == null:
+		return
 	var extra_views: Array = built["neighbor_views"].duplicate()
-	extra_views.append(built["neighbor_views"][0])
+	extra_views.append(non_contributing)
 	var rerun = GeometryGenerator.generate(
 		built["context"], built["macro"], built["finalized"], extra_views
 	)
