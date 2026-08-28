@@ -2,10 +2,20 @@ name: Seed Domain Audit
 
 on:
   pull_request:
+    paths:
+      - 'worldgen/**'
+      - 'tools/ci/seed_domain_audit.py'
+      - 'tools/ci/test_seed_domain_audit.py'
+      - '.github/workflows/seed-domain-audit.yml'
   push:
     branches:
       - main
       - 'validation/seed-domain-*'
+    paths:
+      - 'worldgen/**'
+      - 'tools/ci/seed_domain_audit.py'
+      - 'tools/ci/test_seed_domain_audit.py'
+      - '.github/workflows/seed-domain-audit.yml'
 
 permissions:
   contents: read
