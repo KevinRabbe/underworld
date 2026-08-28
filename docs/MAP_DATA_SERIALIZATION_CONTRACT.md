@@ -39,8 +39,11 @@ generator_manifest_canonical
 world_id
 ```
 
+`world_seed` is serialized as a **canonical signed decimal string**, not a JSON number. The runtime seed remains a signed 64-bit integer; the string wire representation prevents JavaScript and other IEEE-754-based JSON consumers from silently rounding seeds above `2^53`.
+
 Validation requires:
 
+- `world_seed` is a canonical decimal representation of a signed 64-bit integer;
 - the `WorldId` is syntactically valid;
 - the `WorldId` matches the serialized world seed;
 - the manifest canonical text uses the supported manifest schema prefix;
@@ -80,6 +83,8 @@ dictionary with string keys
 
 Runtime-only Variant values such as `Vector3`, scene objects, resources, nodes, and callables are rejected rather than serialized ambiguously.
 
+Identity-critical values that may exceed interoperable JSON numeric precision should use explicit textual wire representations, as `world_seed` does.
+
 ## Decode / load boundary
 
 Decode is intentionally staged:
@@ -115,10 +120,11 @@ Unknown newer/older versions are rejected explicitly. Migration policy belongs t
 `tests/persistence/test_map_data_serialization_contract.gd` covers:
 
 - world header and delta round-trip;
-- large integer seed preservation through JSON;
+- signed 64-bit seed preservation through JSON beyond the `2^53` interoperability boundary;
 - byte-identical canonical JSON for equivalent state with different insertion order;
 - `WorldDeltaStore` reload;
 - corrupt WorldId and seed mismatch rejection;
+- non-canonical decimal seed rejection;
 - generator manifest fingerprint mismatch rejection;
 - unsupported schema rejection;
 - rejection of unexpected topology fields;
