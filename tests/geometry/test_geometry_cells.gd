@@ -22,6 +22,7 @@ static func run() -> Array[String]:
 	_test_configuration_identity_mutation(failures)
 	_test_unmirrored_continuation_rejected(failures)
 	_test_partition_rejects_extra_geometry_parent(failures)
+	_test_partition_accepts_reversed_expected_parent_order(failures)
 	_test_type_and_region_validation(failures)
 	return failures
 
@@ -162,6 +163,21 @@ static func _test_partition_rejects_extra_geometry_parent(failures: Array[String
 		expected
 	)
 	_expect_true(failures, "partition boundary rejects extra geometry parent", not result.success)
+
+
+static func _test_partition_accepts_reversed_expected_parent_order(failures: Array[String]) -> void:
+	var fixture := _fixture()
+	var expected: Array = fixture.geometry.provenance.source_stage_fingerprints.duplicate()
+	expected.reverse()
+	var result = Partitioner.partition(
+		fixture.geometry,
+		fixture.finalization,
+		Config.new(),
+		[],
+		fixture.context,
+		expected
+	)
+	_expect_true(failures, "partition accepts reversed expected parent order", result.success)
 
 
 static func _fixture() -> Dictionary:
