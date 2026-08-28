@@ -6,7 +6,7 @@ This document explains **what each major validation suite proves, which domain o
 
 This index does not create acceptance gates or redefine test behavior. Executable runners and workflow YAML remain authoritative for what actually runs.
 
-Current-main baseline used for this index: `e03eba40dea0486ab1b6a02ea8b1843f13a094c5`.
+Current-main baseline used for this index: `64d32b691ea5e730534930ee47a08841e23f8d09`.
 
 ## Failure-routing vocabulary
 
@@ -27,9 +27,9 @@ A failure should be routed to the owner of the invariant. Do not weaken an ownin
 | **Repository layout contracts** | Repository architecture / dependency policy | Canonical roots, retired paths, forbidden dependency directions, explicit migration exceptions | Fast structural every-PR check | Structural/dependency violation = implementation/integration defect; obsolete validator/policy text = tooling/docs debt |
 | **Deterministic Worldgen fast runner** | Deterministic world definition + runtime integration contracts | Identity, RNG, manifests, provenance, topology, entrances, connectivity, cave/geometry cells, runtime-cell lifecycle, collision/readiness, runtime harness and MAP-015 bootstrap contracts | Fast headless contract executed in every worldgen shard | Implementation defect in owning worldgen/runtime contract or integration staleness against accepted upstream truth |
 | **Deterministic Worldgen ten-shard campaign** | Deterministic worldgen | Reproduction over ten 25-seed shards and a 3x3 region neighborhood per seed: 2,250 seed/region cases total | Broad deterministic campaign | Nondeterminism/generation defect unless an intentional contract revision was not propagated through fixtures/evidence |
-| **`Godot headless contracts` aggregate** | CI integration surface | Requires both the deterministic shard matrix and Content Registry job to succeed | Stable umbrella merge check | Do not diagnose from aggregate alone; inspect the failed dependency and route to that domain |
-| **Content registry contracts** | Authored content core / semantic identity | Semantic ContentId validity, path independence, deterministic indexing/order, duplicate rejection, typed family lookup/references, missing/wrong-type handling | Focused headless contract, included in broad aggregate | Content-core implementation/integration defect; validator debt only when authoritative content rules intentionally changed |
-| **MAP-014 / MAP-015 runtime integration contracts** | Underworld runtime streaming / collision / traversal readiness | Runtime-cell lifecycle, stale-result rejection, deterministic runtime-harness fingerprint/counters, entrance collision gate readiness, MAP-015 bootstrap/route/rebuild behavior | Current-main tests inside deterministic fast runner; also focused runner modes exist | Runtime/streaming/collision implementation defect or integration staleness; not a presentation-only failure |
+| **`Godot headless contracts` aggregate** | CI integration surface | Requires both the deterministic shard matrix and the complete content-contract job to succeed | Stable umbrella merge check | Do not diagnose from aggregate alone; inspect the failed dependency and route to that domain |
+| **Content registry + schema contracts** | Authored content core / semantic identity / category-capability schemas | Semantic ContentId validity, path independence, deterministic definition indexing, typed references, category ancestry, capability composition, schema-ID separation and deterministic schema registries | Focused headless contract, included in broad aggregate | Content-core/schema implementation or integration defect; validator debt only when authoritative content rules intentionally changed |
+| **MAP-014 / MAP-015 runtime integration contracts** | Underworld runtime streaming / collision / traversal readiness | Runtime-cell lifecycle, stale-result rejection, deterministic runtime-harness fingerprint/counters, entrance collision gate readiness, MAP-015 bootstrap/route/rebuild behavior | Current-main tests inside deterministic fast runner; focused modes also exist | Runtime/streaming/collision implementation defect or integration staleness; not a presentation-only failure |
 | **Map Data Serialization contracts** | Persistence / map-data serialization | Persistence serialization schema and round-trip/contract behavior under `worldgen/persistence/**` | Path-filtered focused workflow | Persistence implementation/migration/fixture integration defect; tooling debt only if the executable validator itself is stale |
 | **Worldgen Inspector contracts and exports** | Developer tooling / worldgen inspection | Topology inspector/atlas contracts and reproducible JSON/SVG snapshot/atlas exports, including expected schemas and region-frame counts | Path-filtered focused tooling workflow | Inspector/export tooling defect or integration with changed worldgen data; not authority to rewrite generator truth |
 | **Stable ID Audit** | Deterministic procedural identity | Large StableAddress/StableId corpus reproduction and collision resistance across required address families | Specialized path-filtered audit; 34,969 accepted cases | Identity implementation defect unless audit/report tooling is demonstrably stale |
@@ -90,28 +90,40 @@ Architecture pointers: [Generation Pipeline Interfaces](../GENERATION_PIPELINE_I
 The current `foundation-validation.yml` publishes `Godot headless contracts` only after:
 
 1. the full deterministic shard matrix succeeds; and
-2. Content Registry contracts succeed.
+2. the current content-contract job succeeds.
 
-The aggregate is intentionally useful as a stable integration status, but it is **not a root-cause suite**. When it fails, inspect the dependency result first rather than changing the aggregate job or treating every failure as worldgen-owned.
+The aggregate is a stable integration status, **not a root-cause suite**. When it fails, inspect the dependency result first rather than changing the aggregate job or treating every failure as worldgen-owned.
 
-## Content registry contracts
+## Content registry and schema contracts
 
 Current workflow job: `Content registry contracts` inside [`foundation-validation.yml`](../../.github/workflows/foundation-validation.yml)  
-Runner: [`tests/run_content.gd`](../../tests/run_content.gd)
+Runner: [`tests/run_content.gd`](../../tests/run_content.gd)  
+Schema-registry tests: [`test_content_schema_registries.gd`](../../tests/content/test_content_schema_registries.gd)
 
-Accepted through CONTENT-003 / #82, this suite protects the authored-content core boundary:
+The job now composes the accepted CONTENT-003 / #82 registry contracts with accepted CONTENT-004 / #83 category/capability schema contracts.
+
+Registry coverage includes:
 
 - semantic authored IDs rather than filesystem or procedural identity;
 - path-independent definition identity;
-- deterministic registry ordering/logical results;
+- deterministic definition registry ordering/logical results;
 - hard duplicate rejection;
 - typed family/reference validation;
-- missing/wrong-target diagnostics;
-- optional reference behavior.
+- missing/wrong-target diagnostics and optional references.
 
-Do not make duplicates first/last-wins, accept path-shaped identity, or weaken typed reference checks to accommodate one definition.
+Schema coverage includes:
 
-Architecture pointers: [Content Architecture](../10_architecture/CONTENT_ARCHITECTURE.md), [Content Registry](../10_architecture/CONTENT_REGISTRY.md), [Content IDs](../40_content/CONTENT_IDS.md), [Content References](../40_content/CONTENT_REFERENCES.md).
+- category/capability SchemaId namespace separation from ordinary authored ContentIds;
+- deterministic category ancestry and registration-order independence;
+- category eligibility over explicit ancestry closure;
+- rejection of duplicate IDs, unknown parent references and ancestry cycles;
+- deterministic capability composition/closure and registration-order independence;
+- clear rejection of invalid/duplicate/unknown capability schema relationships;
+- content-definition category/capability declarations validated against the schema registries.
+
+Do not make duplicate definitions/schemas first/last-wins, collapse schema IDs into ordinary ContentIds, accept unknown ancestry/composition references, or weaken typed-reference/category/capability checks to accommodate one definition.
+
+Architecture pointers: [Content Architecture](../10_architecture/CONTENT_ARCHITECTURE.md), [Content Registry](../10_architecture/CONTENT_REGISTRY.md), [Content IDs](../40_content/CONTENT_IDS.md), [Content References](../40_content/CONTENT_REFERENCES.md), [Content Categories](../40_content/CONTENT_CATEGORIES.md), [Content Capabilities](../40_content/CONTENT_CAPABILITIES.md).
 
 ## MAP-014 / MAP-015 runtime integration evidence
 
@@ -182,11 +194,11 @@ Do not shrink the corpus or collision/reproduction requirements to mask an ident
 Current workflow: [`pm-acceptance-gate.yml`](../../.github/workflows/pm-acceptance-gate.yml)  
 Governance contract: [Main Merge Gate](MAIN_MERGE_GATE.md)
 
-This workflow coordinates exact-head PM metadata/status behavior. In particular, a synchronized new head is fail-closed until explicit acceptance, stale `pm-accepted` state is invalidated, draft/lifecycle transitions cannot manufacture acceptance, and only an explicit valid acceptance event can publish success for the exact head.
+This workflow coordinates exact-head PM metadata/status behavior. A synchronized new head is fail-closed until explicit acceptance, stale `pm-accepted` state is invalidated, draft/lifecycle transitions cannot manufacture acceptance, and only an explicit valid acceptance event can publish success for the exact head.
 
 This is **governance evidence, not game/test correctness**.
 
-The workflow itself documents an important security boundary: the `PM acceptance` context is an operational same-principal guard and is not cryptographically isolated from every other same-repository GitHub Actions principal. Repository-owner branch/ruleset enforcement is a separate governance requirement.
+The workflow itself documents that the `PM acceptance` context is an operational same-principal guard and is not cryptographically isolated from every other same-repository GitHub Actions principal. Repository-owner branch/ruleset enforcement is a separate governance requirement.
 
 Therefore:
 
@@ -215,7 +227,8 @@ Preserved audit/validation branches may contain valuable historical evidence, bu
 ## Examples of failures that must not be solved by weakening the test
 
 - A StableId collision must not be hidden by removing the colliding corpus case.
-- Duplicate content IDs must not be converted to implicit first/last-wins registry behavior.
+- Duplicate content or schema IDs must not be converted to implicit first/last-wins behavior.
+- Unknown category ancestry, capability composition references, or schema cycles must not be silently accepted.
 - A deterministic mismatch must not be hidden by reducing seeds/regions or comparing less state without an owning contract change.
 - A stale runtime result must not be accepted by lowering stale-discard or ownership expectations.
 - An entrance collision gate that loses readiness during the MAP-015 route must not be treated as a presentation issue.
@@ -232,7 +245,7 @@ For practical command/trigger selection and exact-head evidence rules, use [Vali
 
 ### Documentation freshness note
 
-At the baseline used for this index, the executable repository contains seven workflow files, including the newly accepted Stable ID Audit and operational PM acceptance workflow. `VALIDATION_MATRIX.md` still states an older five-workflow inventory. That mismatch is **documentation debt**, not a reason to omit current executable suites from this index. Updating the matrix itself is outside QA-001's one-file scope.
+At the baseline used for this index, the executable repository contains seven workflow files, including the accepted Stable ID Audit and operational PM acceptance workflow. `VALIDATION_MATRIX.md` still states an older five-workflow inventory. That mismatch is **documentation debt**, not a reason to omit current executable suites from this index. Updating the matrix itself is outside QA-001's one-file scope.
 
 ## Review invariant
 
