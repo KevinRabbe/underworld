@@ -2,12 +2,14 @@ extends SceneTree
 
 const AtlasBuilder := preload("res://tools/worldgen/topology_atlas_builder.gd")
 const AtlasSvg := preload("res://tools/worldgen/topology_atlas_svg.gd")
+const ElevationSvg := preload("res://tools/worldgen/topology_elevation_svg.gd")
 
 
 func _init() -> void:
 	var failures: Array[String] = []
 	_test_default_atlas(failures)
 	_test_deterministic_atlas(failures)
+	_test_elevation_views(failures)
 	_test_negative_center(failures)
 	_test_radius_contract(failures)
 	_finish(failures)
@@ -74,6 +76,45 @@ static func _test_deterministic_atlas(failures: Array[String]) -> void:
 		AtlasSvg.render(first["atlas"]),
 		AtlasSvg.render(second["atlas"])
 	)
+	_expect_equal(
+		failures,
+		"X/depth elevation SVG reproduces exactly",
+		ElevationSvg.render(first["atlas"], "x"),
+		ElevationSvg.render(second["atlas"], "x")
+	)
+	_expect_equal(
+		failures,
+		"Z/depth elevation SVG reproduces exactly",
+		ElevationSvg.render(first["atlas"], "z"),
+		ElevationSvg.render(second["atlas"], "z")
+	)
+
+
+static func _test_elevation_views(failures: Array[String]) -> void:
+	var built: Dictionary = AtlasBuilder.build(616161, Vector2i.ZERO, 1)
+	_expect_true(failures, "elevation atlas builds", bool(built.get("success", false)))
+	if not bool(built.get("success", false)):
+		return
+
+	var atlas: Dictionary = built["atlas"]
+	var totals: Dictionary = atlas.get("totals", {})
+	var expected_nodes: int = int(totals.get("node_count", -1))
+	var x_svg: String = ElevationSvg.render(atlas, "x")
+	var z_svg: String = ElevationSvg.render(atlas, "z")
+
+	_expect_true(failures, "X/depth SVG renders", not x_svg.is_empty())
+	_expect_true(failures, "Z/depth SVG renders", not z_svg.is_empty())
+	_expect_true(failures, "X/depth SVG names axis", x_svg.contains("X / depth"))
+	_expect_true(failures, "Z/depth SVG names axis", z_svg.contains("Z / depth"))
+	_expect_equal(failures, "X/depth has nine region frames", x_svg.count("class=\"elevation-region-frame\""), 9)
+	_expect_equal(failures, "Z/depth has nine region frames", z_svg.count("class=\"elevation-region-frame\""), 9)
+	_expect_equal(failures, "X/depth carries every node", x_svg.count("class=\"elevation-node\""), expected_nodes)
+	_expect_equal(failures, "Z/depth carries every node", z_svg.count("class=\"elevation-node\""), expected_nodes)
+	_expect_equal(failures, "X/depth has three depth bands per region", x_svg.count("class=\"depth-band "), 27)
+	_expect_equal(failures, "Z/depth has three depth bands per region", z_svg.count("class=\"depth-band "), 27)
+	_expect_true(failures, "X/depth includes world coordinates in hover metadata", x_svg.contains("world=("))
+	_expect_true(failures, "Z/depth includes world coordinates in hover metadata", z_svg.contains("world=("))
+	_expect_equal(failures, "invalid elevation axis is rejected", ElevationSvg.render(atlas, "y"), "")
 
 
 static func _test_negative_center(failures: Array[String]) -> void:
@@ -90,6 +131,8 @@ static func _test_negative_center(failures: Array[String]) -> void:
 		_expect_equal(failures, "negative atlas first coord", regions[0]["region"]["coord"], [-5, -7])
 		_expect_equal(failures, "negative atlas last coord", regions[8]["region"]["coord"], [-3, -5])
 	_expect_true(failures, "negative atlas SVG renders", AtlasSvg.render(atlas).contains("center=(-4,-6)"))
+	_expect_true(failures, "negative X/depth SVG renders", ElevationSvg.render(atlas, "x").contains("center=(-4,-6)"))
+	_expect_true(failures, "negative Z/depth SVG renders", ElevationSvg.render(atlas, "z").contains("center=(-4,-6)"))
 
 
 static func _test_radius_contract(failures: Array[String]) -> void:
@@ -98,6 +141,7 @@ static func _test_radius_contract(failures: Array[String]) -> void:
 	if bool(single.get("success", false)):
 		_expect_equal(failures, "radius zero grid", single["atlas"]["grid_size"], [1, 1])
 		_expect_equal(failures, "radius zero region count", single["atlas"]["regions"].size(), 1)
+		_expect_equal(failures, "radius zero elevation frame count", ElevationSvg.render(single["atlas"], "x").count("class=\"elevation-region-frame\""), 1)
 
 	var negative_radius: Dictionary = AtlasBuilder.build(12, Vector2i.ZERO, -1)
 	_expect_true(failures, "negative radius is rejected", not bool(negative_radius.get("success", true)))
