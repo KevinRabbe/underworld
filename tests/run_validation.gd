@@ -9,6 +9,12 @@ const ProvenanceTests := preload("res://tests/foundation/test_generation_provena
 const CaveMeshTests := preload("res://tests/geometry/test_cave_mesh_builder.gd")
 const RuntimeCellTests := preload("res://tests/geometry/test_runtime_cell_lifecycle.gd")
 const SurfaceEntranceTests := preload("res://tests/geometry/test_surface_entrance_integration.gd")
+const CollisionTests := preload("res://tests/geometry/test_collision_and_gate.gd")
+const RuntimeHarnessTests := preload("res://tests/geometry/test_runtime_validation_harness.gd")
+const CaveRuntimeControllerTests := preload("res://tests/geometry/test_cave_runtime_controller.gd")
+const Map015RuntimeBootstrapTests := preload("res://tests/geometry/test_map015_runtime_bootstrap.gd")
+const RuntimeHarness := preload("res://worldgen/runtime/runtime_validation_harness.gd")
+const Map015FixtureTests := preload("res://tests/geometry/test_map015_fixture.gd")
 const PrimaryTopologyTests := preload("res://tests/topology/test_primary_topology.gd")
 const EntranceGenerationTests := preload("res://tests/entrances/test_entrance_generation.gd")
 const SecondaryConnectivityTests := preload("res://tests/connectivity/test_secondary_connectivity.gd")
@@ -46,6 +52,10 @@ func _init() -> void:
 			_run_geometry_reproduction(args)
 		"geometry-cell-repro":
 			_run_geometry_cell_reproduction(args)
+		"runtime-harness":
+			_run_runtime_harness(args)
+		"map015-fixture":
+			_finish("map015-fixture", Map015FixtureTests.run())
 		"batch":
 			_run_batch(args)
 		"geometry-cell-batch":
@@ -67,12 +77,31 @@ func _run_fast() -> void:
 	failures.append_array(CaveMeshTests.run())
 	failures.append_array(RuntimeCellTests.run())
 	failures.append_array(SurfaceEntranceTests.run())
+	failures.append_array(CollisionTests.run())
+	failures.append_array(RuntimeHarnessTests.run())
+	failures.append_array(CaveRuntimeControllerTests.run())
+	failures.append_array(Map015RuntimeBootstrapTests.run())
 	failures.append_array(PrimaryTopologyTests.run())
 	failures.append_array(EntranceGenerationTests.run())
 	failures.append_array(SecondaryConnectivityTests.run())
 	failures.append_array(CaveGeometryTests.run())
 	failures.append_array(GeometryCellTests.run())
 	_finish("fast", failures)
+
+
+func _run_runtime_harness(args: Dictionary) -> void:
+	var report = RuntimeHarness.run()
+	var expected: String = str(args.get("expect", ""))
+	print("[RUNTIME HARNESS]")
+	print("  fingerprint=%s" % report.fingerprint)
+	print("  counters=%s" % report.counters)
+	if not report.failures.is_empty():
+		_finish("runtime-harness", report.failures)
+		return
+	if not expected.is_empty() and report.fingerprint != expected:
+		_finish("runtime-harness", ["fingerprint mismatch: expected=%s actual=%s" % [expected, report.fingerprint]])
+		return
+	_finish("runtime-harness", [])
 
 
 func _run_fixture(fixture_name: String) -> void:

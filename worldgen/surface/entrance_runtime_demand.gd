@@ -1,6 +1,8 @@
 extends RefCounted
 class_name UnderworldEntranceRuntimeDemand
 
+const CanonicalValue := preload("res://worldgen/validation/canonical_value.gd")
+
 var entrance_id: String
 var cell_addresses: Array
 var source_provenance: String
@@ -12,7 +14,7 @@ func _init(entrance_id_value: String, cells_value: Array, provenance_value: Stri
 	cell_addresses = cells_value.duplicate()
 	cell_addresses.sort_custom(func(a, b): return a.canonical_text() < b.canonical_text())
 	source_provenance = provenance_value
-	fingerprint = "entrance-demand1:" + entrance_id + ":" + str(cell_addresses.size()) + ":" + source_provenance
+	fingerprint = "entrance-demand1:" + CanonicalValue.fingerprint(canonical_data())
 
 
 func canonical_data() -> Dictionary:
