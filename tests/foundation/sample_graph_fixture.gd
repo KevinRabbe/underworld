@@ -46,6 +46,10 @@ static func build(reverse_collection_order: bool = false):
 
 	var entrance_address = StableAddress.entrance(region_address, 0)
 	var entrance_id: String = StableId.from_address(entrance_address).value()
+	var entrance_anchor_address = StableAddress.entrance_anchor(entrance_address)
+	var entrance_anchor_id: String = StableId.from_address(entrance_anchor_address).value()
+	var entrance_path_address = StableAddress.entrance_path(entrance_address, node_a0_address)
+	var entrance_path_id: String = StableId.from_address(entrance_path_address).value()
 
 	var hook_address = StableAddress.special_location(node_a1_address, "large-deposit", 0)
 	var hook_id: String = StableId.from_address(hook_address).value()
@@ -81,6 +85,17 @@ static func build(reverse_collection_order: bool = false):
 		"terminal",
 		["isolated-primary"]
 	)
+	var entrance_anchor = NodeDefinition.new(
+		entrance_anchor_address,
+		network_a_id,
+		Vector3(0.0, -8.0, 0.0),
+		"entrance_anchor",
+		Vector3(10.0, 8.0, 10.0),
+		Vector3(0.90, 0.10, 0.0),
+		"entrance_anchor",
+		["entrance-path"],
+		{"entrance_id": entrance_id}
+	)
 
 	var primary_edge = EdgeDefinition.new(
 		primary_address,
@@ -101,6 +116,16 @@ static func build(reverse_collection_order: bool = false):
 		{"width": 4.0},
 		["secondary"]
 	)
+	var entrance_path = EdgeDefinition.new(
+		entrance_path_address,
+		entrance_anchor_id,
+		node_a0_id,
+		region_id,
+		"entrance_path",
+		{"entrance_id": entrance_id, "descent_profile": "gradual_cave"},
+		{"width": 5.0},
+		["entrance-path"]
+	)
 
 	var entrance = EntranceDefinition.new(
 		entrance_address,
@@ -111,7 +136,14 @@ static func build(reverse_collection_order: bool = false):
 		Vector3(0.0, -18.0, 0.0),
 		"natural_cave",
 		"gradual_cave",
-		{"surface_radius": 6.0, "clearance": 4.5}
+		{
+			"orientation": Vector3.FORWARD,
+			"required_opening_bounds": AABB(
+				Vector3(-14.0, 1.0, -11.0), Vector3(12.0, 8.0, 12.0)
+			),
+			"clearance_radius": 6.0,
+		},
+		{"entrance_path_edge_id": entrance_path_id, "anchor_node_id": entrance_anchor_id}
 	)
 
 	var hook = SpecialHookDefinition.new(
@@ -130,10 +162,11 @@ static func build(reverse_collection_order: bool = false):
 		network_a_address,
 		region_id,
 		node_a0_id,
-		[node_a1_id, node_a0_id],
+		[node_a1_id, node_a0_id, entrance_anchor_id],
 		[primary_id],
 		[entrance_id],
-		{"node_count": 2}
+		{"node_count": 3},
+		[entrance_path_id]
 	)
 	var network_b = NetworkDefinition.new(
 		network_b_address,
@@ -159,8 +192,8 @@ static func build(reverse_collection_order: bool = false):
 	)
 
 	var networks: Array = [network_a, network_b]
-	var nodes: Array = [node_a0, node_a1, node_b0]
-	var edges: Array = [primary_edge, secondary_edge]
+	var nodes: Array = [node_a0, node_a1, node_b0, entrance_anchor]
+	var edges: Array = [primary_edge, secondary_edge, entrance_path]
 	var entrances: Array = [entrance]
 	var hooks: Array = [hook]
 

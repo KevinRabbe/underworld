@@ -395,6 +395,18 @@ The pre-implementation architecture cycle is complete at the documented semantic
 
 The next development cycle is deliberately narrower: implement the tested deterministic foundation primitives — stable addresses/IDs, seed domains, generator manifests, pure graph data, canonical fingerprints/invariant validation, headless test runner and prototype-v2 migration adapter — before implementing the first real Underworld topology generator.
 
+## 2026-08-27 — Primary topology complete; deterministic entrance cycle begins
+
+PR #11 completed the data-only primary topology stage. The next cycle is v0.10
+deterministic entrance generation, ordered after primary topology and before
+secondary connectivity.
+
+The implementation uses a pure deterministic surface sampler over the existing
+terrain contract, replaces the temporary flat depth reference with local sampled
+surface height, and emits stable entrance definitions, entrance-path graph data
+and surface-integration descriptors. It deliberately excludes secondary loops,
+cross-region reconciliation and all mesh/runtime construction.
+
 ## 2026-08-27 — Deterministic foundation merged; primary topology cycle begins
 
 PR #10 completed the deterministic foundation gate under Godot 4.7.2 headless

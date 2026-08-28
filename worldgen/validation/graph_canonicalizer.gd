@@ -74,6 +74,7 @@ static func _network_data(network) -> Dictionary:
 		"root_node_id": network.root_node_id,
 		"node_ids": _sorted_strings(network.node_ids),
 		"primary_edge_ids": _sorted_strings(network.primary_edge_ids),
+		"entrance_path_edge_ids": _sorted_strings(network.entrance_path_edge_ids),
 		"attached_entrance_ids": _sorted_strings(network.attached_entrance_ids),
 		"topology_metrics": network.topology_metrics,
 	}
