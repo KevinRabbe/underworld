@@ -1,12 +1,10 @@
 extends Node3D
 
-signal equipped_tool_changed(tool_id: String)
-
-const TerrainGeneratorScript := preload("res://world/terrain_generator.gd")
+const TerrainGeneratorScript := preload("res://worldgen/surface/terrain_generator.gd")
 const TerrainChunkScript := preload("res://world/terrain_chunk.gd")
-const PickupGeneratorScript := preload("res://world/pickup_generator.gd")
+const PickupGeneratorScript := preload("res://worldgen/surface/pickup_generator.gd")
 
-var settings: UnderworldWorldSettings
+var settings
 var main_generator
 var worker_generator
 var main_pickup_generator
@@ -27,16 +25,9 @@ var max_chunk_build_ms: float = 0.0
 var total_chunks_generated: int = 0
 var world_object_update_timer: float = 0.0
 
-# The save stores only deviations from the deterministic generated baseline.
+# Durable generated-world instance deltas remain world state. Gameplay systems may
+# request mutations and persistence snapshots, but do not become their authority.
 var destroyed_object_ids: Dictionary = {}
-var object_hit_progress: Dictionary = {}
-var gathered_wood: int = 0
-var gathered_stone: int = 0
-var has_stone_axe: bool = false
-var has_stone_pickaxe: bool = false
-var selected_hotbar_slot: int = 1
-var equipped_tool: String = "hands"
-var last_action_message: String = "Walk over loose branches and stones"
 
 # Terrain + pickup transform data is generated on one background worker.
 # Scene-tree, meshes, and physics remain main-thread only.
@@ -51,7 +42,7 @@ var terrain_material: StandardMaterial3D = StandardMaterial3D.new()
 var decoration_assets: Dictionary = {}
 
 
-func configure(world_settings: UnderworldWorldSettings) -> void:
+func configure(world_settings) -> void:
 	settings = world_settings
 
 	main_generator = TerrainGeneratorScript.new()
@@ -69,7 +60,6 @@ func configure(world_settings: UnderworldWorldSettings) -> void:
 	terrain_material.roughness = 1.0
 
 	_create_prototype_decoration_assets()
-	_load_world_modifications()
 
 
 func _create_prototype_decoration_assets() -> void:
@@ -125,8 +115,6 @@ func set_player(player_node: Node3D) -> void:
 	current_player_chunk = world_to_chunk(player.global_position)
 	_update_desired_chunks(current_player_chunk)
 	_update_world_object_physics()
-	_collect_nearby_pickups()
-	equipped_tool_changed.emit(equipped_tool)
 
 
 func _process(delta: float) -> void:
@@ -140,7 +128,6 @@ func _process(delta: float) -> void:
 		if world_object_update_timer <= 0.0:
 			world_object_update_timer = maxf(settings.world_object_update_interval, 0.05)
 			_update_world_object_physics()
-			_collect_nearby_pickups()
 
 	_collect_completed_worker_task()
 	_start_next_worker_task()
@@ -150,6 +137,55 @@ func _exit_tree() -> void:
 	if worker_task_id != -1:
 		WorkerThreadPool.wait_for_task_completion(worker_task_id)
 		worker_task_id = -1
+
+
+func load_destroyed_object_ids(object_ids: Array) -> void:
+	destroyed_object_ids.clear()
+	for object_id_variant in object_ids:
+		destroyed_object_ids[str(object_id_variant)] = true
+
+
+func get_destroyed_object_ids() -> Array:
+	var result: Array = destroyed_object_ids.keys()
+	result.sort()
+	return result
+
+
+func get_destroyed_object_count() -> int:
+	return destroyed_object_ids.size()
+
+
+func is_world_object_destroyed(object_id: String) -> bool:
+	return destroyed_object_ids.has(object_id)
+
+
+func destroy_world_object(
+	object_id: String,
+	object_type: String,
+	object_index: int,
+	object_chunk: Vector2i
+) -> bool:
+	if object_id.is_empty() or destroyed_object_ids.has(object_id):
+		return false
+
+	destroyed_object_ids[object_id] = true
+	if chunks.has(object_chunk):
+		chunks[object_chunk].destroy_world_object(object_type, object_index)
+	return true
+
+
+func collect_nearby_pickups(player_world_position: Vector3, radius: float) -> Array:
+	var collected: Array = []
+	for chunk in chunks.values():
+		var chunk_pickups: Array = chunk.collect_nearby_pickups(player_world_position, radius)
+		for pickup_variant in chunk_pickups:
+			var pickup: Dictionary = pickup_variant
+			var object_id: String = str(pickup.get("object_id", ""))
+			if object_id.is_empty() or destroyed_object_ids.has(object_id):
+				continue
+			destroyed_object_ids[object_id] = true
+			collected.append(pickup)
+	return collected
 
 
 func world_to_chunk(world_position: Vector3) -> Vector2i:
@@ -207,181 +243,6 @@ func find_spawn_xz(preferred: Vector3) -> Vector3:
 	return best_position
 
 
-func try_harvest(origin: Vector3, direction: Vector3, max_distance: float) -> void:
-	if direction.is_zero_approx():
-		return
-
-	var ray_end: Vector3 = origin + direction.normalized() * maxf(max_distance, 0.1)
-	var query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(origin, ray_end, 1)
-	var player_collision: CollisionObject3D = player as CollisionObject3D
-	if player_collision != null:
-		query.exclude = [player_collision.get_rid()]
-
-	var result: Dictionary = get_world_3d().direct_space_state.intersect_ray(query)
-	if result.is_empty():
-		last_action_message = "Miss"
-		return
-
-	var collider: Object = result.get("collider")
-	if collider == null or not collider.has_meta("world_object_id"):
-		last_action_message = "Nothing harvestable"
-		return
-
-	var object_id: String = str(collider.get_meta("world_object_id"))
-	if destroyed_object_ids.has(object_id):
-		return
-
-	var object_type: String = str(collider.get_meta("world_object_type"))
-	var object_index: int = int(collider.get_meta("world_object_index"))
-	var object_chunk_variant: Variant = collider.get_meta("world_object_chunk")
-	var object_chunk: Vector2i = object_chunk_variant as Vector2i
-
-	var required_hits: int = 0
-	if object_type == "tree":
-		if equipped_tool != "stone_axe":
-			last_action_message = "Need Stone Axe for trees"
-			return
-		required_hits = settings.tree_hits_with_axe
-	elif object_type == "rock":
-		if equipped_tool != "stone_pickaxe":
-			last_action_message = "Need Stone Pickaxe for rocks"
-			return
-		required_hits = settings.rock_hits_with_pickaxe
-	else:
-		last_action_message = "Nothing harvestable"
-		return
-
-	var current_hits: int = int(object_hit_progress.get(object_id, 0)) + 1
-	if current_hits < required_hits:
-		object_hit_progress[object_id] = current_hits
-		last_action_message = "%s hit %d/%d" % [
-			object_type.capitalize(), current_hits, required_hits
-		]
-		return
-
-	object_hit_progress.erase(object_id)
-	destroyed_object_ids[object_id] = true
-
-	if chunks.has(object_chunk):
-		chunks[object_chunk].destroy_world_object(object_type, object_index)
-
-	if object_type == "tree":
-		gathered_wood += settings.tree_wood_yield
-		last_action_message = "Tree harvested  +%d wood" % settings.tree_wood_yield
-	else:
-		gathered_stone += settings.rock_stone_yield
-		last_action_message = "Rock harvested  +%d stone" % settings.rock_stone_yield
-
-	_save_world_modifications()
-
-
-func select_hotbar_slot(slot: int) -> void:
-	match slot:
-		1:
-			selected_hotbar_slot = 1
-			equipped_tool = "hands"
-			last_action_message = "Hands equipped"
-		2:
-			if not has_stone_axe:
-				last_action_message = "Stone Axe not crafted — press C"
-				return
-			selected_hotbar_slot = 2
-			equipped_tool = "stone_axe"
-			last_action_message = "Stone Axe equipped"
-		3:
-			if not has_stone_pickaxe:
-				last_action_message = "Stone Pickaxe not crafted — press V"
-				return
-			selected_hotbar_slot = 3
-			equipped_tool = "stone_pickaxe"
-			last_action_message = "Stone Pickaxe equipped"
-		_:
-			return
-
-	equipped_tool_changed.emit(equipped_tool)
-	_save_world_modifications()
-
-
-func request_craft(recipe_id: String) -> void:
-	if recipe_id == "stone_axe":
-		if has_stone_axe:
-			last_action_message = "Stone Axe already crafted"
-			return
-		if gathered_wood < settings.stone_axe_wood_cost or gathered_stone < settings.stone_axe_stone_cost:
-			last_action_message = "Axe needs %d wood + %d stone" % [
-				settings.stone_axe_wood_cost, settings.stone_axe_stone_cost
-			]
-			return
-		gathered_wood -= settings.stone_axe_wood_cost
-		gathered_stone -= settings.stone_axe_stone_cost
-		has_stone_axe = true
-		selected_hotbar_slot = 2
-		equipped_tool = "stone_axe"
-		last_action_message = "Crafted Stone Axe"
-	elif recipe_id == "stone_pickaxe":
-		if has_stone_pickaxe:
-			last_action_message = "Stone Pickaxe already crafted"
-			return
-		if gathered_wood < settings.stone_pickaxe_wood_cost or gathered_stone < settings.stone_pickaxe_stone_cost:
-			last_action_message = "Pickaxe needs %d wood + %d stone" % [
-				settings.stone_pickaxe_wood_cost, settings.stone_pickaxe_stone_cost
-			]
-			return
-		gathered_wood -= settings.stone_pickaxe_wood_cost
-		gathered_stone -= settings.stone_pickaxe_stone_cost
-		has_stone_pickaxe = true
-		selected_hotbar_slot = 3
-		equipped_tool = "stone_pickaxe"
-		last_action_message = "Crafted Stone Pickaxe"
-	else:
-		return
-
-	equipped_tool_changed.emit(equipped_tool)
-	_save_world_modifications()
-
-
-func _collect_nearby_pickups() -> void:
-	if player == null:
-		return
-
-	var collected: Array = []
-	for chunk in chunks.values():
-		collected.append_array(
-			chunk.collect_nearby_pickups(player.global_position, settings.pickup_collect_radius)
-		)
-
-	if collected.is_empty():
-		return
-
-	var branch_count: int = 0
-	var stone_count: int = 0
-	for pickup_variant in collected:
-		var pickup: Dictionary = pickup_variant
-		var object_id: String = str(pickup["object_id"])
-		if destroyed_object_ids.has(object_id):
-			continue
-		destroyed_object_ids[object_id] = true
-
-		var object_type: String = str(pickup["object_type"])
-		if object_type == "branch":
-			gathered_wood += 1
-			branch_count += 1
-		elif object_type == "loose_stone":
-			gathered_stone += 1
-			stone_count += 1
-
-	if branch_count == 0 and stone_count == 0:
-		return
-
-	if branch_count > 0 and stone_count > 0:
-		last_action_message = "Picked up %d wood + %d stone" % [branch_count, stone_count]
-	elif branch_count > 0:
-		last_action_message = "Picked up %d wood" % branch_count
-	else:
-		last_action_message = "Picked up %d stone" % stone_count
-	_save_world_modifications()
-
-
 func get_loaded_chunk_count() -> int:
 	return chunks.size()
 
@@ -414,38 +275,6 @@ func get_active_world_object_count() -> int:
 	return total
 
 
-func get_resource_counts() -> Vector2i:
-	return Vector2i(gathered_wood, gathered_stone)
-
-
-func get_destroyed_object_count() -> int:
-	return destroyed_object_ids.size()
-
-
-func get_last_harvest_message() -> String:
-	return last_action_message
-
-
-func get_last_action_message() -> String:
-	return last_action_message
-
-
-func get_equipped_tool() -> String:
-	return equipped_tool
-
-
-func get_selected_hotbar_slot() -> int:
-	return selected_hotbar_slot
-
-
-func has_tool(tool_id: String) -> bool:
-	if tool_id == "stone_axe":
-		return has_stone_axe
-	if tool_id == "stone_pickaxe":
-		return has_stone_pickaxe
-	return tool_id == "hands"
-
-
 func get_last_generation_ms() -> float:
 	return last_generation_ms
 
@@ -476,82 +305,6 @@ func get_total_chunks_generated() -> int:
 
 func is_worker_busy() -> bool:
 	return worker_task_id != -1
-
-
-func _get_save_path() -> String:
-	return "user://underworld_seed_%d.json" % settings.world_seed
-
-
-func _load_world_modifications() -> void:
-	destroyed_object_ids.clear()
-	object_hit_progress.clear()
-	gathered_wood = 0
-	gathered_stone = 0
-	has_stone_axe = false
-	has_stone_pickaxe = false
-	selected_hotbar_slot = 1
-	equipped_tool = "hands"
-
-	var save_path: String = _get_save_path()
-	if not FileAccess.file_exists(save_path):
-		return
-
-	var file: FileAccess = FileAccess.open(save_path, FileAccess.READ)
-	if file == null:
-		return
-
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
-	if not parsed is Dictionary:
-		return
-
-	var save_data: Dictionary = parsed
-	if int(save_data.get("world_seed", -1)) != settings.world_seed:
-		return
-
-	var destroyed_list: Array = save_data.get("destroyed_objects", [])
-	for object_id in destroyed_list:
-		destroyed_object_ids[str(object_id)] = true
-
-	gathered_wood = int(save_data.get("wood", 0))
-	gathered_stone = int(save_data.get("stone", 0))
-	has_stone_axe = bool(save_data.get("stone_axe", false))
-	has_stone_pickaxe = bool(save_data.get("stone_pickaxe", false))
-	selected_hotbar_slot = clampi(int(save_data.get("selected_slot", 1)), 1, 3)
-	_resolve_equipped_tool_from_slot()
-
-	if not destroyed_object_ids.is_empty():
-		last_action_message = "Loaded %d world modifications" % destroyed_object_ids.size()
-
-
-func _resolve_equipped_tool_from_slot() -> void:
-	if selected_hotbar_slot == 2 and has_stone_axe:
-		equipped_tool = "stone_axe"
-	elif selected_hotbar_slot == 3 and has_stone_pickaxe:
-		equipped_tool = "stone_pickaxe"
-	else:
-		selected_hotbar_slot = 1
-		equipped_tool = "hands"
-
-
-func _save_world_modifications() -> void:
-	var destroyed_list: Array = destroyed_object_ids.keys()
-	destroyed_list.sort()
-	var save_data: Dictionary = {
-		"version": 2,
-		"world_seed": settings.world_seed,
-		"destroyed_objects": destroyed_list,
-		"wood": gathered_wood,
-		"stone": gathered_stone,
-		"stone_axe": has_stone_axe,
-		"stone_pickaxe": has_stone_pickaxe,
-		"selected_slot": selected_hotbar_slot,
-	}
-
-	var file: FileAccess = FileAccess.open(_get_save_path(), FileAccess.WRITE)
-	if file == null:
-		last_action_message = "Save failed"
-		return
-	file.store_string(JSON.stringify(save_data, "  "))
 
 
 func _update_desired_chunks(center: Vector2i) -> void:
@@ -726,8 +479,9 @@ func _update_collision_radius(center: Vector2i) -> void:
 		)
 
 
-func _is_within_collision_radius(coord: Vector2i, center: Vector2i) -> bool:
-	return _is_within_square_radius(coord, center, settings.collision_radius)
+func _is_within_collision_radius(coord: Vector2i, center: Vector2i, radius: int = -1) -> bool:
+	var resolved_radius: int = settings.collision_radius if radius < 0 else radius
+	return _is_within_square_radius(coord, center, resolved_radius)
 
 
 func _is_within_square_radius(coord: Vector2i, center: Vector2i, radius: int) -> bool:

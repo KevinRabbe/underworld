@@ -2,8 +2,10 @@ extends CanvasLayer
 
 var world
 var player
-var combat
-var settings: UnderworldWorldSettings
+var survival
+var combat_resolver
+var encounter_controller
+var settings
 var label: Label
 var crosshair: Label
 var survival_label: Label
@@ -14,13 +16,17 @@ var visible_debug: bool = true
 func configure(
 	world_node,
 	player_node,
-	world_settings: UnderworldWorldSettings,
-	combat_node = null
+	world_settings,
+	survival_controller = null,
+	combat_resolver_node = null,
+	encounter_controller_node = null
 ) -> void:
 	world = world_node
 	player = player_node
 	settings = world_settings
-	combat = combat_node
+	survival = survival_controller
+	combat_resolver = combat_resolver_node
+	encounter_controller = encounter_controller_node
 
 
 func _ready() -> void:
@@ -85,7 +91,14 @@ func _update_layout() -> void:
 
 
 func _refresh_text() -> void:
-	if label == null or survival_label == null or world == null or player == null or settings == null:
+	if (
+		label == null
+		or survival_label == null
+		or world == null
+		or player == null
+		or settings == null
+		or survival == null
+	):
 		return
 
 	var position: Vector3 = player.global_position
@@ -96,19 +109,23 @@ func _refresh_text() -> void:
 	var decoration_counts: Vector2i = world.get_current_decoration_counts()
 	var pickup_counts: Vector2i = world.get_current_pickup_counts()
 	var active_world_objects: int = world.get_active_world_object_count()
-	var resources: Vector2i = world.get_resource_counts()
-	var selected_slot: int = world.get_selected_hotbar_slot()
-	var has_axe: bool = world.has_tool("stone_axe")
-	var has_pickaxe: bool = world.has_tool("stone_pickaxe")
-	var equipped: String = world.get_equipped_tool()
+	var resources: Vector2i = survival.get_resource_counts()
+	var selected_slot: int = survival.get_selected_hotbar_slot()
+	var has_axe: bool = survival.has_tool("stone_axe")
+	var has_pickaxe: bool = survival.has_tool("stone_pickaxe")
+	var equipped: String = survival.get_equipped_tool()
+	var stamina_current: float = player.get_stamina()
+	var stamina_max: float = player.get_max_stamina()
+	var action_state: String = player.get_action_state_name()
 	var active_enemies: int = 0
 	var combat_message: String = "Combat unavailable"
-	if combat != null:
-		active_enemies = combat.get_active_enemy_count()
-		combat_message = combat.get_last_combat_message()
+	if encounter_controller != null:
+		active_enemies = encounter_controller.get_active_enemy_count()
+	if combat_resolver != null:
+		combat_message = combat_resolver.get_last_combat_message()
 
 	label.text = (
-		"UNDERWORLD — prototype 0.07\n"
+		"UNDERWORLD — prototype character foundation\n"
 		+ "FPS: %d\n" % Engine.get_frames_per_second()
 		+ "Seed: %d   Sea: %.1f\n" % [settings.world_seed, settings.sea_level]
 		+ "Position: %.1f, %.1f, %.1f\n" % [position.x, position.y, position.z]
@@ -134,9 +151,12 @@ func _refresh_text() -> void:
 			resources.x, resources.y, world.get_destroyed_object_count()
 		]
 		+ "Equipped: %s   Harvest: %s\n" % [
-			_tool_display_name(equipped), world.get_last_harvest_message()
+			_tool_display_name(equipped), survival.get_last_harvest_message()
 		]
 		+ "Combat: %s   Active enemies: %d\n" % [combat_message, active_enemies]
+		+ "Character: STA %.0f/%.0f   Action: %s\n" % [
+			stamina_current, stamina_max, action_state
+		]
 		+ "Worker: %s\n" % worker_state
 		+ "Chunk CPU: %.2f ms   Max: %.2f ms\n" % [
 			world.get_last_generation_ms(), world.get_max_generation_ms()
@@ -154,8 +174,10 @@ func _refresh_text() -> void:
 	var slot_2: String = _format_slot(2, "Stone Axe", has_axe, selected_slot)
 	var slot_3: String = _format_slot(3, "Stone Pickaxe", has_pickaxe, selected_slot)
 	survival_label.text = (
-		"HP %d/%d    Enemies %d    %s\n" % [
-			player.get_health(), player.get_max_health(), active_enemies, combat_message
+		"HP %d/%d    STA %.0f/%.0f    Action: %s    Enemies %d    %s\n" % [
+			player.get_health(), player.get_max_health(),
+			stamina_current, stamina_max, action_state,
+			active_enemies, combat_message
 		]
 		+ slot_1 + "    " + slot_2 + "    " + slot_3 + "\n"
 		+ "Wood %d   Stone %d    C: craft Axe (%dW/%dS)    V: craft Pickaxe (%dW/%dS)\n" % [
@@ -163,7 +185,7 @@ func _refresh_text() -> void:
 			settings.stone_axe_wood_cost, settings.stone_axe_stone_cost,
 			settings.stone_pickaxe_wood_cost, settings.stone_pickaxe_stone_cost
 		]
-		+ "LMB: harvest   |   RMB: melee attack   |   step away during Burrower wind-up"
+		+ "LMB: harvest   |   RMB: melee   |   Ctrl: dodge   |   Q: frontal parry   |   F: frontal block"
 	)
 
 

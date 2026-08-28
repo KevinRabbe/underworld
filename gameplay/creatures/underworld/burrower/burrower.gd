@@ -5,7 +5,9 @@ signal died(enemy_id: String)
 const GRAVITY := 24.0
 const TURN_SPEED := 8.0
 const HIT_STAGGER_TIME := 0.20
+const PARRY_STAGGER_TIME := 0.85
 const HIT_FLASH_TIME := 0.12
+const PARRY_FLASH_TIME := 0.20
 const BODY_COLOR := Color(0.25, 0.16, 0.10)
 const BODY_HIT_COLOR := Color(0.62, 0.25, 0.10)
 
@@ -24,6 +26,7 @@ var attack_timer: float = 0.0
 var attack_windup_timer: float = 0.0
 var attack_pending: bool = false
 var stagger_timer: float = 0.0
+var parry_stagger_timer: float = 0.0
 var hit_flash_timer: float = 0.0
 var wander_timer: float = 0.0
 var wander_target: Vector3 = Vector3.ZERO
@@ -75,6 +78,7 @@ func _physics_process(delta: float) -> void:
 	attack_timer = maxf(0.0, attack_timer - delta)
 	wander_timer = maxf(0.0, wander_timer - delta)
 	stagger_timer = maxf(0.0, stagger_timer - delta)
+	parry_stagger_timer = maxf(0.0, parry_stagger_timer - delta)
 	hit_flash_timer = maxf(0.0, hit_flash_timer - delta)
 
 	if not is_on_floor():
@@ -119,6 +123,7 @@ func apply_damage(amount: int, source_position: Vector3) -> int:
 
 	health = maxi(health - amount, 0)
 	stagger_timer = HIT_STAGGER_TIME
+	parry_stagger_timer = 0.0
 	hit_flash_timer = HIT_FLASH_TIME
 	_cancel_pending_attack()
 
@@ -148,6 +153,18 @@ func is_winding_up_attack() -> bool:
 	return attack_pending
 
 
+func is_staggered() -> bool:
+	return stagger_timer > 0.0
+
+
+func is_parry_staggered() -> bool:
+	return parry_stagger_timer > 0.0
+
+
+func get_stagger_remaining() -> float:
+	return stagger_timer
+
+
 func _begin_attack() -> void:
 	if not is_instance_valid(target):
 		return
@@ -165,8 +182,36 @@ func _resolve_pending_attack() -> void:
 	var horizontal_distance: float = Vector2(to_target.x, to_target.z).length()
 	if horizontal_distance > attack_range + 0.35:
 		return
+
+	if target.has_method("receive_melee_attack"):
+		var result: Variant = target.call(
+			"receive_melee_attack",
+			attack_damage,
+			global_position,
+			true
+		)
+		if StringName(result) == &"parried":
+			_apply_parry_reaction(target.global_position)
+		return
+
+	# Compatibility path for targets that predate the defensive melee contract.
 	if target.has_method("take_damage"):
 		target.call("take_damage", attack_damage, global_position)
+
+
+func _apply_parry_reaction(source_position: Vector3) -> void:
+	stagger_timer = maxf(stagger_timer, PARRY_STAGGER_TIME)
+	parry_stagger_timer = PARRY_STAGGER_TIME
+	hit_flash_timer = maxf(hit_flash_timer, PARRY_FLASH_TIME)
+	attack_timer = maxf(attack_timer, PARRY_STAGGER_TIME)
+	_cancel_pending_attack()
+
+	var away: Vector3 = global_position - source_position
+	away.y = 0.0
+	if not away.is_zero_approx():
+		away = away.normalized()
+		velocity.x += away.x * 6.2
+		velocity.z += away.z * 6.2
 
 
 func _cancel_pending_attack() -> void:
@@ -232,6 +277,9 @@ func _update_visual_feedback(delta: float) -> void:
 		progress = clampf(progress, 0.0, 1.0)
 		target_scale = Vector3(1.0 + progress * 0.16, 1.0 - progress * 0.12, 1.0 + progress * 0.16)
 		target_pitch = -12.0 * progress
+	elif parry_stagger_timer > 0.0:
+		target_scale = Vector3(0.86, 1.12, 0.90)
+		target_pitch = 16.0
 	elif stagger_timer > 0.0:
 		target_scale = Vector3(0.92, 1.08, 0.92)
 		target_pitch = 7.0
