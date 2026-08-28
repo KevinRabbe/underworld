@@ -52,7 +52,7 @@ static func build(request) -> StageResult:
 		plan.cell_address,
 		_AABB_from_plan(plan),
 		vertices, indices, normals, uvs,
-		descriptors, fragment_ids, plan.fingerprint, metrics, [], true
+		descriptors, fragment_ids, request.input_fingerprint, metrics, [], true
 	)
 	return StageResult.ok("cave_mesh_preparation", data, data.fingerprint)
 

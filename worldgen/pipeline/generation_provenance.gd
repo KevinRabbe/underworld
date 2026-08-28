@@ -79,6 +79,9 @@ func validate() -> Array[String]:
 		if seen.has(source):
 			failures.append("GenerationProvenance source fingerprints must be unique")
 		seen[source] = true
+	var expected_fingerprint := "provenance1:" + CanonicalValue.fingerprint(canonical_data())
+	if not fingerprint.is_empty() and fingerprint != expected_fingerprint:
+		failures.append("GenerationProvenance fingerprint is stale after identity mutation")
 	return failures
 
 
@@ -108,6 +111,29 @@ func validate_against(
 		if expected != source_stage_fingerprints:
 			failures.append("GenerationProvenance source fingerprint ancestry mismatch")
 	return failures
+
+
+func requires_sources(expected_sources: Array) -> Array[String]:
+	var failures: Array[String] = []
+	var available: Dictionary = {}
+	for source in source_stage_fingerprints:
+		available[str(source)] = true
+	for value in expected_sources:
+		if not available.has(str(value)):
+			failures.append("GenerationProvenance missing required source fingerprint: " + str(value))
+	return failures
+
+
+func validate_exact_sources(expected_sources: Array) -> Array[String]:
+	var expected: Array[String] = []
+	for value in expected_sources:
+		expected.append(str(value))
+	expected.sort()
+	var actual: Array[String] = source_stage_fingerprints.duplicate()
+	actual.sort()
+	if actual != expected:
+		return ["GenerationProvenance source fingerprint set mismatch"]
+	return []
 
 
 func canonical_data() -> Dictionary:
