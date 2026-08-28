@@ -31,10 +31,11 @@ ENTRY_RE = re.compile(
 INTEGER_LITERAL_RE = re.compile(r"-?(?:0x[0-9A-Fa-f]+|\d+)$")
 NAMED_DOMAIN_RE = re.compile(r"SeedDomains\.([A-Z][A-Z0-9_]*)$")
 
-DERIVER_CALLS = (
-    "SeedDeriver.derive_u32",
-    "SeedDeriver.derive_state_words",
-    "SeedDeriver.random_unit",
+DOMAIN_ARGUMENT_CALLS = (
+    ("SeedDeriver.derive_u32", 2, "magic-seed-deriver-domain"),
+    ("SeedDeriver.derive_state_words", 2, "magic-seed-deriver-domain"),
+    ("SeedDeriver.random_unit", 2, "magic-seed-deriver-domain"),
+    ("DeterministicRng.from_context", 2, "magic-deterministic-rng-domain"),
 )
 DOMAIN_LOOKUP_CALL = "SeedDomains.get_domain"
 
@@ -281,15 +282,15 @@ def audit_source_text(
                 )
             )
 
-    for call_name in DERIVER_CALLS:
+    for call_name, domain_index, magic_code in DOMAIN_ARGUMENT_CALLS:
         for line, args in _iter_calls(text, call_name):
-            if len(args) < 3:
+            if len(args) <= domain_index:
                 continue
-            domain_expression = _normalize_expression(args[2])
+            domain_expression = _normalize_expression(args[domain_index])
             if INTEGER_LITERAL_RE.fullmatch(domain_expression):
                 violations.append(
                     Violation(
-                        "magic-seed-deriver-domain",
+                        magic_code,
                         path,
                         line,
                         f"{call_name} receives numeric domain directly: {domain_expression}",
