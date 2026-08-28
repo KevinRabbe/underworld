@@ -14,6 +14,7 @@ const GeometryGenerator := preload("res://worldgen/underworld/cave_geometry_gene
 static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_determinism_and_coverage(failures)
+	_test_finalization_boundary(failures)
 	_test_neighbor_order_independence(failures)
 	_test_negative_region(failures)
 	return failures
@@ -133,6 +134,30 @@ static func _test_determinism_and_coverage(failures: Array[String]) -> void:
 			failures,
 			"non-owner cross-region reference does not duplicate tunnel geometry",
 			not tunnel_edges.has(reference.edge_stable_id)
+		)
+
+
+static func _test_finalization_boundary(failures: Array[String]) -> void:
+	var built: Dictionary = _build(13579, Vector2i(1, 1), false)
+	if not bool(built.get("success", false)):
+		failures.append("finalization-boundary fixture failed: %s" % built.get("diagnostics", []))
+		return
+	var raw_connectivity = GeometryGenerator.generate(
+		built["context"],
+		built["macro"],
+		built["connectivity"],
+		built["neighbor_views"]
+	)
+	_expect_true(
+		failures,
+		"raw connectivity cannot bypass region finalization",
+		not raw_connectivity.success
+	)
+	if not raw_connectivity.success:
+		_expect_true(
+			failures,
+			"raw-connectivity rejection names finalization contract",
+			str(raw_connectivity.diagnostics).contains("RegionFinalizationResult")
 		)
 
 

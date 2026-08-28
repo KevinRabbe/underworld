@@ -9,6 +9,7 @@ const GraphCanonicalizer := preload("res://worldgen/validation/graph_canonicaliz
 const CanonicalValue := preload("res://worldgen/validation/canonical_value.gd")
 const ChamberDescriptor := preload("res://worldgen/geometry/chamber_geometry_descriptor.gd")
 const TunnelDescriptor := preload("res://worldgen/geometry/tunnel_geometry_descriptor.gd")
+const FinalizationResult := preload("res://worldgen/underworld/region_finalization_result.gd")
 const GeometryResult := preload("res://worldgen/underworld/cave_geometry_result.gd")
 
 const MIN_CHAMBER_XZ: float = 6.0
@@ -19,18 +20,23 @@ const MIN_TUNNEL_HEIGHT: float = 3.0
 const MAX_TUNNEL_HEIGHT: float = 22.0
 
 
-static func generate(context, region_plan, connectivity_result, neighbor_views: Array = []):
+static func generate(context, region_plan, finalization_result, neighbor_views: Array = []):
 	if context == null:
 		return StageResult.fail("cave_geometry", ["WorldGenerationContext is null"])
 	if region_plan == null:
 		return StageResult.fail("cave_geometry", ["MacroRegionPlan is null"])
-	if connectivity_result == null or connectivity_result.bundle == null:
-		return StageResult.fail("cave_geometry", ["SecondaryConnectivityResult is null"])
+	if finalization_result == null or not (finalization_result is FinalizationResult):
+		return StageResult.fail(
+			"cave_geometry",
+			["Cave geometry requires RegionFinalizationResult"]
+		)
+	if finalization_result.bundle == null:
+		return StageResult.fail("cave_geometry", ["RegionFinalizationResult has no bundle"])
 	var failures: Array[String] = context.validate()
 	if not failures.is_empty():
 		return StageResult.fail("cave_geometry", failures)
 
-	var source = connectivity_result.bundle
+	var source = finalization_result.bundle
 	if source.region_definition.stable_id != region_plan.stable_id:
 		return StageResult.fail("cave_geometry", ["Geometry inputs refer to different regions"])
 	var source_fingerprint_before: String = GraphCanonicalizer.region_bundle_fingerprint(source)
@@ -96,7 +102,7 @@ static func generate(context, region_plan, connectivity_result, neighbor_views: 
 		tunnel_data.append(descriptor.canonical_data())
 	var metrics: Dictionary = _metrics(chambers, tunnels)
 	var fingerprint: String = "geometry-" + CanonicalValue.fingerprint({
-		"source_connectivity_fingerprint": connectivity_result.fingerprint,
+		"source_finalization_fingerprint": finalization_result.fingerprint,
 		"source_graph": GraphCanonicalizer.region_bundle_data(source),
 		"chambers": chamber_data,
 		"tunnels": tunnel_data,
