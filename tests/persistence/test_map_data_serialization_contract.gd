@@ -45,14 +45,15 @@ static func _test_round_trip(failures: Array[String]) -> void:
 		return
 	var envelope: Dictionary = encoded["envelope"]
 	_expect_equal(failures, "schema version", int(envelope.get("save_schema_version", -1)), 3)
+	_expect_true(failures, "world seed uses precision-safe string wire format", envelope["world"]["world_seed"] is String)
 	_expect_equal(failures, "world seed preserved before JSON", int(envelope["world"]["world_seed"]), world_seed)
 	_expect_true(failures, "full topology is not serialized", not envelope.has("topology"))
 	_expect_true(failures, "full region graph is not serialized", not envelope.has("region_graph"))
 	_expect_equal(failures, "top-level envelope keys stay bounded", _sorted_keys(envelope), ["deltas", "save_schema_version", "schema", "world"])
 
 	var decoded: Dictionary = SerializationContract.decode(str(encoded["json"]))
-	_expect_true(failures, "map save decodes", bool(decoded.get("success", false)))
 	if not bool(decoded.get("success", false)):
+		failures.append("map save decodes diagnostics=%s" % str(decoded.get("diagnostics", [])))
 		return
 	var decoded_envelope: Dictionary = decoded["envelope"]
 	_expect_equal(failures, "large world seed survives JSON exactly", int(decoded_envelope["world"]["world_seed"]), world_seed)
@@ -120,8 +121,12 @@ static func _test_corrupt_headers(failures: Array[String]) -> void:
 	_expect_true(failures, "invalid WorldId rejected", not SerializationContract.validate_envelope(bad_world_id).is_empty())
 
 	var wrong_seed_identity: Dictionary = built["envelope"].duplicate(true)
-	wrong_seed_identity["world"]["world_seed"] = 12346
+	wrong_seed_identity["world"]["world_seed"] = "12346"
 	_expect_true(failures, "WorldId/seed mismatch rejected", not SerializationContract.validate_envelope(wrong_seed_identity).is_empty())
+
+	var noncanonical_seed: Dictionary = built["envelope"].duplicate(true)
+	noncanonical_seed["world"]["world_seed"] = "012345"
+	_expect_true(failures, "non-canonical decimal seed rejected", not SerializationContract.validate_envelope(noncanonical_seed).is_empty())
 
 	var bad_manifest: Dictionary = built["envelope"].duplicate(true)
 	bad_manifest["world"]["generator_manifest_id"] = "gm-sha256:deadbeef"
