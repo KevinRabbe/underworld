@@ -1,4 +1,12 @@
-name: PM Acceptance Gate
+name: Operational PM Acceptance Gate
+
+# SECURITY BOUNDARY:
+# This workflow is trusted default-branch code and never executes PR-controlled
+# content, but the `PM acceptance` commit-status context is NOT source-isolated
+# from other same-repository GitHub Actions workflows. A PR-controlled workflow
+# with statuses: write runs as the same GitHub Actions App and can mint the same
+# context name. This is therefore an operational same-principal guard, not a
+# cryptographic/actor-separated authorization boundary. See MAIN_MERGE_GATE.md.
 
 on:
   pull_request_target:
@@ -18,8 +26,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  trusted-pm-acceptance:
-    name: Trusted PM acceptance publisher
+  operational-pm-acceptance:
+    name: Operational PM acceptance publisher
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
