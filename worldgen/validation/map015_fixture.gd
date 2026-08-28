@@ -11,10 +11,10 @@ const Entrances := preload("res://worldgen/underworld/entrance_generator.gd")
 const SurfacePlan := preload("res://worldgen/surface/surface_entrance_chunk_plan.gd")
 
 const SEED := 1
-const REGION := Vector2i(0, 0)
-const ENTRANCE_ID := "sid1:sa1|2:ug|6:region|1:0|1:0|8:entrance|4:slot|1:0"
-const ENTRANCE_FINGERPRINT := "entrances-sha256:0168b5914511eefdd887e44b0e83eb3f8ba77cdc09e33f4889da0c69c9997151"
-const GEOMETRY_FINGERPRINT := "geometry-sha256:ae101fd53557e706925adc51f605f20354173483efc26c183c13658384ef1b62"
+const REGION := Vector2i(0, -1)
+const ENTRANCE_ID := "sid1:sa1|2:ug|6:region|1:0|2:-1|8:entrance|4:slot|1:2"
+const ENTRANCE_FINGERPRINT := "entrances-sha256:8c11c563b2192f85a78d1760b4d8cb2a686d00e3662a8a9c7db2524d2094b5bc"
+const GEOMETRY_FINGERPRINT := "geometry-sha256:d910dbc179903d8f26c92974f29641aad553c7bba56eb833ebcff6a583aef73a"
 
 static func validate() -> Array[String]:
 	var failures: Array[String] = []
