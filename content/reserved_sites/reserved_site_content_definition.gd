@@ -5,8 +5,6 @@ class_name ReservedSiteContentDefinition
 ## Generic semantic identity/revision behavior comes from the accepted ContentDefinition contract.
 ## This subtype owns only reserved-site-specific classification, eligibility and weighting.
 
-const ContentId := preload("res://core/content/identity/content_id.gd")
-
 var categories: Array[String] = []
 var eligible_hook_categories: Array[String] = []
 var selection_weight: int = 1
