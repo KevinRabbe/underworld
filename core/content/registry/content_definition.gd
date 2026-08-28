@@ -34,6 +34,13 @@ func configure_schema_declarations(
 	return self
 
 
+# Generic authoring-validation extension point. Content families that own typed
+# semantic references may override this without making ContentRegistry or the
+# validation pipeline aware of that family.
+func validation_references() -> Array:
+	return []
+
+
 func validate_definition() -> Array[String]:
 	var failures: Array[String] = []
 	failures.append_array(ContentId.validate(content_id))
