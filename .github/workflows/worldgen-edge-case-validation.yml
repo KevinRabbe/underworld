@@ -1,0 +1,44 @@
+name: Worldgen Edge Case Validation
+
+on:
+  pull_request:
+    paths:
+      - 'tests/worldgen_edge_cases/**'
+      - 'tests/run_worldgen_edge_cases.gd'
+      - 'worldgen/**'
+      - '.github/workflows/worldgen-edge-case-validation.yml'
+  push:
+    branches:
+      - 'tests/worldgen-edge-case-corpus-v0.01'
+
+permissions:
+  contents: read
+
+jobs:
+  worldgen-edge-cases:
+    name: Godot worldgen edge-case corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Run edge-case corpus
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . \
+            --script res://tests/run_worldgen_edge_cases.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[WORLDGEN EDGE CASES] PASS' "$validation_log"
