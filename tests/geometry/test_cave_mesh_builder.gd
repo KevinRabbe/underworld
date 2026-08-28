@@ -1,0 +1,92 @@
+extends RefCounted
+
+const Address := preload("res://worldgen/geometry/geometry_cell_address.gd")
+const Fragment := preload("res://worldgen/geometry/geometry_cell_fragment.gd")
+const Plan := preload("res://worldgen/geometry/geometry_cell_plan.gd")
+const Config := preload("res://worldgen/geometry/geometry_cell_partition_config.gd")
+const Request := preload("res://worldgen/geometry/cave_voxel_field_request.gd")
+const Mesher := preload("res://worldgen/geometry/cave_voxel_mesher.gd")
+const Boundary := preload("res://worldgen/geometry/cave_mesh_realization_boundary.gd")
+const Context := preload("res://worldgen/pipeline/world_generation_context.gd")
+const MeshData := preload("res://worldgen/geometry/cave_mesh_data.gd")
+const PartitionResult := preload("res://worldgen/geometry/geometry_cell_partition_result.gd")
+
+
+static func run() -> Array[String]:
+	var failures: Array[String] = []
+	var plan := _plan(Vector3i(-1, 0, 2), ["chamber", "tunnel"])
+	var context := Context.new(7)
+	var provenance = context.make_provenance("geometry_cell_partition", "region", "address", ["plan-source"])
+	var partition = _partition_result(plan, Config.new(), provenance)
+	var result = Mesher.build(Request.new(plan, Config.new(), provenance, 0.0, partition, context))
+	_expect(failures, "chamber and tunnel mesh build succeeds", result.success)
+	if result.success:
+		_expect(failures, "mesh buffers have triangles", result.data.indices.size() > 0)
+		_expect(failures, "mesh indices are valid", _valid_indices(result.data))
+		_expect(failures, "mesh normals are unit and finite", _valid_normals(result.data))
+		var realized: Dictionary = Boundary.realize_main_thread(result.data)
+		_expect(failures, "main-thread realization succeeds", realized.success)
+		_expect(failures, "realization preserves source fingerprint", realized.input_fingerprint == result.data.input_fingerprint)
+		_expect(failures, "stale realization is rejected", not Boundary.realize_main_thread(result.data, null, "stale").success)
+		var changed_vertices: PackedVector3Array = result.data.vertices.duplicate()
+		changed_vertices[0] += Vector3(0.25, 0.0, 0.0)
+		var changed_data = MeshData.new(plan.cell_address, result.data.world_bounds, changed_vertices, result.data.indices, result.data.normals, result.data.uvs, result.data.source_descriptor_ids, result.data.source_fragment_ids, result.data.input_fingerprint, result.data.metrics)
+		_expect(failures, "mesh output identity includes buffer contents", changed_data.output_fingerprint != result.data.output_fingerprint)
+	var reversed := _plan(Vector3i(-1, 0, 2), ["tunnel", "chamber"])
+	var reversed_partition = _partition_result(reversed, Config.new(), provenance)
+	var second = Mesher.build(Request.new(reversed, Config.new(), provenance, 0.0, reversed_partition, context))
+	_expect(failures, "reordered fragments build", second.success)
+	if second.success:
+		_expect(failures, "reordered fragments reproduce buffers", second.data.fingerprint == result.data.fingerprint)
+	var malformed := _plan(Vector3i.ZERO, ["chamber"])
+	malformed.fragments.append(null)
+	var bad = Mesher.build(Request.new(malformed, Config.new(), provenance, 0.0, partition, context))
+	_expect(failures, "malformed fragment is rejected", not bad.success)
+	var missing_provenance = Mesher.build(Request.new(plan, Config.new(), null, 0.0, partition, context))
+	_expect(failures, "missing mesh provenance is rejected", not missing_provenance.success)
+	var stale = context.make_provenance("geometry_cell_partition", "region", "address", ["plan-source"])
+	stale.stage_id = "other_stage"
+	var stale_request = Mesher.build(Request.new(plan, Config.new(), stale, 0.0, partition, context))
+	_expect(failures, "stale mutated mesh provenance is rejected", not stale_request.success)
+	var unrelated = context.make_provenance("geometry_cell_partition", "other-region", "other-address", ["plan-source"])
+	var unrelated_request = Mesher.build(Request.new(plan, Config.new(), unrelated, 0.0, partition, context))
+	_expect(failures, "unrelated partition provenance is rejected", not unrelated_request.success)
+	return failures
+
+
+static func _partition_result(plan: Plan, configuration, provenance):
+	return PartitionResult.new([plan], configuration.fingerprint, plan.source_geometry_fingerprint, plan.source_finalization_fingerprint, {}, [], provenance)
+
+
+static func _plan(coordinate: Vector3i, kinds: Array) -> Plan:
+	var address := Address.new(coordinate)
+	var cell := AABB(Vector3(coordinate) * 32.0, Vector3(32, 32, 32))
+	var fragments: Array = []
+	for i in range(kinds.size()):
+		var clipped := AABB(cell.position + Vector3(2 + i * 8, 4, 3), Vector3(10, 8, 12))
+		fragments.append(Fragment.new(
+			"gfrag1:test-%s" % kinds[i], "stable:%s" % kinds[i], kinds[i], address,
+			cell, clipped, i == 0, {}, {}, "source:%s" % kinds[i], {}
+		))
+	return Plan.new(address, fragments, [], [], "geometry", "finalization")
+
+
+static func _valid_indices(data) -> bool:
+	if data.indices.size() % 3 != 0:
+		return false
+	for index in data.indices:
+		if index < 0 or index >= data.vertices.size():
+			return false
+	return true
+
+
+static func _valid_normals(data) -> bool:
+	for normal in data.normals:
+		if not normal.is_finite() or absf(normal.length() - 1.0) > 0.0001:
+			return false
+	return true
+
+
+static func _expect(failures: Array[String], label: String, condition: bool) -> void:
+	if not condition:
+		failures.append(label)
