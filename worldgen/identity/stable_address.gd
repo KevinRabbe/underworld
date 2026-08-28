@@ -200,6 +200,23 @@ static func entrance(region_address, candidate_slot: int):
 	return region_address.child(["entrance", "slot", str(candidate_slot)])
 
 
+static func entrance_anchor(entrance_address):
+	if entrance_address == null:
+		return null
+	return entrance_address.child(["anchor", "node"])
+
+
+static func entrance_path(entrance_address, connected_node_address):
+	if entrance_address == null or connected_node_address == null:
+		return null
+	return entrance_address.child([
+		"edge",
+		"entrance-path",
+		"target",
+		connected_node_address.canonical_text(),
+	])
+
+
 static func secondary_connector(
 	owner_region_address,
 	endpoint_a,

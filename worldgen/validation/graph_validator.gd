@@ -33,7 +33,7 @@ static func validate_region_bundle(bundle) -> Array[String]:
 	_validate_networks(region, networks, nodes, edges, entrances, failures)
 	_validate_nodes(networks, nodes, failures)
 	_validate_edges(region, nodes, edges, failures)
-	_validate_entrances(region, networks, nodes, entrances, failures)
+	_validate_entrances(region, networks, nodes, edges, entrances, failures)
 	_validate_hooks(region, nodes, edges, hooks, failures)
 	_validate_global_identity_uniqueness(region, networks, nodes, edges, entrances, hooks, failures)
 
@@ -129,6 +129,11 @@ static func _validate_networks(
 			failures
 		)
 		_validate_unique_strings(
+			network.entrance_path_edge_ids,
+			"network entrance_path_edge_ids " + network_id,
+			failures
+		)
+		_validate_unique_strings(
 			network.attached_entrance_ids,
 			"network attached_entrance_ids " + network_id,
 			failures
@@ -157,6 +162,18 @@ static func _validate_networks(
 			if nodes.has(edge.endpoint_b_node_id) and nodes[edge.endpoint_b_node_id].owning_network_id != network_id:
 				failures.append("Primary edge endpoint B belongs to another network: " + edge_id)
 
+		for edge_id in network.entrance_path_edge_ids:
+			if not edges.has(edge_id):
+				failures.append("Network references missing entrance-path edge: " + edge_id)
+				continue
+			var path_edge = edges[edge_id]
+			if path_edge.connection_class != "entrance_path":
+				failures.append("Network entrance path list contains wrong edge class: " + edge_id)
+			if nodes.has(path_edge.endpoint_a_node_id) and nodes[path_edge.endpoint_a_node_id].owning_network_id != network_id:
+				failures.append("Entrance path endpoint A belongs to another network: " + edge_id)
+			if nodes.has(path_edge.endpoint_b_node_id) and nodes[path_edge.endpoint_b_node_id].owning_network_id != network_id:
+				failures.append("Entrance path endpoint B belongs to another network: " + edge_id)
+
 		for entrance_id in network.attached_entrance_ids:
 			if not entrances.has(entrance_id):
 				failures.append("Network references missing entrance: " + entrance_id)
@@ -179,7 +196,9 @@ static func _validate_primary_connectivity(
 	for node_id in network.node_ids:
 		adjacency[node_id] = []
 	var endpoint_pairs: Dictionary = {}
-	for edge_id in network.primary_edge_ids:
+	var connectivity_edge_ids: Array = network.primary_edge_ids.duplicate()
+	connectivity_edge_ids.append_array(network.entrance_path_edge_ids)
+	for edge_id in connectivity_edge_ids:
 		if not edges.has(edge_id):
 			continue
 		var edge = edges[edge_id]
@@ -188,7 +207,7 @@ static func _validate_primary_connectivity(
 		var pair_key: String = edge.endpoint_a_node_id + "\n" + edge.endpoint_b_node_id
 		if endpoint_pairs.has(pair_key):
 			failures.append(
-				"Network has duplicate undirected primary edge endpoints: %s" % network.stable_id
+				"Network has duplicate undirected edge endpoints: %s" % network.stable_id
 			)
 		else:
 			endpoint_pairs[pair_key] = true
@@ -208,7 +227,7 @@ static func _validate_primary_connectivity(
 
 	if reached.size() != network.node_ids.size():
 		failures.append(
-			"Primary network is disconnected: %s reached=%d nodes=%d" % [
+			"Network is disconnected: %s reached=%d nodes=%d" % [
 				network.stable_id,
 				reached.size(),
 				network.node_ids.size(),
@@ -271,6 +290,7 @@ static func _validate_entrances(
 	region,
 	networks: Dictionary,
 	nodes: Dictionary,
+	edges: Dictionary,
 	entrances: Dictionary,
 	failures: Array[String]
 ) -> void:
@@ -280,6 +300,8 @@ static func _validate_entrances(
 			failures.append("Entrance has wrong owning region: " + entrance_id)
 		if not networks.has(entrance.connected_network_id):
 			failures.append("Entrance references missing network: " + entrance_id)
+		elif not networks[entrance.connected_network_id].attached_entrance_ids.has(entrance_id):
+			failures.append("Entrance is omitted from connected network: " + entrance_id)
 		if not nodes.has(entrance.connected_node_id):
 			failures.append("Entrance references missing node: " + entrance_id)
 		elif nodes[entrance.connected_node_id].owning_network_id != entrance.connected_network_id:
@@ -299,6 +321,53 @@ static func _validate_entrances(
 			failures.append("Entrance has empty entrance_kind: " + entrance_id)
 		if entrance.descent_profile.is_empty():
 			failures.append("Entrance has empty descent_profile: " + entrance_id)
+		var path_edge_id: String = str(
+			entrance.generation_metadata.get("entrance_path_edge_id", "")
+		)
+		if path_edge_id.is_empty():
+			failures.append("Entrance has no entrance-path edge reference: " + entrance_id)
+		else:
+			var matching_paths: int = 0
+			for network in networks.values():
+				if path_edge_id in network.entrance_path_edge_ids:
+					matching_paths += 1
+			if matching_paths != 1:
+				failures.append(
+					"Entrance path must belong to exactly one network: %s count=%d" % [
+						entrance_id, matching_paths,
+					]
+				)
+			if not edges.has(path_edge_id):
+				failures.append("Entrance references missing entrance-path edge: " + entrance_id)
+			else:
+				var path_edge = edges[path_edge_id]
+				if path_edge.connection_class != "entrance_path":
+					failures.append("Entrance route has wrong edge class: " + entrance_id)
+				if (
+					path_edge.endpoint_a_node_id != entrance.connected_node_id
+					and path_edge.endpoint_b_node_id != entrance.connected_node_id
+				):
+					failures.append("Entrance path does not reach connected node: " + entrance_id)
+				if str(path_edge.topology_parameters.get("entrance_id", "")) != entrance_id:
+					failures.append("Entrance path metadata references another entrance: " + entrance_id)
+		var integration: Dictionary = entrance.surface_integration_parameters
+		if not integration.has("required_opening_bounds"):
+			failures.append("Entrance is missing required opening bounds: " + entrance_id)
+		else:
+			_validate_aabb(
+				integration["required_opening_bounds"],
+				"entrance opening bounds " + entrance_id,
+				failures
+			)
+		if float(integration.get("clearance_radius", 0.0)) <= 0.0:
+			failures.append("Entrance has non-positive clearance radius: " + entrance_id)
+		if not integration.has("orientation"):
+			failures.append("Entrance is missing orientation: " + entrance_id)
+		else:
+			var orientation: Vector3 = integration["orientation"]
+			_validate_vector3(orientation, "entrance orientation " + entrance_id, failures)
+			if absf(orientation.length() - 1.0) > 0.001:
+				failures.append("Entrance orientation is not normalized: " + entrance_id)
 
 
 static func _validate_hooks(

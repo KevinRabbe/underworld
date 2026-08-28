@@ -6,8 +6,10 @@ const ManifestAndGraphTests := preload("res://tests/foundation/test_manifest_and
 const LegacyV2MigrationTests := preload("res://tests/foundation/test_legacy_v2_migration.gd")
 const ServiceBoundaryTests := preload("res://tests/foundation/test_service_boundaries.gd")
 const PrimaryTopologyTests := preload("res://tests/topology/test_primary_topology.gd")
+const EntranceGenerationTests := preload("res://tests/entrances/test_entrance_generation.gd")
 const ReproductionProbe := preload("res://worldgen/validation/reproduction_probe.gd")
 const TopologyProbe := preload("res://worldgen/validation/topology_reproduction_probe.gd")
+const EntranceProbe := preload("res://worldgen/validation/entrance_reproduction_probe.gd")
 const SampleGraphFixture := preload("res://tests/foundation/sample_graph_fixture.gd")
 const GraphValidator := preload("res://worldgen/validation/graph_validator.gd")
 const GraphCanonicalizer := preload("res://worldgen/validation/graph_canonicalizer.gd")
@@ -26,6 +28,8 @@ func _init() -> void:
 			_run_reproduction(args)
 		"topology-repro":
 			_run_topology_reproduction(args)
+		"entrance-repro":
+			_run_entrance_reproduction(args)
 		"batch":
 			_run_batch(args)
 		_:
@@ -42,6 +46,7 @@ func _run_fast() -> void:
 	failures.append_array(LegacyV2MigrationTests.run())
 	failures.append_array(ServiceBoundaryTests.run())
 	failures.append_array(PrimaryTopologyTests.run())
+	failures.append_array(EntranceGenerationTests.run())
 	_finish("fast", failures)
 
 
@@ -106,8 +111,8 @@ func _run_batch(args: Dictionary) -> void:
 		for region_z in range(-region_radius, region_radius + 1):
 			for region_x in range(-region_radius, region_radius + 1):
 				var region := Vector2i(region_x, region_z)
-				var first: Dictionary = TopologyProbe.build(world_seed, region)
-				var second: Dictionary = TopologyProbe.build(world_seed, region)
+				var first: Dictionary = EntranceProbe.build(world_seed, region)
+				var second: Dictionary = EntranceProbe.build(world_seed, region)
 				cases += 1
 				if not bool(first.get("success", false)) or not bool(second.get("success", false)):
 					failures.append(
@@ -172,6 +177,33 @@ func _run_topology_reproduction(args: Dictionary) -> void:
 	quit(0)
 
 
+func _run_entrance_reproduction(args: Dictionary) -> void:
+	var world_seed: int = int(args.get("seed", "12345"))
+	var region_x: int = int(args.get("region-x", "0"))
+	var region_z: int = int(args.get("region-z", "0"))
+	var expected: String = str(args.get("expect", ""))
+	var probe: Dictionary = EntranceProbe.build(world_seed, Vector2i(region_x, region_z))
+	if not bool(probe.get("success", false)):
+		printerr("[ENTRANCE REPRO] FAIL stage=%s diagnostics=%s" % [
+			probe.get("stage", "unknown"), probe.get("diagnostics", []),
+		])
+		quit(1)
+		return
+	var fingerprint: String = str(probe["fingerprint"])
+	print("[ENTRANCE REPRO]")
+	print("  seed=%d" % world_seed)
+	print("  region=(%d,%d)" % [region_x, region_z])
+	print("  macro_fingerprint=%s" % probe["macro_fingerprint"])
+	print("  topology_fingerprint=%s" % probe["topology_fingerprint"])
+	print("  entrance_fingerprint=%s" % fingerprint)
+	print("  metrics=%s" % probe["metrics"])
+	if not expected.is_empty() and fingerprint != expected:
+		printerr("[ENTRANCE REPRO] expected=%s actual=%s" % [expected, fingerprint])
+		quit(1)
+		return
+	quit(0)
+
+
 func _finish(label: String, failures: Array[String]) -> void:
 	if failures.is_empty():
 		print("[VALIDATION] PASS %s" % label)
@@ -205,4 +237,5 @@ static func _print_usage() -> void:
 	print("  --mode=fixture --name=graph|legacy-v2")
 	print("  --mode=repro --seed=12345 --region-x=0 --region-z=0 [--expect=probe-sha256:...]")
 	print("  --mode=topology-repro --seed=12345 --region-x=0 --region-z=0 [--expect=topology-sha256:...]")
+	print("  --mode=entrance-repro --seed=12345 --region-x=0 --region-z=0 [--expect=entrances-sha256:...]")
 	print("  --mode=batch --start-seed=1 --count=100 --region-radius=1")

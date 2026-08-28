@@ -53,5 +53,5 @@ The tree cones and box rocks are intentionally placeholder geometry. Their job i
 1. Tune macro terrain and environmental thresholds from screenshots/playtests.
 2. Replace placeholder distribution rules only if forests or rock fields look artificial.
 3. Add simple grass/ground cover after large vegetation placement is convincing.
-4. Begin cave-entrance candidate generation once the surface biome itself is interesting to traverse.
+4. Integrate deterministic entrance descriptors into surface/cave geometry only after the entrance-definition gate is merged.
 5. Add actual gathering/combat interactions only after the generated environment is stable enough to play in.
