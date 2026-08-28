@@ -42,6 +42,18 @@ jobs:
           fi
           grep -Fq '[WORLDGEN INSPECTOR] PASS' "$validation_log"
 
+      - name: Run atlas contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tools/worldgen/run_topology_atlas_contracts.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[WORLDGEN ATLAS] PASS' "$validation_log"
+
       - name: Export sample snapshot
         run: |
           set -o pipefail
@@ -60,3 +72,22 @@ jobs:
           test -s "$output_dir/ci_sample.svg"
           grep -Fq 'underworld-topology-snapshot-v1' "$output_dir/ci_sample.json"
           grep -Fq '<svg' "$output_dir/ci_sample.svg"
+
+      - name: Export sample 3x3 atlas
+        run: |
+          set -o pipefail
+          export_log="$(mktemp)"
+          output_dir="/tmp/underworld-worldgen-inspector"
+          godot --headless --path . --quit-after 1 \
+            --script res://tools/worldgen/export_topology_atlas.gd -- \
+            --seed=12345 --center-x=0 --center-z=0 --radius=1 \
+            --out-dir="$output_dir" --basename=ci_atlas 2>&1 \
+            | tee "$export_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$export_log"; then
+            exit 1
+          fi
+          grep -Fq '[WORLDGEN ATLAS] PASS' "$export_log"
+          test -s "$output_dir/ci_atlas.json"
+          test -s "$output_dir/ci_atlas.svg"
+          grep -Fq 'underworld-topology-atlas-v1' "$output_dir/ci_atlas.json"
+          test "$(grep -o 'class=\"region-frame\"' "$output_dir/ci_atlas.svg" | wc -l)" -eq 9
