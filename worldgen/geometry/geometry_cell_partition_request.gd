@@ -10,18 +10,21 @@ var cave_geometry_result
 var region_finalization_result
 var configuration
 var requested_cells: Array
+var world_context
 
 
 func _init(
 	geometry_result_value,
 	finalization_result_value,
 	configuration_value = null,
-	requested_cells_value: Array = []
+	requested_cells_value: Array = [],
+	world_context_value = null
 ) -> void:
 	cave_geometry_result = geometry_result_value
 	region_finalization_result = finalization_result_value
 	configuration = configuration_value if configuration_value != null else Config.new()
 	requested_cells = requested_cells_value.duplicate(true)
+	world_context = world_context_value
 
 
 func validate() -> Array[String]:

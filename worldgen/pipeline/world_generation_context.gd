@@ -3,6 +3,7 @@ class_name UnderworldWorldGenerationContext
 
 const GeneratorManifestScript := preload("res://worldgen/versioning/generator_manifest.gd")
 const WorldIdScript := preload("res://worldgen/identity/world_id.gd")
+const Provenance := preload("res://worldgen/pipeline/generation_provenance.gd")
 
 var world_seed: int
 var world_id: String
@@ -39,3 +40,34 @@ func canonical_header() -> Dictionary:
 		"generator_manifest_id": generator_manifest_id,
 		"generator_manifest_canonical": generator_manifest.canonical_text(),
 	}
+
+
+func stage_contract_revision(stage_id: String, fallback: int = 1) -> int:
+	if generator_manifest == null:
+		return fallback
+	return int(generator_manifest.stage_revisions().get(stage_id, fallback))
+
+
+func make_provenance(
+	stage_id: String,
+	region_id: String = "",
+	region_address: String = "",
+	source_fingerprints: Array = []
+):
+	return Provenance.from_context(
+		self,
+		stage_id,
+		stage_contract_revision(stage_id),
+		region_id,
+		region_address,
+		source_fingerprints
+	)
+
+
+func validate_provenance(provenance, expected_stage: String = "", expected_region: String = "", expected_sources = null) -> Array[String]:
+	if provenance == null or not (provenance is Provenance):
+		return ["GenerationProvenance is missing or has the wrong type"]
+	var failures: Array[String] = provenance.validate_against(self, expected_stage, expected_region, expected_sources)
+	if provenance.stage_contract_revision != stage_contract_revision(provenance.stage_id):
+		failures.append("GenerationProvenance stage revision does not match current manifest")
+	return failures
