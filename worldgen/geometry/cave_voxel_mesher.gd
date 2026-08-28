@@ -67,8 +67,9 @@ static func build(request) -> StageResult:
 					if values[i] < request.iso_level: mask |= 1 << i
 				if mask == 0 or mask == 255: continue
 				for tri in MARCHING_CUBES_TABLE[mask]:
-					var a := _edge_point(positions, values, CUBE_EDGES[int(tri[0])], request.iso_level); var b := _edge_point(positions, values, CUBE_EDGES[int(tri[1])], request.iso_level); var c := _edge_point(positions, values, CUBE_EDGES[int(tri[2])], request.iso_level)
-					_append_triangle(a, b, c, pitch, edge_vertices, vertices, indices, normals, uvs, fragments)
+					var edge_a: int = int(tri[0]); var edge_b: int = int(tri[1]); var edge_c: int = int(tri[2])
+					var a := _edge_point(positions, values, CUBE_EDGES[edge_a], request.iso_level); var b := _edge_point(positions, values, CUBE_EDGES[edge_b], request.iso_level); var c := _edge_point(positions, values, CUBE_EDGES[edge_c], request.iso_level)
+					_append_triangle(a, b, c, [_lattice_edge_key(Vector3i(x, y, z), edge_a), _lattice_edge_key(Vector3i(x, y, z), edge_b), _lattice_edge_key(Vector3i(x, y, z), edge_c)], edge_vertices, vertices, indices, normals, uvs)
 	var fallback_count := 0
 	if indices.is_empty() and not fragments.is_empty():
 		for fragment in fragments:
@@ -110,7 +111,7 @@ static func _roughness(point: Vector3, fragment) -> float:
 static func _edge_point(positions: Array, values: Array, edge: Array, iso: float) -> Vector3:
 	var a: int = int(edge[0]); var b: int = int(edge[1]); var denominator := float(values[b]) - float(values[a]); var t := 0.5 if absf(denominator) < 0.000001 else clampf((iso - float(values[a])) / denominator, 0.0, 1.0); return positions[a].lerp(positions[b], t)
 
-static func _append_triangle(a: Vector3, b: Vector3, c: Vector3, pitch: float, edge_vertices: Dictionary, vertices: PackedVector3Array, indices: PackedInt32Array, normals: PackedVector3Array, uvs: PackedVector2Array, fragments: Array) -> void:
+static func _append_triangle(a: Vector3, b: Vector3, c: Vector3, edge_keys: Array, edge_vertices: Dictionary, vertices: PackedVector3Array, indices: PackedInt32Array, normals: PackedVector3Array, uvs: PackedVector2Array) -> void:
 	var cross := (b - a).cross(c - a); if cross.length_squared() < 0.00000001: return
 	# The canonical table is wound for the solid side. The cave void is the
 	# negative side, so reverse once and derive stable inward face normals.
@@ -119,8 +120,9 @@ static func _append_triangle(a: Vector3, b: Vector3, c: Vector3, pitch: float, e
 	c = swap
 	var inward_normal := -(c - a).cross(b - a).normalized()
 	var ids: Array[int] = []
-	for point in [a, b, c]:
-		var key := _lattice_edge_key(point, pitch)
+	for point_index in 3:
+		var point: Vector3 = [a, b, c][point_index]
+		var key: String = str(edge_keys[point_index])
 		if not edge_vertices.has(key):
 			edge_vertices[key] = vertices.size(); vertices.append(point); normals.append(inward_normal if inward_normal.length_squared() > 0.000001 else Vector3.UP); uvs.append(Vector2(point.x + point.z, point.y) * 0.0625)
 		ids.append(int(edge_vertices[key]))
@@ -138,7 +140,15 @@ static func _append_box_shell(bounds: AABB, vertices: PackedVector3Array, indice
 			var point: Vector3 = corners[index]; vertices.append(point); normals.append(Vector3.UP); uvs.append(Vector2(point.x + point.z, point.y) * 0.0625)
 		indices.append_array(PackedInt32Array([start,start+1,start+2,start,start+2,start+3]))
 
-static func _lattice_edge_key(point: Vector3, pitch: float) -> String: return "%d:%d:%d" % [roundi(point.x / pitch), roundi(point.y / pitch), roundi(point.z / pitch)]
+static func _lattice_edge_key(cube: Vector3i, edge_index: int) -> String:
+	var endpoints: Array = CUBE_EDGES[edge_index]
+	var first: Vector3i = cube + CUBE_OFFSETS[int(endpoints[0])]
+	var second: Vector3i = cube + CUBE_OFFSETS[int(endpoints[1])]
+	if first.x > second.x or (first.x == second.x and (first.y > second.y or (first.y == second.y and first.z > second.z))):
+		var swap := first
+		first = second
+		second = swap
+	return "%d:%d:%d-%d:%d:%d" % [first.x, first.y, first.z, second.x, second.y, second.z]
 static func _AABB_from_plan(plan) -> AABB: return plan.fragments[0].cell_bounds if not plan.fragments.is_empty() else AABB()
 static func _unique_count(values: Array) -> int:
 	var seen := {}; for value in values: seen[str(value)] = true
