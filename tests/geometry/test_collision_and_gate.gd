@@ -19,15 +19,16 @@ static func run() -> Array[String]:
 	var mesh := MeshData.new(address, AABB(Vector3.ZERO, Vector3.ONE), vertices, indices, normals, uvs, ["source"], ["fragment"], "plan", {"triangle_count": 1})
 	var prepared = CollisionBuilder.prepare(mesh, "prov")
 	_expect(failures, "collision preparation succeeds", prepared.success)
+	var realized: Dictionary = {}
 	if prepared.success:
-		var realized: Dictionary = Boundary.realize_main_thread(prepared.data, mesh.output_fingerprint)
+		realized = Boundary.realize_main_thread(prepared.data, mesh.output_fingerprint)
 		_expect(failures, "collision realization succeeds", realized.success)
 		_expect(failures, "stale collision source rejected", not Boundary.realize_main_thread(prepared.data, "stale").success)
 	var streamer := Streamer.new("world", "manifest")
 	streamer.demand_cell(address, "entrance:test", ["collision"], "plan", "prov")
 	var gate := Gate.new("entrance:test", [address])
 	_expect(failures, "gate closed before collision", not gate.update(streamer))
-	var result := Result.new(address, streamer.records[address.canonical_text()].generation, "collision", "plan", "prov")
+	var result := Result.new(address, streamer.records[address.canonical_text()].generation, "collision", "plan", "prov", realized.get("shape") if prepared.success else null, true, [], "world", "manifest")
 	_expect(failures, "collision result accepted", streamer.accept_result(result))
 	_expect(failures, "gate opens when collision ready", gate.update(streamer))
 	streamer.release_demand(address, "entrance:test")
