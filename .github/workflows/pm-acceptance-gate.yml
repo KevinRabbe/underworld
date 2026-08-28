@@ -77,6 +77,10 @@ jobs:
 
           case "$EVENT_ACTION" in
             synchronize)
+              # Fail the exact new head before metadata cleanup. If this run is
+              # cancelled after publication, the head remains fail-closed.
+              publish_status "$EVENT_HEAD_SHA" failure "New commit requires explicit PM re-acceptance"
+
               has_acceptance="$(jq -r '[.labels[].name] | index("pm-accepted") != null' <<<"$current_json")"
               if [ "$has_acceptance" = "true" ]; then
                 gh api --method DELETE \
@@ -87,7 +91,7 @@ jobs:
               decision_json="$(read_pr)"
               decision_head="$(jq -r '.head.sha' <<<"$decision_json")"
               if [ "$decision_head" != "$EVENT_HEAD_SHA" ]; then
-                echo "Synchronize event was superseded before its decision point; newer head owns acceptance state."
+                echo "Synchronize event was superseded during metadata cleanup; newer head owns acceptance state."
                 exit 0
               fi
 
@@ -98,7 +102,7 @@ jobs:
                 exit 1
               fi
 
-              publish_status "$EVENT_HEAD_SHA" failure "New commit requires explicit PM re-acceptance"
+              echo "Synchronized head is fail-closed and stale PM metadata is clear."
               ;;
 
             converted_to_draft|opened|reopened|ready_for_review)
