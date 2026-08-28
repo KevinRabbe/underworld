@@ -22,25 +22,38 @@ static func _test_success_report(failures: Array[String]) -> void:
 	_expect_equal(failures, "report schema", report.get("schema", ""), "underworld-generation-debug-report-v1")
 	_expect_equal(failures, "seed preserved", int(report.get("world_seed", 0)), 12345)
 	_expect_equal(failures, "region preserved", report.get("region_coord", []), [0, 0])
-	_expect_equal(failures, "merged stage count", report.get("stages", []).size(), 3)
-	if report.get("stages", []).size() == 3:
+	_expect_equal(failures, "merged stage count", report.get("stages", []).size(), 4)
+	if report.get("stages", []).size() == 4:
 		_expect_equal(failures, "macro stage first", report["stages"][0]["stage"], "macro_region")
 		_expect_equal(failures, "topology stage second", report["stages"][1]["stage"], "primary_topology")
 		_expect_equal(failures, "entrance stage third", report["stages"][2]["stage"], "entrance_generation")
+		_expect_equal(failures, "connectivity stage fourth", report["stages"][3]["stage"], "secondary_connectivity")
 		_expect_true(failures, "macro fingerprint captured", not str(report["stages"][0]["fingerprint"]).is_empty())
 		_expect_true(failures, "topology fingerprint captured", not str(report["stages"][1]["fingerprint"]).is_empty())
 		_expect_true(failures, "entrance fingerprint captured", not str(report["stages"][2]["fingerprint"]).is_empty())
+		_expect_true(failures, "connectivity fingerprint captured", not str(report["stages"][3]["fingerprint"]).is_empty())
 		_expect_true(failures, "topology metrics captured", not report["stages"][1]["parameters"].is_empty())
 		_expect_true(failures, "entrance metrics captured", not report["stages"][2]["parameters"].is_empty())
-		_expect_equal(failures, "entrance retry count is explicit", int(report["stages"][2]["retry_count"]), 0)
+		_expect_true(failures, "connectivity metrics captured", report["stages"][3]["parameters"].has("local_candidate_count"))
+		_expect_equal(failures, "connectivity retry count is explicit", int(report["stages"][3]["retry_count"]), 0)
+		_expect_equal(failures, "four explicit neighbor views", int(report["stages"][3]["parameters"].get("neighbor_view_count", -1)), 4)
+		_expect_equal(
+			failures,
+			"neighbor coordinates are deterministic",
+			report["stages"][3]["parameters"].get("neighbor_region_coords", []),
+			[[-1, 0], [1, 0], [0, -1], [0, 1]]
+		)
 	_expect_equal(failures, "successful run has zero retries", int(report.get("total_retries", -1)), 0)
 	_expect_equal(failures, "successful run has no failure stage", str(report.get("failure_stage", "missing")), "")
 	_expect_true(failures, "global parameters captured", report.get("parameters", {}).has("macro_region_size"))
 	_expect_true(failures, "entrance candidate constant captured", report.get("parameters", {}).has("macro_entrance_candidate_count"))
 	_expect_true(failures, "entrance jitter constant captured", report.get("parameters", {}).has("entrance_surface_jitter_radius"))
+	_expect_true(failures, "connectivity max length captured", report.get("parameters", {}).has("connectivity_max_cross_region_length"))
+	_expect_true(failures, "connectivity score threshold captured", report.get("parameters", {}).has("connectivity_min_cross_region_score"))
 	_expect_true(failures, "JSON output names schema", str(built.get("json", "")).contains("underworld-generation-debug-report-v1"))
 	_expect_true(failures, "text output names topology stage", str(built.get("text", "")).contains("primary_topology"))
 	_expect_true(failures, "text output names entrance stage", str(built.get("text", "")).contains("entrance_generation"))
+	_expect_true(failures, "text output names connectivity stage", str(built.get("text", "")).contains("secondary_connectivity"))
 
 
 static func _test_exact_reproduction(failures: Array[String]) -> void:
@@ -57,15 +70,16 @@ static func _test_failure_and_retry_capture(failures: Array[String]) -> void:
 	var report = Report.new(context, Vector2i(4, 5), {"test_parameter": 9})
 	report.record_stage(StageResult.ok("macro_region", null, "fingerprint-a"), 1, {"attempt_limit": 3})
 	report.record_stage(StageResult.ok("primary_topology", null, "fingerprint-b"), 0, {})
-	report.record_stage(StageResult.fail("entrance_generation", ["synthetic entrance failure"]), 2, {"attempt_limit": 3})
+	report.record_stage(StageResult.ok("entrance_generation", null, "fingerprint-c"), 0, {})
+	report.record_stage(StageResult.fail("secondary_connectivity", ["synthetic connectivity failure"]), 2, {"attempt_limit": 3})
 	var data: Dictionary = report.to_dictionary()
 	_expect_true(failures, "synthetic report fails", not bool(data.get("success", true)))
-	_expect_equal(failures, "first failing stage captured", str(data.get("failure_stage", "")), "entrance_generation")
+	_expect_equal(failures, "first failing stage captured", str(data.get("failure_stage", "")), "secondary_connectivity")
 	_expect_equal(failures, "retries aggregate", int(data.get("total_retries", 0)), 3)
-	_expect_equal(failures, "per-stage retry captured", int(data["stages"][2]["retry_count"]), 2)
-	_expect_equal(failures, "failure diagnostic captured", data["stages"][2]["diagnostics"], ["synthetic entrance failure"])
-	_expect_equal(failures, "stage parameter captured", int(data["stages"][2]["parameters"]["attempt_limit"]), 3)
-	_expect_true(failures, "human report includes diagnostic", report.to_text().contains("diagnostic=synthetic entrance failure"))
+	_expect_equal(failures, "per-stage retry captured", int(data["stages"][3]["retry_count"]), 2)
+	_expect_equal(failures, "failure diagnostic captured", data["stages"][3]["diagnostics"], ["synthetic connectivity failure"])
+	_expect_equal(failures, "stage parameter captured", int(data["stages"][3]["parameters"]["attempt_limit"]), 3)
+	_expect_true(failures, "human report includes diagnostic", report.to_text().contains("diagnostic=synthetic connectivity failure"))
 
 
 static func _test_negative_coordinates(failures: Array[String]) -> void:
@@ -74,9 +88,10 @@ static func _test_negative_coordinates(failures: Array[String]) -> void:
 	var report: Dictionary = built.get("report", {})
 	_expect_equal(failures, "negative seed preserved", int(report.get("world_seed", 0)), -998877)
 	_expect_equal(failures, "negative region preserved", report.get("region_coord", []), [-5, -4])
-	_expect_equal(failures, "negative report includes entrance stage", report.get("stages", []).size(), 3)
-	if report.get("stages", []).size() == 3:
-		_expect_equal(failures, "negative report entrance stage third", report["stages"][2]["stage"], "entrance_generation")
+	_expect_equal(failures, "negative report includes current pipeline", report.get("stages", []).size(), 4)
+	if report.get("stages", []).size() == 4:
+		_expect_equal(failures, "negative report connectivity stage fourth", report["stages"][3]["stage"], "secondary_connectivity")
+		_expect_equal(failures, "negative report has four neighbor views", int(report["stages"][3]["parameters"].get("neighbor_view_count", -1)), 4)
 
 
 static func _expect_true(failures: Array[String], label: String, condition: bool) -> void:
