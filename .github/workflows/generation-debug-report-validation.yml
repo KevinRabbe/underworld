@@ -62,4 +62,6 @@ jobs:
           grep -Fq 'macro_region' "$output_dir/ci_generation_debug.txt"
           grep -Fq 'primary_topology' "$output_dir/ci_generation_debug.txt"
           grep -Fq 'entrance_generation' "$output_dir/ci_generation_debug.txt"
+          grep -Fq 'secondary_connectivity' "$output_dir/ci_generation_debug.txt"
           grep -Fq 'entrance_generation' "$output_dir/ci_generation_debug.json"
+          grep -Fq 'secondary_connectivity' "$output_dir/ci_generation_debug.json"
