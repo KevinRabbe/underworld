@@ -1,48 +1,153 @@
 # Underworld — Main Merge Gate
 
-Status: **repository-governance contract / operational same-principal guard**
+Status: **repository-governance contract**
 
-This document defines the repository merge-control baseline for `main`.
+This document defines the intended enforceable merge gate for `main`. It complements the pull task board; it does not replace architecture review, dependency review, protected-roadmap ownership, or exact-head validation.
 
-It does **not** claim source-isolated PM authorization under the current GitHub identity model. The current `PM acceptance` status is useful as an operational workflow guard, but ordinary same-repository GitHub Actions can run as the same GitHub Actions App and can request `statuses: write`. A PR-controlled workflow could therefore publish the same commit-status context name.
-
-That limitation is explicit and must not be hidden by wording such as “trusted authorization” or “cryptographically enforced PM approval.”
-
-## Current policy
-
-Normal merge eligibility is intended to require:
+## Target policy
 
 ```text
 required broad CI
-+ operational exact-head PM acceptance signal
-+ non-draft pull request
-+ branch up to date with protected main
++ exact-current-main synchronization
++ source-isolated PM acceptance
++ non-draft PR
 + pull-request-only main updates
-= operationally merge eligible
+= merge eligible
 ```
 
-Green CI is necessary but never sufficient by project policy.
+Green CI is necessary but never sufficient by itself.
 
-The repository-owner ruleset must also require the PR branch to be up to date before merge. A reviewed/green SHA must not land after `main` has advanced without being synchronized and revalidated.
+## Required `main` contexts
 
-## Required status contexts
+Configure the final `main` ruleset to require:
 
-The final `main` ruleset should require these exact stable contexts:
-
-| Purpose | Required context |
+| Source | Required context |
 | --- | --- |
-| Character validation | `Godot character contracts` |
-| Repository layout validation | `Repository layout contracts` |
+| Character Validation | `Godot character contracts` |
+| Repository Layout Validation | `Repository layout contracts` |
 | Deterministic Worldgen aggregate | `Godot headless contracts` |
-| Operational PM gate | `PM acceptance` |
+| distinct external PM GitHub App | `PM acceptance` |
 
-The first three contexts are normal CI evidence.
+The first three contexts may come from GitHub Actions. The `PM acceptance` context **must not** be accepted from the GitHub Actions App. It must be source-bound to a distinct external GitHub App/integration that ordinary repository workflows cannot impersonate.
 
-`PM acceptance` is an **operational process-control context**, not source-isolated authorization while it is emitted by the same GitHub Actions identity available to ordinary repository workflows.
+## Why GitHub Actions cannot own authoritative PM acceptance
 
-Do not configure individual deterministic matrix shard names as branch requirements. Require only the stable aggregate `Godot headless contracts`.
+A same-repository `pull_request` workflow can request `statuses: write` and post an arbitrary commit status on its PR head.
 
-## Deterministic Worldgen aggregate
+Therefore a required context name such as:
+
+```text
+PM acceptance
+```
+
+is not sufficient by itself when both the trusted publisher and untrusted PR workflows use the GitHub Actions App identity.
+
+Binding the required status to the GitHub Actions App also does not solve this: both publishers would have the same source App.
+
+Consequently:
+
+- repository Actions may perform metadata hygiene and diagnostics;
+- repository Actions must not be the authoritative source for `PM acceptance`;
+- the branch ruleset must bind `PM acceptance` to a distinct external GitHub App/integration;
+- credentials for that App must not be exposed to ordinary repository Actions.
+
+## External PM App trust boundary
+
+The authoritative PM publisher must run outside candidate PR-controlled GitHub Actions.
+
+Minimum properties:
+
+1. distinct GitHub App/integration identity from GitHub Actions;
+2. App credentials/private key stored outside repository workflows;
+3. installed only with the permissions required to read PR state and publish the acceptance status;
+4. status context exactly `PM acceptance`;
+5. status published on the exact current PR-head SHA;
+6. ruleset required-status source explicitly bound to this App/integration;
+7. no repository workflow has credentials that allow it to publish as the App;
+8. ordinary Actions are not a bypass actor.
+
+The external App should consume pull-request webhook events for:
+
+```text
+opened
+reopened
+synchronize
+labeled
+unlabeled
+ready_for_review
+converted_to_draft
+```
+
+It must query current PR state at its authoritative decision point instead of trusting stale event snapshots.
+
+## PM approval input
+
+The operational PM signal remains:
+
+```text
+pm-accepted
+```
+
+Only an explicit `labeled` event for `pm-accepted` may grant `PM acceptance=success`.
+
+The external App should additionally validate the event sender against the configured PM actor/account/team policy and must reject automated label application from `github-actions[bot]` as an authorization event.
+
+Because PM and workers currently share the same repository-owner identity surface in some workflows, this label still does **not** provide cryptographic separation between a malicious worker using that same owner identity and PM. It does, however, separate the required status source from PR-controlled GitHub Actions and prevents ordinary PR workflows from minting the required status directly.
+
+True human-role separation requires a distinct PM account/team/App approval identity.
+
+## Exact-head PM semantics
+
+The external App must be fail-closed.
+
+### Grant
+
+`PM acceptance=success` is allowed only when all are true:
+
+1. webhook/action represents `labeled`;
+2. label is exactly `pm-accepted`;
+3. label event sender satisfies the configured PM actor policy;
+4. event head is still the current live PR head;
+5. PR is non-draft;
+6. live PR still contains `pm-accepted`;
+7. decision is serialized/coordinated per PR so overlapping same-head events cannot leave stale success.
+
+Immediately before status publication, the App must re-query live head/draft/label state.
+
+A post-publication recheck or equivalent transactional/serialized design is recommended so an acceptance removal racing the grant cannot leave final success behind.
+
+### Revoke/fail
+
+The App must publish failure for the exact current head when:
+
+- a new head is synchronized;
+- `pm-accepted` is removed;
+- the PR becomes draft;
+- the PR is reopened;
+- a ready-for-review transition occurs without a fresh explicit acceptance action;
+- live state is inconsistent with a grant.
+
+A new commit always requires a new explicit PM acceptance action.
+
+## Repository metadata guard
+
+`.github/workflows/pm-acceptance-gate.yml` is intentionally a **non-authoritative metadata guard**.
+
+It runs as trusted `pull_request_target` default-branch code and:
+
+- never checks out or executes PR-controlled content;
+- removes stale `pm-accepted` on synchronize/reopen/ready/draft transitions;
+- rejects retaining `pm-accepted` on draft PRs;
+- guards against superseded-head metadata mutation;
+- uses per-PR concurrency;
+- has no `statuses: write` permission;
+- never publishes the required `PM acceptance` context.
+
+This workflow improves repository hygiene but is not part of the cryptographic/source-isolated authorization boundary. The external PM App must remain correct even if metadata cleanup is delayed or fails.
+
+Do **not** configure the branch ruleset to require the metadata-guard job as a substitute for the external App status.
+
+## Deterministic aggregate contract
 
 `.github/workflows/foundation-validation.yml` preserves the complete deterministic campaign as ten shards:
 
@@ -52,169 +157,21 @@ count per shard: 25
 region radius: 1 = 3x3 regions
 ```
 
-Together this remains:
+Together this remains 250 seeds × 9 regions = 2,250 seed/region cases.
 
-```text
-250 seeds × 9 regions = 2,250 seed/region cases
-```
-
-Each shard runs the fast deterministic contracts followed by its 25-seed batch.
-
-A final job named exactly:
+Each shard runs fast deterministic contracts and its 25-seed batch. A final job named exactly:
 
 ```text
 Godot headless contracts
 ```
 
-runs with `if: always()` after the matrix and fails unless the matrix result is `success`.
+uses `if: always()` and fails unless the entire matrix result is `success`.
 
-This gives branch rules one stable required context while preserving every shard.
-
-## Operational PM acceptance workflow
-
-The project workflow is `.github/workflows/pm-acceptance-gate.yml`.
-
-It runs from `pull_request_target`, which means the workflow definition comes from the trusted base/default branch rather than from the candidate PR branch.
-
-The workflow itself therefore has an important execution-safety boundary:
-
-- it never checks out the PR branch;
-- it never executes PR-controlled repository code;
-- it queries PR metadata through the GitHub API;
-- it binds decisions to the event head and live PR head;
-- it uses per-PR concurrency;
-- it rechecks live state before granting success;
-- it rechecks state after publishing success;
-- only an explicit `labeled: pm-accepted` event may grant success;
-- synchronize, draft transitions, and acceptance removal fail/revoke;
-- unrelated label events cannot grant acceptance.
-
-Those properties protect the normal project process against stale events, accidental acceptance reuse, and event-order races.
-
-They do **not** source-isolate the status context from another same-repository GitHub Actions workflow.
-
-## Source-isolation limitation
-
-The remaining trust limitation is external to the workflow logic itself.
-
-A same-repository PR can modify or add a normal GitHub Actions workflow. If repository policy allows that workflow to request:
-
-```yaml
-permissions:
-  statuses: write
-```
-
-then that workflow executes as the same GitHub Actions App identity used by the operational PM workflow and can call the commit-status API with:
-
-```text
-context = PM acceptance
-```
-
-Therefore the context name alone does not prove that the status came from the intended `pull_request_target` workflow.
-
-Binding the required status to the GitHub Actions App does not fix this, because both the intended workflow and a PR-controlled workflow use the same App identity.
-
-### Consequence
-
-Under the current identity model:
-
-```text
-PM acceptance = operational same-principal guard
-```
-
-It is **not**:
-
-```text
-PM acceptance = actor-separated authorization boundary
-```
-
-The current mechanism is still useful for preventing ordinary accidental merges and for making the intended PM lifecycle machine-readable, but it must not be represented as resistant to a malicious or intentionally bypassing same-repository workflow with equivalent Actions permissions.
-
-## Path to true PM authorization
-
-True source-isolated PM authorization requires a source ordinary PR workflows cannot mint.
-
-Acceptable future mechanisms include one of the following:
-
-1. a distinct GitHub App whose private key/installation credentials are unavailable to ordinary repository workflows;
-2. an external CI/service identity that publishes the required status and is source-bound in the branch ruleset;
-3. an owner-controlled approval mechanism whose credentials or approval authority are unavailable to worker/PR workflows;
-4. another GitHub-supported authorization primitive that provides equivalent actor separation.
-
-When such a mechanism exists, update this document and the ruleset so the required PM gate is tied to that isolated source.
-
-Until then, do not claim technical authorization against ordinary GitHub Actions.
-
-## Exact-head operational semantics
-
-Even though the status is not source-isolated, the intended PM workflow still enforces exact-head lifecycle semantics for normal project operation.
-
-### Per-PR coordination
-
-Runs use one concurrency group per PR:
-
-```text
-pm-acceptance-<repository>-<pr-number>
-```
-
-with `cancel-in-progress: true`.
-
-Newer PR-state events supersede older in-progress runs for the same PR.
-
-### Superseded-head guard
-
-Every run compares:
-
-```text
-event head SHA
-vs.
-live PR head SHA
-```
-
-A delayed event for SHA A exits without mutating acceptance state for newer SHA B.
-
-### Only explicit acceptance may grant
-
-Success is possible only for:
-
-```text
-event action = labeled
-event label = pm-accepted
-```
-
-and only when the live PR still satisfies all of:
-
-- event head equals current head;
-- PR is non-draft;
-- `pm-accepted` is currently present.
-
-The workflow re-reads the PR immediately before the grant decision and again after success publication.
-
-### Synchronize invalidates
-
-A current-head synchronize event:
-
-- removes stale `pm-accepted` when present;
-- verifies it is absent;
-- publishes `PM acceptance = failure` on the synchronized head.
-
-A later explicit acceptance action is required for the new head.
-
-### Lifecycle events cannot resurrect acceptance
-
-`opened`, `reopened`, `ready_for_review`, and `converted_to_draft` do not reinterpret a persisted label as a new approval.
-
-They publish failure for the exact current head.
-
-### Acceptance removal revokes
-
-Removing `pm-accepted` publishes failure for the exact current head.
-
-Unrelated label changes cannot grant success.
+The ruleset must require only the stable aggregate, not generated shard names.
 
 ## Required `main` ruleset
 
-Create one active branch ruleset targeting only the default branch / `refs/heads/main`.
+Create one active branch ruleset targeting only `refs/heads/main` / the default branch.
 
 Required behavior:
 
@@ -223,40 +180,24 @@ Required behavior:
 - require `Godot character contracts`;
 - require `Repository layout contracts`;
 - require stable `Godot headless contracts`;
-- require operational `PM acceptance` if the team chooses to keep this same-principal process guard;
+- require `PM acceptance` **from the distinct external PM App source**;
 - block ordinary direct pushes to `main`;
 - block force pushes;
 - block branch deletion;
-- do not require impossible same-user self-approval;
-- do not grant ordinary workers or broad Actions workflows permanent bypass rights.
+- do not require a self-approval rule that the current same-account workflow cannot satisfy;
+- do not give ordinary workers or GitHub Actions permanent bypass rights.
 
-### Why “up to date” is mandatory
+The up-to-date requirement is mandatory because exact-head validation against stale `main` is not sufficient for this project. A PR accepted and green at SHA A must synchronize/revalidate if `main` advances before merge.
 
-Suppose SHA A is fully reviewed and green, then `main` advances to SHA M.
+## Required status-source verification
 
-Without an up-to-date requirement, A could potentially merge without validating the combined A+M state.
+Before activation is considered complete, verify the ruleset UI/API associates `PM acceptance` with the distinct PM App/integration, not merely the context string and not the GitHub Actions App.
 
-Required behavior is:
+A spoof status with the same context created by GitHub Actions must **not** satisfy the required PM check.
 
-```text
-reviewed PR head A
-        ↓
-main advances to M
-        ↓
-PR becomes out of date
-        ↓
-synchronize/rebase/merge current main
-        ↓
-new exact PR head B
-        ↓
-rerun required CI
-        ↓
-repeat PM review/acceptance for B
-```
+If GitHub cannot source-bind the status to the distinct App under the repository's current plan/features, #118 remains BLOCKED and the project must choose another owner-controlled authorization mechanism rather than claiming enforcement.
 
-A stale reviewed head must never remain merge-eligible solely because its earlier checks were green.
-
-## Normal acceptance lifecycle
+## Acceptance lifecycle
 
 ```text
 worker opens draft PR
@@ -265,173 +206,211 @@ broad CI runs
         ↓
 worker hands off to REVIEW
         ↓
+PR synchronized with current main
+        ↓
 PM reviews exact current head
         ↓
 PR becomes non-draft when appropriate
         ↓
-PM explicitly adds pm-accepted
+PM explicitly applies pm-accepted
         ↓
-operational gate checks exact live state
+external PM App validates actor + exact live state
         ↓
-PM acceptance may become success
+external App publishes PM acceptance=success on exact head
         ↓
-branch must also be current with main
-        ↓
-all required checks green on current head
+all required broad contexts green on same exact head
         ↓
 ruleset permits merge
 ```
 
-If `main` moves or the PR head changes, synchronize and revalidate.
+Any new commit or stale-main condition invalidates merge eligibility until synchronization, validation, and PM acceptance are repeated as required.
 
 ## Same-principal limitation
 
-The current PM and worker automation share the repository owner/App permission surface.
+The current operational process may use the same GitHub owner identity for PM and workers.
 
 Therefore:
 
-- `pm-accepted` is an operational role signal;
-- `PM acceptance` is an operational status signal;
-- neither is cryptographic actor separation;
-- a principal with equivalent write permission can apply the label;
-- a same-repository GitHub Actions workflow with `statuses: write` can mint the same status context;
-- the current mechanism is not intended to resist an intentionally malicious equally privileged actor.
+- source isolation prevents PR-controlled GitHub Actions from spoofing the authoritative required status;
+- PM actor allowlisting can reject `github-actions[bot]` and other automation actors;
+- it does not distinguish two roles that deliberately operate as the same human/account identity.
 
-This limitation is architectural, not a bug in the event-order workflow logic.
+Do not describe the label itself as cryptographic authorization.
 
-## Post-landing verification campaign
+For full actor separation, use a dedicated PM account/team or another owner-controlled identity ordinary workers cannot use.
 
-After the support PR lands and the owner activates the ruleset, use a disposable documentation-only PR.
+## Emergency bypass policy
 
-### Case 1 — broad CI green, no operational acceptance
+There is no routine bypass actor.
+
+For a repository-blocking emergency only:
+
+1. record the reason and affected PR/commit on the PM board;
+2. temporarily alter/bypass only the minimum rule using repository-owner authority;
+3. perform the emergency action;
+4. restore the active ruleset immediately;
+5. verify source-bound required checks and `main` protection again;
+6. record the verification result.
+
+Emergency bypass is not for skipping dependency order, architecture review, deterministic validation, PM acceptance, or protected-roadmap ownership.
+
+## Mandatory owner/external setup
+
+The connected project tooling can read repository protection/rulesets but cannot create the required GitHub App identity or activate the final source-bound ruleset.
+
+Owner/external setup must therefore:
+
+1. create/select a distinct PM GitHub App/integration;
+2. host its webhook/status publisher outside repository PR-controlled Actions;
+3. keep App credentials outside repository workflow-accessible secrets;
+4. configure PM actor/sender policy;
+5. install the App with minimal required permissions;
+6. observe at least one `PM acceptance` status emitted by that App so GitHub can select it as the expected source;
+7. activate the `main` ruleset with required App source binding;
+8. enable require-branches-up-to-date;
+9. run the verification campaign below.
+
+Until those steps are complete, #118 is not DONE.
+
+## Mandatory verification campaign
+
+Use a harmless throwaway documentation PR after the App and ruleset are active.
+
+### Case 1 — broad CI green, no PM acceptance
 
 Expected:
 
 ```text
 broad CI = green
-PM acceptance = failure
-merge = blocked by configured project rules
+PM acceptance from external App = failure/missing
+merge = blocked
 ```
 
-### Case 2 — explicit current-head acceptance
+### Case 2 — explicit exact-head acceptance
 
-Expected under normal project operation:
-
-```text
-non-draft current head
-+ explicit pm-accepted event
-+ broad CI green
-+ branch current with main
-=> operational merge gate may pass
-```
-
-### Case 3 — accepted SHA A, then push SHA B
+Make the PR non-draft and apply `pm-accepted` through the allowed PM actor.
 
 Expected:
 
 ```text
-PM acceptance = failure on B
-stale pm-accepted removed
-B blocked until explicit re-acceptance
+Godot character contracts = success
+Repository layout contracts = success
+Godot headless contracts = success
+PM acceptance (external App source) = success
+merge = allowed only if branch is current with main
 ```
 
-### Case 4 — main advances while PR is green
+### Case 3 — new-head invalidation
+
+From accepted SHA A, push harmless SHA B.
 
 Expected:
 
 ```text
-PR becomes out of date
-merge blocked
-synchronize required
-all required checks rerun on new head
+PM acceptance on B = failure before any fresh grant
+stale pm-accepted metadata is removed
+B cannot merge until revalidated and explicitly re-accepted
 ```
 
-### Case 5 — reordered same-head events
+### Case 4 — same-head event race
 
-Exercise labeled/unlabeled/synchronize ordering around one SHA.
+Exercise rapid label/synchronize or label/remove transitions for one head.
 
-After events settle:
+Expected final invariant:
 
 ```text
-pm-accepted absent => intended operational PM acceptance is not success
+if live pm-accepted is absent or PR is draft:
+PM acceptance final state != success
 ```
 
-### Case 6 — unrelated labels
+### Case 5 — Actions spoof attempt
 
-Unrelated label events must never grant operational acceptance.
+On a throwaway PR, run a deliberately scoped test workflow that posts a status named `PM acceptance` using the normal GitHub Actions identity.
 
-### Case 7 — draft transition
-
-An accepted PR converted back to draft must fail the operational PM gate and require fresh acceptance after returning to ready.
-
-### Case 8 — deterministic aggregate
-
-All ten deterministic shards must run. One controlled shard failure must cause:
+Expected:
 
 ```text
-Godot headless contracts = failure
+spoof context may exist in commit status history
+ruleset does NOT count it as the required external-App PM acceptance
+merge remains blocked
 ```
 
-### Case 9 — direct push
+Do not retain the spoof workflow after the test.
 
-A normal direct push to `main` without administrative bypass must be rejected.
+### Case 6 — stale-main rejection
 
-### Case 10 — trust-boundary assertion
+Accept and green a throwaway PR, then advance `main` independently.
 
-Explicitly record that the current campaign does **not** prove source-isolated PM authorization while ordinary repository Actions can mint the same status context.
+Expected:
 
-Do not mark that stronger property as tested or satisfied until a distinct trusted identity exists.
+```text
+PR becomes non-merge-eligible until updated with current main
+required checks rerun on synchronized head
+```
 
-## Connector limitation
+### Case 7 — deterministic aggregate
 
-The connected GitHub tooling can read rulesets/protection but does not expose a write action for creating or activating the final repository ruleset.
+Confirm all ten shards execute and stable:
 
-Therefore #118 has two practical layers:
+```text
+Godot headless contracts
+```
 
-1. in-repository operational workflow/documentation support;
-2. repository-owner ruleset activation and verification.
+passes only when the complete matrix succeeds.
 
-A future source-isolated PM authorization mechanism is a separate trust-boundary upgrade unless an external identity is supplied during this task.
+### Case 8 — direct push
+
+Attempt a harmless normal direct push to `main` without administrative bypass.
+
+Expected:
+
+```text
+push rejected
+main unchanged
+```
 
 ## Owner activation checklist
 
-- [ ] `Underworld main merge gate` exists and is Active
-- [ ] target is only default branch / `main`
-- [ ] pull request required before merge
-- [ ] branch required to be up to date before merge
-- [ ] direct push restricted for normal workflow
-- [ ] force push blocked
-- [ ] branch deletion blocked
-- [ ] `Godot character contracts` required
-- [ ] `Repository layout contracts` required
-- [ ] stable `Godot headless contracts` required
-- [ ] operational `PM acceptance` configured if retaining the same-principal guard
-- [ ] no ordinary worker/Actions bypass actor configured
-- [ ] no self-approval rule that deadlocks the current same-account model
-- [ ] exact-head invalidation campaign passed
-- [ ] out-of-date branch rejection verified
-- [ ] same-head reordered-event campaign passed
-- [ ] unrelated labels proven unable to grant through the intended workflow
-- [ ] draft behavior verified
-- [ ] failed-shard aggregate behavior verified
-- [ ] direct-push rejection verified
-- [ ] limitation that same-repo Actions can mint the same status context is explicitly recorded
+- [ ] distinct external PM GitHub App/integration exists;
+- [ ] App publisher is outside PR-controlled repository Actions;
+- [ ] App credentials are not available to ordinary repository workflows;
+- [ ] PM actor/sender policy configured;
+- [ ] `Underworld main merge gate` ruleset exists and is Active;
+- [ ] target is only default branch / `main`;
+- [ ] pull request required before merge;
+- [ ] branches must be up to date before merge;
+- [ ] direct push restricted;
+- [ ] force push blocked;
+- [ ] branch deletion blocked;
+- [ ] `Godot character contracts` required;
+- [ ] `Repository layout contracts` required;
+- [ ] stable `Godot headless contracts` required;
+- [ ] `PM acceptance` required from the distinct PM App source;
+- [ ] GitHub Actions App is not accepted as PM-status source;
+- [ ] no ordinary Actions/worker bypass configured;
+- [ ] no self-approval rule that deadlocks same-account workflow;
+- [ ] Actions spoof attempt does not satisfy PM requirement;
+- [ ] synchronize invalidation observed;
+- [ ] same-head race invariant observed;
+- [ ] stale-main rejection observed;
+- [ ] draft behavior observed;
+- [ ] direct-push rejection observed.
 
 ## Invariants
 
-1. Green CI is necessary but not sufficient by project policy.
-2. The intended PM workflow executes only trusted default-branch workflow code and never PR-controlled code.
-3. Only explicit `labeled: pm-accepted` may grant success through the intended workflow.
-4. Synchronize and acceptance removal revoke/fail through the intended workflow.
-5. Same-PR workflow runs are coordinated and live state is rechecked at the grant decision point.
-6. Superseded old-head events do not mutate the newer head through the intended workflow.
-7. The `PM acceptance` context is **not source-isolated** from other same-repository GitHub Actions under the current identity model.
-8. Required-status App binding to the shared GitHub Actions App does not create actor separation.
-9. True PM authorization requires a distinct trusted identity or equivalent owner-controlled mechanism.
-10. The deterministic campaign remains ten 25-seed shards covering 2,250 seed/region cases.
-11. `Godot headless contracts` is the stable deterministic aggregate required by branch rules.
-12. Merge eligibility requires the PR branch to be up to date with `main`.
-13. Normal updates to `main` use pull requests only.
+1. Green CI is necessary but never sufficient.
+2. Required `PM acceptance` is source-bound to a distinct external PM App, not GitHub Actions.
+3. Candidate PR workflows cannot satisfy the source-bound PM requirement by posting the same context name.
+4. Repository Actions never hold credentials that let them publish as the external PM App.
+5. Only explicit current-head PM acceptance may grant success.
+6. New heads require revalidation and re-acceptance.
+7. Draft/lifecycle transitions cannot manufacture approval.
+8. Same-head event races cannot leave authoritative success when live approval state is invalid.
+9. `pm-accepted` remains an operational signal under the current same-principal human-role model.
+10. The full deterministic campaign remains ten shards covering 2,250 seed/region cases.
+11. `Godot headless contracts` is the stable deterministic aggregate.
+12. Branches must be up to date with `main` before merge.
+13. Normal `main` updates use pull requests only.
 14. Force pushes and branch deletion are not normal workflow.
 15. Emergency bypass is temporary, explicit, narrow, and recorded.
 16. Governance rules never authorize violating architecture, dependency, or protected-roadmap contracts.
