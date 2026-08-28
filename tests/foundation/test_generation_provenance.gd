@@ -14,6 +14,7 @@ static func run() -> Array[String]:
 	_test_coherent_pipeline(failures)
 	_test_mixed_seed_and_manifest_rejection(failures)
 	_test_invalid_ancestry(failures)
+	_test_mutation_and_required_ancestry(failures)
 	return failures
 
 
@@ -61,6 +62,18 @@ static func _test_invalid_ancestry(failures: Array[String]) -> void:
 	var invalid := Provenance.new("world1", "manifest1", "macro_region", 1, "region", "address", ["dup", "dup"])
 	_expect_true(failures, "duplicate ancestry is rejected", not invalid.validate().is_empty())
 	_expect_true(failures, "invalid ancestry has no usable fingerprint", invalid.fingerprint.is_empty())
+
+
+static func _test_mutation_and_required_ancestry(failures: Array[String]) -> void:
+	var context := Context.new(77)
+	var provenance = context.make_provenance("macro_region", "region", "address", ["parent:a"])
+	var original: String = provenance.fingerprint
+	provenance.world_id = "world:mutated"
+	_expect_true(failures, "mutated provenance is rejected", not provenance.validate().is_empty())
+	_expect_true(failures, "provenance fingerprint remains original", provenance.fingerprint == original)
+	_expect_true(failures, "required ancestry rejects substituted parent", not provenance.requires_sources(["parent:b"]).is_empty())
+	context.world_id = "world:wrong"
+	_expect_true(failures, "context world id must match seed", not context.validate().is_empty())
 
 
 static func _expect_true(failures: Array[String], label: String, condition: bool) -> void:

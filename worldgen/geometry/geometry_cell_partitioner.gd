@@ -24,6 +24,10 @@ static func generate(request):
 	if request.world_context != null:
 		failures.append_array(request.world_context.validate_provenance(geometry.provenance, "geometry_description"))
 		failures.append_array(request.world_context.validate_provenance(finalization.provenance, "region_finalization"))
+		if geometry.provenance != null and finalization.provenance != null:
+			failures.append_array(request.world_context.validate_required_sources(
+				geometry.provenance, [finalization.provenance.fingerprint]
+			))
 		if not failures.is_empty():
 			return StageResult.fail("geometry_cell_partition", failures)
 	if geometry.bundle == null or finalization.bundle == null:
@@ -390,7 +394,10 @@ static func _validate_plans(plans: Array) -> Array[String]:
 				owners[source_key] = true
 			for face in fragment.neighboring_cell_addresses.keys():
 				var neighbor = fragment.neighboring_cell_addresses[face]
-				var neighbor_plan = plans_by_coordinate.get(neighbor.coordinate)
+				# Plans are keyed by canonical coordinate text; using Vector3i here
+				# silently skipped mirrored validation because Dictionary does not
+				# coerce the key type.
+				var neighbor_plan = plans_by_coordinate.get(_coordinate_key(neighbor.coordinate))
 				if neighbor_plan == null:
 					continue
 				var opposite := _opposite_face(str(face))
