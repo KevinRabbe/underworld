@@ -78,5 +78,15 @@
         "res://worldgen/"
       ]
     }
+  ],
+  "dependency_exceptions": [
+    {
+      "rule": "worldgen_must_remain_runtime_independent",
+      "source_path": "worldgen/migration/legacy_v2_surface_resolver.gd",
+      "allowed_prefixes": [
+        "res://world/"
+      ],
+      "reason": "Frozen prototype-v2 save migration must replay the legacy surface generators exactly."
+    }
   ]
 }

@@ -68,6 +68,59 @@ def read_text_resource(path: str) -> str | None:
         return None
 
 
+def validate_exception_contracts(
+    dependency_rules: list[dict],
+    dependency_exceptions: list[dict],
+    files: set[str],
+) -> list[str]:
+    errors: list[str] = []
+    rules_by_name = {
+        str(rule.get("name", "")): rule
+        for rule in dependency_rules
+        if str(rule.get("name", ""))
+    }
+
+    for exception in dependency_exceptions:
+        rule_name = str(exception.get("rule", ""))
+        source_path = str(exception.get("source_path", ""))
+        reason = str(exception.get("reason", "")).strip()
+        allowed_prefixes = set(exception.get("allowed_prefixes", []))
+
+        if rule_name not in rules_by_name:
+            errors.append(f"dependency exception references unknown rule: {rule_name}")
+            continue
+        if source_path not in files:
+            errors.append(f"dependency exception source does not exist: {source_path}")
+        if not reason:
+            errors.append(f"dependency exception requires a reason: {source_path}")
+
+        forbidden_prefixes = set(rules_by_name[rule_name].get("forbidden_prefixes", []))
+        invalid_prefixes = allowed_prefixes - forbidden_prefixes
+        for prefix in sorted(invalid_prefixes):
+            errors.append(
+                f"dependency exception allows non-forbidden prefix {prefix} "
+                f"for rule {rule_name}"
+            )
+
+    return errors
+
+
+def is_dependency_exception(
+    dependency_exceptions: list[dict],
+    rule_name: str,
+    source_path: str,
+    prefix: str,
+) -> bool:
+    for exception in dependency_exceptions:
+        if str(exception.get("rule", "")) != rule_name:
+            continue
+        if str(exception.get("source_path", "")) != source_path:
+            continue
+        if prefix in set(exception.get("allowed_prefixes", [])):
+            return True
+    return False
+
+
 def main() -> int:
     try:
         policy = load_policy()
@@ -81,14 +134,24 @@ def main() -> int:
     legacy_allowed_roots = set(policy.get("legacy_allowed_roots", []))
     forbidden_roots = set(policy.get("forbidden_roots", []))
     retired_resource_prefixes = tuple(policy.get("retired_resource_prefixes", []))
-    dependency_rules = policy.get("dependency_rules", [])
+    dependency_rules = list(policy.get("dependency_rules", []))
+    dependency_exceptions = list(policy.get("dependency_exceptions", []))
 
     errors: list[str] = []
     dependency_violations = 0
     retired_path_violations = 0
+    dependency_exceptions_used: set[tuple[str, str, str]] = set()
     legacy_roots_present: set[str] = set()
 
     allowed_roots = canonical_roots | legacy_allowed_roots
+    tracked_file_set = set(files)
+    errors.extend(
+        validate_exception_contracts(
+            dependency_rules,
+            dependency_exceptions,
+            tracked_file_set,
+        )
+    )
 
     for path in files:
         root = top_level(path)
@@ -117,13 +180,22 @@ def main() -> int:
         for rule in dependency_rules:
             if root not in set(rule.get("source_roots", [])):
                 continue
+            rule_name = str(rule.get("name", "unnamed"))
             for prefix in rule.get("forbidden_prefixes", []):
-                if prefix in text:
-                    dependency_violations += 1
-                    errors.append(
-                        f"dependency rule {rule.get('name', 'unnamed')} forbids "
-                        f"{prefix} in {path}"
-                    )
+                if prefix not in text:
+                    continue
+                if is_dependency_exception(
+                    dependency_exceptions,
+                    rule_name,
+                    path,
+                    prefix,
+                ):
+                    dependency_exceptions_used.add((rule_name, path, prefix))
+                    continue
+                dependency_violations += 1
+                errors.append(
+                    f"dependency rule {rule_name} forbids {prefix} in {path}"
+                )
 
     policy_version = int(policy.get("policy_version", 0))
     production_count = sum(1 for path in files if top_level(path) in PRODUCTION_ROOTS)
@@ -145,6 +217,7 @@ def main() -> int:
     print(f"  test files: {test_count}")
     print(f"  tool files: {tool_count}")
     print(f"  legacy roots present: {legacy_summary}")
+    print(f"  dependency exceptions used: {len(dependency_exceptions_used)}")
     print(f"  forbidden root dependencies: {dependency_violations}")
     print(f"  retired path violations: {retired_path_violations}")
     return 0

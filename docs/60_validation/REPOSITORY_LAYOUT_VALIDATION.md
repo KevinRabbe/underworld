@@ -61,6 +61,21 @@ Stage 1 CI currently enforces:
 
 The checker intentionally uses simple path/reference rules. It does not attempt to parse architectural intent from class names or infer ownership from implementation details.
 
+## Named migration exceptions
+
+Dependency exceptions must be explicit, file-specific, prefix-specific and carry a reason in `repository_layout_policy.json`. The validator checks that every exception references a real source file and a real forbidden prefix.
+
+Current exception:
+
+```text
+worldgen/migration/legacy_v2_surface_resolver.gd
+  may reference res://world/
+```
+
+Reason: the frozen prototype-v2 save migration must replay the legacy terrain and pickup generators exactly to map old accepted-index IDs to stable semantic IDs. This exception does **not** permit other `worldgen/` files to depend on `world/`, and it does not permit that resolver to import gameplay, presentation, combat or app code.
+
+Remove the exception when the legacy-v2 replay path is retired or isolated behind a pure compatibility package.
+
 ## What can be validated mechanically
 
 The validator may grow to check:
@@ -121,7 +136,7 @@ worldgen → presentation/         ERROR
 core → gameplay/                 ERROR
 ```
 
-Some dependencies require semantic review and should not be guessed by simple path rules.
+Some dependencies require semantic review and should not be guessed by simple path rules. Required compatibility exceptions must be encoded narrowly rather than weakening an entire dependency rule.
 
 ## Content/path identity check
 
@@ -168,6 +183,7 @@ A successful run reports a compact summary similar to:
   test files: 42
   tool files: 2
   legacy roots present: combat, data
+  dependency exceptions used: 1
   forbidden root dependencies: 0
   retired path violations: 0
 ```
@@ -181,9 +197,10 @@ Current progress:
 1. canonical tree and legacy migration map — **done**;
 2. lightweight root/path policy checker — **done**;
 3. forbidden production → tests/tools dependency checks — **done**;
-4. tighten legacy path rules after actual domain migrations — **active, domain by domain**;
-5. content-registry/content validation — **future family cycle**;
-6. richer static dependency checks — **only where they produce reliable signal**.
+4. narrow, validated migration exceptions — **done**;
+5. tighten legacy path rules after actual domain migrations — **active, domain by domain**;
+6. content-registry/content validation — **future family cycle**;
+7. richer static dependency checks — **only where they produce reliable signal**.
 
 ## Merge policy
 
