@@ -180,6 +180,7 @@ func _create_debug_hud() -> void:
 		world_settings,
 		survival,
 		combat_resolver,
-		encounter_controller
+		encounter_controller,
+		underworld_runtime
 	)
 	add_child(debug_hud)
