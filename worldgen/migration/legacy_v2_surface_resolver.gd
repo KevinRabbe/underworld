@@ -1,8 +1,8 @@
 extends RefCounted
 class_name UnderworldLegacyV2SurfaceResolver
 
-const TerrainGeneratorScript := preload("res://world/terrain_generator.gd")
-const PickupGeneratorScript := preload("res://world/pickup_generator.gd")
+const TerrainGeneratorScript := preload("res://worldgen/surface/terrain_generator.gd")
+const PickupGeneratorScript := preload("res://worldgen/surface/pickup_generator.gd")
 const StableAddressScript := preload("res://worldgen/identity/stable_address.gd")
 const StableIdScript := preload("res://worldgen/identity/stable_id.gd")
 

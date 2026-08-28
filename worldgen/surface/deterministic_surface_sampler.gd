@@ -1,8 +1,8 @@
 extends RefCounted
 class_name UnderworldDeterministicSurfaceSampler
 
-const WorldSettings := preload("res://data/world_settings.gd")
-const TerrainGenerator := preload("res://world/terrain_generator.gd")
+const SurfaceSettings := preload("res://worldgen/surface/prototype_surface_settings.gd")
+const TerrainGenerator := preload("res://worldgen/surface/terrain_generator.gd")
 const SurfaceSample := preload("res://worldgen/surface/deterministic_surface_sample.gd")
 
 var world_seed: int
@@ -12,7 +12,7 @@ var _terrain
 
 func _init(seed_value: int) -> void:
 	world_seed = seed_value
-	_settings = WorldSettings.new()
+	_settings = SurfaceSettings.new()
 	_settings.world_seed = world_seed
 	_terrain = TerrainGenerator.new()
 	_terrain.configure(_settings)
