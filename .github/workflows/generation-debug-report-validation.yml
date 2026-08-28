@@ -1,0 +1,63 @@
+name: Generation Debug Report Validation
+
+on:
+  pull_request:
+    paths:
+      - 'tools/generation_debug/**'
+      - 'worldgen/**'
+      - '.github/workflows/generation-debug-report-validation.yml'
+  push:
+    branches:
+      - 'task/MAP-007-generation-debug-report'
+
+permissions:
+  contents: read
+
+jobs:
+  generation-debug-report:
+    name: Godot generation debug report contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Run debug report contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tools/generation_debug/run_generation_debug_report_contracts.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[GENERATION DEBUG CONTRACTS] PASS' "$validation_log"
+
+      - name: Export real debug report
+        run: |
+          set -o pipefail
+          export_log="$(mktemp)"
+          output_dir="/tmp/underworld-generation-debug"
+          godot --headless --path . --quit-after 1 \
+            --script res://tools/generation_debug/export_generation_debug_report.gd -- \
+            --seed=12345 --region-x=0 --region-z=0 \
+            --out-dir="$output_dir" --basename=ci_generation_debug 2>&1 \
+            | tee "$export_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$export_log"; then
+            exit 1
+          fi
+          grep -Fq '[GENERATION DEBUG] PASS' "$export_log"
+          test -s "$output_dir/ci_generation_debug.json"
+          test -s "$output_dir/ci_generation_debug.txt"
+          grep -Fq 'underworld-generation-debug-report-v1' "$output_dir/ci_generation_debug.json"
+          grep -Fq 'macro_region' "$output_dir/ci_generation_debug.txt"
+          grep -Fq 'primary_topology' "$output_dir/ci_generation_debug.txt"
