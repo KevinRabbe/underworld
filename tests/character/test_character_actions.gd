@@ -1,7 +1,7 @@
 extends RefCounted
 
-const StaminaScript := preload("res://player/stamina_component.gd")
-const ActionControllerScript := preload("res://player/player_action_controller.gd")
+const StaminaScript := preload("res://gameplay/player/components/stamina_component.gd")
+const ActionControllerScript := preload("res://gameplay/player/actions/player_action_controller.gd")
 
 
 static func run() -> Array[String]:

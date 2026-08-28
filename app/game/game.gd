@@ -2,7 +2,7 @@ extends Node3D
 
 const WorldSettingsScript := preload("res://data/world_settings.gd")
 const ChunkManagerScript := preload("res://world/chunk_manager.gd")
-const PlayerScript := preload("res://player/player.gd")
+const PlayerScript := preload("res://gameplay/player/player.gd")
 const CombatManagerScript := preload("res://combat/combat_manager.gd")
 const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
 
