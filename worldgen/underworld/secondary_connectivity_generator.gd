@@ -33,6 +33,33 @@ static func generate(context, region_plan, primary_topology, entrance_result, ne
 	var failures: Array[String] = context.validate()
 	if not failures.is_empty():
 		return StageResult.fail("secondary_connectivity", failures)
+	failures.append_array(context.validate_provenance(
+		region_plan.provenance, "macro_region", region_plan.stable_id
+	))
+	failures.append_array(context.validate_provenance(
+		primary_topology.provenance, "primary_topology", region_plan.stable_id,
+		[region_plan.provenance.fingerprint]
+	))
+	failures.append_array(context.validate_provenance(
+		entrance_result.provenance, "entrance_selection", region_plan.stable_id,
+		[region_plan.provenance.fingerprint, primary_topology.provenance.fingerprint]
+	))
+	for view in neighbor_views:
+		if not (view is Dictionary):
+			continue
+		var neighbor_plan = view.get("region_plan")
+		var neighbor_topology = view.get("primary_topology")
+		if neighbor_plan != null and neighbor_plan.provenance != null:
+			failures.append_array(context.validate_provenance(
+				neighbor_plan.provenance, "macro_region", neighbor_plan.stable_id
+			))
+		if neighbor_topology != null and neighbor_plan != null and neighbor_topology.provenance != null:
+			failures.append_array(context.validate_provenance(
+				neighbor_topology.provenance, "primary_topology", neighbor_plan.stable_id,
+				[neighbor_plan.provenance.fingerprint]
+			))
+	if not failures.is_empty():
+		return StageResult.fail("secondary_connectivity", failures)
 
 	var source = entrance_result.bundle
 	if source.region_definition.stable_id != region_plan.stable_id:
@@ -124,11 +151,37 @@ static func generate(context, region_plan, primary_topology, entrance_result, ne
 		"external_edge_references": reference_data,
 		"metrics": metrics,
 	})
+	var provenance = context.make_provenance(
+		"secondary_connectivity",
+		region.stable_id,
+		region.stable_address.canonical_text(),
+		_neighbor_source_fingerprints(region_plan, primary_topology, entrance_result, neighbor_views)
+	)
 	return StageResult.ok(
 		"secondary_connectivity",
-		ConnectivityResult.new(bundle, metadata, external_refs, metrics, fingerprint),
-		fingerprint
+		ConnectivityResult.new(bundle, metadata, external_refs, metrics, fingerprint, provenance),
+		fingerprint,
+		provenance
 	)
+
+
+static func _neighbor_source_fingerprints(region_plan, primary_topology, entrance_result, neighbor_views: Array) -> Array[String]:
+	var sources: Array[String] = [
+		region_plan.provenance.fingerprint,
+		primary_topology.provenance.fingerprint,
+		entrance_result.provenance.fingerprint,
+	]
+	for view in _normalized_neighbors(region_plan, neighbor_views):
+		if not (view is Dictionary):
+			continue
+		var neighbor_plan = view.get("region_plan")
+		var neighbor_topology = view.get("primary_topology")
+		if neighbor_plan != null and neighbor_plan.provenance != null:
+			sources.append(neighbor_plan.provenance.fingerprint)
+		if neighbor_topology != null and neighbor_topology.provenance != null:
+			sources.append(neighbor_topology.provenance.fingerprint)
+	sources.sort()
+	return sources
 
 
 static func _local_candidates(context, region_plan, bundle, nodes: Array) -> Array:

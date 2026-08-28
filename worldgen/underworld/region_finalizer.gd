@@ -46,6 +46,31 @@ static func generate(
 	var failures: Array[String] = context.validate()
 	if not failures.is_empty():
 		return StageResult.fail("region_finalization", failures)
+	failures.append_array(context.validate_provenance(
+		region_plan.provenance, "macro_region", region_plan.stable_id
+	))
+	failures.append_array(context.validate_provenance(
+		entrance_result.provenance, "entrance_selection", region_plan.stable_id
+	))
+	failures.append_array(context.validate_provenance(
+		connectivity_result.provenance, "secondary_connectivity", region_plan.stable_id
+	))
+	failures.append_array(context.validate_provenance(
+		hook_result.provenance, "special_location_hooks", region_plan.stable_id
+	))
+	if region_plan.provenance != null:
+		for input_provenance in [entrance_result.provenance, connectivity_result.provenance, hook_result.provenance]:
+			if input_provenance != null:
+				failures.append_array(context.validate_required_sources(input_provenance, [region_plan.provenance.fingerprint]))
+	if hook_result.provenance != null and connectivity_result.provenance != null:
+		failures.append_array(context.validate_exact_sources(
+			hook_result.provenance,
+			[region_plan.provenance.fingerprint, connectivity_result.provenance.fingerprint]
+		))
+	if connectivity_result.provenance != null and entrance_result.provenance != null:
+		failures.append_array(context.validate_required_sources(connectivity_result.provenance, [entrance_result.provenance.fingerprint]))
+	if not failures.is_empty():
+		return StageResult.fail("region_finalization", failures)
 
 	var bundle = hook_result.bundle
 	var region_id: String = bundle.region_definition.stable_id
@@ -90,10 +115,17 @@ static func generate(
 		"surface_integration_descriptors": surface_data,
 		"metrics": metrics,
 	})
+	var provenance = context.make_provenance(
+		"region_finalization",
+		region_id,
+		bundle.region_definition.stable_address.canonical_text(),
+		[entrance_result.provenance.fingerprint, connectivity_result.provenance.fingerprint, hook_result.provenance.fingerprint]
+	)
 	return StageResult.ok(
 		"region_finalization",
-		FinalizationResult.new(bundle, external_refs, surface_descriptors, metrics, fingerprint),
-		fingerprint
+		FinalizationResult.new(bundle, external_refs, surface_descriptors, metrics, fingerprint, provenance),
+		fingerprint,
+		provenance
 	)
 
 
