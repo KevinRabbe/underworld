@@ -1,6 +1,7 @@
 # Generation Debug Report
 
 Task: `MAP-007`
+Repair: `MAP-007-R1`
 
 This development-only tool exports a deterministic report for the currently merged underground generation pipeline without changing generator behavior.
 
@@ -18,6 +19,16 @@ The command writes:
 - `.json` — machine-readable deterministic report;
 - `.txt` — concise human-readable report.
 
+## Current reported pipeline
+
+The report executes the current merged deterministic path in this order:
+
+1. `macro_region`
+2. `primary_topology`
+3. `entrance_generation`
+
+One `DeterministicSurfaceSampler` is created from the report world seed and shared by primary topology and entrance generation. This mirrors the current production/reproduction path without adding generation retries or consuming any separate randomness stream.
+
 ## Report contents
 
 The report includes:
@@ -25,14 +36,16 @@ The report includes:
 - world seed and stable world ID;
 - generator manifest fingerprint;
 - underground region coordinate;
-- stages in execution order;
+- stages in exact execution order;
 - success/failure state per stage;
 - stage fingerprints;
 - diagnostics from failed stages;
-- explicit retry counts (currently zero for the merged generator, because this task does not add retry behavior);
+- explicit retry counts (currently zero for real merged stages, because this task does not add retry behavior);
 - important generator constants;
-- macro profile/tendency values;
-- primary-topology metrics.
+- macro profile/tendency and candidate-slot values;
+- primary-topology metrics;
+- entrance-generation metrics;
+- entrance candidate count and surface jitter radius.
 
 No wall-clock timestamp is included, so the same seed, region and generator revision reproduce the same report exactly.
 
@@ -47,7 +60,7 @@ This tool is observational only. It does not:
 - touch character/gameplay systems;
 - perform map visualization.
 
-Later generator stages can append their own stage result and parameters using the same report model without changing the report schema.
+Future merged generator stages can append their own stage result and parameters using the same report model without changing the report schema.
 
 ## Validation
 
@@ -56,4 +69,4 @@ godot --headless --path . --quit-after 1 \
   --script res://tools/generation_debug/run_generation_debug_report_contracts.gd
 ```
 
-The contracts cover successful reports, exact deterministic reproduction, synthetic failure diagnostics, explicit retry accounting and negative seed/region coordinates.
+The contracts cover the exact three-stage order, stage fingerprints/metrics, exact deterministic JSON/text reproduction, synthetic entrance-stage failure diagnostics, explicit retry accounting and negative seed/region coordinates. The dedicated CI workflow also exports a real report and requires `entrance_generation` in both JSON and text output.
