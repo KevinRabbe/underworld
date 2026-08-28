@@ -3,15 +3,24 @@ class_name UnderworldDepthProfileProvider
 
 const SeedDomains := preload("res://worldgen/random/seed_domains.gd")
 const SeedDeriver := preload("res://worldgen/random/seed_deriver.gd")
+const SurfaceSampler := preload("res://worldgen/surface/deterministic_surface_sampler.gd")
 
 
-static func sample(context, region_plan, world_position: Vector3, stable_address) -> Vector3:
+static func sample(
+	context,
+	region_plan,
+	world_position: Vector3,
+	stable_address,
+	surface_sampler = null
+) -> Vector3:
 	if context == null or region_plan == null or stable_address == null:
 		return Vector3(1.0, 0.0, 0.0)
 
+	if surface_sampler == null:
+		surface_sampler = SurfaceSampler.new(context.world_seed)
 	var depth_span: float = maxf(region_plan.world_bounds.size.y, 1.0)
 	var depth_ratio: float = clampf(
-		(region_plan.surface_reference_y - world_position.y) / depth_span,
+		surface_relative_depth(surface_sampler, world_position) / depth_span,
 		0.0,
 		1.0
 	)
@@ -28,6 +37,13 @@ static func sample(context, region_plan, world_position: Vector3, stable_address
 	weighted += region_plan.profile_bias * 0.30
 	weighted += jitter
 	return _normalized_profile(weighted)
+
+
+static func surface_relative_depth(surface_sampler, world_position: Vector3) -> float:
+	if surface_sampler == null:
+		return 0.0
+	var surface_sample = surface_sampler.sample(world_position.x, world_position.z)
+	return surface_sample.world_position.y - world_position.y
 
 
 static func resolve_grammar(profile: Vector3, regional_tendencies: Dictionary) -> Dictionary:

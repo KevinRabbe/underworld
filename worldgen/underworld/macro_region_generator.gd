@@ -12,6 +12,7 @@ const REGION_SIZE: float = 512.0
 const REGION_DEPTH: float = 384.0
 const NETWORK_CANDIDATE_COUNT: int = 4
 const SPECIAL_CANDIDATE_COUNT: int = 4
+const ENTRANCE_CANDIDATE_COUNT: int = 6
 
 
 static func generate(context, region_coord: Vector2i):
@@ -48,6 +49,9 @@ static func generate(context, region_coord: Vector2i):
 	var special_slots: Array[int] = []
 	for slot in range(SPECIAL_CANDIDATE_COUNT):
 		special_slots.append(slot)
+	var entrance_slots: Array[int] = []
+	for slot in range(ENTRANCE_CANDIDATE_COUNT):
+		entrance_slots.append(slot)
 
 	var tendencies: Dictionary = {
 		"branching": 0.35 + SeedDeriver.random_unit(
@@ -65,11 +69,11 @@ static func generate(context, region_coord: Vector2i):
 		region_coord,
 		anchor,
 		bounds,
-		0.0,
 		profile_bias,
 		tendencies,
 		network_slots,
-		special_slots
+		special_slots,
+		entrance_slots
 	)
 	return StageResult.ok(
 		"macro_region",
