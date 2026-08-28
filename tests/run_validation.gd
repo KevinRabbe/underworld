@@ -12,6 +12,7 @@ const SurfaceEntranceTests := preload("res://tests/geometry/test_surface_entranc
 const CollisionTests := preload("res://tests/geometry/test_collision_and_gate.gd")
 const RuntimeHarnessTests := preload("res://tests/geometry/test_runtime_validation_harness.gd")
 const RuntimeHarness := preload("res://worldgen/runtime/runtime_validation_harness.gd")
+const Map015FixtureTests := preload("res://tests/geometry/test_map015_fixture.gd")
 const PrimaryTopologyTests := preload("res://tests/topology/test_primary_topology.gd")
 const EntranceGenerationTests := preload("res://tests/entrances/test_entrance_generation.gd")
 const SecondaryConnectivityTests := preload("res://tests/connectivity/test_secondary_connectivity.gd")
@@ -51,6 +52,8 @@ func _init() -> void:
 			_run_geometry_cell_reproduction(args)
 		"runtime-harness":
 			_run_runtime_harness(args)
+		"map015-fixture":
+			_finish("map015-fixture", Map015FixtureTests.run())
 		"batch":
 			_run_batch(args)
 		"geometry-cell-batch":
