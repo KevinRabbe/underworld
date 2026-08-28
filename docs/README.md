@@ -44,8 +44,8 @@ The numeric prefixes are reading-order markers only. They are not game versions,
 - [`DEVELOPMENT_RULEBOOK.md`](DEVELOPMENT_RULEBOOK.md) — architecture-first development and feature-scope rules.
 - [`DECISION_LOG.md`](DECISION_LOG.md) — chronological architectural/project decisions and revisions.
 - [`00_project/DOCUMENTATION_ARCHITECTURE.md`](00_project/DOCUMENTATION_ARCHITECTURE.md) — documentation ownership, document types and migration rules.
-
-DOC-001 and DOC-002 add a canonical glossary and cross-system ownership map. They are intentionally not linked from this branch until those files are present on the target base; this navigation task does not depend on their merge order.
+- [`00_project/GLOSSARY.md`](00_project/GLOSSARY.md) — canonical project terminology and links to owning contracts.
+- [`10_architecture/SYSTEM_OWNERSHIP_MAP.md`](10_architecture/SYSTEM_OWNERSHIP_MAP.md) — cross-system ownership, identity boundaries and dependency routing.
 
 ### Core architecture and dependency direction
 
