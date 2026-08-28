@@ -56,12 +56,19 @@ func _init(
 		output_fingerprint = "mesh-buffers1:" + CanonicalValue.fingerprint({
 			"cell": cell_address.canonical_text() if cell_address != null else "",
 			"input": input_fingerprint,
-			"vertex_count": vertices.size(),
-			"index_count": indices.size(),
-			"normal_count": normals.size(),
-			"uv_count": uvs.size(),
+			"vertices": _packed_to_array(vertices),
+			"indices": _packed_to_array(indices),
+			"normals": _packed_to_array(normals),
+			"uvs": _packed_to_array(uvs),
 		})
 	fingerprint = "cmesh-data1:" + CanonicalValue.fingerprint(canonical_data())
+
+
+static func _packed_to_array(values) -> Array:
+	var result: Array = []
+	for value in values:
+		result.append(value)
+	return result
 
 
 func canonical_data() -> Dictionary:
