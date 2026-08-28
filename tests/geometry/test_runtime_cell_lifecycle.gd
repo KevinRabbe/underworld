@@ -55,6 +55,26 @@ static func run() -> Array[String]:
 	_expect(failures, "source identity change advances generation", stable_record.generation > changed_generation and not stable_record.readiness["definition"])
 	var undemanded := Result.new(stable_address, stable_record.generation, "render", "plan:two", "prov:two", null, true, [], "world:c", "manifest:c")
 	_expect(failures, "undemanded tier result is rejected", not stable.accept_result(undemanded) and not stable_record.readiness["render"])
+	var hysteresis := Streamer.new("world:h", "manifest:h")
+	var render_address := Address.new(Vector3i(3, 0, 0))
+	hysteresis.update_observer(Vector3(64.1, 0.1, 0.1), "route")
+	var render_record = hysteresis.records[render_address.canonical_text()]
+	_expect(failures, "render acquired at activation radius", render_record != null and render_record.demand_count("render") == 1)
+	hysteresis.update_observer(Vector3(32.1, 0.1, 0.1), "route")
+	_expect(failures, "render retained at release-only distance", render_record.demand_count("render") == 1)
+	hysteresis.update_observer(Vector3(0.1, 0.1, 0.1), "route")
+	_expect(failures, "render released beyond release radius", render_record.demand_count("render") == 0)
+	var geometry_address := Address.new(Vector3i(4, 0, 0))
+	hysteresis.update_observer(Vector3(64.1, 0.1, 0.1), "geometry-route")
+	var geometry_record = hysteresis.records[geometry_address.canonical_text()]
+	_expect(failures, "geometry acquired at activation radius", geometry_record != null and geometry_record.demand_count("voxel_geometry") == 1)
+	hysteresis.update_observer(Vector3(32.1, 0.1, 0.1), "geometry-route")
+	_expect(failures, "geometry retained at release-only distance", geometry_record.demand_count("voxel_geometry") == 1)
+	hysteresis.update_observer(Vector3(64.1, 0.1, 0.1), "geometry-route")
+	_expect(failures, "rapid geometry reversal retains demand", geometry_record.demand_count("voxel_geometry") == 1)
+	hysteresis.update_observer(Vector3(0.1, 0.1, 0.1), "geometry-route")
+	_expect(failures, "geometry released beyond release radius", geometry_record.demand_count("voxel_geometry") == 0)
+	_expect(failures, "unbound observer demand does not queue work", hysteresis.queued_count == 0)
 	return failures
 
 
