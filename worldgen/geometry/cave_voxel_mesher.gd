@@ -93,7 +93,7 @@ static func _source_sdf(point: Vector3, fragment) -> float:
 	var metadata: Dictionary = fragment.metadata
 	match str(fragment.source_kind):
 		"chamber":
-			var center: Vector3 = metadata.get("center", fragment.clipped_source_bounds.get_center()); var dimensions: Vector3 = metadata.get("dimensions", fragment.clipped_source_bounds.size); var local := (point - center).rotated(Vector3.UP, -float(metadata.get("rotation_y", 0.0))); var radius := maxf(minf(dimensions.x, minf(dimensions.y, dimensions.z)) * 0.5, 0.01); var q := Vector3(local.x / maxf(dimensions.x * 0.5, 0.01), local.y / maxf(dimensions.y * 0.5, 0.01), local.z / maxf(dimensions.z * 0.5, 0.01)); return (q.length() - 1.0) * radius + _roughness(point, fragment)
+			return _chamber_sdf(point, metadata, fragment.clipped_source_bounds) + _roughness(point, fragment)
 		"tunnel":
 			var points: Array = metadata.get("control_points", []); var best := INF
 			var width := maxf(float(metadata.get("width", 2.0)) * 0.5, 0.1)
@@ -101,11 +101,54 @@ static func _source_sdf(point: Vector3, fragment) -> float:
 			for i in range(maxi(points.size() - 1, 0)):
 				best = minf(best, _elliptical_capsule_sdf(point, points[i], points[i + 1], width, height))
 			return best + _roughness(point, fragment)
-		"entrance": return _box_sdf(point, metadata.get("required_opening_bounds", fragment.clipped_source_bounds)) + _roughness(point, fragment)
+		"entrance": return _entrance_sdf(point, metadata, fragment.clipped_source_bounds) + _roughness(point, fragment)
 		_: return _box_sdf(point, fragment.clipped_source_bounds)
 
 static func _box_sdf(point: Vector3, bounds: AABB) -> float:
 	var q := (point - bounds.get_center()).abs() - bounds.size * 0.5; var outside := Vector3(maxf(q.x, 0.0), maxf(q.y, 0.0), maxf(q.z, 0.0)); return outside.length() + minf(maxf(q.x, maxf(q.y, q.z)), 0.0)
+
+static func _chamber_sdf(point: Vector3, metadata: Dictionary, fallback_bounds: AABB) -> float:
+	var center: Vector3 = metadata.get("center", fallback_bounds.get_center())
+	var dimensions: Vector3 = metadata.get("dimensions", fallback_bounds.size)
+	var family := str(metadata.get("shape_family", "ellipsoid"))
+	var rotation := float(metadata.get("rotation_y", 0.0))
+	var local := (point - center).rotated(Vector3.UP, -rotation)
+	var family_dimensions := dimensions
+	match family:
+		"low_oval": family_dimensions.y *= 0.7
+		"gallery": family_dimensions.x *= 1.25
+		"alcove": family_dimensions.z *= 0.75
+		"fracture_vault": family_dimensions.x *= 1.15; family_dimensions.z *= 0.8
+		"junction_vault": family_dimensions *= 1.1
+		"arched_ellipsoid": family_dimensions.y *= 0.9
+		"entrance_vestibule": family_dimensions.x *= 1.1
+		"irregular_ellipsoid": pass
+	var radius := maxf(minf(family_dimensions.x, minf(family_dimensions.y, family_dimensions.z)) * 0.5, 0.01)
+	var q := Vector3(local.x / maxf(family_dimensions.x * 0.5, 0.01), local.y / maxf(family_dimensions.y * 0.5, 0.01), local.z / maxf(family_dimensions.z * 0.5, 0.01))
+	var distance := (q.length() - 1.0) * radius
+	if family == "arched_ellipsoid": distance = maxf(distance, local.y - family_dimensions.y * 0.35)
+	if family == "irregular_ellipsoid": distance += sin(local.x * 0.37) * sin(local.z * 0.29) * 0.12
+	if family == "fracture_vault": distance += absf(sin(local.x * 0.21 + local.z * 0.17)) * 0.08
+	return distance
+
+static func _entrance_sdf(point: Vector3, metadata: Dictionary, fallback_bounds: AABB) -> float:
+	var opening: AABB = metadata.get("required_opening_bounds", fallback_bounds)
+	var orientation: Vector3 = metadata.get("orientation", Vector3.FORWARD)
+	var yaw := atan2(orientation.x, orientation.z)
+	var local_point := (point - opening.get_center()).rotated(Vector3.UP, -yaw) + opening.get_center()
+	var opening_distance := _box_sdf(local_point, opening)
+	var surface: Vector3 = metadata.get("surface_world_position", opening.get_center())
+	var underground: Vector3 = metadata.get("underground_anchor", opening.get_center())
+	var radius := maxf(float(metadata.get("clearance_radius", 1.0)), 0.25)
+	var profile := str(metadata.get("descent_profile", "gradual"))
+	if profile == "gradual": radius *= 1.2
+	if profile == "steep": radius *= 0.9
+	return minf(opening_distance, _capsule_sdf(point, surface, underground, radius))
+
+static func _capsule_sdf(point: Vector3, a: Vector3, b: Vector3, radius: float) -> float:
+	var ab := b - a
+	var t := clampf((point - a).dot(ab) / maxf(ab.length_squared(), 0.000001), 0.0, 1.0)
+	return point.distance_to(a.lerp(b, t)) - radius
 
 static func _elliptical_capsule_sdf(point: Vector3, a: Vector3, b: Vector3, radius_x: float, radius_y: float) -> float:
 	var axis_vector := b - a
