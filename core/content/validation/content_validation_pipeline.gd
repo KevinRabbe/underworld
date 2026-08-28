@@ -77,6 +77,7 @@ func _validate(
 	target_family: String
 ) -> Dictionary:
 	var diagnostics: Array = []
+	var id_targeting_requested: bool = not raw_target_ids.is_empty()
 	var target_ids: Dictionary = {}
 	for raw_target_id in raw_target_ids:
 		var target_id: String = str(raw_target_id)
@@ -177,7 +178,7 @@ func _validate(
 	var reference_edges: Array = []
 	for candidate in definitions:
 		if candidate == null or not candidate is ContentDefinition:
-			if target_ids.is_empty() and target_family.is_empty():
+			if not id_targeting_requested and target_family.is_empty():
 				_add_diagnostic(
 					diagnostics,
 					"definition_type_invalid",
@@ -187,7 +188,12 @@ func _validate(
 				)
 			continue
 
-		var selected: bool = _is_selected_definition(candidate, target_ids, target_family)
+		var selected: bool = _is_selected_definition(
+			candidate,
+			target_ids,
+			target_family,
+			id_targeting_requested
+		)
 		var candidate_id: String = str(candidate.content_id)
 		var definition_failures: Array[String] = candidate.validate_definition()
 		var base_valid: bool = definition_failures.is_empty()
@@ -593,9 +599,10 @@ func _component_edges(component: Array, edges: Array) -> Array:
 func _is_selected_definition(
 	definition,
 	target_ids: Dictionary,
-	target_family: String
+	target_family: String,
+	id_targeting_requested: bool
 ) -> bool:
-	if not target_ids.is_empty() and not target_ids.has(str(definition.content_id)):
+	if id_targeting_requested and not target_ids.has(str(definition.content_id)):
 		return false
 	if not target_family.is_empty() and str(definition.definition_family) != target_family:
 		return false
