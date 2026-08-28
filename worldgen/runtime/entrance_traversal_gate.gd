@@ -15,11 +15,13 @@ func _init(entrance_id_value: String, required_cells_value: Array = []) -> void:
 
 func update(streamer) -> bool:
 	diagnostics.clear()
-	var ready := true
+	var ready := not required_cells.is_empty()
+	if required_cells.is_empty():
+		diagnostics.append("no validated destination collision cells")
 	for address in required_cells:
 		var key: String = address.canonical_text()
 		var record = streamer.records.get(key)
-		if record == null or bool(record.release_pending) or not bool(record.readiness.get("collision", false)):
+		if record == null or bool(record.release_pending) or not bool(record.readiness.get("collision", false)) or record.collision_handle == null:
 			ready = false
 			diagnostics.append("collision not ready: " + key)
 	open = ready
