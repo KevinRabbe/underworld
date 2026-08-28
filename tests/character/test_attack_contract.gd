@@ -1,10 +1,10 @@
 extends RefCounted
 
-const StaminaScript := preload("res://player/stamina_component.gd")
-const ActionControllerScript := preload("res://player/player_action_controller.gd")
+const StaminaScript := preload("res://gameplay/player/components/stamina_component.gd")
+const ActionControllerScript := preload("res://gameplay/player/actions/player_action_controller.gd")
 const AttackCatalogScript := preload("res://combat/player_attack_catalog.gd")
 const CombatManagerScript := preload("res://combat/combat_manager.gd")
-const PlayerScript := preload("res://player/player.gd")
+const PlayerScript := preload("res://gameplay/player/player.gd")
 
 
 static func run(tree: SceneTree) -> Array[String]:

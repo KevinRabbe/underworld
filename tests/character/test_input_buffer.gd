@@ -1,7 +1,7 @@
 extends RefCounted
 
-const InputBufferScript := preload("res://player/player_input_buffer.gd")
-const PlayerScript := preload("res://player/player.gd")
+const InputBufferScript := preload("res://gameplay/player/input/player_input_buffer.gd")
+const PlayerScript := preload("res://gameplay/player/player.gd")
 
 
 static func run(tree: SceneTree) -> Array[String]:

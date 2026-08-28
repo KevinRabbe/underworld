@@ -1,6 +1,6 @@
 extends RefCounted
 
-const MannequinScript := preload("res://player/prototype_mannequin.gd")
+const MannequinScript := preload("res://presentation/characters/player/prototype_mannequin/prototype_mannequin.gd")
 
 
 static func run() -> Array[String]:

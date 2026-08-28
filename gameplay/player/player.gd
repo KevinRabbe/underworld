@@ -6,10 +6,10 @@ signal hotbar_slot_requested(slot: int)
 signal craft_requested(recipe_id: String)
 signal parry_succeeded(source_position: Vector3)
 
-const PrototypeMannequinScript := preload("res://player/prototype_mannequin.gd")
-const StaminaComponentScript := preload("res://player/stamina_component.gd")
-const PlayerActionControllerScript := preload("res://player/player_action_controller.gd")
-const PlayerInputBufferScript := preload("res://player/player_input_buffer.gd")
+const PrototypeMannequinScript := preload("res://presentation/characters/player/prototype_mannequin/prototype_mannequin.gd")
+const StaminaComponentScript := preload("res://gameplay/player/components/stamina_component.gd")
+const PlayerActionControllerScript := preload("res://gameplay/player/actions/player_action_controller.gd")
+const PlayerInputBufferScript := preload("res://gameplay/player/input/player_input_buffer.gd")
 const AttackCatalogScript := preload("res://combat/player_attack_catalog.gd")
 
 const WALK_SPEED := 6.0
@@ -288,8 +288,6 @@ func _request_attack() -> void:
 	if action_controller.is_free():
 		_start_attack_from_intent(intent)
 		return
-	# A buffered attack is not committed yet. Remember only the button intent;
-	# weapon and facing are resolved when the controller becomes free.
 	input_buffer.push(&"attack")
 
 
@@ -452,8 +450,6 @@ func _get_requested_dodge_direction() -> Vector3:
 	)
 	var dodge_direction: Vector3 = _camera_relative_direction(input_vector)
 	if dodge_direction.is_zero_approx() and visual_root != null:
-		# The visual convention uses +Z as character forward, so no-input dodge
-		# becomes a predictable backstep along local -Z.
 		dodge_direction = -visual_root.global_transform.basis.z
 		dodge_direction.y = 0.0
 	if dodge_direction.is_zero_approx():
@@ -488,8 +484,6 @@ func _start_parry() -> bool:
 func _update_tool_use_feedback(delta: float) -> void:
 	tool_use_cooldown_timer = maxf(0.0, tool_use_cooldown_timer - delta)
 	tool_swing_timer = maxf(0.0, tool_swing_timer - delta)
-	# The articulated right arm now supplies the visible swing. The equipment
-	# socket itself stays stable so tools do not need their own fake animation.
 
 
 func _configure_character_body() -> void:
