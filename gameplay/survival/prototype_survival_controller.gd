@@ -4,6 +4,7 @@ signal equipped_tool_changed(tool_id: String)
 
 var settings
 var world
+var world_seed: int = 0
 var player: Node3D
 
 var object_hit_progress: Dictionary = {}
@@ -17,9 +18,10 @@ var last_action_message: String = "Walk over loose branches and stones"
 var pickup_update_timer: float = 0.0
 
 
-func configure(world_node, survival_settings) -> void:
+func configure(world_node, survival_settings, seed: int) -> void:
 	world = world_node
 	settings = survival_settings
+	world_seed = seed
 	_load_state()
 
 
@@ -242,14 +244,8 @@ func get_crafting_cost(recipe_id: String) -> Vector2i:
 	return Vector2i.ZERO
 
 
-func _get_world_seed() -> int:
-	if world == null:
-		return 0
-	return int(world.get_world_seed())
-
-
 func _get_save_path() -> String:
-	return "user://underworld_seed_%d.json" % _get_world_seed()
+	return "user://underworld_seed_%d.json" % world_seed
 
 
 func _reset_state() -> void:
@@ -281,7 +277,7 @@ func _load_state() -> void:
 		return
 
 	var save_data: Dictionary = parsed
-	if int(save_data.get("world_seed", -1)) != _get_world_seed():
+	if int(save_data.get("world_seed", -1)) != world_seed:
 		return
 
 	var destroyed_list: Array = save_data.get("destroyed_objects", [])
@@ -316,7 +312,7 @@ func _save_state() -> void:
 
 	var save_data: Dictionary = {
 		"version": 2,
-		"world_seed": _get_world_seed(),
+		"world_seed": world_seed,
 		"destroyed_objects": destroyed_list,
 		"wood": gathered_wood,
 		"stone": gathered_stone,
