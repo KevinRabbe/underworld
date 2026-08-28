@@ -122,14 +122,8 @@ func update_observer(position: Vector3, source: String = "player") -> void:
 			for z in range(center.z - definition_activate_radius, center.z + definition_activate_radius + 1):
 				var coordinate := Vector3i(x, y, z)
 				var distance := _cell_distance(center, coordinate)
-				var tiers: Array[String] = ["definition"]
-				if distance <= geometry_activate_radius:
-					tiers.append("fragment_plan")
-					tiers.append("voxel_geometry")
-				if distance <= render_activate_radius:
-					tiers.append("render")
-				if distance <= collision_activate_radius:
-					tiers.append("collision")
+				var record = records.get(Address.new(coordinate).canonical_text())
+				var tiers: Array[String] = _observer_tiers(record, distance)
 				set_demand(Address.new(coordinate), source, tiers)
 	for record in records.values():
 		if not record.demands.has(source):
@@ -162,6 +156,9 @@ func accept_result(result) -> bool:
 	if result.world_id != world_id or result.generator_manifest_id != generator_manifest_id:
 		stale_result_count += 1
 		return false
+	if record.source_fingerprint.is_empty() or record.provenance_fingerprint.is_empty():
+		stale_result_count += 1
+		return false
 	if record.demands.is_empty() or record.demand_count(result.tier) <= 0:
 		stale_result_count += 1
 		return false
@@ -175,6 +172,9 @@ func accept_result(result) -> bool:
 		stale_result_count += 1
 		return false
 	if result.tier == "collision" and result.payload == null:
+		stale_result_count += 1
+		return false
+	if result.tier == "collision" and not (result.payload is ConcavePolygonShape3D):
 		stale_result_count += 1
 		return false
 	record.queued[result.tier] = false
@@ -250,6 +250,10 @@ func _queue_if_needed(record) -> void:
 	var tiers: Array = record.demanded_tiers()
 	if tiers.is_empty():
 		return
+	# Observer demand may establish desired tiers before the definition service
+	# binds authoritative source/provenance identity. Never queue unbound work.
+	if record.source_fingerprint.is_empty() or record.provenance_fingerprint.is_empty():
+		return
 	var request := Request.new(record.cell_address, record.generation, tiers, record.source_fingerprint, record.provenance_fingerprint, world_id, generator_manifest_id)
 	for tier in tiers:
 		if record.readiness.get(tier, false) or record.queued.get(tier, false):
@@ -277,3 +281,32 @@ func _update_state(record) -> void:
 
 func _cell_distance(a: Vector3i, b: Vector3i) -> int:
 	return maxi(abs(a.x - b.x), maxi(abs(a.y - b.y), abs(a.z - b.z)))
+
+
+func _observer_tiers(record, distance: int) -> Array[String]:
+	var tiers: Array[String] = ["definition"]
+	if distance <= geometry_activate_radius:
+		tiers.append("fragment_plan")
+		tiers.append("voxel_geometry")
+	if distance <= render_activate_radius:
+		tiers.append("render")
+	if distance <= collision_activate_radius:
+		tiers.append("collision")
+	if record != null:
+		if distance <= geometry_release_radius and record.demand_count("fragment_plan") > 0:
+			tiers.append("fragment_plan")
+		if distance <= geometry_release_radius and record.demand_count("voxel_geometry") > 0:
+			tiers.append("voxel_geometry")
+		if distance <= render_release_radius and record.demand_count("render") > 0:
+			tiers.append("render")
+		if distance <= collision_release_radius and record.demand_count("collision") > 0:
+			tiers.append("collision")
+		if distance <= definition_release_radius and record.demand_count("definition") > 0:
+			tiers.append("definition")
+	var unique: Dictionary = {}
+	var result: Array[String] = []
+	for tier in tiers:
+		if not unique.has(tier):
+			unique[tier] = true
+			result.append(tier)
+	return result

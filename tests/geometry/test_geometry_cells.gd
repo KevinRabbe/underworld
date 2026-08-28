@@ -20,6 +20,9 @@ static func run() -> Array[String]:
 	_test_exact_boundaries_and_continuation(failures)
 	_test_negative_cells_and_configuration(failures)
 	_test_configuration_identity_mutation(failures)
+	_test_unmirrored_continuation_rejected(failures)
+	_test_partition_rejects_extra_geometry_parent(failures)
+	_test_partition_accepts_reversed_expected_parent_order(failures)
 	_test_type_and_region_validation(failures)
 	return failures
 
@@ -92,14 +95,14 @@ static func _test_type_and_region_validation(failures: Array[String]) -> void:
 	var fixture := _fixture()
 	var missing_context = Partitioner.partition(fixture.geometry, fixture.finalization, Config.new())
 	_expect_true(failures, "authoritative partition requires context", not missing_context.success)
-	var wrong = Partitioner.partition(fixture.finalization, fixture.finalization, Config.new(), [], fixture.context)
+	var wrong = Partitioner.partition(fixture.finalization, fixture.finalization, Config.new(), [], fixture.context, fixture.geometry.provenance.source_stage_fingerprints)
 	_expect_true(failures, "wrong geometry input type is rejected", not wrong.success)
 	var source_bundle = SampleGraphFixture.build()
 	var other_region_address = StableAddress.underground_region(99, 99)
 	var other_region = RegionDefinition.new(other_region_address, Vector2i(99, 99), Vector3.ZERO, AABB(Vector3.ZERO, Vector3.ONE))
 	var other_bundle = RegionGraphBundle.new(other_region)
 	var other_finalization := FinalizationResult.new(other_bundle, [], [], {}, "finalization-other")
-	var mismatched = Partitioner.partition(fixture.geometry, other_finalization, Config.new(), [], fixture.context)
+	var mismatched = Partitioner.partition(fixture.geometry, other_finalization, Config.new(), [], fixture.context, fixture.geometry.provenance.source_stage_fingerprints)
 	_expect_true(failures, "mismatched region input is rejected", not mismatched.success)
 
 
@@ -110,6 +113,71 @@ static func _test_configuration_identity_mutation(failures: Array[String]) -> vo
 	configuration.cubes_per_axis = 32
 	_expect_true(failures, "mutated configuration identity is rejected", not configuration.validate().is_empty())
 	_expect_equal(failures, "mutation does not rewrite cached identity", configuration.fingerprint, original)
+
+
+static func _test_unmirrored_continuation_rejected(failures: Array[String]) -> void:
+	var crossing_result = _partition(_crossing_fixture(), Config.new())
+	_expect_true(failures, "malformed-continuation fixture partitions", crossing_result.success)
+	if not crossing_result.success:
+		return
+	var malformed_plans: Array = crossing_result.data.plans.duplicate()
+	var right = _find_fragment(malformed_plans, "chamber", Vector3i(1, 0, 0))
+	_expect_true(failures, "malformed-continuation right fragment exists", right != null)
+	if right == null:
+		return
+	right.continuation_mask.erase("-x")
+	var validation: Array[String] = Partitioner._validate_plans(malformed_plans)
+	var rejected := false
+	for failure in validation:
+		if str(failure).contains("Unmirrored geometry-cell continuation"):
+			rejected = true
+			break
+	_expect_true(failures, "unmirrored continuation is rejected", rejected)
+
+
+static func _test_partition_rejects_extra_geometry_parent(failures: Array[String]) -> void:
+	var fixture := _fixture()
+	var expected: Array = fixture.geometry.provenance.source_stage_fingerprints.duplicate()
+	var actual: Array = expected.duplicate()
+	actual.append("unrelated:valid")
+	var extra_provenance = fixture.context.make_provenance(
+		"geometry_description",
+		fixture.geometry.bundle.region_definition.stable_id,
+		fixture.geometry.bundle.region_definition.stable_address.canonical_text(),
+		actual
+	)
+	var malformed_geometry := GeometryResult.new(
+		fixture.geometry.bundle,
+		fixture.geometry.chamber_descriptors,
+		fixture.geometry.tunnel_descriptors,
+		fixture.geometry.geometry_metrics,
+		fixture.geometry.fingerprint,
+		extra_provenance
+	)
+	var result = Partitioner.partition(
+		malformed_geometry,
+		fixture.finalization,
+		Config.new(),
+		[],
+		fixture.context,
+		expected
+	)
+	_expect_true(failures, "partition boundary rejects extra geometry parent", not result.success)
+
+
+static func _test_partition_accepts_reversed_expected_parent_order(failures: Array[String]) -> void:
+	var fixture := _fixture()
+	var expected: Array = fixture.geometry.provenance.source_stage_fingerprints.duplicate()
+	expected.reverse()
+	var result = Partitioner.partition(
+		fixture.geometry,
+		fixture.finalization,
+		Config.new(),
+		[],
+		fixture.context,
+		expected
+	)
+	_expect_true(failures, "partition accepts reversed expected parent order", result.success)
 
 
 static func _fixture() -> Dictionary:
@@ -174,7 +242,7 @@ static func _negative_fixture() -> Dictionary:
 
 
 static func _partition(fixture: Dictionary, config, cells: Array = []) -> Object:
-	return Partitioner.partition(fixture.geometry, fixture.finalization, config, cells, fixture.context)
+	return Partitioner.partition(fixture.geometry, fixture.finalization, config, cells, fixture.context, fixture.geometry.provenance.source_stage_fingerprints)
 
 
 static func _find_fragment(plans: Array, kind: String, coordinate: Vector3i):

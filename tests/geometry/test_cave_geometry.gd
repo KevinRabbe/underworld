@@ -17,6 +17,8 @@ static func run() -> Array[String]:
 	_test_finalization_boundary(failures)
 	_test_finalizer_input_types(failures)
 	_test_neighbor_order_independence(failures)
+	_test_stale_neighbor_rejected(failures)
+	_test_irrelevant_neighbor_does_not_change_identity(failures)
 	_test_negative_region(failures)
 	return failures
 
@@ -232,6 +234,83 @@ static func _test_neighbor_order_independence(failures: Array[String]) -> void:
 		forward["geometry"].fingerprint,
 		reversed["geometry"].fingerprint
 	)
+	_expect_equal(
+		failures,
+		"neighbor scheduling order cannot change geometry provenance",
+		forward["geometry"].provenance.fingerprint,
+		reversed["geometry"].provenance.fingerprint
+	)
+
+
+static func _test_stale_neighbor_rejected(failures: Array[String]) -> void:
+	var built: Dictionary = {}
+	var view = null
+	for seed in range(1, 33):
+		var candidate_built: Dictionary = _build(seed, Vector2i(0, 0), true)
+		if not bool(candidate_built.get("success", false)):
+			continue
+		var endpoint_ids: Dictionary = {}
+		for edge in candidate_built["finalized"].bundle.edges:
+			if edge != null:
+				endpoint_ids[edge.endpoint_a_node_id] = true
+				endpoint_ids[edge.endpoint_b_node_id] = true
+		for candidate in candidate_built["neighbor_views"]:
+			for node in candidate["primary_topology"].bundle.nodes:
+				if node != null and endpoint_ids.has(node.stable_id):
+					built = candidate_built
+					view = candidate
+					break
+			if view != null:
+				break
+		if view != null:
+			break
+	_expect_true(failures, "geometry stale-neighbor contributor exists", view != null)
+	if view == null:
+		return
+	var neighbor_plan = view["region_plan"]
+	var original = neighbor_plan.provenance
+	neighbor_plan.provenance = built["context"].make_provenance(
+		"macro_region", neighbor_plan.stable_id, neighbor_plan.stable_address.canonical_text(), ["stale-neighbor-parent"]
+	)
+	var rejected = GeometryGenerator.generate(
+		built["context"], built["macro"], built["finalized"], built["neighbor_views"]
+	)
+	neighbor_plan.provenance = original
+	_expect_true(failures, "changed geometry neighbor ancestry is rejected", not rejected.success)
+
+
+static func _test_irrelevant_neighbor_does_not_change_identity(failures: Array[String]) -> void:
+	var built: Dictionary = _build(24681357, Vector2i(2, -3), true)
+	if not bool(built.get("success", false)):
+		failures.append("geometry irrelevant-neighbor fixture failed")
+		return
+	var endpoint_ids: Dictionary = {}
+	for edge in built["finalized"].bundle.edges:
+		if edge != null:
+			endpoint_ids[edge.endpoint_a_node_id] = true
+			endpoint_ids[edge.endpoint_b_node_id] = true
+	var non_contributing = null
+	for candidate in built["neighbor_views"]:
+		var contributes := false
+		for node in candidate["primary_topology"].bundle.nodes:
+			if node != null and endpoint_ids.has(node.stable_id):
+				contributes = true
+				break
+		if not contributes:
+			non_contributing = candidate
+			break
+	_expect_true(failures, "non-contributing adjacent neighbor exists", non_contributing != null)
+	if non_contributing == null:
+		return
+	var extra_views: Array = built["neighbor_views"].duplicate()
+	extra_views.append(non_contributing)
+	var rerun = GeometryGenerator.generate(
+		built["context"], built["macro"], built["finalized"], extra_views
+	)
+	_expect_true(failures, "irrelevant geometry neighbor succeeds", rerun.success)
+	if rerun.success:
+		_expect_equal(failures, "irrelevant duplicate does not change geometry", built["geometry"].fingerprint, rerun.data.fingerprint)
+		_expect_equal(failures, "irrelevant duplicate does not change geometry provenance", built["geometry"].provenance.fingerprint, rerun.data.provenance.fingerprint)
 
 
 static func _test_negative_region(failures: Array[String]) -> void:

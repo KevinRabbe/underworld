@@ -11,6 +11,7 @@ var region_finalization_result
 var configuration
 var requested_cells: Array
 var world_context
+var expected_geometry_source_fingerprints: Array[String]
 
 
 func _init(
@@ -18,19 +19,26 @@ func _init(
 	finalization_result_value,
 	configuration_value = null,
 	requested_cells_value: Array = [],
-	world_context_value = null
+	world_context_value = null,
+	expected_geometry_sources_value: Array = []
 ) -> void:
 	cave_geometry_result = geometry_result_value
 	region_finalization_result = finalization_result_value
 	configuration = configuration_value if configuration_value != null else Config.new()
 	requested_cells = requested_cells_value.duplicate(true)
 	world_context = world_context_value
+	expected_geometry_source_fingerprints = []
+	for value in expected_geometry_sources_value:
+		expected_geometry_source_fingerprints.append(str(value))
+	expected_geometry_source_fingerprints.sort()
 
 
 func validate() -> Array[String]:
 	var failures: Array[String] = []
 	if world_context == null:
 		failures.append("GeometryCellPartitionRequest requires WorldGenerationContext")
+	elif expected_geometry_source_fingerprints.is_empty():
+		failures.append("GeometryCellPartitionRequest requires expected geometry provenance ancestry")
 	if cave_geometry_result == null or not (cave_geometry_result is CaveGeometryResult):
 		failures.append("GeometryCellPartitionRequest requires CaveGeometryResult")
 	if region_finalization_result == null or not (region_finalization_result is FinalizationResult):
