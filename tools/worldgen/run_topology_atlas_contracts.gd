@@ -99,6 +99,7 @@ static func _test_elevation_views(failures: Array[String]) -> void:
 	var atlas: Dictionary = built["atlas"]
 	var totals: Dictionary = atlas.get("totals", {})
 	var expected_nodes: int = int(totals.get("node_count", -1))
+	var expected_edges: int = int(totals.get("edge_count", -1))
 	var x_svg: String = ElevationSvg.render(atlas, "x")
 	var z_svg: String = ElevationSvg.render(atlas, "z")
 
@@ -110,10 +111,21 @@ static func _test_elevation_views(failures: Array[String]) -> void:
 	_expect_equal(failures, "Z/depth has nine region frames", z_svg.count("class=\"elevation-region-frame\""), 9)
 	_expect_equal(failures, "X/depth carries every node", x_svg.count("class=\"elevation-node\""), expected_nodes)
 	_expect_equal(failures, "Z/depth carries every node", z_svg.count("class=\"elevation-node\""), expected_nodes)
+	_expect_equal(failures, "X/depth carries every edge", x_svg.count("class=\"elevation-edge"), expected_edges)
+	_expect_equal(failures, "Z/depth carries every edge", z_svg.count("class=\"elevation-edge"), expected_edges)
 	_expect_equal(failures, "X/depth has three depth bands per region", x_svg.count("class=\"depth-band "), 27)
 	_expect_equal(failures, "Z/depth has three depth bands per region", z_svg.count("class=\"depth-band "), 27)
 	_expect_true(failures, "X/depth includes world coordinates in hover metadata", x_svg.contains("world=("))
 	_expect_true(failures, "Z/depth includes world coordinates in hover metadata", z_svg.contains("world=("))
+	for region in atlas.get("regions", []):
+		for node in region.get("nodes", []):
+			var node_id: String = str(node.get("stable_id", ""))
+			_expect_true(failures, "X/depth attributes node " + node_id, x_svg.contains(node_id))
+			_expect_true(failures, "Z/depth attributes node " + node_id, z_svg.contains(node_id))
+		for edge in region.get("edges", []):
+			var edge_id: String = str(edge.get("stable_id", ""))
+			_expect_true(failures, "X/depth attributes edge " + edge_id, x_svg.contains(edge_id))
+			_expect_true(failures, "Z/depth attributes edge " + edge_id, z_svg.contains(edge_id))
 	_expect_equal(failures, "invalid elevation axis is rejected", ElevationSvg.render(atlas, "y"), "")
 
 
