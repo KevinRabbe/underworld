@@ -11,6 +11,9 @@ const Gate := preload("res://worldgen/runtime/entrance_traversal_gate.gd")
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
+	var empty_gate := Gate.new("empty", [])
+	var empty_streamer := Streamer.new("world", "manifest")
+	_expect(failures, "empty gate fails closed", not empty_gate.update(empty_streamer) and not empty_gate.diagnostics.is_empty())
 	var address := Address.new(Vector3i(-1, 0, -2))
 	var vertices := PackedVector3Array([Vector3(0, 0, 0), Vector3(1, 0, 0), Vector3(0, 1, 0)])
 	var indices := PackedInt32Array([0, 1, 2])
@@ -31,6 +34,10 @@ static func run() -> Array[String]:
 	var result := Result.new(address, streamer.records[address.canonical_text()].generation, "collision", "plan", "prov", realized.get("shape") if prepared.success else null, true, [], "world", "manifest")
 	_expect(failures, "collision result accepted", streamer.accept_result(result))
 	_expect(failures, "gate opens when collision ready", gate.update(streamer))
+	var invalid := Result.new(address, streamer.records[address.canonical_text()].generation, "collision", "plan", "prov", null, true, [], "world", "manifest")
+	streamer.release_demand(address, "entrance:test")
+	streamer.demand_cell(address, "entrance:test", ["collision"], "plan", "prov")
+	_expect(failures, "null collision payload is rejected", not streamer.accept_result(invalid))
 	streamer.release_demand(address, "entrance:test")
 	gate.update(streamer)
 	_expect(failures, "gate closes before release", not gate.is_open())
