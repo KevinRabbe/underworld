@@ -5,6 +5,9 @@ const StageResult := preload("res://worldgen/pipeline/generation_stage_result.gd
 const GraphCanonicalizer := preload("res://worldgen/validation/graph_canonicalizer.gd")
 const GraphValidator := preload("res://worldgen/validation/graph_validator.gd")
 const CanonicalValue := preload("res://worldgen/validation/canonical_value.gd")
+const EntranceResult := preload("res://worldgen/underworld/entrance_generation_result.gd")
+const ConnectivityResult := preload("res://worldgen/underworld/secondary_connectivity_result.gd")
+const HookResult := preload("res://worldgen/underworld/special_location_hook_result.gd")
 const FinalizationResult := preload("res://worldgen/underworld/region_finalization_result.gd")
 
 
@@ -19,12 +22,27 @@ static func generate(
 		return StageResult.fail("region_finalization", ["WorldGenerationContext is null"])
 	if region_plan == null:
 		return StageResult.fail("region_finalization", ["MacroRegionPlan is null"])
-	if entrance_result == null or entrance_result.bundle == null:
-		return StageResult.fail("region_finalization", ["EntranceGenerationResult is null"])
-	if connectivity_result == null or connectivity_result.bundle == null:
-		return StageResult.fail("region_finalization", ["SecondaryConnectivityResult is null"])
-	if hook_result == null or hook_result.bundle == null:
-		return StageResult.fail("region_finalization", ["SpecialLocationHookResult is null"])
+	if entrance_result == null or not (entrance_result is EntranceResult):
+		return StageResult.fail(
+			"region_finalization",
+			["Region finalization requires EntranceGenerationResult"]
+		)
+	if entrance_result.bundle == null:
+		return StageResult.fail("region_finalization", ["EntranceGenerationResult has no bundle"])
+	if connectivity_result == null or not (connectivity_result is ConnectivityResult):
+		return StageResult.fail(
+			"region_finalization",
+			["Region finalization requires SecondaryConnectivityResult"]
+		)
+	if connectivity_result.bundle == null:
+		return StageResult.fail("region_finalization", ["SecondaryConnectivityResult has no bundle"])
+	if hook_result == null or not (hook_result is HookResult):
+		return StageResult.fail(
+			"region_finalization",
+			["Region finalization requires SpecialLocationHookResult"]
+		)
+	if hook_result.bundle == null:
+		return StageResult.fail("region_finalization", ["SpecialLocationHookResult has no bundle"])
 	var failures: Array[String] = context.validate()
 	if not failures.is_empty():
 		return StageResult.fail("region_finalization", failures)

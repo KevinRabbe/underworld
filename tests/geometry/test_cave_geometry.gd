@@ -15,6 +15,7 @@ static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_determinism_and_coverage(failures)
 	_test_finalization_boundary(failures)
+	_test_finalizer_input_types(failures)
 	_test_neighbor_order_independence(failures)
 	_test_negative_region(failures)
 	return failures
@@ -158,6 +159,58 @@ static func _test_finalization_boundary(failures: Array[String]) -> void:
 			failures,
 			"raw-connectivity rejection names finalization contract",
 			str(raw_connectivity.diagnostics).contains("RegionFinalizationResult")
+		)
+
+
+static func _test_finalizer_input_types(failures: Array[String]) -> void:
+	var built: Dictionary = _build(97531, Vector2i(-1, 2), false)
+	if not bool(built.get("success", false)):
+		failures.append("finalizer-type fixture failed: %s" % built.get("diagnostics", []))
+		return
+
+	var wrong_entrance = RegionFinalizer.generate(
+		built["context"],
+		built["macro"],
+		built["connectivity"],
+		built["connectivity"],
+		built["hooks"]
+	)
+	_expect_true(failures, "finalizer rejects wrong entrance result type", not wrong_entrance.success)
+	if not wrong_entrance.success:
+		_expect_true(
+			failures,
+			"wrong entrance diagnostic names EntranceGenerationResult",
+			str(wrong_entrance.diagnostics).contains("EntranceGenerationResult")
+		)
+
+	var wrong_connectivity = RegionFinalizer.generate(
+		built["context"],
+		built["macro"],
+		built["entrances"],
+		built["entrances"],
+		built["hooks"]
+	)
+	_expect_true(failures, "finalizer rejects wrong connectivity result type", not wrong_connectivity.success)
+	if not wrong_connectivity.success:
+		_expect_true(
+			failures,
+			"wrong connectivity diagnostic names SecondaryConnectivityResult",
+			str(wrong_connectivity.diagnostics).contains("SecondaryConnectivityResult")
+		)
+
+	var skipped_hooks = RegionFinalizer.generate(
+		built["context"],
+		built["macro"],
+		built["entrances"],
+		built["connectivity"],
+		built["connectivity"]
+	)
+	_expect_true(failures, "raw connectivity cannot substitute for hook result", not skipped_hooks.success)
+	if not skipped_hooks.success:
+		_expect_true(
+			failures,
+			"skipped-hook diagnostic names SpecialLocationHookResult",
+			str(skipped_hooks.diagnostics).contains("SpecialLocationHookResult")
 		)
 
 
