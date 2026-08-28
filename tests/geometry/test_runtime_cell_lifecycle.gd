@@ -26,7 +26,7 @@ static func run() -> Array[String]:
 	_expect(failures, "observer demand uses hysteresis tiers", streamer.active_owner_count() > 0)
 	var stale := Result.new(address, record.generation - 1, "render", "plan:a", "prov:a", null)
 	_expect(failures, "stale generation rejected", not streamer.accept_result(stale))
-	var accepted := Result.new(address, record.generation, "definition", "plan:a", "prov:a", null)
+	var accepted := Result.new(address, record.generation, "definition", "plan:a", "prov:a", null, true, [], "world:a", "manifest:a")
 	_expect(failures, "matching definition accepted", streamer.accept_result(accepted))
 	var wrong_source := Result.new(address, record.generation, "render", "plan:old", "prov:a", null, true, [], "world:a", "manifest:a")
 	_expect(failures, "mismatched source rejected", not streamer.accept_result(wrong_source))
@@ -43,6 +43,18 @@ static func run() -> Array[String]:
 	_expect(failures, "stale result cannot resurrect", not streamer.accept_result(old_result))
 	streamer.reconfigure("world:b", "manifest:b")
 	_expect(failures, "reconfigure invalidates readiness", not record.readiness["definition"])
+	var stable := Streamer.new("world:c", "manifest:c")
+	var stable_address := Address.new(Vector3i(4, 0, 0))
+	var stable_record = stable.demand_cell(stable_address, "player", ["definition"], "plan:one", "prov:one")
+	stable.update_observer(Vector3(0.1, 0.1, 0.1), "poll")
+	stable.update_observer(Vector3(0.1, 0.1, 0.1), "poll")
+	var poll_record = stable.records[Address.new(Vector3i(0, 0, 0)).canonical_text()]
+	_expect(failures, "observer polling is idempotent", poll_record.demand_count("definition") == 1)
+	var changed_generation: int = stable_record.generation
+	stable.demand_cell(stable_address, "player", ["definition"], "plan:two", "prov:two")
+	_expect(failures, "source identity change advances generation", stable_record.generation > changed_generation and not stable_record.readiness["definition"])
+	var undemanded := Result.new(stable_address, stable_record.generation, "render", "plan:two", "prov:two", null, true, [], "world:c", "manifest:c")
+	_expect(failures, "undemanded tier result is rejected", not stable.accept_result(undemanded) and not stable_record.readiness["render"])
 	return failures
 
 
