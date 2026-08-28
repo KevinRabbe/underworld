@@ -2,10 +2,28 @@ name: World Definition Service Validation
 
 on:
   pull_request:
+    paths:
+      - 'worldgen/services/**'
+      - 'worldgen/graph/surface_entrance_integration_descriptor.gd'
+      - 'worldgen/pipeline/world_generation_context.gd'
+      - 'worldgen/identity/**'
+      - 'tests/world_definition_service/**'
+      - 'tests/foundation/sample_graph_fixture.gd'
+      - 'tests/run_world_definition_service.gd'
+      - '.github/workflows/world-definition-service-validation.yml'
   push:
     branches:
       - main
       - 'validation/world-definition-service-*'
+    paths:
+      - 'worldgen/services/**'
+      - 'worldgen/graph/surface_entrance_integration_descriptor.gd'
+      - 'worldgen/pipeline/world_generation_context.gd'
+      - 'worldgen/identity/**'
+      - 'tests/world_definition_service/**'
+      - 'tests/foundation/sample_graph_fixture.gd'
+      - 'tests/run_world_definition_service.gd'
+      - '.github/workflows/world-definition-service-validation.yml'
 
 permissions:
   contents: read
