@@ -74,6 +74,14 @@ static func run() -> Array[String]:
 	_expect(failures, "analytic chamber surface builds", surface_result.success and surface_result.data.indices.size() > 0)
 	if surface_result.success:
 		_expect(failures, "marching-cubes vertices are canonically reused", _unique_positions(surface_result.data.vertices) == surface_result.data.vertices.size())
+	var tunnel_plan := _tunnel_plan(Vector3i.ZERO)
+	var tunnel_partition = _partition_result(tunnel_plan, Config.new(), provenance)
+	var tunnel_result = Mesher.build(Request.new(tunnel_plan, Config.new(), provenance, 0.0, tunnel_partition, context))
+	_expect(failures, "elliptical tunnel capsule builds", tunnel_result.success and tunnel_result.data.indices.size() > 0)
+	var entrance_plan := _entrance_plan(Vector3i.ZERO)
+	var entrance_partition = _partition_result(entrance_plan, Config.new(), provenance)
+	var entrance_result = Mesher.build(Request.new(entrance_plan, Config.new(), provenance, 0.0, entrance_partition, context))
+	_expect(failures, "oriented entrance descent volume builds", entrance_result.success and entrance_result.data.indices.size() > 0)
 	return failures
 
 
@@ -101,6 +109,24 @@ static func _surface_plan(coordinate: Vector3i) -> Plan:
 	var metadata := {"center": Vector3(16, 16, 16), "dimensions": Vector3(22, 18, 20), "shape_family": "ellipsoid", "rotation_y": 0.0}
 	var fragment := Fragment.new("gfrag1:surface-chamber", "stable:surface-chamber", "chamber", address, cell, clipped, true, metadata, {}, "source:surface-chamber", {})
 	return Plan.new(address, [fragment], [], [], "geometry", "finalization")
+
+
+static func _tunnel_plan(coordinate: Vector3i) -> Plan:
+	var address := Address.new(coordinate)
+	var cell := AABB(Vector3(coordinate) * 32.0, Vector3(32, 32, 32))
+	var clipped := AABB(Vector3(3, 12, 3), Vector3(26, 8, 26))
+	var metadata := {"control_points": [Vector3(4, 16, 4), Vector3(12, 16, 12), Vector3(20, 14, 20), Vector3(28, 14, 28)], "width": 6.0, "height": 4.0}
+	var fragment := Fragment.new("gfrag1:tunnel-surface", "stable:tunnel-surface", "tunnel", address, cell, clipped, true, metadata, {}, "source:tunnel-surface", {})
+	return Plan.new(address, [fragment], [], [], "geometry", "finalization")
+
+
+static func _entrance_plan(coordinate: Vector3i) -> Plan:
+	var address := Address.new(coordinate)
+	var cell := AABB(Vector3(coordinate) * 32.0, Vector3(32, 32, 32))
+	var clipped := AABB(Vector3(10, 4, 10), Vector3(12, 24, 12))
+	var metadata := {"required_opening_bounds": clipped, "surface_world_position": Vector3(16, 20, 16), "orientation": Vector3(1, 0, 0), "underground_anchor": Vector3(16, 4, 16), "clearance_radius": 3.0, "descent_profile": "gradual"}
+	var fragment := Fragment.new("gfrag1:entrance-surface", "stable:entrance-surface", "entrance", address, cell, clipped, true, metadata, {}, "source:entrance-surface", {})
+	return Plan.new(address, [fragment], [metadata], [], "geometry", "finalization")
 
 
 static func _valid_indices(data) -> bool:
