@@ -134,7 +134,7 @@ static func generate(context, region_plan, finalization_result, neighbor_views: 
 		"geometry_description",
 		region_plan.stable_id,
 		region_plan.stable_address.canonical_text(),
-		[region_plan.provenance.fingerprint, finalization_result.provenance.fingerprint]
+		_neighbor_source_fingerprints(region_plan, finalization_result, neighbor_views)
 	)
 	return StageResult.ok(
 		"cave_geometry",
@@ -142,6 +142,24 @@ static func generate(context, region_plan, finalization_result, neighbor_views: 
 		fingerprint,
 		provenance
 	)
+
+
+static func _neighbor_source_fingerprints(region_plan, finalization_result, neighbor_views: Array) -> Array[String]:
+	var sources: Array[String] = [
+		region_plan.provenance.fingerprint,
+		finalization_result.provenance.fingerprint,
+	]
+	for view in neighbor_views:
+		if not (view is Dictionary):
+			continue
+		var neighbor_plan = view.get("region_plan")
+		var neighbor_topology = view.get("primary_topology")
+		if neighbor_plan != null and neighbor_plan.provenance != null:
+			sources.append(neighbor_plan.provenance.fingerprint)
+		if neighbor_topology != null and neighbor_topology.provenance != null:
+			sources.append(neighbor_topology.provenance.fingerprint)
+	sources.sort()
+	return sources
 
 
 static func _build_chamber(context, region_plan, node, domain):
