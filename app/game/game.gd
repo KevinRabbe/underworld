@@ -1,7 +1,8 @@
 extends Node3D
 
 const WorldSettingsScript := preload("res://data/world_settings.gd")
-const ChunkManagerScript := preload("res://world/chunk_manager.gd")
+const SurfaceChunkStreamerScript := preload("res://world/runtime/streaming/surface_chunk_streamer.gd")
+const PrototypeSurvivalControllerScript := preload("res://gameplay/survival/prototype_survival_controller.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
@@ -9,6 +10,7 @@ const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
 
 var settings
 var world
+var survival
 var player
 var combat_resolver
 var encounter_controller
@@ -55,10 +57,17 @@ func _setup_environment() -> void:
 func _create_world() -> void:
 	settings = WorldSettingsScript.new()
 
-	world = ChunkManagerScript.new()
-	world.name = "World"
+	world = SurfaceChunkStreamerScript.new()
+	world.name = "SurfaceWorld"
 	world.configure(settings)
 	add_child(world)
+
+	# Prototype survival currently owns the version-2 save orchestration. It loads
+	# generated-world deltas into the streamer before initial chunk construction.
+	survival = PrototypeSurvivalControllerScript.new()
+	survival.name = "PrototypeSurvival"
+	add_child(survival)
+	survival.configure(world, settings)
 
 	var preferred_spawn: Vector3 = Vector3(
 		settings.chunk_size * 0.5,
@@ -99,12 +108,13 @@ func _create_player() -> void:
 	player.set_respawn_position(spawn_position)
 	player.set_harvest_range(settings.harvest_range)
 	player.set_tool_use_cooldown(settings.tool_use_cooldown)
-	player.harvest_requested.connect(world.try_harvest)
-	player.hotbar_slot_requested.connect(world.select_hotbar_slot)
-	player.craft_requested.connect(world.request_craft)
-	world.equipped_tool_changed.connect(player.set_equipped_tool)
+	player.harvest_requested.connect(survival.try_harvest)
+	player.hotbar_slot_requested.connect(survival.select_hotbar_slot)
+	player.craft_requested.connect(survival.request_craft)
+	survival.equipped_tool_changed.connect(player.set_equipped_tool)
 	world.set_player(player)
-	player.set_equipped_tool(world.get_equipped_tool())
+	survival.set_player(player)
+	player.set_equipped_tool(survival.get_equipped_tool())
 
 
 func _create_combat() -> void:
@@ -127,6 +137,7 @@ func _create_debug_hud() -> void:
 		world,
 		player,
 		settings,
+		survival,
 		combat_resolver,
 		encounter_controller
 	)
