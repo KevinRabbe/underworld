@@ -390,7 +390,10 @@ static func _validate_plans(plans: Array) -> Array[String]:
 				owners[source_key] = true
 			for face in fragment.neighboring_cell_addresses.keys():
 				var neighbor = fragment.neighboring_cell_addresses[face]
-				var neighbor_plan = plans_by_coordinate.get(neighbor.coordinate)
+				# Plans are keyed by canonical coordinate text; using Vector3i here
+				# silently skipped mirrored validation because Dictionary does not
+				# coerce the key type.
+				var neighbor_plan = plans_by_coordinate.get(_coordinate_key(neighbor.coordinate))
 				if neighbor_plan == null:
 					continue
 				var opposite := _opposite_face(str(face))

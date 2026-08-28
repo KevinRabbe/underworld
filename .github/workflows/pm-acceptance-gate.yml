@@ -1,7 +1,7 @@
 name: PM Acceptance Gate
 
 on:
-  pull_request:
+  pull_request_target:
     types:
       - opened
       - reopened
@@ -10,79 +10,103 @@ on:
       - unlabeled
       - ready_for_review
       - converted_to_draft
-  pull_request_target:
-    types:
-      - synchronize
 
 permissions: {}
 
 jobs:
-  invalidate-stale-acceptance:
-    if: github.event_name == 'pull_request_target'
-    name: Invalidate stale PM acceptance
+  pm-acceptance:
+    name: Publish trusted PM acceptance
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
       contents: read
       issues: write
+      pull-requests: read
+      statuses: write
 
     steps:
-      - name: Remove stale pm-accepted label
+      - name: Evaluate and publish exact-head PM acceptance
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          HAD_PM_ACCEPTANCE: ${{ contains(github.event.pull_request.labels.*.name, 'pm-accepted') }}
-        run: |
-          set -euo pipefail
-
-          if [ "$HAD_PM_ACCEPTANCE" = "true" ]; then
-            gh api --method DELETE \
-              "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels/pm-accepted" \
-              >/dev/null 2>&1 || true
-          fi
-
-          current_labels="$(gh api \
-            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" \
-            --jq '.[].name')"
-
-          if printf '%s\n' "$current_labels" | grep -Fxq 'pm-accepted'; then
-            echo "Failed to invalidate stale pm-accepted label after synchronize."
-            exit 1
-          fi
-
-          echo "Stale PM acceptance is absent for the synchronized head."
-
-  pm-acceptance:
-    if: github.event_name == 'pull_request'
-    name: PM acceptance
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions:
-      contents: read
-
-    steps:
-      - name: Enforce exact-head PM acceptance state
-        env:
           EVENT_ACTION: ${{ github.event.action }}
-          IS_DRAFT: ${{ github.event.pull_request.draft }}
-          HAS_PM_ACCEPTANCE: ${{ contains(github.event.pull_request.labels.*.name, 'pm-accepted') }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          STATUS_CONTEXT: PM acceptance
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
+
+          publish_status() {
+            local state="$1"
+            local description="$2"
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/statuses/${EVENT_HEAD_SHA}" \
+              -f state="$state" \
+              -f context="$STATUS_CONTEXT" \
+              -f description="$description" \
+              -f target_url="$RUN_URL" \
+              >/dev/null
+          }
+
+          pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+          current_head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
 
           if [ "$EVENT_ACTION" = "synchronize" ]; then
-            echo "A new commit invalidates PM acceptance for this head."
-            echo "The trusted pull_request_target path removes any stale pm-accepted label."
-            exit 1
+            has_acceptance="$(
+              jq -r '[.labels[].name] | index("pm-accepted") != null' <<<"$pr_json"
+            )"
+
+            if [ "$has_acceptance" = "true" ]; then
+              if ! gh api --method DELETE \
+                "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels/pm-accepted" \
+                >/dev/null; then
+                publish_status failure "New commit invalidated PM acceptance; label cleanup failed"
+                echo "Failed to remove stale pm-accepted label."
+                exit 1
+              fi
+            fi
+
+            current_labels="$(
+              gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" \
+                --jq '.[].name'
+            )"
+            publish_status failure "New commit requires PM re-acceptance"
+
+            if printf '%s\n' "$current_labels" | grep -Fxq 'pm-accepted'; then
+              echo "Stale pm-accepted label remains after synchronize."
+              exit 1
+            fi
+
+            if [ "$current_head_sha" != "$EVENT_HEAD_SHA" ]; then
+              echo "Event head ${EVENT_HEAD_SHA} was superseded by ${current_head_sha}; both require fresh acceptance."
+            fi
+
+            echo "Published failing PM acceptance status for synchronized head ${EVENT_HEAD_SHA}."
+            exit 0
           fi
 
-          if [ "$IS_DRAFT" = "true" ]; then
-            echo "PR is still draft; PM acceptance cannot pass."
-            exit 1
+          if [ "$current_head_sha" != "$EVENT_HEAD_SHA" ]; then
+            publish_status failure "Superseded head; PM acceptance invalid"
+            echo "Event head ${EVENT_HEAD_SHA} is no longer current (${current_head_sha})."
+            exit 0
           fi
 
-          if [ "$HAS_PM_ACCEPTANCE" != "true" ]; then
-            echo "Missing required pm-accepted label for the current PR head."
-            exit 1
+          is_draft="$(jq -r '.draft' <<<"$pr_json")"
+          has_acceptance="$(
+            jq -r '[.labels[].name] | index("pm-accepted") != null' <<<"$pr_json"
+          )"
+
+          if [ "$is_draft" = "true" ]; then
+            publish_status failure "Draft PR cannot be PM-accepted"
+            echo "PR is draft; published failing PM acceptance status."
+            exit 0
           fi
 
-          echo "PM acceptance gate passed for the current PR head."
+          if [ "$has_acceptance" != "true" ]; then
+            publish_status failure "Missing pm-accepted for current head"
+            echo "Current head lacks pm-accepted; published failing PM acceptance status."
+            exit 0
+          fi
+
+          publish_status success "PM accepted exact current PR head"
+          echo "Published successful PM acceptance status for ${EVENT_HEAD_SHA}."

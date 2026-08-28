@@ -15,9 +15,13 @@ permissions:
 
 jobs:
   deterministic-foundation:
-    name: Godot headless contracts
+    name: Godot headless shard (${{ matrix.start-seed }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        start-seed: [1, 26, 51, 76, 101, 126, 151, 176, 201, 226]
 
     steps:
       - name: Checkout
@@ -51,9 +55,29 @@ jobs:
           validation_log="$(mktemp)"
           godot --headless --path . --quit-after 1 \
             --script res://tests/run_validation.gd -- \
-            --mode=batch --start-seed=1 --count=250 --region-radius=1 2>&1 \
+            --mode=batch --start-seed=${{ matrix.start-seed }} --count=25 --region-radius=1 2>&1 \
             | tee "$validation_log"
           if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
             exit 1
           fi
           grep -Fq '[VALIDATION] PASS batch' "$validation_log"
+
+  deterministic-foundation-aggregate:
+    name: Godot headless contracts
+    if: always()
+    needs:
+      - deterministic-foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Require every deterministic shard to pass
+        env:
+          SHARD_RESULT: ${{ needs.deterministic-foundation.result }}
+        run: |
+          set -euo pipefail
+          if [ "$SHARD_RESULT" != "success" ]; then
+            echo "Deterministic Worldgen shard matrix result: $SHARD_RESULT"
+            exit 1
+          fi
+          echo "[VALIDATION] PASS deterministic-worldgen aggregate"
