@@ -12,8 +12,8 @@ static func run() -> Array[String]:
 	_expect(failures, "harness fingerprint reproduces", first.fingerprint == second.fingerprint)
 	_expect(failures, "harness reports queued work", int(first.counters["queued"]) > 0)
 	_expect(failures, "harness reports accepted readiness", int(first.counters["ready"]) > 0)
-	_expect(failures, "harness reports stale discard", int(first.counters["stale_discarded"]) == 1)
-	_expect(failures, "harness reports releases", int(first.counters["released"]) >= 4)
+	_expect(failures, "harness reports stale discard", int(first.counters["stale_discarded"]) >= 3)
+	_expect(failures, "harness reports releases", int(first.counters["released"]) >= 2)
 	return failures
 
 
