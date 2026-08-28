@@ -21,13 +21,16 @@ The command writes:
 
 ## Current reported pipeline
 
-The report executes the current merged deterministic path in this order:
+The report executes the current merged deterministic target-region path in this order:
 
 1. `macro_region`
 2. `primary_topology`
 3. `entrance_generation`
+4. `secondary_connectivity`
 
-One `DeterministicSurfaceSampler` is created from the report world seed and shared by primary topology and entrance generation. This mirrors the current production/reproduction path without adding generation retries or consuming any separate randomness stream.
+One `DeterministicSurfaceSampler` is created from the report world seed and shared by target/neighbor topology and entrance generation.
+
+Secondary connectivity receives four explicit cardinal neighbor views. Each view is built from that neighbor's macro plan and primary topology, matching the production stage contract; the connectivity generator itself does not secretly generate neighbors. Neighbor coordinates and view count are included in the stage parameters.
 
 ## Report contents
 
@@ -36,7 +39,7 @@ The report includes:
 - world seed and stable world ID;
 - generator manifest fingerprint;
 - underground region coordinate;
-- stages in exact execution order;
+- stages in exact target-region execution order;
 - success/failure state per stage;
 - stage fingerprints;
 - diagnostics from failed stages;
@@ -45,7 +48,10 @@ The report includes:
 - macro profile/tendency and candidate-slot values;
 - primary-topology metrics;
 - entrance-generation metrics;
-- entrance candidate count and surface jitter radius.
+- secondary-connectivity metrics;
+- deterministic cardinal neighbor-view coordinates/count;
+- entrance candidate count and surface jitter radius;
+- connectivity length/score/degree bounds.
 
 No wall-clock timestamp is included, so the same seed, region and generator revision reproduce the same report exactly.
 
@@ -57,6 +63,7 @@ This tool is observational only. It does not:
 - retry failed generation;
 - alter generation configuration;
 - modify world definitions;
+- hide neighbor generation inside production stages;
 - touch character/gameplay systems;
 - perform map visualization.
 
@@ -69,4 +76,4 @@ godot --headless --path . --quit-after 1 \
   --script res://tools/generation_debug/run_generation_debug_report_contracts.gd
 ```
 
-The contracts cover the exact three-stage order, stage fingerprints/metrics, exact deterministic JSON/text reproduction, synthetic entrance-stage failure diagnostics, explicit retry accounting and negative seed/region coordinates. The dedicated CI workflow also exports a real report and requires `entrance_generation` in both JSON and text output.
+The contracts cover the exact four-stage order, stage fingerprints/metrics, four explicit neighbor views, exact deterministic JSON/text reproduction, synthetic connectivity-stage failure diagnostics, explicit retry accounting and negative seed/region coordinates. The dedicated CI workflow also exports a real report and requires both `entrance_generation` and `secondary_connectivity` in JSON and text output.
