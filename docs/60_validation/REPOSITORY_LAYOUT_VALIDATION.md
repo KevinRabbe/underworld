@@ -37,27 +37,28 @@ canonical:
   worldgen/
 
 legacy_allowed:
-  data/
+  <none>
 
 forbidden:
   combat/
+  data/
   game/
   player/
   scenes/
   scripts/
 ```
 
-`game/`, `player/` and `combat/` became forbidden after their staged migrations completed. `data/` remains the only temporary top-level compatibility root until its prototype settings/data responsibilities are split and migrated deliberately.
+The prototype top-level `game/`, `player/`, `combat/` and `data/` roots have all completed staged migration and are now permanently retired. New project files must enter a canonical ownership root.
 
 Stage 1 CI currently enforces:
 
 - tracked files may only enter reviewed top-level ownership roots;
-- retired `combat/`, `game/` and `player/` roots may not return;
-- Godot resource references may not use `res://combat/`, `res://game/` or `res://player/`;
+- retired `combat/`, `data/`, `game/` and `player/` roots may not return;
+- Godot resource references may not use `res://combat/`, `res://data/`, `res://game/` or `res://player/`;
 - production/runtime roots may not import from `tests/` or `tools/`;
 - `worldgen/` may not import concrete runtime/app/presentation domains;
 - `core/` may not import concrete game domains;
-- the validator reports which temporary legacy roots are still present.
+- the validator reports if any temporary legacy root is reintroduced.
 
 The checker intentionally uses simple path/reference rules. It does not attempt to parse architectural intent from class names or infer ownership from implementation details.
 
@@ -113,7 +114,7 @@ forbidden
 
 The current machine policy represents `canonical`, `legacy_allowed`, and `forbidden` directly. A `migrating` state is represented operationally by a dedicated migration branch/PR while the source root remains legacy-allowed until the atomic move is complete.
 
-Once one legacy root has been fully migrated and all active references are updated, move that root from `legacy_allowed_roots` to `forbidden_roots` in the policy.
+There are currently no legacy-allowed top-level roots. Any future temporary compatibility root requires an explicit architecture decision and must not be added casually.
 
 Do not keep legacy paths allowed after their migration is complete.
 
@@ -177,7 +178,7 @@ A successful run reports a compact summary similar to:
   production files: 84
   test files: 42
   tool files: 2
-  legacy roots present: data
+  legacy roots present: <none>
   dependency exceptions used: 0
   forbidden root dependencies: 0
   retired path violations: 0
@@ -193,7 +194,7 @@ Current progress:
 2. lightweight root/path policy checker — **done**;
 3. forbidden production → tests/tools dependency checks — **done**;
 4. narrow, validated migration exceptions — **done; currently zero active exceptions**;
-5. tighten legacy path rules after actual domain migrations — **active, domain by domain**;
+5. top-level prototype-root migrations — **done; no legacy roots remain**;
 6. content-registry/content validation — **future family cycle**;
 7. richer static dependency checks — **only where they produce reliable signal**.
 
