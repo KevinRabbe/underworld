@@ -1,6 +1,6 @@
 extends RefCounted
 
-const AttackDefinitionScript := preload("res://combat/player_attack_definition.gd")
+const AttackDefinitionScript := preload("res://gameplay/combat/attacks/player_attack_definition.gd")
 
 
 static func for_tool(tool_id: String) -> RefCounted:
