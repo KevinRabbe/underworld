@@ -294,6 +294,36 @@ static func _test_targeted_validation_and_order_independence(failures: Array[Str
 	if not _has_code_fragment(missing_target, "target_missing", "not present"):
 		failures.append("targeted validation did not report a missing requested definition")
 
+	var invalid_only: Dictionary = pipeline.validate_ids(
+		definitions_a,
+		["Item.Bad"],
+		categories,
+		capabilities,
+		[validator]
+	)
+	if not _has_code(invalid_only, "target_invalid"):
+		failures.append("invalid-only targeted validation did not report malformed target id")
+	if not invalid_only.get("validated_definition_ids", []).is_empty():
+		failures.append("invalid-only targeted validation selected unrelated definitions: %s" % [invalid_only.get("validated_definition_ids", [])])
+	if not _all_diagnostics_have_code(invalid_only, "target_invalid"):
+		failures.append("invalid-only targeted validation leaked unrelated diagnostics: %s" % [invalid_only.get("diagnostics", [])])
+
+	var mixed: Dictionary = pipeline.validate_ids(
+		definitions_a,
+		["Item.Bad", "item.tool.good"],
+		categories,
+		capabilities,
+		[validator]
+	)
+	if mixed.get("validated_definition_ids", []) != ["item.tool.good"]:
+		failures.append("mixed valid/invalid target request selected unexpected definitions: %s" % [mixed.get("validated_definition_ids", [])])
+	if not _has_code(mixed, "target_invalid"):
+		failures.append("mixed valid/invalid target request did not diagnose malformed target id")
+	if _has_source_code(mixed, "item.tool.bad", "family_rule"):
+		failures.append("mixed valid/invalid target request leaked unrelated family diagnostics")
+	if _has_source_code(mixed, "item.tool.bad", "category_unknown"):
+		failures.append("mixed valid/invalid target request leaked unrelated schema diagnostics")
+
 
 static func _categories():
 	var registry = CategorySchemaRegistry.new()
@@ -350,6 +380,23 @@ static func _has_code_fragment(result: Dictionary, code: String, fragment: Strin
 		if str(diagnostic.get("code", "")) == code and str(diagnostic.get("message", "")).contains(fragment):
 			return true
 	return false
+
+
+static func _has_code(result: Dictionary, code: String) -> bool:
+	for diagnostic in result.get("diagnostics", []):
+		if str(diagnostic.get("code", "")) == code:
+			return true
+	return false
+
+
+static func _all_diagnostics_have_code(result: Dictionary, code: String) -> bool:
+	var diagnostics: Array = result.get("diagnostics", [])
+	if diagnostics.is_empty():
+		return false
+	for diagnostic in diagnostics:
+		if str(diagnostic.get("code", "")) != code:
+			return false
+	return true
 
 
 static func _has_source_code(result: Dictionary, source_id: String, code: String) -> bool:
