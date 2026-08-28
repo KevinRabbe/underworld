@@ -75,6 +75,20 @@ static func run() -> Array[String]:
 	hysteresis.update_observer(Vector3(0.1, 0.1, 0.1), "geometry-route")
 	_expect(failures, "geometry released beyond release radius", geometry_record.demand_count("voxel_geometry") == 0)
 	_expect(failures, "unbound observer demand does not queue work", hysteresis.queued_count == 0)
+	var bound_executor := ManualExecutor.new()
+	var bound_streamer := Streamer.new("world:bound", "manifest:bound", bound_executor)
+	var bound_address := Address.new(Vector3i.ZERO)
+	bound_streamer.update_observer(Vector3.ZERO, "observer")
+	_expect(failures, "observer-only demand has no queued job", bound_executor.requests.is_empty())
+	var bound_record = bound_streamer.set_demand(bound_address, "observer", ["definition"], "source:accepted", "provenance:accepted")
+	_expect(failures, "binding identity queues authoritative job", bound_executor.requests.size() == 1)
+	if bound_executor.requests.size() == 1:
+		var queued_request = bound_executor.requests[0].request
+		_expect(failures, "queued request carries bound source", queued_request.source_fingerprint == "source:accepted" and queued_request.provenance_fingerprint == "provenance:accepted")
+	var bound_result := Result.new(bound_address, bound_record.generation, "definition", "source:accepted", "provenance:accepted", null, true, [], "world:bound", "manifest:bound")
+	_expect(failures, "matching bound result accepted", bound_streamer.accept_result(bound_result))
+	var wrong_bound_result := Result.new(bound_address, bound_record.generation, "render", "source:wrong", "provenance:accepted", null, true, [], "world:bound", "manifest:bound")
+	_expect(failures, "wrong bound identity rejected", not bound_streamer.accept_result(wrong_bound_result))
 	return failures
 
 
