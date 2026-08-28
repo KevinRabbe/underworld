@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
-      pull-requests: read
+      pull-requests: write
       issues: write
       statuses: write
 
