@@ -2,10 +2,20 @@ name: Surface Contract Validation
 
 on:
   pull_request:
+    paths:
+      - 'worldgen/surface/**'
+      - 'tests/surface_contract/**'
+      - 'tests/run_surface_contract.gd'
+      - '.github/workflows/surface-contract-validation.yml'
   push:
     branches:
       - main
       - 'validation/surface-sampler-*'
+    paths:
+      - 'worldgen/surface/**'
+      - 'tests/surface_contract/**'
+      - 'tests/run_surface_contract.gd'
+      - '.github/workflows/surface-contract-validation.yml'
 
 permissions:
   contents: read
