@@ -96,14 +96,34 @@ static func _source_sdf(point: Vector3, fragment) -> float:
 			var center: Vector3 = metadata.get("center", fragment.clipped_source_bounds.get_center()); var dimensions: Vector3 = metadata.get("dimensions", fragment.clipped_source_bounds.size); var local := (point - center).rotated(Vector3.UP, -float(metadata.get("rotation_y", 0.0))); var radius := maxf(minf(dimensions.x, minf(dimensions.y, dimensions.z)) * 0.5, 0.01); var q := Vector3(local.x / maxf(dimensions.x * 0.5, 0.01), local.y / maxf(dimensions.y * 0.5, 0.01), local.z / maxf(dimensions.z * 0.5, 0.01)); return (q.length() - 1.0) * radius + _roughness(point, fragment)
 		"tunnel":
 			var points: Array = metadata.get("control_points", []); var best := INF
+			var width := maxf(float(metadata.get("width", 2.0)) * 0.5, 0.1)
+			var height := maxf(float(metadata.get("height", 2.0)) * 0.5, 0.1)
 			for i in range(maxi(points.size() - 1, 0)):
-				var a: Vector3 = points[i]; var b: Vector3 = points[i + 1]; var ab := b - a; var t := clampf((point - a).dot(ab) / maxf(ab.length_squared(), 0.000001), 0.0, 1.0); best = minf(best, point.distance_to(a.lerp(b, t)))
-			var radius := maxf(minf(float(metadata.get("width", 2.0)), float(metadata.get("height", 2.0))) * 0.5, 0.1); return best - radius + _roughness(point, fragment)
+				best = minf(best, _elliptical_capsule_sdf(point, points[i], points[i + 1], width, height))
+			return best + _roughness(point, fragment)
 		"entrance": return _box_sdf(point, metadata.get("required_opening_bounds", fragment.clipped_source_bounds)) + _roughness(point, fragment)
 		_: return _box_sdf(point, fragment.clipped_source_bounds)
 
 static func _box_sdf(point: Vector3, bounds: AABB) -> float:
 	var q := (point - bounds.get_center()).abs() - bounds.size * 0.5; var outside := Vector3(maxf(q.x, 0.0), maxf(q.y, 0.0), maxf(q.z, 0.0)); return outside.length() + minf(maxf(q.x, maxf(q.y, q.z)), 0.0)
+
+static func _elliptical_capsule_sdf(point: Vector3, a: Vector3, b: Vector3, radius_x: float, radius_y: float) -> float:
+	var axis_vector := b - a
+	var axis_length := axis_vector.length()
+	if axis_length < 0.000001:
+		var delta := point - a
+		return Vector2(delta.x / radius_x, delta.y / radius_y).length() * minf(radius_x, radius_y) - minf(radius_x, radius_y)
+	var axis := axis_vector / axis_length
+	var t := clampf((point - a).dot(axis) / axis_length, 0.0, 1.0)
+	var closest := a + axis * (t * axis_length)
+	var radial := point - closest
+	var side := axis.cross(Vector3.UP)
+	if side.length_squared() < 0.000001:
+		side = axis.cross(Vector3.RIGHT)
+	side = side.normalized()
+	var vertical := side.cross(axis).normalized()
+	var normalized_radius := Vector2(radial.dot(side) / radius_x, radial.dot(vertical) / radius_y)
+	return (normalized_radius.length() - 1.0) * minf(radius_x, radius_y)
 
 static func _roughness(point: Vector3, fragment) -> float:
 	var phase := float(abs(hash(str(fragment.source_descriptor_id))) % 997) * 0.017; return sin(point.x * 0.31 + phase) * sin(point.y * 0.23 + phase * 1.7) * sin(point.z * 0.19 + phase * 0.61) * 0.035
