@@ -61,3 +61,5 @@ jobs:
           grep -Fq 'underworld-generation-debug-report-v1' "$output_dir/ci_generation_debug.json"
           grep -Fq 'macro_region' "$output_dir/ci_generation_debug.txt"
           grep -Fq 'primary_topology' "$output_dir/ci_generation_debug.txt"
+          grep -Fq 'entrance_generation' "$output_dir/ci_generation_debug.txt"
+          grep -Fq 'entrance_generation' "$output_dir/ci_generation_debug.json"
