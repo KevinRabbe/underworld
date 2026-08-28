@@ -14,24 +14,24 @@ required broad CI
 = merge eligible
 ```
 
-Green CI is necessary but is never sufficient by itself.
+Green CI is necessary but never sufficient by itself.
 
 ## Required `main` status contexts
 
-Configure the final `main` ruleset to require these exact contexts:
+The final `main` ruleset must require these exact live contexts:
 
 | Source | Required context |
 | --- | --- |
 | Character Validation | `Godot character contracts` |
 | Repository Layout Validation | `Repository layout contracts` |
-| Deterministic Worldgen Validation aggregate | `Godot headless contracts` |
+| Deterministic Worldgen aggregate | `Godot headless contracts` |
 | trusted PM acceptance publisher | `PM acceptance` |
 
-The deterministic workflow intentionally runs ten matrix shards, but the ruleset must require the single stable aggregate context `Godot headless contracts`, not shard-specific names.
+Do not require workflow display names or individual Worldgen shard names.
 
-## Deterministic aggregate contract
+## Stable Deterministic Worldgen aggregate
 
-`.github/workflows/foundation-validation.yml` preserves the complete deterministic campaign as ten shards:
+`.github/workflows/foundation-validation.yml` preserves the complete deterministic campaign as ten matrix shards:
 
 ```text
 start seeds: 1, 26, 51, 76, 101, 126, 151, 176, 201, 226
@@ -39,9 +39,9 @@ count per shard: 25
 region radius: 1 = 3x3 regions
 ```
 
-Together this remains 250 seeds × 9 regions = 2,250 seed/region cases.
+Together this remains 250 seeds × 9 regions = **2,250 deterministic seed/region cases**.
 
-Each shard runs the fast deterministic contracts followed by its 25-seed batch. A final job:
+Each shard runs the fast deterministic contracts and its 25-seed batch. A final job runs after the matrix:
 
 ```text
 name: Godot headless contracts
@@ -49,51 +49,51 @@ needs: deterministic-foundation
 if: always()
 ```
 
-fails unless the matrix result is `success`. This gives branch rules one stable context while preserving all ten shards and fail-fast-disabled campaign execution.
+The aggregate succeeds only when the matrix result is `success`. A failed or cancelled shard therefore makes the stable aggregate fail.
 
-Do not replace the aggregate by requiring every generated matrix check name manually.
+The ruleset must require only the stable aggregate `Godot headless contracts`; matrix instance names are implementation details.
 
 ## PM acceptance signal
 
-The operational review signal is the pull-request label:
+The operational PM review signal is the pull-request label:
 
 ```text
 pm-accepted
 ```
 
-The authoritative status context is:
+The authoritative required status context is:
 
 ```text
 PM acceptance
 ```
 
-That status is published directly to the exact current PR-head SHA by trusted `pull_request_target` workflow code from the default branch.
+The label itself is not a required status check. Trusted default-branch workflow code publishes the status directly to the exact PR-head SHA.
 
-The workflow does not use a PR-head `pull_request` job as the authority for this status.
+## Trusted default-branch authority
 
-## Trusted exact-head publisher
+`.github/workflows/pm-acceptance-gate.yml` uses only `pull_request_target` and listens for:
 
-`.github/workflows/pm-acceptance-gate.yml` runs only on `pull_request_target` for:
+- `opened`;
+- `reopened`;
+- `synchronize`;
+- `labeled`;
+- `unlabeled`;
+- `ready_for_review`;
+- `converted_to_draft`.
 
-- opened;
-- reopened;
-- synchronize;
-- labeled;
-- unlabeled;
-- ready-for-review;
-- converted-to-draft.
+The workflow definition is taken from the base/default branch. Candidate PR workflow code therefore cannot redefine the authoritative gate used to judge that candidate.
 
 The trusted job:
 
 1. never checks out the PR branch;
-2. never executes scripts, actions, binaries, or other content from the PR branch;
-3. queries the live pull request through the GitHub API;
-4. resolves the live head SHA, draft state, and current labels;
-5. ignores an event whose payload head has already been superseded by a newer live head;
-6. publishes the `PM acceptance` commit status directly to the exact live PR-head SHA using `statuses: write`;
-7. on `synchronize`, removes stale `pm-accepted` and publishes failure immediately in the same trusted job.
+2. never executes PR-controlled scripts, Actions, binaries, or repository code;
+3. queries live PR metadata through the GitHub API;
+4. compares the event head SHA with the live PR head SHA before changing acceptance state;
+5. publishes `PM acceptance` directly to the exact event/current head using `statuses: write`;
+6. removes stale `pm-accepted` on current-head `synchronize`;
+7. does not depend on label mutation recursively triggering another workflow.
 
-The job uses only narrowly scoped permissions:
+Its permissions are intentionally narrow:
 
 ```text
 pull-requests: read
@@ -101,87 +101,109 @@ issues: write
 statuses: write
 ```
 
-There is no checkout step.
+There is no checkout step and no broad repository write permission.
 
-## Why the superseded-event guard matters
+## Exact-head rule
 
-GitHub events and workflow jobs can complete out of order.
+Acceptance belongs to one exact PR head.
 
-For example, a delayed `labeled` event for SHA A must never be able to observe newer SHA B and publish acceptance for B.
-
-The workflow therefore compares:
+The workflow compares:
 
 ```text
 event head SHA
 vs.
-live PR head SHA from GitHub API
+live PR head SHA
 ```
 
-If they differ, that run performs no acceptance mutation and publishes no status. The event belonging to the newer head evaluates that head independently.
+If they differ, the event is superseded and exits without granting acceptance or intentionally mutating current acceptance metadata. The event for the newer head evaluates the newer head independently.
 
-This prevents an older event from granting acceptance to a commit it did not represent.
+This prevents an old `labeled` event for SHA A from granting success to SHA B.
+
+Because GitHub events are asynchronous, metadata mutation cannot be treated as a transactional lock across separate workflow runs. The security invariant is therefore conservative: **a stale event must never grant acceptance to a newer head**. A later current-head event may conservatively invalidate acceptance and require re-review; that is safe.
+
+## Only an explicit acceptance event may grant success
+
+A critical rule is that **label presence by itself never grants acceptance on arbitrary lifecycle events**.
+
+`PM acceptance=success` may be published only when all of the following are true:
+
+1. the event action is `labeled`;
+2. the label added by that event is exactly `pm-accepted`;
+3. the event head is still the exact current PR head;
+4. the PR is non-draft; and
+5. live PR metadata confirms `pm-accepted` is present.
+
+This means unrelated label changes, reopening, becoming ready for review, or other lifecycle events cannot accidentally reinterpret a stale label as fresh PM approval.
+
+Workers must never add `pm-accepted` merely to make CI green.
 
 ## Synchronize invalidation
 
-For accepted SHA A followed by a pushed SHA B:
+For accepted SHA A followed by new SHA B:
 
 ```text
 SHA A + pm-accepted + PM acceptance=success
         ↓
-new commit SHA B pushed
+new commit SHA B
         ↓
-pull_request_target:synchronize
+pull_request_target:synchronize for SHA B
         ↓
-trusted default-branch workflow queries live SHA B
-        ↓
-stale pm-accepted removed if present
+trusted workflow confirms SHA B is current
         ↓
 PM acceptance=failure published directly to SHA B
         ↓
-PM reviews SHA B and explicitly re-adds pm-accepted
+stale pm-accepted removed if present
         ↓
-pull_request_target:labeled evaluates SHA B
+label absence verified
         ↓
-PM acceptance may become success
+SHA B remains blocked
+        ↓
+PM reviews SHA B and explicitly adds pm-accepted
+        ↓
+labeled(pm-accepted) event may publish success for SHA B
 ```
 
-The synchronize run does not depend on its label removal recursively starting another workflow. Failure is published directly in the same trusted job.
+Failure is published **before** stale-label cleanup. Cleanup failure therefore cannot leave the synchronized head with a successful PM gate.
 
-If GitHub suppresses workflow recursion for changes made with `GITHUB_TOKEN`, the invariant still holds.
+The synchronize path does not rely on `GITHUB_TOKEN` label removal triggering an `unlabeled` workflow; GitHub may suppress recursive workflow events from its own token.
 
-## Pass/fail semantics
+## Lifecycle-event semantics
 
-`PM acceptance` is `failure` when:
+The trusted gate behaves conservatively:
 
-- the current PR is draft;
-- `pm-accepted` is absent; or
-- the event is `synchronize`, because a new commit invalidates prior acceptance.
+| Event | Can grant success? | Intended result |
+| --- | --- | --- |
+| `opened` | No | failure / acceptance required |
+| `reopened` | No | failure / fresh acceptance required |
+| `synchronize` | No | failure first, then stale-label cleanup |
+| `labeled: pm-accepted` | **Yes** | success only if exact current head + non-draft |
+| `labeled: other` | No | no acceptance change |
+| `unlabeled: pm-accepted` | No | failure |
+| `unlabeled: other` | No | no acceptance change |
+| `ready_for_review` | No | failure / explicit acceptance still required |
+| `converted_to_draft` | No | failure |
 
-It is `success` only when the exact evaluated head is current, the PR is non-draft, and `pm-accepted` is present.
-
-Workers must never add `pm-accepted` to their own handoff PR merely to make the gate green.
+The consequence is deliberate: moving a PR from draft to ready does not resurrect an older approval. PM must explicitly accept the exact ready head.
 
 ## Same-principal limitation
 
-The current repository workflow uses the same GitHub owner/app permission surface for PM and worker activity.
+PM and worker activity currently share the same GitHub owner/app permission surface.
 
-Therefore `pm-accepted` is an **operational workflow-control signal**, not cryptographic actor separation.
+Therefore `pm-accepted` is an **operational workflow-control signal**, not cryptographic actor separation. A principal with equivalent issue-write permission could theoretically add the label or alter repository settings.
 
-A principal with equivalent repository write permissions could theoretically apply the label or alter repository settings. This mechanism protects normal process from accidental or automation-driven merges that treat green CI as sufficient; it is not designed to resist a malicious repository owner or another equally privileged principal.
+This mechanism prevents ordinary accidental or automation-driven merges from treating broad CI as sufficient. It is not designed to resist a malicious repository owner or another equally privileged principal.
 
-True actor-separated PM authorization requires a distinct account, GitHub App, team, environment approval, or another owner-controlled credential ordinary workers do not possess.
+True actor-separated PM authorization requires a distinct account, GitHub App, team, protected environment, or other owner-controlled credential unavailable to ordinary workers.
 
-Do not claim stronger security than the current identity model provides.
+## Why there is no required approving review yet
 
-## Why no required approving review yet
+GitHub does not allow a user to approve their own PR. Requiring one approving review while PM and workers share the same principal would deadlock self-authored PRs without creating real separation.
 
-GitHub does not allow a user to approve their own PR. Requiring one approving review while PM and workers share the same principal would deadlock self-authored PRs rather than create meaningful separation.
-
-The initial enforceable design therefore combines required checks with the operational `pm-accepted` signal.
+The current enforceable design therefore uses required checks plus the operational `pm-accepted` signal. It should be upgraded when a separate PM identity exists.
 
 ## Required `main` ruleset
 
-Create one active branch ruleset targeting the default branch / `refs/heads/main`.
+Create one active ruleset targeting only the default branch / `refs/heads/main`.
 
 Required behavior:
 
@@ -192,17 +214,11 @@ Required behavior:
 - require `PM acceptance`;
 - block ordinary direct pushes to `main`;
 - block force pushes;
-- block branch deletion;
-- do not require a self-approval rule that the current same-account workflow cannot satisfy;
-- do not give ordinary workers or Actions workflows permanent bypass rights.
+- block deletion of `main`;
+- do not require impossible same-user self-approval;
+- do not grant ordinary workers or Actions workflows permanent bypass rights.
 
-Required checks must apply to the current PR head. Success on an older SHA is not acceptance for a newer SHA.
-
-## Draft behavior
-
-Draft PRs cannot satisfy `PM acceptance`, even if the label is present.
-
-GitHub also treats draft PRs as non-merge-ready. The explicit failing PM status makes the repository's own acceptance state visible and machine-readable.
+Required checks must apply to the current PR head. Success on an older SHA is never acceptance for a newer SHA.
 
 ## Acceptance lifecycle
 
@@ -213,20 +229,21 @@ broad CI runs
         ↓
 worker hands off to REVIEW
         ↓
-PM reviews exact current head
-        ↓
 PR becomes non-draft when appropriate
         ↓
-PM adds pm-accepted
+PM reviews exact current head
         ↓
-trusted default-branch workflow publishes PM acceptance=success on that SHA
+PM explicitly adds pm-accepted
+        ↓
+trusted default-branch labeled-event handler
+publishes PM acceptance=success on that SHA
         ↓
 all other required contexts green on same SHA
         ↓
 active ruleset allows merge
 ```
 
-Any new implementation commit returns the current head to failure until it is explicitly reviewed again.
+Any implementation commit or acceptance-invalidating lifecycle transition returns the PR to a state that requires explicit current-head PM acceptance.
 
 ## Emergency bypass policy
 
@@ -235,33 +252,21 @@ There is no routine bypass actor.
 For an actual repository-blocking emergency:
 
 1. record the reason and affected PR/commit on the PM board;
-2. temporarily alter or bypass only the minimum rule necessary using repository-owner authority;
+2. use repository-owner authority to alter only the minimum rule necessary;
 3. perform the emergency action;
 4. restore the active ruleset immediately;
-5. verify `main` is protected again;
+5. verify `main` protection again;
 6. record the verification result.
 
 Emergency bypass is not for skipping architecture review, dependency order, deterministic validation, PM acceptance, or protected-roadmap ownership.
 
 ## Required post-merge verification campaign
 
-The trusted `pull_request_target` workflow cannot be fully exercised until its workflow file exists on the default branch, because GitHub deliberately executes the default-branch version of that workflow.
+`pull_request_target` candidate changes cannot exercise their own trusted logic before that workflow exists on the default branch. Static review and ordinary exact-head CI are therefore the pre-landing evidence for the support PR.
 
-After the support PR is accepted and merged, and after the repository owner activates the ruleset, use a throwaway documentation-only PR.
+After support code is accepted and merged, and after the repository owner activates the ruleset, use a throwaway documentation-only PR for end-to-end verification.
 
 ### Case 1 — broad CI green, no PM acceptance
-
-Expected:
-
-```text
-broad CI = green
-PM acceptance = failure
-merge = blocked
-```
-
-### Case 2 — accepted current head
-
-Make the PR non-draft and apply `pm-accepted` after review.
 
 Expected:
 
@@ -269,36 +274,66 @@ Expected:
 Godot character contracts = success
 Repository layout contracts = success
 Godot headless contracts = success
-PM acceptance = success
+PM acceptance = failure
+merge = blocked
+```
+
+### Case 2 — explicit exact-head acceptance
+
+Make the PR non-draft, review the current head, and add `pm-accepted`.
+
+Expected:
+
+```text
+PM acceptance = success on exact current head
+all required checks = success
 merge = allowed
 ```
 
-### Case 3 — exact-head invalidation
+### Case 3 — push after acceptance
 
 From accepted SHA A, push harmless SHA B.
 
 Expected:
 
 ```text
-trusted synchronize job removes stale pm-accepted
-PM acceptance=failure is published directly to SHA B
+PM acceptance=failure appears on SHA B
+stale pm-accepted is removed
 SHA B remains blocked until explicit re-acceptance
 ```
 
-Also confirm no delayed event for SHA A can publish acceptance to SHA B.
+### Case 4 — unrelated labels cannot grant acceptance
 
-### Case 4 — draft transition
-
-Convert an accepted PR back to draft.
+While the current head is unaccepted, add or remove an unrelated label.
 
 Expected:
 
 ```text
-PM acceptance = failure
-merge = blocked
+PM acceptance does not become success
 ```
 
-### Case 5 — direct push
+### Case 5 — ready/draft transitions
+
+Convert an accepted PR to draft, then later mark it ready.
+
+Expected:
+
+```text
+draft => PM acceptance=failure
+ready => still failure until explicit pm-accepted label event
+```
+
+### Case 6 — deterministic aggregate
+
+Confirm all ten shard jobs execute and the exact stable context:
+
+```text
+Godot headless contracts
+```
+
+succeeds only when the entire matrix succeeds. A controlled failed-shard test must make the aggregate fail.
+
+### Case 7 — direct push
 
 Attempt a harmless normal direct push to `main` without administrative bypass.
 
@@ -309,61 +344,55 @@ push rejected
 main unchanged
 ```
 
-### Case 6 — deterministic aggregate
-
-Confirm all ten deterministic shard jobs execute and the exact stable context:
-
-```text
-Godot headless contracts
-```
-
-is successful only when the matrix succeeds.
-
 ## Connector limitation
 
-The connected GitHub tooling can read rulesets/protection but does not expose a write action for creating or activating the repository ruleset.
+The connected GitHub tooling can read repository rulesets and branch protection but does not expose a write action for creating or activating them.
 
 Therefore #118 has two layers:
 
 1. in-repository workflow/documentation support;
-2. repository-owner ruleset activation plus the verification campaign above.
+2. repository-owner ruleset activation plus the end-to-end verification campaign.
 
-Until owner activation is complete, policy remains operational rather than technically enforced on `main`.
+The task is not DONE until layer 2 is verified.
 
 ## Owner activation checklist
 
 - [ ] `Underworld main merge gate` exists and is Active;
 - [ ] target is only default branch / `main`;
 - [ ] pull request required before merge;
-- [ ] direct push restricted for normal workflow;
-- [ ] force push blocked;
+- [ ] direct pushes blocked for normal workflow;
+- [ ] force pushes blocked;
 - [ ] branch deletion blocked;
 - [ ] `Godot character contracts` required;
 - [ ] `Repository layout contracts` required;
-- [ ] stable `Godot headless contracts` aggregate required;
-- [ ] `PM acceptance` required;
-- [ ] no ordinary Actions/worker bypass configured;
-- [ ] no self-approval rule that deadlocks the same-account workflow;
-- [ ] synchronize invalidation observed successfully;
-- [ ] superseded-event guard observed or inspected;
-- [ ] draft behavior observed;
-- [ ] direct-push rejection observed.
+- [ ] stable `Godot headless contracts` required;
+- [ ] trusted `PM acceptance` required;
+- [ ] required context names match live GitHub output;
+- [ ] no ordinary worker/Actions bypass configured;
+- [ ] no self-approval rule deadlocks the same-account workflow;
+- [ ] exact-head synchronize invalidation verified;
+- [ ] only explicit `labeled: pm-accepted` can restore success;
+- [ ] unrelated labels and ready/draft transitions verified;
+- [ ] failed-shard aggregate behavior verified;
+- [ ] direct-push rejection verified.
 
 ## Invariants
 
 1. Green CI is necessary but never sufficient by itself.
 2. `PM acceptance` is published only by trusted default-branch `pull_request_target` code.
 3. The trusted workflow never checks out or executes PR-controlled code.
-4. Draft PRs cannot satisfy PM acceptance.
-5. Every current-head synchronize invalidates prior PM acceptance directly.
-6. Stale label removal does not depend on recursive workflow events.
-7. Superseded old-head events cannot publish success onto a newer head.
-8. Re-acceptance is explicit and applies only to the then-current head.
-9. `pm-accepted` is an operational signal, not actor-separated security under the current same-principal model.
-10. The full deterministic campaign remains ten 25-seed shards covering 2,250 seed/region cases.
-11. `Godot headless contracts` is the stable aggregate required by branch rules.
-12. Normal updates to `main` use pull requests only.
-13. Force pushes and branch deletion are not normal workflow.
-14. Emergency bypass is temporary, explicit, narrow, and recorded.
-15. Governance rules never authorize violating architecture, dependency, or protected-roadmap contracts.
-16. No MAP-009→MAP-015 production/runtime contract is changed by this governance mechanism.
+4. Acceptance belongs to one exact current PR head.
+5. Only an explicit current-head `labeled: pm-accepted` event may grant success.
+6. Unrelated label events can never grant PM acceptance.
+7. Reopen/ready/draft events can never resurrect an old acceptance.
+8. Every current-head synchronize publishes failure directly before stale-label cleanup.
+9. Stale-label removal does not depend on recursive workflow events.
+10. Superseded old-head events can never grant acceptance to a newer head.
+11. `pm-accepted` is operational, not actor-separated security under the current same-principal model.
+12. The complete deterministic campaign remains ten 25-seed shards covering 2,250 cases.
+13. `Godot headless contracts` is the stable aggregate required by branch rules.
+14. Normal updates to `main` use pull requests only.
+15. Force pushes and branch deletion are not normal workflow.
+16. Emergency bypass is temporary, explicit, narrow, and recorded.
+17. Governance rules never authorize violating architecture, dependency, or protected-roadmap contracts.
+18. No MAP-009→MAP-015 production/runtime behavior is changed by this governance mechanism.

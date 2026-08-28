@@ -30,9 +30,22 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_LABEL: ${{ github.event.label.name }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
+
+          publish_status() {
+            local state="$1"
+            local description="$2"
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/statuses/${EVENT_HEAD_SHA}" \
+              -f state="$state" \
+              -f context='PM acceptance' \
+              -f description="$description" \
+              -f target_url="$RUN_URL" \
+              >/dev/null
+          }
 
           pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
           live_head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
@@ -45,17 +58,17 @@ jobs:
           fi
 
           # Never let a delayed event for an older head mutate acceptance state or
-          # publish a success status for a newer head. A newer event will evaluate
-          # the current head independently.
+          # publish a status for a newer head. A newer event evaluates that head.
           if [ "$live_head_sha" != "$EVENT_HEAD_SHA" ]; then
             echo "Ignoring superseded ${EVENT_ACTION} event for ${EVENT_HEAD_SHA}; live head is ${live_head_sha}."
             exit 0
           fi
 
-          status_state="failure"
-          status_description="PM acceptance is required for this exact PR head."
-
           if [ "$EVENT_ACTION" = "synchronize" ]; then
+            # The exact new head is blocked before metadata cleanup, so cleanup
+            # failure cannot leave the synchronized head with a successful gate.
+            publish_status failure "New commit invalidated PM acceptance for this head."
+
             if [ "$has_pm_acceptance" = "true" ]; then
               gh api --method DELETE \
                 "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels/pm-accepted" \
@@ -71,22 +84,49 @@ jobs:
               exit 1
             fi
 
-            status_description="New commit invalidated PM acceptance for this head."
-          elif [ "$is_draft" = "true" ]; then
-            status_description="Draft PRs cannot satisfy PM acceptance."
-          elif [ "$has_pm_acceptance" != "true" ]; then
-            status_description="Missing pm-accepted for this exact PR head."
-          else
-            status_state="success"
-            status_description="PM accepted this exact non-draft PR head."
+            echo "Published failing PM acceptance for synchronized head ${EVENT_HEAD_SHA}."
+            exit 0
           fi
 
-          gh api --method POST \
-            "repos/${GITHUB_REPOSITORY}/statuses/${live_head_sha}" \
-            -f state="$status_state" \
-            -f context='PM acceptance' \
-            -f description="$status_description" \
-            -f target_url="$RUN_URL" \
-            >/dev/null
+          if [ "$EVENT_ACTION" = "labeled" ]; then
+            if [ "$EVENT_LABEL" != "pm-accepted" ]; then
+              echo "Unrelated label '${EVENT_LABEL}' does not change PM acceptance."
+              exit 0
+            fi
 
-          echo "Published PM acceptance=${status_state} for ${live_head_sha}: ${status_description}"
+            if [ "$is_draft" = "true" ]; then
+              publish_status failure "Draft PRs cannot satisfy PM acceptance."
+              exit 0
+            fi
+
+            if [ "$has_pm_acceptance" != "true" ]; then
+              publish_status failure "pm-accepted is not present on this exact PR head."
+              exit 0
+            fi
+
+            publish_status success "PM accepted this exact non-draft PR head."
+            echo "Published successful PM acceptance for ${EVENT_HEAD_SHA}."
+            exit 0
+          fi
+
+          if [ "$EVENT_ACTION" = "unlabeled" ] && [ "$EVENT_LABEL" != "pm-accepted" ]; then
+            echo "Unrelated label removal '${EVENT_LABEL}' does not change PM acceptance."
+            exit 0
+          fi
+
+          # Opening/reopening, removing pm-accepted, becoming ready, or returning
+          # to draft never grants acceptance. A fresh explicit pm-accepted label
+          # event is required to move the exact current head back to success.
+          if [ "$EVENT_ACTION" = "converted_to_draft" ] || [ "$is_draft" = "true" ]; then
+            publish_status failure "Draft PRs cannot satisfy PM acceptance."
+          elif [ "$EVENT_ACTION" = "ready_for_review" ]; then
+            publish_status failure "Ready head requires explicit PM re-acceptance."
+          elif [ "$EVENT_ACTION" = "unlabeled" ]; then
+            publish_status failure "pm-accepted was removed from this exact PR head."
+          elif [ "$EVENT_ACTION" = "reopened" ]; then
+            publish_status failure "Reopened head requires explicit PM re-acceptance."
+          else
+            publish_status failure "PM acceptance is required for this exact PR head."
+          fi
+
+          echo "Published failing PM acceptance for ${EVENT_HEAD_SHA} after ${EVENT_ACTION}."
