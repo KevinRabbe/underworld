@@ -27,7 +27,7 @@ static func run() -> Array[String]:
 	streamer.demand_cell(address, "entrance:test", ["collision"], "plan", "prov")
 	var gate := Gate.new("entrance:test", [address])
 	_expect(failures, "gate closed before collision", not gate.update(streamer))
-	var result := Result.new(address, streamer.records[address.canonical_text()].generation, "collision", "plan", "prov")
+	var result := Result.new(address, streamer.records[address.canonical_text()].generation, "collision", "plan", "prov", null, true, [], "world", "manifest")
 	_expect(failures, "collision result accepted", streamer.accept_result(result))
 	_expect(failures, "gate opens when collision ready", gate.update(streamer))
 	streamer.release_demand(address, "entrance:test")
