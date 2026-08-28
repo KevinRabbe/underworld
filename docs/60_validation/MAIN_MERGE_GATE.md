@@ -81,9 +81,9 @@ PM acceptance=success
 => a fresh explicit acceptance action occurred for this head
 ```
 
-Any new commit invalidates acceptance.
+Any new commit invalidates acceptance status immediately.
 
-Acceptance from SHA A is never acceptance for SHA B.
+Acceptance from SHA A is never acceptance for SHA B, even if the `pm-accepted` label happens to remain visible as stale metadata after the head changes.
 
 ## Trusted workflow events
 
@@ -130,11 +130,15 @@ The workflow publishes failure for the exact current head when:
 - a PR is moved to ready-for-review without a fresh acceptance event;
 - live acceptance state is inconsistent.
 
-On `synchronize`, stale `pm-accepted` is removed and the new head receives failure directly. Correctness does not depend on the label removal recursively starting another workflow.
+On `synchronize`, the new head receives `PM acceptance=failure` directly. Exact-head safety does **not** depend on the workflow mutating PR labels.
+
+A live post-merge probe demonstrated that workflow-owned label deletion can return HTTP 403 even when the job reports issue-write permission. Therefore `pm-accepted` may remain visible after a synchronize event as **stale metadata only**. Its presence cannot grant success because only a fresh explicit `labeled: pm-accepted` event is a grant path.
+
+To accept the new head after synchronization, PM must review the new exact head, remove any stale `pm-accepted` label if it is still present, and explicitly add it again. That remove/re-add cycle produces the fresh acceptance event for the new SHA.
 
 ## Superseded-event safety
 
-Every event compares its payload head SHA to the current live PR head before mutating acceptance state.
+Every event compares its payload head SHA to the current live PR head before changing acceptance status.
 
 If the event belongs to an older head, it exits without changing the newer head.
 
@@ -220,11 +224,15 @@ ruleset permits merge only if every required context is green
 
 Any implementation commit returns the head to unaccepted state.
 
+If `pm-accepted` remains visible after that commit, it is stale metadata. PM must remove it and explicitly add it again only after reviewing the new exact head.
+
 ## PM operating rule
 
 The `pm-accepted` label is not a worker completion signal.
 
 Workers must not apply it merely to make the gate green. The PM applies it only after exact-head review and dependency review are complete.
+
+After a synchronized head invalidates prior acceptance, a surviving `pm-accepted` label must be treated as stale. Re-acceptance requires an explicit PM remove/re-add cycle so a new `labeled: pm-accepted` event is generated for the current head.
 
 Because the current repository may use the same GitHub account/App surface for multiple roles, this is a process rule rather than actor-separated cryptographic enforcement.
 
@@ -265,24 +273,25 @@ Start from accepted SHA A and push harmless SHA B.
 Expected:
 
 ```text
-pm-accepted removed from current PR
 PM acceptance=failure on SHA B
 merge blocked
+pm-accepted may remain visible only as stale metadata
 ```
 
-SHA B must require fresh CI and fresh PM acceptance.
+SHA B must require fresh CI and fresh PM acceptance. If the label remains present, remove it and explicitly add it again only after the new head has been reviewed.
 
 ### Case 4 — same-head event ordering
 
 Exercise acceptance/removal and synchronize/labeled timing as closely as practical.
 
-Expected invariant:
+Expected invariants:
 
 ```text
+synchronize => final PM acceptance on the new head is failure
 live pm-accepted absent => final PM acceptance is not success
 ```
 
-No delayed event for an old head may change the newer head.
+No delayed event for an old head may change the newer head. A stale label that survives synchronization must never turn the new head green without a fresh explicit label event.
 
 ### Case 5 — draft transition
 
@@ -369,7 +378,7 @@ Repository-owner activation plus the verification campaign above are required be
 - [ ] per-PR concurrency exists;
 - [ ] only explicit `pm-accepted` label event grants success;
 - [ ] success is exact-head and non-draft;
-- [ ] new commits revoke acceptance;
+- [ ] new commits revoke acceptance status even if label metadata persists;
 - [ ] acceptance removal/draft/reopen/ready transitions fail closed;
 - [ ] same-head and superseded-head event races cannot leave stale success during normal operation;
 - [ ] full ten-shard 2,250-case deterministic campaign remains intact;
