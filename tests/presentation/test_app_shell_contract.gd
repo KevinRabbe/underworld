@@ -81,9 +81,15 @@ static func _test_title_screen_contract(failures: Array[String]) -> void:
 	var background := title.get_node_or_null("Background") as Control
 	if background == null or background.theme_type_variation != &"ScreenBackground":
 		failures.append("title background styling must be delegated to the Theme")
+	var safe_margin := title.get_node_or_null("SafeMargin") as Control
+	if safe_margin == null or safe_margin.theme_type_variation != &"MenuSafeMargin":
+		failures.append("title safe-area spacing must be delegated to the Theme")
 	var menu_panel := title.get_node_or_null("SafeMargin/Center/MenuPanel") as Control
 	if menu_panel == null or menu_panel.theme_type_variation != &"MenuPanel":
 		failures.append("title panel styling must be delegated to the Theme")
+	var menu_stack := title.get_node_or_null("SafeMargin/Center/MenuPanel/Menu") as Control
+	if menu_stack == null or menu_stack.theme_type_variation != &"MenuStack":
+		failures.append("title menu spacing must be delegated to the Theme")
 	var title_label := title.get_node_or_null(menu_path + "Title") as Control
 	if title_label == null or title_label.theme_type_variation != &"TitleLabel":
 		failures.append("title typography must be delegated to the Theme")
@@ -95,13 +101,27 @@ static func _test_theme_boundary(failures: Array[String]) -> void:
 	if theme == null or not theme is Theme:
 		failures.append("stable Underworld Theme did not load as Theme")
 		return
-	for variation in [&"ScreenBackground", &"MenuPanel", &"TitleLabel", &"SubtitleLabel", &"StatusLabel"]:
-		if not theme.is_type_variation(variation, &"Control") and not (
-			theme.is_type_variation(variation, &"Panel")
-			or theme.is_type_variation(variation, &"PanelContainer")
-			or theme.is_type_variation(variation, &"Label")
-		):
-			failures.append("Underworld Theme is missing reusable variation: %s" % variation)
+
+	var expected_variations: Dictionary = {
+		&"ScreenBackground": &"Panel",
+		&"MenuPanel": &"PanelContainer",
+		&"MenuSafeMargin": &"MarginContainer",
+		&"MenuStack": &"VBoxContainer",
+		&"TitleLabel": &"Label",
+		&"SubtitleLabel": &"Label",
+		&"StatusLabel": &"Label",
+	}
+	for variation in expected_variations:
+		var base_type: StringName = expected_variations[variation]
+		if not theme.is_type_variation(variation, base_type):
+			failures.append("Underworld Theme variation '%s' must extend %s" % [variation, base_type])
+
+	var hover_style: StyleBox = theme.get_stylebox(&"hover", &"Button")
+	var focus_style: StyleBox = theme.get_stylebox(&"focus", &"Button")
+	if hover_style == null or focus_style == null:
+		failures.append("Underworld Theme must define hover and focus button states")
+	elif hover_style == focus_style:
+		failures.append("keyboard/controller focus styling must be independently replaceable from hover styling")
 
 
 static func _test_game_scene_remains_independent(failures: Array[String]) -> void:
