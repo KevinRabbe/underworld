@@ -39,6 +39,18 @@ static func encode(value: Variant) -> String:
 			return _encode_array(value)
 		TYPE_DICTIONARY:
 			return _encode_dictionary(value)
+		TYPE_PACKED_VECTOR2_ARRAY:
+			return _encode_array(Array(value))
+		TYPE_PACKED_VECTOR3_ARRAY:
+			return _encode_array(Array(value))
+		TYPE_PACKED_INT32_ARRAY:
+			return _encode_array(Array(value))
+		TYPE_PACKED_FLOAT32_ARRAY:
+			return _encode_array(Array(value))
+		TYPE_PACKED_FLOAT64_ARRAY:
+			return _encode_array(Array(value))
+		TYPE_PACKED_BYTE_ARRAY:
+			return _encode_array(Array(value))
 		_:
 			return ""
 

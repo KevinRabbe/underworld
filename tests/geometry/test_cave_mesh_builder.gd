@@ -39,6 +39,11 @@ static func run() -> Array[String]:
 		_expect(failures, "stale realization is rejected", not Boundary.realize_main_thread(result.data, null, "stale").success)
 		var repeated = Mesher.build(Request.new(plan, Config.new(), provenance, 0.0, partition, context))
 		_expect(failures, "repeated extraction reproduces exact fingerprint", repeated.success and repeated.data.fingerprint == result.data.fingerprint)
+		var retimed_metrics: Dictionary = result.data.metrics.duplicate(true)
+		retimed_metrics["extraction_ms"] = 999999.0
+		retimed_metrics["preparation_ms"] = 888888.0
+		var retimed_data = MeshData.new(plan.cell_address, result.data.world_bounds, result.data.vertices, result.data.indices, result.data.normals, result.data.uvs, result.data.source_descriptor_ids, result.data.source_fragment_ids, result.data.input_fingerprint, retimed_metrics)
+		_expect(failures, "observational timings do not perturb mesh identity", retimed_data.fingerprint == result.data.fingerprint)
 		var changed_vertices: PackedVector3Array = result.data.vertices.duplicate()
 		changed_vertices[0] += Vector3(0.25, 0.0, 0.0)
 		var changed_data = MeshData.new(plan.cell_address, result.data.world_bounds, changed_vertices, result.data.indices, result.data.normals, result.data.uvs, result.data.source_descriptor_ids, result.data.source_fragment_ids, result.data.input_fingerprint, result.data.metrics)
@@ -68,12 +73,16 @@ static func run() -> Array[String]:
 	_expect(failures, "empty cells remain valid mesh results", empty.success)
 	if empty.success:
 		_expect(failures, "empty cell emits no triangles", empty.data.indices.is_empty())
-	var surface_plan := _surface_plan(Vector3i.ZERO)
+		_expect(failures, "empty cell bounds derive from address", empty.data.world_bounds == AABB(Vector3(96, -64, 32), Vector3(32, 32, 32)))
+	var surface_plan := _surface_plan(Vector3i.ZERO, 0.5)
 	var surface_partition = _partition_result(surface_plan, Config.new(), provenance)
 	var surface_result = Mesher.build(Request.new(surface_plan, Config.new(), provenance, 0.0, surface_partition, context))
 	_expect(failures, "analytic chamber surface builds", surface_result.success and surface_result.data.indices.size() > 0)
 	if surface_result.success:
 		_expect(failures, "marching-cubes vertices are canonically reused", _unique_positions(surface_result.data.vertices) == surface_result.data.vertices.size())
+		var altered_surface_plan := _surface_plan(Vector3i.ZERO, 1.0)
+		var altered_surface := Mesher.build(Request.new(altered_surface_plan, Config.new(), provenance, 0.0, _partition_result(altered_surface_plan, Config.new(), provenance), context))
+		_expect(failures, "chamber authored parameters affect mesh identity", altered_surface.success and altered_surface.data.fingerprint != surface_result.data.fingerprint)
 	var tunnel_plan := _tunnel_plan(Vector3i.ZERO)
 	var tunnel_partition = _partition_result(tunnel_plan, Config.new(), provenance)
 	var tunnel_result = Mesher.build(Request.new(tunnel_plan, Config.new(), provenance, 0.0, tunnel_partition, context))
@@ -94,20 +103,22 @@ static func _plan(coordinate: Vector3i, kinds: Array) -> Plan:
 	var cell := AABB(Vector3(coordinate) * 32.0, Vector3(32, 32, 32))
 	var fragments: Array = []
 	for i in range(kinds.size()):
-		var clipped := AABB(cell.position + Vector3(2 + i * 8, 4, 3), Vector3(10, 8, 12))
+		var kind_offset := 2 if str(kinds[i]) == "chamber" else 10
+		var clipped := AABB(cell.position + Vector3(kind_offset, 4, 3), Vector3(10, 8, 12))
+		var owner := str(kinds[i]) == "chamber" or (not kinds.has("chamber") and i == 0)
 		fragments.append(Fragment.new(
 			"gfrag1:test-%s" % kinds[i], "stable:%s" % kinds[i], kinds[i], address,
-			cell, clipped, i == 0, {}, {}, "source:%s" % kinds[i], {}
+			cell, clipped, owner, {}, {}, "source:%s" % kinds[i], {}
 		))
 	return Plan.new(address, fragments, [], [], "geometry", "finalization")
 
 
-static func _surface_plan(coordinate: Vector3i) -> Plan:
+static func _surface_plan(coordinate: Vector3i, floor_bias: float = 0.5) -> Plan:
 	var address := Address.new(coordinate)
 	var cell := AABB(Vector3(coordinate) * 32.0, Vector3(32, 32, 32))
 	var clipped := AABB(Vector3(5, 5, 5), Vector3(22, 22, 22))
-	var metadata := {"center": Vector3(16, 16, 16), "dimensions": Vector3(22, 18, 20), "shape_family": "ellipsoid", "rotation_y": 0.0}
-	var fragment := Fragment.new("gfrag1:surface-chamber", "stable:surface-chamber", "chamber", address, cell, clipped, true, metadata, {}, "source:surface-chamber", {})
+	var metadata := {"center": Vector3(16, 16, 16), "dimensions": Vector3(22, 18, 20), "shape_family": "ellipsoid", "rotation_y": 0.0, "floor_bias": floor_bias, "wall_roughness": 0.5}
+	var fragment := Fragment.new("gfrag1:surface-chamber", "stable:surface-chamber", "chamber", address, cell, clipped, true, {}, {}, "source:surface-chamber", metadata)
 	return Plan.new(address, [fragment], [], [], "geometry", "finalization")
 
 
@@ -116,7 +127,7 @@ static func _tunnel_plan(coordinate: Vector3i) -> Plan:
 	var cell := AABB(Vector3(coordinate) * 32.0, Vector3(32, 32, 32))
 	var clipped := AABB(Vector3(3, 12, 3), Vector3(26, 8, 26))
 	var metadata := {"control_points": [Vector3(4, 16, 4), Vector3(12, 16, 12), Vector3(20, 14, 20), Vector3(28, 14, 28)], "width": 6.0, "height": 4.0}
-	var fragment := Fragment.new("gfrag1:tunnel-surface", "stable:tunnel-surface", "tunnel", address, cell, clipped, true, metadata, {}, "source:tunnel-surface", {})
+	var fragment := Fragment.new("gfrag1:tunnel-surface", "stable:tunnel-surface", "tunnel", address, cell, clipped, true, {}, {}, "source:tunnel-surface", metadata)
 	return Plan.new(address, [fragment], [], [], "geometry", "finalization")
 
 
@@ -125,7 +136,7 @@ static func _entrance_plan(coordinate: Vector3i) -> Plan:
 	var cell := AABB(Vector3(coordinate) * 32.0, Vector3(32, 32, 32))
 	var clipped := AABB(Vector3(10, 4, 10), Vector3(12, 24, 12))
 	var metadata := {"required_opening_bounds": clipped, "surface_world_position": Vector3(16, 20, 16), "orientation": Vector3(1, 0, 0), "underground_anchor": Vector3(16, 4, 16), "clearance_radius": 3.0, "descent_profile": "gradual"}
-	var fragment := Fragment.new("gfrag1:entrance-surface", "stable:entrance-surface", "entrance", address, cell, clipped, true, metadata, {}, "source:entrance-surface", {})
+	var fragment := Fragment.new("gfrag1:entrance-surface", "stable:entrance-surface", "entrance", address, cell, clipped, true, {}, {}, "source:entrance-surface", metadata)
 	return Plan.new(address, [fragment], [metadata], [], "geometry", "finalization")
 
 

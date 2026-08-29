@@ -117,6 +117,8 @@ func _run_fixture(fixture_name: String) -> void:
 					"[VALIDATION] graph fingerprint=%s" %
 					GraphCanonicalizer.region_bundle_fingerprint(bundle)
 				)
+		"mesh":
+			failures.append_array(CaveMeshTests.run())
 		_:
 			failures.append("unknown fixture: %s" % fixture_name)
 	_finish("fixture:%s" % fixture_name, failures)

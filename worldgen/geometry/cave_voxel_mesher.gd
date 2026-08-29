@@ -38,7 +38,7 @@ static func build(request) -> StageResult:
 			descriptor_ids.append(fragment.source_descriptor_id); fragment_ids.append(fragment.fragment_id)
 	if rejected > 0: return StageResult.fail("cave_mesh_preparation", ["Geometry fragment has non-positive clipped bounds"])
 	var pitch: float = request.partition_configuration.voxel_pitch
-	var cell_bounds: AABB = _AABB_from_plan(plan); var halo := pitch * float(request.partition_configuration.sample_halo)
+	var cell_bounds: AABB = _AABB_from_plan(plan, request.partition_configuration); var halo := pitch * float(request.partition_configuration.sample_halo)
 	if fragments.is_empty():
 		var empty_metrics := {"fragment_count": 0, "source_descriptor_count": 0, "vertex_count": 0, "index_count": 0, "triangle_count": 0, "sample_count": 0, "cube_count": 0, "sample_pitch": pitch, "sample_halo": request.partition_configuration.sample_halo, "marching_cubes_table_revision": MARCHING_CUBES_TABLE_REVISION, "extraction_mode": "global_signed_distance_marching_cubes", "memory_bytes": 0, "extraction_ms": 0.0, "preparation_ms": 0.0}
 		var empty_data := MeshData.new(plan.cell_address, cell_bounds, PackedVector3Array(), PackedInt32Array(), PackedVector3Array(), PackedVector2Array(), [], [], request.input_fingerprint, empty_metrics, [], true)
@@ -54,7 +54,13 @@ static func build(request) -> StageResult:
 			scan = scan.merge(fragment_scan)
 	var halo_bounds := AABB(cell_bounds.position - Vector3.ONE * halo, cell_bounds.size + Vector3.ONE * halo * 2.0)
 	scan = scan.intersection(halo_bounds)
-	var minimum := Vector3i(floori(scan.position.x / pitch), floori(scan.position.y / pitch), floori(scan.position.z / pitch)); var maximum := Vector3i(ceili((scan.position.x + scan.size.x) / pitch), ceili((scan.position.y + scan.size.y) / pitch), ceili((scan.position.z + scan.size.z) / pitch))
+	# Halo samples may be read, but cube emission is owned by the requested
+	# cell's half-open lattice range. This prevents adjacent cells from
+	# emitting duplicate halo cubes.
+	var cell_min := Vector3i(floori(cell_bounds.position.x / pitch), floori(cell_bounds.position.y / pitch), floori(cell_bounds.position.z / pitch))
+	var cell_max := Vector3i(ceili((cell_bounds.position.x + cell_bounds.size.x) / pitch), ceili((cell_bounds.position.y + cell_bounds.size.y) / pitch), ceili((cell_bounds.position.z + cell_bounds.size.z) / pitch))
+	var minimum := Vector3i(maxi(floori(scan.position.x / pitch), cell_min.x), maxi(floori(scan.position.y / pitch), cell_min.y), maxi(floori(scan.position.z / pitch), cell_min.z))
+	var maximum := Vector3i(mini(ceili((scan.position.x + scan.size.x) / pitch), cell_max.x), mini(ceili((scan.position.y + scan.size.y) / pitch), cell_max.y), mini(ceili((scan.position.z + scan.size.z) / pitch), cell_max.z))
 	var samples := 0; var cubes := 0; var started := Time.get_ticks_usec()
 	for x in range(minimum.x, maximum.x):
 		for y in range(minimum.y, maximum.y):
@@ -70,13 +76,8 @@ static func build(request) -> StageResult:
 					var edge_a: int = int(tri[0]); var edge_b: int = int(tri[1]); var edge_c: int = int(tri[2])
 					var a := _edge_point(positions, values, CUBE_EDGES[edge_a], request.iso_level); var b := _edge_point(positions, values, CUBE_EDGES[edge_b], request.iso_level); var c := _edge_point(positions, values, CUBE_EDGES[edge_c], request.iso_level)
 					_append_triangle(a, b, c, [_lattice_edge_key(Vector3i(x, y, z), edge_a), _lattice_edge_key(Vector3i(x, y, z), edge_b), _lattice_edge_key(Vector3i(x, y, z), edge_c)], edge_vertices, vertices, indices, normals, uvs)
-	var fallback_count := 0
-	if indices.is_empty() and not fragments.is_empty():
-		for fragment in fragments:
-			_append_box_shell(fragment.clipped_source_bounds, vertices, indices, normals, uvs)
-			fallback_count += 1
 	var memory_bytes := vertices.size() * 12 + normals.size() * 12 + uvs.size() * 8 + indices.size() * 4
-	var metrics := {"fragment_count": fragments.size(), "source_descriptor_count": _unique_count(descriptor_ids), "vertex_count": vertices.size(), "index_count": indices.size(), "triangle_count": indices.size() / 3, "sample_count": samples, "cube_count": cubes, "sample_pitch": pitch, "sample_halo": request.partition_configuration.sample_halo, "marching_cubes_table_revision": MARCHING_CUBES_TABLE_REVISION, "extraction_mode": "global_signed_distance_marching_cubes", "fallback_shell_count": fallback_count, "memory_bytes": memory_bytes, "extraction_ms": float(Time.get_ticks_usec() - started) / 1000.0, "preparation_ms": float(Time.get_ticks_usec() - started) / 1000.0}
+	var metrics := {"fragment_count": fragments.size(), "source_descriptor_count": _unique_count(descriptor_ids), "vertex_count": vertices.size(), "index_count": indices.size(), "triangle_count": indices.size() / 3, "sample_count": samples, "cube_count": cubes, "sample_pitch": pitch, "sample_halo": request.partition_configuration.sample_halo, "marching_cubes_table_revision": MARCHING_CUBES_TABLE_REVISION, "extraction_mode": "global_signed_distance_marching_cubes", "fallback_shell_count": 0, "memory_bytes": memory_bytes, "extraction_ms": float(Time.get_ticks_usec() - started) / 1000.0, "preparation_ms": float(Time.get_ticks_usec() - started) / 1000.0}
 	var data := MeshData.new(plan.cell_address, cell_bounds, vertices, indices, normals, uvs, descriptor_ids, fragment_ids, request.input_fingerprint, metrics, [], true)
 	return StageResult.ok("cave_mesh_preparation", data, data.fingerprint)
 
@@ -100,7 +101,7 @@ static func _source_sdf(point: Vector3, fragment) -> float:
 			var height := maxf(float(metadata.get("height", 2.0)) * 0.5, 0.1)
 			for i in range(maxi(points.size() - 1, 0)):
 				best = minf(best, _elliptical_capsule_sdf(point, points[i], points[i + 1], width, height))
-			return best + _roughness(point, fragment)
+			return best + _roughness(point, fragment) * clampf(float(metadata.get("roughness", 1.0)), 0.0, 2.0)
 		"entrance": return _entrance_sdf(point, metadata, fragment.clipped_source_bounds) + _roughness(point, fragment)
 		_: return _box_sdf(point, fragment.clipped_source_bounds)
 
@@ -113,6 +114,8 @@ static func _chamber_sdf(point: Vector3, metadata: Dictionary, fallback_bounds: 
 	var family := str(metadata.get("shape_family", "ellipsoid"))
 	var rotation := float(metadata.get("rotation_y", 0.0))
 	var local := (point - center).rotated(Vector3.UP, -rotation)
+	var asymmetry: Vector3 = metadata.get("asymmetry", Vector3.ZERO)
+	local += Vector3(asymmetry.x * local.y, asymmetry.y * local.x, asymmetry.z * local.y)
 	var family_dimensions := dimensions
 	match family:
 		"low_oval": family_dimensions.y *= 0.7
@@ -129,6 +132,12 @@ static func _chamber_sdf(point: Vector3, metadata: Dictionary, fallback_bounds: 
 	if family == "arched_ellipsoid": distance = maxf(distance, local.y - family_dimensions.y * 0.35)
 	if family == "irregular_ellipsoid": distance += sin(local.x * 0.37) * sin(local.z * 0.29) * 0.12
 	if family == "fracture_vault": distance += absf(sin(local.x * 0.21 + local.z * 0.17)) * 0.08
+	var floor_bias := clampf(float(metadata.get("floor_bias", 0.5)), 0.0, 1.0)
+	var ceiling_arch := clampf(float(metadata.get("ceiling_arch", 0.0)), 0.0, 1.0)
+	var wall_roughness := clampf(float(metadata.get("wall_roughness", 0.0)), 0.0, 1.0)
+	distance += (local.y / maxf(family_dimensions.y, 0.01) - (0.5 - floor_bias)) * 0.30
+	distance += sin(local.x * 0.19 + local.z * 0.13) * ceiling_arch * 0.10
+	distance += sin(local.x * 0.41 + local.z * 0.23) * wall_roughness * 0.08
 	return distance
 
 static func _entrance_sdf(point: Vector3, metadata: Dictionary, fallback_bounds: AABB) -> float:
@@ -140,6 +149,7 @@ static func _entrance_sdf(point: Vector3, metadata: Dictionary, fallback_bounds:
 	var surface: Vector3 = metadata.get("surface_world_position", opening.get_center())
 	var underground: Vector3 = metadata.get("underground_anchor", opening.get_center())
 	var radius := maxf(float(metadata.get("clearance_radius", 1.0)), 0.25)
+	radius += maxf(float(metadata.get("clearance_margin", 0.0)), 0.0)
 	var profile := str(metadata.get("descent_profile", "gradual"))
 	if profile == "gradual": radius *= 1.2
 	if profile == "steep": radius *= 0.9
@@ -215,7 +225,12 @@ static func _lattice_edge_key(cube: Vector3i, edge_index: int) -> String:
 		first = second
 		second = swap
 	return "%d:%d:%d-%d:%d:%d" % [first.x, first.y, first.z, second.x, second.y, second.z]
-static func _AABB_from_plan(plan) -> AABB: return plan.fragments[0].cell_bounds if not plan.fragments.is_empty() else AABB()
+static func _AABB_from_plan(plan, configuration) -> AABB:
+	if not plan.fragments.is_empty():
+		return plan.fragments[0].cell_bounds
+	if plan.cell_address == null or configuration == null:
+		return AABB()
+	return AABB(Vector3(plan.cell_address.coordinate) * configuration.cell_size, configuration.cell_size)
 static func _unique_count(values: Array) -> int:
 	var seen := {}; for value in values: seen[str(value)] = true
 	return seen.size()
