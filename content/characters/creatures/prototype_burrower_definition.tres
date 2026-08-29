@@ -1,0 +1,27 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://gameplay/creatures/definitions/creature_definition.gd" id="1_creature"]
+
+[resource]
+script = ExtResource("1_creature")
+content_id = "creature.enemy.burrower"
+definition_family = "creature"
+schema_revision = 1
+category_ids = Array[String](["category.creature.enemy"])
+capability_ids = Array[String](["capability.movement", "capability.sensing", "capability.combat.melee"])
+display_name = "Burrower"
+max_health = 36
+move_speed = 3.3
+detection_range = 16.0
+attack_range = 1.8
+attack_damage = 10
+attack_cooldown = 1.2
+attack_windup = 0.42
+hit_stagger_duration = 0.2
+parry_stagger_duration = 0.85
+attack_profile_id = "attack_profile.creature.burrower.melee"
+archetype_id = "archetype.creature.burrower.prototype"
+animation_set_id = "animation_set.humanoid.prototype"
+rig_profile_id = "rig_profile.humanoid.prototype"
+required_animation_role_ids = Array[String](["animation_role.locomotion.idle", "animation_role.locomotion.walk_forward", "animation_role.action.attack.light_01", "animation_role.reaction.hit.front"])
+required_rig_role_ids = Array[String](["rig_role.root", "rig_role.head"])
