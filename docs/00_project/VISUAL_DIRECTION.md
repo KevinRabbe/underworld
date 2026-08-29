@@ -171,6 +171,8 @@ The approved first-pass turnaround and action reference is [Frontier Underworld 
 
 The isolated authoring scene at `res://tools/character_preview/voxel_character_preview.tscn` provides a neutral-lit character review environment. It can exercise directional locomotion, airborne poses, dodges, light/heavy attacks, block, parry, hit, death, tool use, equipment visibility and manual turntable rotation without changing the gameplay scene.
 
+For repeatable visual review, the scene also accepts user arguments such as `--preview-capture=<absolute PNG path>`, `--preview-state=attack_heavy`, `--preview-pose-time=0.38`, and `--preview-angle=-33`. Capture mode freezes the requested clip at the normalized pose time after compiling the real runtime modules; it is evidence of the implemented presentation rather than a separate mockup.
+
 ## Creatures and bosses
 
 Common creatures can use mid-detail assets with strong silhouettes and readable attack poses.

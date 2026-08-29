@@ -14,6 +14,9 @@ const ACCENT := 5
 const FACE := 6
 const CANVAS_LIGHT := 7
 const TROUSER := 8
+const CANVAS_DARK := 9
+const LEATHER_LIGHT := 10
+const SOLE := 11
 
 
 static func build() -> Resource:
@@ -22,17 +25,20 @@ static func build() -> Resource:
 		_entry("cloth", Color("716655"), 0.92, 0.0),
 		_entry("leather", Color("503a2b"), 0.76, 0.0),
 		_entry("metal", Color("858b8e"), 0.38, 0.62),
-		_entry("hair", Color("392820"), 0.88, 0.0),
+		_entry("hair", Color("4a3326"), 0.88, 0.0),
 		_entry("accent", Color("2e7180"), 0.82, 0.0),
-		_entry("face", Color("32271f"), 0.72, 0.0),
+		_entry("face", Color("4a392d"), 0.72, 0.0),
 		_entry("canvas_light", Color("9a896a"), 0.94, 0.0),
 		_entry("trouser", Color("343835"), 0.90, 0.0),
+		_entry("canvas_dark", Color("5b5445"), 0.95, 0.0),
+		_entry("leather_light", Color("75543a"), 0.80, 0.0),
+		_entry("sole", Color("252523"), 0.98, 0.0),
 	])
 	var modules: Array[Resource] = [
 		_module("body", &"body_base", [
-			_part("pelvis", "rig_role.pelvis", _box(Vector3i(-2,-1,-1), Vector3i(1,1,1), TROUSER), Vector3i.ZERO),
-			_part("spine", "rig_role.spine.lower", _box(Vector3i(-2,-1,-1), Vector3i(1,6,1), CANVAS_LIGHT), Vector3i(0,1,0)),
-			_part("chest", "rig_role.chest", _box(Vector3i(-3,-1,-1), Vector3i(2,3,1), CANVAS_LIGHT), Vector3i(0,0,0)),
+			_part("pelvis", "rig_role.pelvis", _box(Vector3i(-2,-1,-1), Vector3i(2,1,1), TROUSER), Vector3i.ZERO),
+			_part("spine", "rig_role.spine.lower", _box(Vector3i(-2,-1,-1), Vector3i(2,6,1), CANVAS_LIGHT), Vector3i(0,1,0)),
+			_part("chest", "rig_role.chest", _box(Vector3i(-3,-1,-1), Vector3i(3,3,1), CANVAS_LIGHT), Vector3i(0,0,0)),
 		]),
 		_module("head", &"head_hair", [
 			_part("head_skin", "rig_role.head", _head_cells(), Vector3i(0,1,0)),
@@ -41,16 +47,18 @@ static func build() -> Resource:
 		]),
 		_module("jacket", &"torso_outfit", [
 			_part("jacket_front", "rig_role.chest", _jacket_front_cells(), Vector3i.ZERO),
+			_part("jacket_trim", "rig_role.chest", _jacket_trim_cells(), Vector3i.ZERO),
 			_part("jacket_lower", "rig_role.spine.lower", _jacket_lower_cells(), Vector3i(0,1,0)),
 			_part("shoulder_l", "rig_role.clavicle.left", _box(Vector3i(-2,-1,-1), Vector3i(1,1,1), CLOTH), Vector3i.ZERO),
 			_part("shoulder_r", "rig_role.clavicle.right", _box(Vector3i(-1,-1,-1), Vector3i(2,1,1), CLOTH), Vector3i.ZERO),
 			_part("neck_connector", "rig_role.neck", _box(Vector3i(-1,-2,-1), Vector3i(0,0,1), CLOTH), Vector3i.ZERO),
-			_part("upperarm_l", "rig_role.upper_arm.left", _box(Vector3i(-5,-1,-1), Vector3i(0,1,1), CLOTH), Vector3i(-1,0,0)),
+			_part("upperarm_l", "rig_role.upper_arm.left", _upper_arm_cells(true), Vector3i(-1,0,0)),
 			_part("forearm_l", "rig_role.forearm.left", _box(Vector3i(-5,-1,-1), Vector3i(0,0,1), LEATHER), Vector3i(-1,0,0)),
-			_part("upperarm_r", "rig_role.upper_arm.right", _box(Vector3i(0,-1,-1), Vector3i(5,1,1), CLOTH), Vector3i(1,0,0)),
+			_part("upperarm_r", "rig_role.upper_arm.right", _upper_arm_cells(false), Vector3i(1,0,0)),
 			_part("forearm_r", "rig_role.forearm.right", _box(Vector3i(0,-1,-1), Vector3i(5,0,1), LEATHER), Vector3i(1,0,0)),
 			_part("scarf", "rig_role.neck", _box(Vector3i(-2,-1,-2), Vector3i(1,1,1), ACCENT), Vector3i(0,0,0)),
 			_part("belt", "rig_role.pelvis", _box(Vector3i(-3,1,-2), Vector3i(2,2,1), LEATHER), Vector3i(0,0,0)),
+			_part("belt_buckle", "rig_role.pelvis", _box(Vector3i(0,1,-3), Vector3i(1,2,-3), METAL), Vector3i.ZERO),
 			_part("pack_straps", "rig_role.chest", _pack_strap_cells(), Vector3i.ZERO),
 		]),
 		_module("trousers", &"leg_outfit", [
@@ -68,13 +76,14 @@ static func build() -> Resource:
 			_mirrored_part("hand_r", "rig_role.hand.right", "hand_l", Vector3i(1,0,0)),
 		]),
 		_module("boots", &"feet", [
-			_part("foot_l", "rig_role.foot.left", _box(Vector3i(-1,-1,-1), Vector3i(1,1,4), LEATHER), Vector3i(0,0,0)),
-			_part("foot_r", "rig_role.foot.right", _box(Vector3i(-1,-1,-1), Vector3i(1,1,4), LEATHER), Vector3i(0,0,0)),
+			_part("foot_l", "rig_role.foot.left", _boot_cells(), Vector3i(0,0,0)),
+			_part("foot_r", "rig_role.foot.right", _boot_cells(), Vector3i(0,0,0)),
 		]),
 		_module("pouch", &"back_accessory", [
 			_part("hip_pouch", "rig_role.pelvis", _box(Vector3i(3,-1,1), Vector3i(5,2,2), LEATHER), Vector3i.ZERO),
-			_part("expedition_pack", "rig_role.chest", _box(Vector3i(-3,-7,2), Vector3i(2,2,4), CLOTH), Vector3i.ZERO),
-			_part("pack_roll", "rig_role.chest", _box(Vector3i(-3,2,2), Vector3i(2,4,4), LEATHER), Vector3i.ZERO),
+			_part("expedition_pack", "rig_role.chest", _expedition_pack_cells(), Vector3i.ZERO),
+			_part("pack_roll", "rig_role.chest", _pack_roll_cells(), Vector3i.ZERO),
+			_part("pack_buckles", "rig_role.chest", _pack_buckle_cells(), Vector3i.ZERO),
 		]),
 		_module("tools", &"held_item", [
 			_tool_part("axe_handle", "stone_axe", _box(Vector3i(0,-7,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO),
@@ -128,26 +137,39 @@ static func _box(minimum: Vector3i, maximum: Vector3i, palette_index: int) -> Ar
 static func _head_cells() -> Array[Dictionary]:
 	var cells: Array[Dictionary] = []
 	for z in range(-2, 2):
-		for y in range(0, 5):
-			for x in range(-2, 2):
-				var corner_cut := y == 4 and (x == -2 or x == 1) and (z == -2 or z == 1)
-				if not corner_cut:
+		for y in range(0, 6):
+			for x in range(-2, 3):
+				var corner_cut := y == 5 and (x == -2 or x == 2) and (z == -2 or z == 1)
+				var face_inlay := z == -2 and ((y == 3 and x in [-1, 1]) or (y == 1 and x == 0))
+				if not corner_cut and not face_inlay:
 					cells.append({"position": Vector3i(x,y,z), "palette_index": SKIN})
+	# Small ears break the box silhouette without changing the semantic head rig.
+	cells.append({"position": Vector3i(-3,2,-1), "palette_index": SKIN})
+	cells.append({"position": Vector3i(3,2,-1), "palette_index": SKIN})
 	return cells
 
 
 static func _hair_cells() -> Array[Dictionary]:
-	var cells := _box(Vector3i(-2,4,-2), Vector3i(1,5,1), HAIR)
-	cells.append_array(_box(Vector3i(-2,1,1), Vector3i(1,3,2), HAIR))
-	cells.append_array(_box(Vector3i(-3,2,-1), Vector3i(-3,4,1), HAIR))
+	var cells: Array[Dictionary] = []
+	for z in range(-2, 2):
+		for y in range(4, 6):
+			for x in range(-2, 3):
+				if not (y == 5 and abs(x) == 2):
+					cells.append({"position": Vector3i(x,y,z), "palette_index": HAIR})
+	# Short back and side layers keep the head readable from the rear without
+	# creating the previous solid helmet slab.
+	cells.append_array(_box(Vector3i(-2,1,1), Vector3i(2,3,2), HAIR))
+	cells.append_array(_box(Vector3i(-3,2,0), Vector3i(-3,4,1), HAIR))
+	cells.append_array(_box(Vector3i(3,2,0), Vector3i(3,4,1), HAIR))
+	cells.append_array(_box(Vector3i(-2,4,-3), Vector3i(0,5,-3), HAIR))
 	return cells
 
 
 static func _face_cells() -> Array[Dictionary]:
 	return [
-		{"position": Vector3i(-1,3,-3), "palette_index": FACE},
-		{"position": Vector3i(1,3,-3), "palette_index": FACE},
-		{"position": Vector3i(0,2,-3), "palette_index": SKIN},
+		{"position": Vector3i(-1,3,-2), "palette_index": FACE},
+		{"position": Vector3i(1,3,-2), "palette_index": FACE},
+		{"position": Vector3i(0,1,-2), "palette_index": FACE},
 	]
 
 
@@ -156,6 +178,75 @@ static func _jacket_front_cells() -> Array[Dictionary]:
 	cells.append_array(_box(Vector3i(1,-1,-2), Vector3i(3,3,-2), CLOTH))
 	cells.append_array(_box(Vector3i(-1,-1,-2), Vector3i(0,0,-2), LEATHER))
 	return cells
+
+
+static func _jacket_trim_cells() -> Array[Dictionary]:
+	return [
+		{"position": Vector3i(-2,3,-3), "palette_index": CANVAS_LIGHT},
+		{"position": Vector3i(-1,2,-3), "palette_index": CANVAS_LIGHT},
+		{"position": Vector3i(1,2,-3), "palette_index": CANVAS_LIGHT},
+		{"position": Vector3i(2,3,-3), "palette_index": CANVAS_LIGHT},
+		{"position": Vector3i(0,1,-3), "palette_index": LEATHER_LIGHT},
+		{"position": Vector3i(0,-1,-3), "palette_index": METAL},
+	]
+
+
+static func _upper_arm_cells(left: bool) -> Array[Dictionary]:
+	var minimum_x: int = -5 if left else 0
+	var maximum_x: int = 0 if left else 5
+	var cells: Array[Dictionary] = []
+	for z in range(-1, 2):
+		for y in range(-1, 2):
+			for x in range(minimum_x, maximum_x + 1):
+				var distance_from_shoulder: int = -x if left else x
+				var palette_index: int = ACCENT if left and distance_from_shoulder in [2, 3] else CLOTH
+				cells.append({"position": Vector3i(x,y,z), "palette_index": palette_index})
+	return cells
+
+
+static func _boot_cells() -> Array[Dictionary]:
+	var cells: Array[Dictionary] = []
+	for z in range(-1, 5):
+		for y in range(-1, 2):
+			for x in range(-1, 2):
+				var palette_index: int = SOLE if y == -1 else (LEATHER_LIGHT if z >= 2 else LEATHER)
+				cells.append({"position": Vector3i(x,y,z), "palette_index": palette_index})
+	return cells
+
+
+static func _expedition_pack_cells() -> Array[Dictionary]:
+	var cells: Array[Dictionary] = []
+	for z in range(2, 5):
+		for y in range(-7, 3):
+			for x in range(-3, 3):
+				if (y in [-7, 2]) and x in [-3, 2]:
+					continue
+				var palette_index: int = CANVAS_DARK
+				if y in [-5, 0] or x in [-3, 2]:
+					palette_index = LEATHER
+				cells.append({"position": Vector3i(x,y,z), "palette_index": palette_index})
+	return cells
+
+
+static func _pack_roll_cells() -> Array[Dictionary]:
+	var cells: Array[Dictionary] = []
+	for z in range(2, 5):
+		for y in range(2, 5):
+			for x in range(-3, 3):
+				if y in [2, 4] and z in [2, 4]:
+					continue
+				var palette_index: int = LEATHER_LIGHT if x in [-3, 2] else CANVAS_LIGHT
+				cells.append({"position": Vector3i(x,y,z), "palette_index": palette_index})
+	return cells
+
+
+static func _pack_buckle_cells() -> Array[Dictionary]:
+	return [
+		{"position": Vector3i(-2,-4,5), "palette_index": METAL},
+		{"position": Vector3i(1,-4,5), "palette_index": METAL},
+		{"position": Vector3i(-2,1,5), "palette_index": METAL},
+		{"position": Vector3i(1,1,5), "palette_index": METAL},
+	]
 
 
 static func _jacket_lower_cells() -> Array[Dictionary]:

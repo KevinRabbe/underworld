@@ -51,6 +51,11 @@ position = Vector3(-2, 2.4, -2)
 light_energy = 2.0
 omni_range = 7.0
 
+[node name="RimLight" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-38, 142, 0)
+light_color = Color(0.62, 0.78, 0.8, 1)
+light_energy = 0.8
+
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(0.840386, -0.092323, 0.53405, 0, 0.985389, 0.170319, -0.542, -0.143137, 0.828107, 2.7, 1.35, -4.2)
 fov = 34.0

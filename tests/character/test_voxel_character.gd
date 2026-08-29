@@ -31,7 +31,7 @@ static func _test_definition_contract(failures: Array[String]) -> void:
 	var jacket_parts: Array[String] = []
 	for part_value in character.module_for_slot(&"torso_outfit").parts:
 		jacket_parts.append(str(part_value.get("part_id", "")))
-	_expect_true(failures, "expedition jacket authors connected shoulder, neck, and layered shell parts", jacket_parts.has("shoulder_l") and jacket_parts.has("shoulder_r") and jacket_parts.has("neck_connector") and jacket_parts.has("jacket_front") and jacket_parts.has("jacket_lower"))
+	_expect_true(failures, "expedition jacket authors connected shoulder, neck, layered shell, and field details", jacket_parts.has("shoulder_l") and jacket_parts.has("shoulder_r") and jacket_parts.has("neck_connector") and jacket_parts.has("jacket_front") and jacket_parts.has("jacket_lower") and jacket_parts.has("jacket_trim") and jacket_parts.has("belt_buckle"))
 	var leg_parts: Array[String] = []
 	for part_value in character.module_for_slot(&"leg_outfit").parts:
 		leg_parts.append(str(part_value.get("part_id", "")))
@@ -39,7 +39,7 @@ static func _test_definition_contract(failures: Array[String]) -> void:
 	var accessory_parts: Array[String] = []
 	for part_value in character.module_for_slot(&"back_accessory").parts:
 		accessory_parts.append(str(part_value.get("part_id", "")))
-	_expect_true(failures, "expedition accessory module includes pack, roll, and hip pouch", accessory_parts.has("expedition_pack") and accessory_parts.has("pack_roll") and accessory_parts.has("hip_pouch"))
+	_expect_true(failures, "expedition accessory module includes pack, roll, buckles, and hip pouch", accessory_parts.has("expedition_pack") and accessory_parts.has("pack_roll") and accessory_parts.has("pack_buckles") and accessory_parts.has("hip_pouch"))
 	var original_fingerprint: String = character.canonical_fingerprint()
 	character.modules.reverse()
 	_expect_equal(failures, "module order cannot change character fingerprint", character.canonical_fingerprint(), original_fingerprint)
@@ -142,6 +142,9 @@ static func _test_runtime_presentation(failures: Array[String]) -> void:
 	var library: AnimationLibrary = character.animation_player.get_animation_library("")
 	for clip_name in ["idle", "walk_forward", "walk_backward", "strafe_left", "strafe_right", "sprint", "jump", "fall", "dodge_forward", "dodge_backward", "dodge_left", "dodge_right", "attack_light", "attack_heavy", "block", "parry", "hit", "death", "tool_use"]:
 		_expect_true(failures, "%s owns authored pose tracks" % clip_name, library.has_animation(clip_name) and library.get_animation(clip_name).get_track_count() > 0)
+	for action_clip_name in ["jump", "fall", "dodge_forward", "dodge_backward", "dodge_left", "dodge_right", "attack_light", "attack_heavy", "block", "parry", "hit", "death", "tool_use"]:
+		var action_clip: Animation = library.get_animation(action_clip_name)
+		_expect_true(failures, "%s owns complete left/right upper-arm silhouette tracks" % action_clip_name, _has_bone_rotation_track(action_clip, character.skeleton, "upperarm_l") and _has_bone_rotation_track(action_clip, character.skeleton, "upperarm_r"))
 	_expect_true(failures, "heavy attack owns a fuller silhouette than light attack", library.get_animation("attack_heavy").get_track_count() > library.get_animation("attack_light").get_track_count())
 	_expect_true(failures, "idle pose lowers both articulated arm chains", library.get_animation("idle").get_track_count() >= 6)
 	_expect_true(failures, "directional dodge poses include torso and all leg chains", library.get_animation("dodge_forward").get_track_count() >= 5 and library.get_animation("dodge_left").get_track_count() >= 5)
@@ -277,3 +280,11 @@ static func _expect_true(failures: Array[String], label: String, condition: bool
 
 static func _expect_equal(failures: Array[String], label: String, actual: Variant, expected: Variant) -> void:
 	if actual != expected: failures.append("%s — expected %s, got %s" % [label, str(expected), str(actual)])
+
+
+static func _has_bone_rotation_track(animation: Animation, skeleton: Skeleton3D, bone_name: String) -> bool:
+	var bone_index: int = skeleton.find_bone(bone_name)
+	if bone_index < 0:
+		return false
+	var expected_path := NodePath("Skeleton3D:bones/%d/rotation" % bone_index)
+	return animation.find_track(expected_path, Animation.TYPE_VALUE) >= 0
