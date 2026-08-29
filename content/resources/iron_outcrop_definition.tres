@@ -1,0 +1,15 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://gameplay/resources/definitions/authored_harvestable_resource_definition.gd" id="1_definition"]
+
+[resource]
+script = ExtResource("1_definition")
+content_id = "resource.deposit.iron_outcrop"
+definition_family = "resource"
+schema_revision = 1
+category_ids = Array[String](["category.resource.deposit"])
+capability_ids = Array[String](["capability.excavatable"])
+capacity_units = 4.0
+primary_yield_item_id = "item.resource.iron_chunk"
+primary_yield_quantity_per_capacity_unit = 1.0
+presentation_archetype_id = "archetype.resource.iron_outcrop.prototype"
