@@ -111,7 +111,10 @@ func reset_pose() -> void:
 		var bone_name: String = str(bone_name_variant)
 		var bone_index: int = int(bone_indices[bone_name])
 		skeleton.set_bone_pose_rotation(bone_index, Quaternion.IDENTITY)
-		skeleton.set_bone_pose_position(bone_index, Vector3.ZERO)
+		# Procedural bones have no imported bind-pose animation. Keep their
+		# authored rest translation when clearing rotations; zeroing it collapses
+		# the visual rig toward the root after runtime animation resets.
+		skeleton.set_bone_pose_position(bone_index, skeleton.get_bone_rest(bone_index).origin)
 		skeleton.set_bone_pose_scale(bone_index, Vector3.ONE)
 
 
