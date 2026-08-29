@@ -165,6 +165,10 @@ The current box mannequin remains a valid rig/gameplay test representation until
 
 CHAR-PRESENT-001 evaluates a high-quality modular voxel player presentation while preserving the same semantic humanoid rig, equipment sockets, gameplay collision and animation-role contracts. The voxel survivor is a character-pipeline experiment, not an environment-wide renderer decision. Its internal module, palette and compiled-mesh boundaries are deliberately replaceable so an authored voxel source or a different compatible character presentation can later use the same gameplay contract.
 
+The working character theme is **Frontier Underworld Expedition**. It is a reversible art-direction choice rather than permanent world lore. The baseline survivor uses practical layered canvas, leather, rugged trousers, boots, a compact field pack, pouches, restrained teal identification accents and chunky cave-working tools. The silhouette should communicate a capable explorer at normal gameplay distance without borrowing a specific historical culture, religion or mythology.
+
+The approved first-pass turnaround and action reference is [Frontier Underworld Expedition character reference v1](reference/frontier_underworld_expedition_character_reference_v1.png). It guides proportions, palette, module layering and pose readability; it is preview/reference material and is not loaded by the runtime.
+
 ## Creatures and bosses
 
 Common creatures can use mid-detail assets with strong silhouettes and readable attack poses.

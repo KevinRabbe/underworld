@@ -22,6 +22,18 @@ static func _test_definition_contract(failures: Array[String]) -> void:
 	_expect_true(failures, "baseline voxel survivor validates", character.validate_definition().is_empty())
 	_expect_equal(failures, "baseline voxel size", character.voxel_size, 0.05)
 	_expect_true(failures, "baseline survivor is 36 voxels tall", is_equal_approx(character.presentation_bounds.size.y, 1.8))
+	var palette_slots: Array[String] = []
+	for entry_value in character.palette.entries:
+		palette_slots.append(str(entry_value.get("slot", "")))
+	_expect_true(failures, "expedition palette separates canvas and trouser materials", palette_slots.has("canvas_light") and palette_slots.has("trouser"))
+	var jacket_parts: Array[String] = []
+	for part_value in character.module_for_slot(&"torso_outfit").parts:
+		jacket_parts.append(str(part_value.get("part_id", "")))
+	_expect_true(failures, "expedition jacket authors connected shoulder, neck, and layered-front parts", jacket_parts.has("shoulder_l") and jacket_parts.has("shoulder_r") and jacket_parts.has("neck_connector") and jacket_parts.has("jacket_front"))
+	var accessory_parts: Array[String] = []
+	for part_value in character.module_for_slot(&"back_accessory").parts:
+		accessory_parts.append(str(part_value.get("part_id", "")))
+	_expect_true(failures, "expedition accessory module includes pack, roll, and hip pouch", accessory_parts.has("expedition_pack") and accessory_parts.has("pack_roll") and accessory_parts.has("hip_pouch"))
 	var original_fingerprint: String = character.canonical_fingerprint()
 	character.modules.reverse()
 	_expect_equal(failures, "module order cannot change character fingerprint", character.canonical_fingerprint(), original_fingerprint)
