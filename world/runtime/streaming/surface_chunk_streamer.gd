@@ -144,7 +144,7 @@ func load_destroyed_object_ids(object_ids: Array) -> void:
 	destroyed_object_ids.clear()
 	for object_id_variant in object_ids:
 		var object_id: String = str(object_id_variant)
-		if StableIdScript.parse(object_id) == null:
+		if not _is_valid_surface_object_id(object_id):
 			continue
 		destroyed_object_ids[object_id] = true
 
@@ -160,7 +160,7 @@ func get_destroyed_object_count() -> int:
 
 
 func is_world_object_destroyed(object_id: String) -> bool:
-	if StableIdScript.parse(object_id) == null:
+	if not _is_valid_surface_object_id(object_id):
 		return false
 	return destroyed_object_ids.has(object_id)
 
@@ -171,7 +171,10 @@ func destroy_world_object(
 	object_index: int,
 	object_chunk: Vector2i
 ) -> bool:
-	if StableIdScript.parse(object_id) == null or destroyed_object_ids.has(object_id):
+	if (
+		not _is_valid_surface_object_id(object_id, object_type)
+		or destroyed_object_ids.has(object_id)
+	):
 		return false
 
 	destroyed_object_ids[object_id] = true
@@ -195,7 +198,11 @@ func find_nearby_pickups(player_world_position: Vector3, radius: float) -> Array
 		for pickup_variant in chunk_pickups:
 			var pickup: Dictionary = pickup_variant.duplicate(true)
 			var object_id: String = str(pickup.get("object_id", ""))
-			if StableIdScript.parse(object_id) == null or destroyed_object_ids.has(object_id):
+			var object_type: String = str(pickup.get("object_type", ""))
+			if (
+				not _is_valid_surface_object_id(object_id, object_type)
+				or destroyed_object_ids.has(object_id)
+			):
 				continue
 			pickup["object_chunk"] = chunk_coord
 			found.append(pickup)
@@ -210,7 +217,11 @@ func collect_nearby_pickups(player_world_position: Vector3, radius: float) -> Ar
 		for pickup_variant in chunk_pickups:
 			var pickup: Dictionary = pickup_variant
 			var object_id: String = str(pickup.get("object_id", ""))
-			if StableIdScript.parse(object_id) == null or destroyed_object_ids.has(object_id):
+			var object_type: String = str(pickup.get("object_type", ""))
+			if (
+				not _is_valid_surface_object_id(object_id, object_type)
+				or destroyed_object_ids.has(object_id)
+			):
 				continue
 			destroyed_object_ids[object_id] = true
 			collected.append(pickup)
@@ -518,3 +529,44 @@ func _is_within_collision_radius(coord: Vector2i, center: Vector2i, radius: int 
 func _is_within_square_radius(coord: Vector2i, center: Vector2i, radius: int) -> bool:
 	var delta: Vector2i = coord - center
 	return abs(delta.x) <= radius and abs(delta.y) <= radius
+
+
+func _is_valid_surface_object_id(object_id: String, object_type: String = "") -> bool:
+	var stable_id = StableIdScript.parse(object_id)
+	if stable_id == null:
+		return false
+	var segments: Array[String] = stable_id.address().segments()
+	if segments.size() != 8:
+		return false
+	if segments[0] != "surface" or segments[1] != "candidate":
+		return false
+	if segments[3] != "cell" or segments[6] != "slot":
+		return false
+	if not _is_canonical_signed_int(segments[4]) or not _is_canonical_signed_int(segments[5]):
+		return false
+	if not _is_canonical_nonnegative_int(segments[7]):
+		return false
+
+	var domain: String = segments[2]
+	var expected_domain: String = _surface_domain_for_object_type(object_type)
+	if not object_type.is_empty():
+		return not expected_domain.is_empty() and domain == expected_domain
+	return domain in ["tree", "rock", "branch", "loose-stone"]
+
+
+func _surface_domain_for_object_type(object_type: String) -> String:
+	match object_type:
+		"tree", "rock", "branch":
+			return object_type
+		"loose_stone":
+			return "loose-stone"
+		_:
+			return ""
+
+
+func _is_canonical_signed_int(value: String) -> bool:
+	return value.is_valid_int() and str(int(value)) == value
+
+
+func _is_canonical_nonnegative_int(value: String) -> bool:
+	return value.is_valid_int() and int(value) >= 0 and str(int(value)) == value
