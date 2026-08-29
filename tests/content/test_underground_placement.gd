@@ -11,9 +11,9 @@ const CreatureDefinition := preload("res://gameplay/creatures/definitions/creatu
 const ResourceDefinition := preload("res://gameplay/resources/definitions/resource_definition.gd")
 const ResourceYieldRule := preload("res://gameplay/resources/definitions/resource_yield_rule.gd")
 
-const CATEGORY_SITE_ENCOUNTER := "category.structure.underworld.encounter"
-const CATEGORY_SITE_RESOURCE := "category.structure.underworld.resource"
-const CATEGORY_SITE_UNUSED := "category.structure.underworld.unused"
+const CATEGORY_SITE_ENCOUNTER := "category.structure.underworld.shrine"
+const CATEGORY_SITE_RESOURCE := "category.structure.underworld.vault"
+const CATEGORY_SITE_UNUSED := "category.structure.underworld.outpost"
 const CATEGORY_CREATURE_ENEMY := "category.creature.enemy"
 const CATEGORY_RESOURCE_DEPOSIT := "category.resource.deposit"
 const TRAIT_PRIMARY := "trait.network.primary"
