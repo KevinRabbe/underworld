@@ -16,6 +16,13 @@ const PENDING_LOOT_SCHEMA := "persistence.pending_loot.v1"
 const ITEM_FAMILY := "item"
 const LOOT_PROFILE_FAMILY := "loot_profile"
 
+const INVENTORY_ROOT_KEYS := ["schema", "slot_capacity", "max_weight", "slots"]
+const INVENTORY_RECORD_KEYS := ["slot", "kind", "state", "definition_contract"]
+const EQUIPMENT_ROOT_KEYS := ["schema", "selected_hotbar", "selected_slot_key", "slots"]
+const EQUIPMENT_RECORD_KEYS := ["slot_key", "kind", "state", "definition_contract"]
+const PENDING_LOOT_ROOT_KEYS := ["schema", "occurrence_id", "profile_id", "rewards", "consumed"]
+const PENDING_LOOT_REWARD_KEYS := ["item_id", "quantity", "definition_contract"]
+
 
 static func encode_inventory(container, content_registry) -> Dictionary:
 	var failures: Array[String] = []
@@ -29,6 +36,9 @@ static func encode_inventory(container, content_registry) -> Dictionary:
 		return _failure(failures)
 
 	var native_snapshot: Dictionary = container.canonical_snapshot()
+	var native_max_weight: float = float(native_snapshot.get("max_weight", 0.0))
+	if is_nan(native_max_weight) or is_inf(native_max_weight):
+		failures.append("inventory encode max_weight must be finite")
 	var records: Array[Dictionary] = []
 	for raw_record in native_snapshot.get("slots", []):
 		if not raw_record is Dictionary:
@@ -47,20 +57,24 @@ static func encode_inventory(container, content_registry) -> Dictionary:
 
 	if not failures.is_empty():
 		return _failure(failures)
-
-	var snapshot: Dictionary = {
+	return _encoded({
 		"schema": INVENTORY_SCHEMA,
 		"slot_capacity": int(native_snapshot.get("slot_capacity", 0)),
-		"max_weight": float(native_snapshot.get("max_weight", 0.0)),
+		"max_weight": native_max_weight,
 		"slots": records,
-	}
-	return _encoded(snapshot)
+	}, "inventory snapshot")
 
 
 static func decode_inventory(snapshot: Variant, content_registry) -> Dictionary:
 	var failures: Array[String] = []
 	_validate_registry(content_registry, failures)
-	var source: Dictionary = _require_snapshot(snapshot, INVENTORY_SCHEMA, "inventory", failures)
+	var source: Dictionary = _require_snapshot(
+		snapshot,
+		INVENTORY_SCHEMA,
+		"inventory",
+		INVENTORY_ROOT_KEYS,
+		failures
+	)
 	if source.is_empty() and not failures.is_empty():
 		return _failure(failures)
 
@@ -73,23 +87,30 @@ static func decode_inventory(snapshot: Variant, content_registry) -> Dictionary:
 		failures.append("inventory snapshot slot_capacity must be >= 1")
 	if typeof(raw_max_weight) != TYPE_INT and typeof(raw_max_weight) != TYPE_FLOAT:
 		failures.append("inventory snapshot max_weight must be numeric")
-	elif float(raw_max_weight) < 0.0 and not is_equal_approx(float(raw_max_weight), -1.0):
-		failures.append("inventory snapshot max_weight must be -1 or >= 0")
+	else:
+		var max_weight: float = float(raw_max_weight)
+		if is_nan(max_weight) or is_inf(max_weight):
+			failures.append("inventory snapshot max_weight must be finite")
+		elif max_weight < 0.0 and not is_equal_approx(max_weight, -1.0):
+			failures.append("inventory snapshot max_weight must be -1 or >= 0")
 	if not raw_slots is Array:
 		failures.append("inventory snapshot slots must be Array")
 	if not failures.is_empty():
 		return _failure(failures)
 
-	var restored = RestoredItemContainerState.new().configure(
-		int(raw_capacity),
-		float(raw_max_weight)
-	)
+	var restored = RestoredItemContainerState.new().configure(int(raw_capacity), float(raw_max_weight))
 	var seen_slots: Dictionary = {}
 	for raw_record in raw_slots:
 		if not raw_record is Dictionary:
 			failures.append("inventory snapshot occupied slot must be Dictionary")
 			continue
 		var record: Dictionary = raw_record
+		_validate_exact_keys(
+			record,
+			INVENTORY_RECORD_KEYS,
+			"inventory snapshot occupied slot",
+			failures
+		)
 		var raw_slot = record.get("slot", null)
 		var raw_kind = record.get("kind", null)
 		var raw_state = record.get("state", null)
@@ -157,6 +178,9 @@ static func encode_equipment(equipment, content_registry) -> Dictionary:
 		return _failure(failures)
 
 	var native_snapshot: Dictionary = equipment.canonical_snapshot()
+	var selected_slot_key: String = equipment.selected_slot_key()
+	if selected_slot_key.is_empty():
+		failures.append("equipment encode selected hotbar requires authored slot binding")
 	var records: Array[Dictionary] = []
 	for raw_slot in native_snapshot.get("slots", []):
 		if not raw_slot is Dictionary:
@@ -205,41 +229,64 @@ static func encode_equipment(equipment, content_registry) -> Dictionary:
 	if not failures.is_empty():
 		return _failure(failures)
 	records.sort_custom(func(a, b): return str(a.get("slot_key", "")) < str(b.get("slot_key", "")))
-	var snapshot: Dictionary = {
+	return _encoded({
 		"schema": EQUIPMENT_SCHEMA,
 		"selected_hotbar": equipment.selected_hotbar(),
+		"selected_slot_key": selected_slot_key,
 		"slots": records,
-	}
-	return _encoded(snapshot)
+	}, "equipment snapshot")
 
 
 static func decode_equipment(
 	snapshot: Variant,
 	content_registry,
 	current_rules: Array,
-	current_hotbar_bindings: Dictionary = {}
+	current_hotbar_bindings: Dictionary
 ) -> Dictionary:
 	var failures: Array[String] = []
 	_validate_registry(content_registry, failures)
-	var source: Dictionary = _require_snapshot(snapshot, EQUIPMENT_SCHEMA, "equipment", failures)
+	var source: Dictionary = _require_snapshot(
+		snapshot,
+		EQUIPMENT_SCHEMA,
+		"equipment",
+		EQUIPMENT_ROOT_KEYS,
+		failures
+	)
 	if source.is_empty() and not failures.is_empty():
 		return _failure(failures)
 
 	var raw_selected = source.get("selected_hotbar", null)
+	var raw_selected_slot_key = source.get("selected_slot_key", null)
 	var raw_slots = source.get("slots", null)
 	if typeof(raw_selected) != TYPE_INT:
 		failures.append("equipment snapshot selected_hotbar must be int")
 	elif int(raw_selected) < 1 or int(raw_selected) > 4:
 		failures.append("equipment snapshot selected_hotbar must be between 1 and 4")
+	if typeof(raw_selected_slot_key) != TYPE_STRING:
+		failures.append("equipment snapshot selected_slot_key must be String")
+	elif str(raw_selected_slot_key).is_empty() or str(raw_selected_slot_key) != str(raw_selected_slot_key).strip_edges():
+		failures.append("equipment snapshot selected_slot_key must be non-empty and trimmed")
 	if not raw_slots is Array:
 		failures.append("equipment snapshot slots must be Array")
 	if not failures.is_empty():
 		return _failure(failures)
 
-	var restored = RestoredEquipmentHotbarState.new().configure(
-		current_rules,
-		current_hotbar_bindings
-	)
+	var selected_index: int = int(raw_selected)
+	if not current_hotbar_bindings.has(selected_index):
+		failures.append("current authored hotbar binding is missing saved selection: %d" % selected_index)
+	else:
+		var current_selected_slot_key: String = str(current_hotbar_bindings[selected_index])
+		if current_selected_slot_key != str(raw_selected_slot_key):
+			failures.append(
+				"current authored hotbar binding changed saved selection: %s != %s" % [
+					current_selected_slot_key,
+					str(raw_selected_slot_key),
+				]
+			)
+	if not failures.is_empty():
+		return _failure(failures)
+
+	var restored = RestoredEquipmentHotbarState.new().configure(current_rules, current_hotbar_bindings)
 	for failure in restored.validate_state():
 		failures.append("current authored equipment config: %s" % failure)
 	if not failures.is_empty():
@@ -251,6 +298,12 @@ static func decode_equipment(
 			failures.append("equipment snapshot occupied slot must be Dictionary")
 			continue
 		var record: Dictionary = raw_record
+		_validate_exact_keys(
+			record,
+			EQUIPMENT_RECORD_KEYS,
+			"equipment snapshot occupied slot",
+			failures
+		)
 		var raw_slot_key = record.get("slot_key", null)
 		var raw_kind = record.get("kind", null)
 		var raw_state = record.get("state", null)
@@ -297,10 +350,12 @@ static func decode_equipment(
 
 	if not failures.is_empty():
 		return _failure(failures)
-	var selection_result: Dictionary = restored.select_hotbar(int(raw_selected))
+	var selection_result: Dictionary = restored.select_hotbar(selected_index)
 	if not bool(selection_result.get("success", false)):
 		for diagnostic in selection_result.get("diagnostics", []):
 			failures.append("equipment selection restore: %s" % diagnostic)
+	elif restored.selected_slot_key() != str(raw_selected_slot_key):
+		failures.append("restored equipment selected slot does not match saved semantic selection")
 	for failure in restored.validate_state():
 		failures.append("restored equipment: %s" % failure)
 	if not failures.is_empty():
@@ -319,21 +374,11 @@ static func encode_pending_loot(pending, content_registry) -> Dictionary:
 	if not failures.is_empty():
 		return _failure(failures)
 
-	_resolve_loot_profile(
-		content_registry,
-		pending.profile_id,
-		"pending-loot encode",
-		failures
-	)
+	_resolve_loot_profile(content_registry, pending.profile_id, "pending-loot encode", failures)
 	var rewards: Array[Dictionary] = []
 	for reward in pending.rewards:
 		var item_id: String = str(reward.get("item_id", ""))
-		var definition = _resolve_item(
-			content_registry,
-			item_id,
-			"pending-loot encode",
-			failures
-		)
+		var definition = _resolve_item(content_registry, item_id, "pending-loot encode", failures)
 		if definition == null:
 			continue
 		var saved_contract: String = str(reward.get("definition_contract", ""))
@@ -351,13 +396,19 @@ static func encode_pending_loot(pending, content_registry) -> Dictionary:
 		"profile_id": pending.profile_id,
 		"rewards": rewards,
 		"consumed": pending.consumed,
-	})
+	}, "pending-loot snapshot")
 
 
 static func decode_pending_loot(snapshot: Variant, content_registry) -> Dictionary:
 	var failures: Array[String] = []
 	_validate_registry(content_registry, failures)
-	var source: Dictionary = _require_snapshot(snapshot, PENDING_LOOT_SCHEMA, "pending-loot", failures)
+	var source: Dictionary = _require_snapshot(
+		snapshot,
+		PENDING_LOOT_SCHEMA,
+		"pending-loot",
+		PENDING_LOOT_ROOT_KEYS,
+		failures
+	)
 	if source.is_empty() and not failures.is_empty():
 		return _failure(failures)
 
@@ -376,20 +427,22 @@ static func decode_pending_loot(snapshot: Variant, content_registry) -> Dictiona
 	if not failures.is_empty():
 		return _failure(failures)
 
-	_resolve_loot_profile(
-		content_registry,
-		str(raw_profile),
-		"pending-loot snapshot",
-		failures
-	)
+	_resolve_loot_profile(content_registry, str(raw_profile), "pending-loot snapshot", failures)
 	var rewards: Array[Dictionary] = []
 	for raw_reward in raw_rewards:
 		if not raw_reward is Dictionary:
 			failures.append("pending-loot snapshot reward must be Dictionary")
 			continue
-		var raw_item_id = raw_reward.get("item_id", null)
-		var raw_quantity = raw_reward.get("quantity", null)
-		var raw_contract = raw_reward.get("definition_contract", null)
+		var reward: Dictionary = raw_reward
+		_validate_exact_keys(
+			reward,
+			PENDING_LOOT_REWARD_KEYS,
+			"pending-loot snapshot reward",
+			failures
+		)
+		var raw_item_id = reward.get("item_id", null)
+		var raw_quantity = reward.get("quantity", null)
+		var raw_contract = reward.get("definition_contract", null)
 		if typeof(raw_item_id) != TYPE_STRING:
 			failures.append("pending-loot snapshot reward item_id must be String")
 		if typeof(raw_quantity) != TYPE_INT:
@@ -418,11 +471,7 @@ static func decode_pending_loot(snapshot: Variant, content_registry) -> Dictiona
 
 	if not failures.is_empty():
 		return _failure(failures)
-	var restored = PendingLootState.new().configure(
-		str(raw_occurrence),
-		str(raw_profile),
-		rewards
-	)
+	var restored = PendingLootState.new().configure(str(raw_occurrence), str(raw_profile), rewards)
 	if bool(raw_consumed):
 		if not restored.consume_after_commit():
 			failures.append("pending-loot consumed state could not be reconstructed")
@@ -437,6 +486,7 @@ static func _require_snapshot(
 	snapshot: Variant,
 	expected_schema: String,
 	label: String,
+	expected_keys: Array,
 	failures: Array[String]
 ) -> Dictionary:
 	if not snapshot is Dictionary:
@@ -444,13 +494,53 @@ static func _require_snapshot(
 		return {}
 	for failure in InventoryStateCodec.validate_state(snapshot, "%s_snapshot" % label):
 		failures.append(failure)
+	_validate_json_safe(snapshot, "%s_snapshot" % label, failures)
 	var source: Dictionary = snapshot
+	_validate_exact_keys(source, expected_keys, "%s snapshot" % label, failures)
 	var raw_schema = source.get("schema", null)
 	if typeof(raw_schema) != TYPE_STRING:
 		failures.append("%s snapshot schema must be String" % label)
 	elif str(raw_schema) != expected_schema:
 		failures.append("%s snapshot schema mismatch: %s" % [label, str(raw_schema)])
 	return source
+
+
+static func _validate_exact_keys(
+	source: Dictionary,
+	expected_keys: Array,
+	label: String,
+	failures: Array[String]
+) -> void:
+	for expected_key in expected_keys:
+		if not source.has(expected_key):
+			failures.append("%s missing structural field: %s" % [label, str(expected_key)])
+	for raw_key in source.keys():
+		var key: String = str(raw_key)
+		if not expected_keys.has(key):
+			failures.append("%s contains unknown structural field: %s" % [label, key])
+
+
+static func _validate_json_safe(value: Variant, path: String, failures: Array[String]) -> void:
+	match typeof(value):
+		TYPE_FLOAT:
+			var number: float = float(value)
+			if is_nan(number) or is_inf(number):
+				failures.append("%s contains non-finite float" % path)
+		TYPE_ARRAY:
+			var index: int = 0
+			for entry in value:
+				_validate_json_safe(entry, "%s[%d]" % [path, index], failures)
+				index += 1
+		TYPE_DICTIONARY:
+			var dictionary: Dictionary = value
+			for raw_key in dictionary.keys():
+				if typeof(raw_key) != TYPE_STRING:
+					continue
+				_validate_json_safe(
+					dictionary[raw_key],
+					"%s.%s" % [path, str(raw_key)],
+					failures
+				)
 
 
 static func _validate_registry(content_registry, failures: Array[String]) -> void:
@@ -505,7 +595,13 @@ static func _definition_contract(definition) -> String:
 	return InventoryStateCodec.canonical_json(definition.canonical_descriptor())
 
 
-static func _encoded(snapshot: Dictionary) -> Dictionary:
+static func _encoded(snapshot: Dictionary, label: String) -> Dictionary:
+	var failures: Array[String] = []
+	for failure in InventoryStateCodec.validate_state(snapshot, label):
+		failures.append(failure)
+	_validate_json_safe(snapshot, label, failures)
+	if not failures.is_empty():
+		return _failure(failures)
 	var canonical_snapshot: Dictionary = InventoryStateCodec.canonicalize(snapshot)
 	var canonical_json: String = InventoryStateCodec.canonical_json(canonical_snapshot)
 	return _success({
