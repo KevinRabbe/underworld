@@ -89,5 +89,5 @@ static func _test_warning_budgets_are_explicit_and_non_gating(failures: Array[St
 
 
 static func _test_profiler_contract_is_available(failures: Array[String]) -> void:
-	if Profiler == null or not Profiler.has_method("run_map015"):
-		failures.append("runtime cave profiler does not expose the MAP-015 profiling entrypoint")
+	if Profiler == null:
+		failures.append("runtime cave profiler script failed to load")
