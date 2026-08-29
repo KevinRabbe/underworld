@@ -34,6 +34,7 @@ static func run() -> Array[String]:
 	_test_authored_m3_recipes_and_identity(failures)
 	_test_equivalent_declaration_order_is_canonical(failures)
 	_test_missing_item_reference_fails_content005(failures)
+	_test_missing_output_reference_blocks_plan_and_mutation(failures)
 	_test_wrong_recipe_definition_type_fails_closed(failures)
 	_test_crafting_context_eligibility(failures)
 	_test_insufficient_ingredients_are_atomic(failures)
@@ -102,6 +103,57 @@ static func _test_missing_item_reference_fails_content005(failures: Array[String
 	var result: Dictionary = _validate(definitions)
 	if not _has_diagnostic(result, "reference_resolution", "missing content definition"):
 		failures.append("missing recipe ingredient did not fail through CONTENT-005 reference resolution")
+
+
+static func _test_missing_output_reference_blocks_plan_and_mutation(failures: Array[String]) -> void:
+	var recipe = RecipeDefinition.new().configure_recipe(
+		"recipe.test.missing_output",
+		[_amount("item.resource.wood", 1)],
+		[_amount("item.tool.missing_output", 1)]
+	)
+	var wood = _item("item.resource.wood", 64, ITEM_RESOURCE)
+	var definitions: Array = [recipe, wood]
+	var validation: Dictionary = _validate(definitions)
+	if bool(validation.get("success", false)):
+		failures.append("missing recipe output unexpectedly passed CONTENT-005 validation")
+	if not _has_diagnostic(validation, "reference_resolution", "missing content definition"):
+		failures.append("missing recipe output did not fail through CONTENT-005 reference resolution")
+
+	var registry = _registry(definitions, failures)
+	if registry == null:
+		return
+	var inventory = ItemContainerState.new().configure(2, 10.0)
+	inventory.add_stack(wood, 1)
+	var before: String = inventory.canonical_json()
+	var service = CraftingService.new().configure(registry, validation)
+
+	var built: Dictionary = service.build_plan(
+		recipe.content_id,
+		CraftingContext.new(),
+		inventory
+	)
+	if bool(built.get("success", false)):
+		failures.append("missing recipe output unexpectedly produced a crafting plan")
+	if built.has("plan"):
+		failures.append("missing recipe output exposed an INV-002 plan before successful CONTENT-005 validation")
+	if not _has_fragment(built, "requires successful CONTENT-005 validation evidence"):
+		failures.append("missing recipe output plan failure did not come from CONTENT-005 evidence gate")
+
+	var crafted: Dictionary = service.craft(
+		recipe.content_id,
+		CraftingContext.new(),
+		inventory
+	)
+	if bool(crafted.get("success", false)):
+		failures.append("missing recipe output unexpectedly crafted")
+	if str(crafted.get("transaction_fingerprint", "")) != "":
+		failures.append("missing recipe output emitted a transaction fingerprint")
+	if int(crafted.get("operation_count", 0)) != 0:
+		failures.append("missing recipe output emitted inventory operations")
+	if not crafted.get("events", []).is_empty():
+		failures.append("missing recipe output emitted inventory events")
+	if inventory.canonical_json() != before:
+		failures.append("missing recipe output mutated inventory before successful CONTENT-005 validation")
 
 
 static func _test_wrong_recipe_definition_type_fails_closed(failures: Array[String]) -> void:
