@@ -1,8 +1,6 @@
 extends "res://core/content/registry/content_definition.gd"
 
-const ContentId := preload("res://core/content/identity/content_id.gd")
 const ContentReference := preload("res://core/content/references/content_reference.gd")
-const SchemaId := preload("res://core/content/schema/schema_id.gd")
 const SemanticRoleSchemaRegistry := preload("res://core/content/schema/semantic_role_schema_registry.gd")
 
 const DEFINITION_FAMILY := "animation_set"
@@ -72,20 +70,16 @@ func validate_definition() -> Array[String]:
 	if root_motion_policy != ROOT_MOTION_DISABLED and root_motion_policy != ROOT_MOTION_VISUAL_ONLY:
 		failures.append("unsupported root-motion policy '%s' for %s" % [root_motion_policy, content_id])
 
-	var bound_roles: Array[String] = []
 	for raw_role_id in role_bindings.keys():
 		var role_id: String = str(raw_role_id)
-		bound_roles.append(role_id)
 		for failure in SchemaId.validate_animation_role(role_id):
 			failures.append("animation binding role: %s" % failure)
 		var binding: String = str(role_bindings[raw_role_id])
 		if binding.is_empty() or binding != binding.strip_edges():
 			failures.append("animation binding must be a non-empty trimmed presentation binding: %s" % role_id)
 
-	var fallback_sources: Array[String] = []
 	for raw_role_id in fallback_roles.keys():
 		var role_id: String = str(raw_role_id)
-		fallback_sources.append(role_id)
 		for failure in SchemaId.validate_animation_role(role_id):
 			failures.append("fallback source role: %s" % failure)
 		var fallback_role_id: String = str(fallback_roles[raw_role_id])

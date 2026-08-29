@@ -1,6 +1,5 @@
 extends "res://core/content/registry/content_definition.gd"
 
-const SchemaId := preload("res://core/content/schema/schema_id.gd")
 const SemanticRoleSchemaRegistry := preload("res://core/content/schema/semantic_role_schema_registry.gd")
 
 const DEFINITION_FAMILY := "rig_profile"
