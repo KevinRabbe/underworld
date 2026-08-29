@@ -58,6 +58,17 @@ static func generate(
 	failures.append_array(context.validate_provenance(
 		hook_result.provenance, "special_location_hooks", region_plan.stable_id
 	))
+	if region_plan.provenance != null:
+		for input_provenance in [entrance_result.provenance, connectivity_result.provenance, hook_result.provenance]:
+			if input_provenance != null:
+				failures.append_array(context.validate_required_sources(input_provenance, [region_plan.provenance.fingerprint]))
+	if hook_result.provenance != null and connectivity_result.provenance != null:
+		failures.append_array(context.validate_exact_sources(
+			hook_result.provenance,
+			[region_plan.provenance.fingerprint, connectivity_result.provenance.fingerprint]
+		))
+	if connectivity_result.provenance != null and entrance_result.provenance != null:
+		failures.append_array(context.validate_required_sources(connectivity_result.provenance, [entrance_result.provenance.fingerprint]))
 	if not failures.is_empty():
 		return StageResult.fail("region_finalization", failures)
 

@@ -41,7 +41,8 @@ static func generate(context, region_plan, finalization_result, neighbor_views: 
 	failures.append_array(context.validate_provenance(
 		finalization_result.provenance, "region_finalization", region_plan.stable_id
 	))
-	for view in neighbor_views:
+	var effective_neighbors: Array = _effective_neighbor_views(region_plan, finalization_result.bundle, neighbor_views)
+	for view in effective_neighbors:
 		if not (view is Dictionary):
 			continue
 		var neighbor_plan = view.get("region_plan")
@@ -70,7 +71,7 @@ static func generate(context, region_plan, finalization_result, neighbor_views: 
 	local_nodes.sort_custom(_stable_less)
 	var edges: Array = source.edges.duplicate()
 	edges.sort_custom(_stable_less)
-	var all_nodes: Dictionary = _node_index(source.nodes, neighbor_views)
+	var all_nodes: Dictionary = _node_index(source.nodes, effective_neighbors)
 
 	var chambers: Array = []
 	for node in local_nodes:
@@ -134,7 +135,7 @@ static func generate(context, region_plan, finalization_result, neighbor_views: 
 		"geometry_description",
 		region_plan.stable_id,
 		region_plan.stable_address.canonical_text(),
-		[region_plan.provenance.fingerprint, finalization_result.provenance.fingerprint]
+		_neighbor_source_fingerprints(region_plan, finalization_result, effective_neighbors)
 	)
 	return StageResult.ok(
 		"cave_geometry",
@@ -142,6 +143,69 @@ static func generate(context, region_plan, finalization_result, neighbor_views: 
 		fingerprint,
 		provenance
 	)
+
+
+static func _neighbor_source_fingerprints(region_plan, finalization_result, neighbor_views: Array) -> Array[String]:
+	var sources: Array[String] = [
+		region_plan.provenance.fingerprint,
+		finalization_result.provenance.fingerprint,
+	]
+	for view in neighbor_views:
+		if not (view is Dictionary):
+			continue
+		var neighbor_plan = view.get("region_plan")
+		var neighbor_topology = view.get("primary_topology")
+		if neighbor_plan != null and neighbor_plan.provenance != null:
+			sources.append(neighbor_plan.provenance.fingerprint)
+		if neighbor_topology != null and neighbor_topology.provenance != null:
+			sources.append(neighbor_topology.provenance.fingerprint)
+	sources.sort()
+	return sources
+
+
+static func expected_provenance_sources(region_plan, finalization_result, neighbor_views: Array = []) -> Array[String]:
+	if region_plan == null or finalization_result == null or finalization_result.bundle == null:
+		return []
+	var effective_neighbors := _effective_neighbor_views(region_plan, finalization_result.bundle, neighbor_views)
+	return _neighbor_source_fingerprints(region_plan, finalization_result, effective_neighbors)
+
+
+static func _effective_neighbor_views(region_plan, bundle, neighbor_views: Array) -> Array:
+	var result: Array = []
+	var seen: Dictionary = {}
+	var endpoint_ids: Dictionary = {}
+	for edge in bundle.edges:
+		if edge != null:
+			endpoint_ids[edge.endpoint_a_node_id] = true
+			endpoint_ids[edge.endpoint_b_node_id] = true
+	for value in neighbor_views:
+		if not (value is Dictionary):
+			continue
+		var plan = value.get("region_plan")
+		var topology = value.get("primary_topology")
+		if plan == null or topology == null or topology.bundle == null:
+			continue
+		if plan.stable_id == region_plan.stable_id or _shared_sides(region_plan.region_coord, plan.region_coord).is_empty():
+			continue
+		if seen.has(plan.stable_id):
+			continue
+		var contributes := false
+		for node in topology.bundle.nodes:
+			if node != null and endpoint_ids.has(node.stable_id):
+				contributes = true
+				break
+		if contributes:
+			seen[plan.stable_id] = true
+			result.append(value)
+	result.sort_custom(func(a, b): return str(a.get("region_plan").stable_id) < str(b.get("region_plan").stable_id))
+	return result
+
+
+static func _shared_sides(a: Vector2i, b: Vector2i) -> Array[String]:
+	var delta := b - a
+	if delta == Vector2i(1, 0) or delta == Vector2i(-1, 0) or delta == Vector2i(0, 1) or delta == Vector2i(0, -1):
+		return ["cardinal"]
+	return []
 
 
 static func _build_chamber(context, region_plan, node, domain):
