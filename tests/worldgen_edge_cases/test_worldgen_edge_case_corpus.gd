@@ -2,9 +2,12 @@ extends RefCounted
 
 const StableAddress := preload("res://worldgen/identity/stable_address.gd")
 const StableId := preload("res://worldgen/identity/stable_id.gd")
-const ConnectivityProbe := preload(
-	"res://worldgen/validation/secondary_connectivity_reproduction_probe.gd"
-)
+const WorldGenerationContext := preload("res://worldgen/pipeline/world_generation_context.gd")
+const SurfaceSampler := preload("res://worldgen/surface/deterministic_surface_sampler.gd")
+const MacroRegionGenerator := preload("res://worldgen/underworld/macro_region_generator.gd")
+const PrimaryTopologyGenerator := preload("res://worldgen/underworld/primary_topology_generator.gd")
+const EntranceGenerator := preload("res://worldgen/underworld/entrance_generator.gd")
+const ConnectivityGenerator := preload("res://worldgen/underworld/secondary_connectivity_generator.gd")
 
 const LARGE_POSITIVE_SEED: int = 4611686018427387903
 const LARGE_NEGATIVE_SEED: int = -4611686018427387904
@@ -14,6 +17,12 @@ const STAGE_FINGERPRINT_KEYS: Array[String] = [
 	"topology_fingerprint",
 	"entrance_fingerprint",
 	"fingerprint",
+]
+const CARDINAL_NEIGHBOR_OFFSETS: Array[Vector2i] = [
+	Vector2i(-1, 0),
+	Vector2i(1, 0),
+	Vector2i(0, -1),
+	Vector2i(0, 1),
 ]
 
 
@@ -66,7 +75,7 @@ static func _run_corpus(
 		var case_key := _case_key(world_seed, region)
 
 		var identity_snapshot := _validate_identity(label, region, failures)
-		var first: Dictionary = ConnectivityProbe.build(world_seed, region)
+		var first: Dictionary = _build_fresh_stage_1_to_4(world_seed, region)
 		if not bool(first.get("success", false)):
 			failures.append(
 				"%s corpus case %s failed at %s: %s" % [
@@ -80,10 +89,10 @@ static func _run_corpus(
 
 		_validate_stage_fingerprints(label, first, failures)
 		if repeat_each:
-			var second: Dictionary = ConnectivityProbe.build(world_seed, region)
+			var second: Dictionary = _build_fresh_stage_1_to_4(world_seed, region)
 			if not bool(second.get("success", false)):
 				failures.append(
-					"repeat corpus case %s failed at %s: %s" % [
+					"fresh replay corpus case %s failed at %s: %s" % [
 						label,
 						second.get("stage", "unknown"),
 						second.get("diagnostics", []),
@@ -100,6 +109,76 @@ static func _run_corpus(
 			snapshot[fingerprint_key] = str(first.get(fingerprint_key, ""))
 		results[case_key] = snapshot
 	return results
+
+
+static func _build_fresh_stage_1_to_4(
+	world_seed: int,
+	region_coord: Vector2i
+) -> Dictionary:
+	# Intentionally bypass SecondaryConnectivityReproductionProbe here. That
+	# production validation helper caches immutable Stage-1/2/3 inputs for an
+	# immediate replay so the broad campaign can rerun Stage 4 cheaply. TEST-056
+	# must instead prove that the complete upstream pipeline reproduces from a
+	# fresh context and surface sampler on every invocation.
+	var context = WorldGenerationContext.new(world_seed)
+	var sampler = SurfaceSampler.new(world_seed)
+
+	var macro = MacroRegionGenerator.generate(context, region_coord)
+	if not macro.success:
+		return _failure("macro_region", macro.diagnostics)
+
+	var topology = PrimaryTopologyGenerator.generate(context, macro.data, sampler)
+	if not topology.success:
+		return _failure("primary_topology", topology.diagnostics)
+
+	var entrances = EntranceGenerator.generate(context, macro.data, topology.data, sampler)
+	if not entrances.success:
+		return _failure("entrance_generation", entrances.diagnostics)
+
+	var neighbor_views: Array = []
+	for offset in CARDINAL_NEIGHBOR_OFFSETS:
+		var neighbor_macro = MacroRegionGenerator.generate(context, region_coord + offset)
+		if not neighbor_macro.success:
+			return _failure("neighbor_macro_region", neighbor_macro.diagnostics)
+		var neighbor_topology = PrimaryTopologyGenerator.generate(
+			context,
+			neighbor_macro.data,
+			sampler
+		)
+		if not neighbor_topology.success:
+			return _failure("neighbor_primary_topology", neighbor_topology.diagnostics)
+		neighbor_views.append({
+			"region_plan": neighbor_macro.data,
+			"primary_topology": neighbor_topology.data,
+		})
+
+	var connectivity = ConnectivityGenerator.generate(
+		context,
+		macro.data,
+		topology.data,
+		entrances.data,
+		neighbor_views
+	)
+	if not connectivity.success:
+		return _failure("secondary_connectivity", connectivity.diagnostics)
+
+	return {
+		"success": true,
+		"macro_fingerprint": macro.fingerprint,
+		"topology_fingerprint": topology.fingerprint,
+		"entrance_fingerprint": entrances.fingerprint,
+		"fingerprint": connectivity.fingerprint,
+		"diagnostics": [],
+	}
+
+
+static func _failure(stage: String, diagnostics: Array) -> Dictionary:
+	return {
+		"success": false,
+		"fingerprint": "",
+		"stage": stage,
+		"diagnostics": diagnostics,
+	}
 
 
 static func _validate_identity(
@@ -139,11 +218,11 @@ static func _validate_identity(
 
 static func _validate_stage_fingerprints(
 	label: String,
-	probe: Dictionary,
+	build_snapshot: Dictionary,
 	failures: Array[String]
 ) -> void:
 	for fingerprint_key in STAGE_FINGERPRINT_KEYS:
-		if str(probe.get(fingerprint_key, "")).is_empty():
+		if str(build_snapshot.get(fingerprint_key, "")).is_empty():
 			failures.append("%s missing %s" % [label, fingerprint_key])
 
 
@@ -158,7 +237,7 @@ static func _assert_same_stage_fingerprints(
 		var second_value: String = str(second.get(fingerprint_key, ""))
 		if first_value != second_value:
 			failures.append(
-				"%s non-deterministic %s: first=%s second=%s" % [
+				"%s non-deterministic fresh replay %s: first=%s second=%s" % [
 					label,
 					fingerprint_key,
 					first_value,
