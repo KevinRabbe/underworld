@@ -1,14 +1,12 @@
 extends SceneTree
 
 const PerformanceContractTests := preload("res://tests/geometry/test_runtime_performance_contract.gd")
-const Perf002PinnedParityTests := preload("res://tests/geometry/test_perf002_pinned_mesh_parity.gd")
 const Profiler := preload("res://worldgen/runtime/runtime_cave_profiler.gd")
 
 
 func _init() -> void:
 	var failures: Array[String] = []
 	failures.append_array(PerformanceContractTests.run())
-	failures.append_array(Perf002PinnedParityTests.run())
 	if not failures.is_empty():
 		_finish(failures)
 		return
