@@ -1,6 +1,6 @@
 # Runtime Cave Performance — PERF-001
 
-Status: **measured prototype baseline / warning budgets**
+Status: **measurement contract / repaired baseline pending exact-head run**
 
 PERF-001 measures the accepted MAP-016 runtime cave vertical slice before any optimization work changes cell size, voxel pitch, streaming radii, collision detail or presentation quality.
 
@@ -27,59 +27,68 @@ The primary end-to-end profile is the accepted MAP-015/MAP-016 traversal fixture
 
 `tests/run_performance.gd` runs the fixture through `UnderworldRuntimeCaveProfiler.run_map015()` and prints a machine-readable `metric.*` report plus scenario snapshots. The profiler independently builds the deterministic generation/partition/mesh/collision pipeline, then runs the production `UnderworldCaveRuntimeController.bootstrap_fixture()` path and requires both paths to produce the same deterministic bootstrap fingerprint.
 
-## Cost separation
+The controller-route cave-cell centers are derived from `controller.streamer.cell_size`; PERF instrumentation does not own a duplicate cell-size constant.
+
+## Measurement semantics
+
+The report deliberately separates these costs:
 
 | Metric family | Owner / meaning |
 | --- | --- |
 | `deterministic_generation_ms` | macro/topology/entrance/connectivity/hook/finalized cave geometry generation |
 | `surface_partition_ms` | surface handoff plus geometry-cell partition preparation |
-| `mesh_worker_total_ms` / `mesh_worker_cell_max_ms` | accepted Marching-Cubes extraction; sourced from mesh observational metrics |
+| `mesh_extraction_total_ms` / `mesh_extraction_cell_max_ms` | synchronous staged `VoxelMesher.build()` extraction cost; worker-eligible CPU/wall work, **not** production executor scheduling/queue latency |
 | `mesh_realization_*` | `ArrayMesh` realization at the main-thread resource boundary |
-| `collision_prepare_*` | conversion of deterministic mesh indices into collision-face data |
+| `collision_prepare_*` | synchronous conversion of deterministic mesh indices into collision-face data |
 | `collision_realization_*` | `ConcavePolygonShape3D` realization at the main-thread physics-resource boundary |
-| `controller_bootstrap_ms` | end-to-end production bootstrap including scene-node attachment |
+| `staged_processing_total_ms` | staged extraction + collision-face preparation; **not** measured worker-thread/scheduler time |
+| `controller_bootstrap_ms` | end-to-end synchronous production fixture bootstrap including scene-node attachment |
 | mesh vertex/triangle/sample/cube counts | geometry density / extraction work indicators |
 | mesh memory estimates | deterministic mesh-buffer residency estimate, not total engine heap usage |
 | streaming scenario snapshots | logical demand/residency and release pressure under observer movement |
 
+PERF-001 does **not** instrument production executor queueing, worker scheduling, contention, or worker/main-thread handoff latency. It measures the CPU/wall work of the worker-eligible stages synchronously so expensive stage ownership can be identified without inventing scheduler evidence.
+
 ## Streaming scenarios
 
-The production controller route covers surface approach, each required entrance/cave cell, and return to the same surface entrance. A policy-only streamer route covers surface approach, entrance transition, shallow/mid/deep cave positions, a negative-coordinate position, and surface return.
+The production controller route covers surface approach, each required entrance/cave cell, and return to the same surface entrance. Those `update_player_position()` samples measure **demand/gate update cost only**. `bootstrap_fixture()` pre-realizes the fixture; observer movement does not dynamically generate/realize newly demanded cave cells.
+
+A policy-only streamer route covers surface approach, entrance transition, shallow/mid/deep cave positions, a negative-coordinate position, and surface return. It measures demand/release bookkeeping and logical residency, not dynamic scene loading latency.
 
 ### Logical release versus realized-node residency
 
-`UnderworldRuntimeStreamer` owns demand/release state and can release cell runtime handles. The accepted cave controller has attach paths for `MeshInstance3D` and collision `StaticBody3D` nodes but no corresponding scene-node reclamation path yet.
+`UnderworldRuntimeStreamer` owns demand/release state and can release cell runtime handles. The accepted cave controller has attach paths for `MeshInstance3D` and collision `StaticBody3D` nodes but no corresponding dynamic scene-node realization/reclamation path driven by observer movement.
 
 PERF-001 therefore treats these as separate observations:
 
 - **logical streaming residency** — demanded/active streamer cells;
-- **realized runtime residency** — attached render/collision nodes;
+- **realized runtime residency** — fixture-attached render/collision nodes;
 - **record retention** — streamer records remain as dormant bookkeeping after logical release.
 
-This card measures those distinctions. It does not implement unload/reclamation policy.
+Dynamic post-bootstrap cave-cell realization and scene-node reclamation latency are currently **absent/unmeasured**. PERF-001 reports that boundary instead of calling demand-update samples load/unload latency.
 
 ## Prototype warning budgets
 
-Budgets live in `worldgen/runtime/runtime_performance_budget.gd`, revision `2`. They are warning thresholds, not hard correctness gates.
+Budgets live in `worldgen/runtime/runtime_performance_budget.gd`, revision `3`. They are warning thresholds, not hard correctness gates.
 
 | Metric | Warning threshold |
 | --- | ---: |
 | controller bootstrap | `2000 ms` |
 | deterministic generation | `500 ms` |
 | surface handoff + partition | `150 ms` |
-| mesh extraction total | `1200 ms` |
-| mesh extraction, worst cell | `250 ms` |
+| staged mesh extraction total | `1200 ms` |
+| staged mesh extraction, worst cell | `250 ms` |
 | mesh realization, worst cell | `8 ms` |
 | collision preparation, worst cell | `8 ms` |
 | collision realization, worst cell | `8 ms` |
-| streamer observer update | `4 ms` |
+| streamer observer demand update | `4 ms` |
 | total mesh-buffer estimate | `256 MiB` |
 | worst cell mesh-buffer estimate | `8 MiB` |
 | logical geometry residency | `343 cells` |
 | logical render residency | `125 cells` |
 | logical collision residency | `125 cells` |
 
-Streaming uses hysteresis. Residency is therefore budgeted against the accepted **release** envelopes rather than the smaller activation cubes: geometry release radius `3` gives `7^3 = 343`; render/collision release radius `2` gives `5^3 = 125`.
+Streaming uses hysteresis. Residency is budgeted against the accepted **release** envelopes rather than the smaller activation cubes: geometry release radius `3` gives `7^3 = 343`; render/collision release radius `2` gives `5^3 = 125`.
 
 ## Running the profile
 
@@ -89,76 +98,21 @@ godot --headless --path . --quit-after 1 --script res://tests/run_performance.gd
 
 The dedicated `Runtime Cave Performance Validation` workflow runs the same command and stores `runtime-cave-performance.log` as an artifact. Timing-budget warnings are printed but do not fail the workflow; structural errors, deterministic fingerprint drift and invalid profiling contracts do fail it.
 
-## Measured baseline
+## Pre-repair exploratory result
 
-Measurement source:
+An earlier architecture-validation run on profiler head `0b57b764db5218951b420c5db8d8b9b54564bc35` confirmed the manual slow-build hypothesis, but its values are **not PERF-001 acceptance evidence** because PM review subsequently required the measurement-semantic repairs above. Do not use that run as the canonical baseline.
 
-- profiler implementation head: `0b57b764db5218951b420c5db8d8b9b54564bc35`;
-- dedicated workflow run: `33255875862`;
-- job: `99109361555`;
-- Godot: `4.7.2`;
-- hosted runner: Ubuntu 24.04;
-- result: `[PERF-001] PASS`;
-- deterministic fingerprint: `entrances-sha256:8c11c563b2192f85a78d1760b4d8cb2a686d00e3662a8a9c7db2524d2094b5bc:geometry-sha256:d910dbc179903d8f26c92974f29641aad553c7bba56eb833ebcff6a583aef73a:gpartition-result1:sha256:2747883649716b5c0d3e6906f86308cbae7faa68e19cc4fc7801ff4e9a1183be`.
+## Acceptance baseline
 
-The measurement was taken before the subsequent revision-2 **budget-only** correction from activation envelopes to release-hysteresis envelopes. That correction changes warning classification only; it does not change the profiler, runtime path, measured values, or deterministic fingerprint. A final current-head run is still required for REVIEW.
+Populate this section only from the first exact repaired-head performance run after:
 
-### Timing and work metrics
+1. controller route centers derive from runtime `cell_size`;
+2. extraction metrics are named/declared as synchronous staged extraction rather than worker scheduler latency;
+3. demand-update scenarios are explicitly distinguished from dynamic load/unload latency;
+4. revision-3 release-hysteresis budgets are active.
 
-| Metric | Measured |
-| --- | ---: |
-| deterministic generation | `286.220 ms` |
-| surface handoff + partition | `27.947 ms` |
-| Marching-Cubes extraction total | `17165.667 ms` |
-| Marching-Cubes worst cell | `4971.129 ms` |
-| collision-face preparation total | `4596.272 ms` |
-| collision-face preparation worst cell | `2337.389 ms` |
-| mesh realization total | `9.575 ms` |
-| mesh realization worst cell | `3.330 ms` |
-| collision realization total | `12.396 ms` |
-| collision realization worst cell | `5.092 ms` |
-| staged worker total (mesh + collision preparation) | `21761.939 ms` |
-| main-thread resource realization total | `21.971 ms` |
-| production controller bootstrap | `26541.944 ms` |
-| streamer observer update worst sample | `10.865 ms` |
-| controller-route observer update worst sample | `9.936 ms` |
-
-### Geometry / memory metrics
-
-Eight fixture cells produced:
-
-- vertices: `11,379`;
-- triangles: `21,449`;
-- lattice samples: `2,163,864`;
-- cubes evaluated: `270,483`;
-- estimated mesh-buffer memory total: `621,516 bytes` (~`0.59 MiB`);
-- worst cell mesh-buffer estimate: `218,092 bytes` (~`0.21 MiB`).
-
-Mesh-buffer memory is therefore not the current bottleneck.
-
-### Streaming observations
-
-- logical residency peak: geometry `186`, render `46`, collision `46` — all inside revision-2 release-envelope budgets;
-- peak active streamer owners: `470` in the policy route;
-- peak retained streamer records: `928`;
-- explicit logical releases during the route: `776`;
-- stale-result count: `0`;
-- at surface return the policy route still held `431` active owners and `928` records because release hysteresis and dormant-record bookkeeping are distinct from record deletion;
-- production controller route kept exactly `8` realized render nodes and `8` realized collision nodes throughout traversal/return; no scene-node reclamation path exists yet;
-- negative-coordinate addressing reproduced `(-2, -3, -2)` correctly.
-
-## Bottleneck conclusion
-
-The manual “cave build is slow” observation is confirmed, but the cost is now separated precisely:
-
-1. **Primary bottleneck — Marching-Cubes extraction:** `17.17 s` across eight cells, worst cell `4.97 s`. This exceeds both mesh CPU warning budgets by more than an order of magnitude.
-2. **Secondary bottleneck — collision-face preparation:** `4.60 s` total, worst cell `2.34 s`. `ConcavePolygonShape3D` realization itself is only `12.4 ms` total, so the expensive portion is the GDScript face-array preparation, not physics-resource creation.
-3. **End-to-end symptom — controller bootstrap:** `26.54 s`, consistent with the two worker-side costs dominating the load.
-4. **Tertiary runtime cost — observer streaming update:** about `10–11 ms` at the sampled peaks, above the `4 ms` warning line. This is meaningful but much smaller than initial cave construction.
-5. **Not current bottlenecks:** deterministic world generation (`286 ms`), partitioning (`28 ms`), main-thread mesh/collision realization (`22 ms` total), and mesh-buffer memory (~`0.59 MiB`).
-
-The profile therefore does **not** justify broad LOD/cell-size/radius changes yet. PERF-002 should first target the measured extraction and collision-preparation CPU paths while preserving MAP-016 seam/fingerprint/collision contracts. Streaming record/node reclamation should remain a separately measured follow-up unless memory/residency evidence shows it is material.
+The exact run/head/fingerprint and measured budget exceedances will be recorded in the PR/issue handoff without changing world truth.
 
 ## PERF-002 decision rule
 
-PERF-002 is justified by the measured CPU budget exceedances above, but remains dependency-blocked until PERF-001 is independently accepted. Every optimization must name the measured metric it targets, provide before/after profiling, and rerun deterministic validation to prove world truth is unchanged.
+PERF-002 becomes justified only by the repaired measured CPU budget exceedances and remains dependency-blocked until PERF-001 is independently accepted. Every optimization must name the accepted PERF-001 metric it targets, provide before/after profiling, and rerun deterministic validation to prove world truth is unchanged.
