@@ -97,6 +97,11 @@ func render_snapshot() -> Dictionary:
 	}
 
 
+func controls_are_mouse_passthrough() -> bool:
+	_ensure_ui()
+	return _controls_are_mouse_passthrough(_root)
+
+
 func _ensure_ui() -> void:
 	if _root != null:
 		return
@@ -110,6 +115,7 @@ func _ensure_ui() -> void:
 
 	var vitals_panel := PanelContainer.new()
 	vitals_panel.name = "VitalsPanel"
+	vitals_panel.theme_type_variation = &"MenuPanel"
 	vitals_panel.position = Vector2(24.0, 24.0)
 	vitals_panel.size = Vector2(330.0, 168.0)
 	_root.add_child(vitals_panel)
@@ -202,6 +208,7 @@ func _ensure_ui() -> void:
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hint_label.text = ""
 	bottom.add_child(_hint_label)
+	_set_mouse_passthrough(_root)
 
 
 func _render(model: Dictionary) -> void:
@@ -253,6 +260,22 @@ func _render(model: Dictionary) -> void:
 func _render_invalid_hotbar() -> void:
 	for index in range(_hotbar_labels.size()):
 		_hotbar_labels[index].text = "%d  ! INVALID" % (index + 1)
+
+
+static func _set_mouse_passthrough(node: Node) -> void:
+	if node is Control:
+		(node as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for child in node.get_children():
+		_set_mouse_passthrough(child)
+
+
+static func _controls_are_mouse_passthrough(node: Node) -> bool:
+	if node is Control and (node as Control).mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		return false
+	for child in node.get_children():
+		if not _controls_are_mouse_passthrough(child):
+			return false
+	return true
 
 
 static func _hotbar_text(entry: Dictionary) -> String:
