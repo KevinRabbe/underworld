@@ -24,7 +24,7 @@ const CREATURE_ROOT := "category.creature"
 const ENEMY_CATEGORY := "category.creature.enemy"
 const MOVEMENT := "capability.movement"
 const SENSING := "capability.sensing"
-const MELEE := "capability.combat.melee"
+const DAMAGE_DEALER := "capability.damage_dealer"
 
 const ATTACK_ID := "attack_profile.creature.burrower.melee"
 const ARCHETYPE_ID := "archetype.creature.burrower.prototype"
@@ -85,7 +85,7 @@ static func _test_burrower_authored_baseline(failures: Array[String]) -> void:
 static func _test_wrong_concrete_types_fail_closed(failures: Array[String]) -> void:
 	var wrong_creature = ContentDefinition.new()
 	wrong_creature.configure("creature.enemy.generic_wrong_type", "creature", 1)
-	wrong_creature.configure_schema_declarations([ENEMY_CATEGORY], [MOVEMENT, SENSING, MELEE])
+	wrong_creature.configure_schema_declarations([ENEMY_CATEGORY], [MOVEMENT, SENSING, DAMAGE_DEALER])
 	var wrong_creature_result: Dictionary = _pipeline().validate_all(
 		[wrong_creature],
 		_categories(),
@@ -169,7 +169,7 @@ static func _test_invalid_semantic_bindings_fail(failures: Array[String]) -> voi
 		failures.append("creature accepted a rig role not provided by selected rig profile")
 
 	var missing_capability = _creature("creature.enemy.missing_sensing")
-	missing_capability.configure_schema_declarations([ENEMY_CATEGORY], [MOVEMENT, MELEE])
+	missing_capability.configure_schema_declarations([ENEMY_CATEGORY], [MOVEMENT, DAMAGE_DEALER])
 	var missing_capability_definitions: Array = _shared_targets()
 	missing_capability_definitions.push_front(missing_capability)
 	var missing_capability_result: Dictionary = _pipeline().validate_all(
@@ -281,7 +281,7 @@ static func _shared_targets() -> Array:
 static func _creature(content_id: String):
 	var creature = CreatureDefinition.new()
 	creature.configure_creature(content_id, "Contract Probe", 30, 3.0, 12.0, 1.7, 8, 1.1, 0.35, 1)
-	creature.configure_schema_declarations([ENEMY_CATEGORY], [MOVEMENT, SENSING, MELEE])
+	creature.configure_schema_declarations([ENEMY_CATEGORY], [MOVEMENT, SENSING, DAMAGE_DEALER])
 	creature.configure_semantic_bindings(
 		ATTACK_ID,
 		ARCHETYPE_ID,
@@ -316,7 +316,7 @@ static func _capabilities():
 	var diagnostics: Array[String] = registry.index_schemas([
 		CapabilitySchema.new().configure(MOVEMENT),
 		CapabilitySchema.new().configure(SENSING),
-		CapabilitySchema.new().configure(MELEE),
+		CapabilitySchema.new().configure(DAMAGE_DEALER),
 	])
 	assert(diagnostics.is_empty())
 	return registry
