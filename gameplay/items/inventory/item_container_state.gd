@@ -426,44 +426,24 @@ static func _authored_definition_compatibility_failures(
 	stored_definition,
 	incoming_definition
 ) -> Array[String]:
-	var failures: Array[String] = []
 	if stored_definition == null or not stored_definition is ItemDefinition:
 		return ["authored item definition mismatch: stored slot definition is not ItemDefinition"]
 	if incoming_definition == null or not incoming_definition is ItemDefinition:
 		return ["authored item definition mismatch: incoming definition is not ItemDefinition"]
-	if str(stored_definition.content_id) != str(incoming_definition.content_id):
-		failures.append(
-			"authored item definition mismatch: content_id %s != %s" % [
-				stored_definition.content_id,
-				incoming_definition.content_id,
-			]
+
+	var stored_descriptor_json: String = InventoryStateCodec.canonical_json(
+		stored_definition.canonical_descriptor()
+	)
+	var incoming_descriptor_json: String = InventoryStateCodec.canonical_json(
+		incoming_definition.canonical_descriptor()
+	)
+	if stored_descriptor_json == incoming_descriptor_json:
+		return []
+	return [
+		"authored item definition mismatch for %s: canonical authored descriptor differs" % str(
+			incoming_definition.content_id
 		)
-	if stored_definition.schema_revision != incoming_definition.schema_revision:
-		failures.append(
-			"authored item definition mismatch for %s: schema_revision %d != %d" % [
-				incoming_definition.content_id,
-				stored_definition.schema_revision,
-				incoming_definition.schema_revision,
-			]
-		)
-	if stored_definition.stack_limit != incoming_definition.stack_limit:
-		failures.append(
-			"authored item definition mismatch for %s: stack_limit %d != %d" % [
-				incoming_definition.content_id,
-				stored_definition.stack_limit,
-				incoming_definition.stack_limit,
-			]
-		)
-	if stored_definition.unit_weight != incoming_definition.unit_weight:
-		failures.append(
-			"authored item definition mismatch for %s: unit_weight %.6f != %.6f" % [
-				incoming_definition.content_id,
-				stored_definition.unit_weight,
-				incoming_definition.unit_weight,
-			]
-		)
-	failures.sort()
-	return failures
+	]
 
 
 static func _definition_failures(definition) -> Array[String]:
