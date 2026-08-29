@@ -116,7 +116,7 @@ static func _test_full_controller_world_swap_clears_entrance_state(failures: Arr
 	_expect(failures, "full configure clears old-world render collision tracking", controller.render_nodes.is_empty() and controller.collision_nodes.is_empty() and controller.get_child_count() == 0)
 	_expect(failures, "new streamer starts without old-world records", controller.streamer.records.is_empty())
 
-	var old_position := Vector3(old_address.coordinate) * controller.streamer.cell_size + controller.streamer.cell_size * 0.5
+	var old_position: Vector3 = Vector3(old_address.coordinate) * controller.streamer.cell_size + controller.streamer.cell_size * 0.5
 	controller.update_player_position(old_position)
 	_expect(failures, "player update near old entrance cannot recreate old entrance demand", not _has_demand_source(controller.streamer.records, old_source))
 	var observer_record = controller.streamer.records.get(old_key)
@@ -130,7 +130,7 @@ static func _test_full_controller_world_swap_clears_entrance_state(failures: Arr
 	new_plan.demand_handoffs = [Demand.new(new_entrance_id, [new_address], "prov:swap:new")]
 	new_plan.underground_cells = [new_address]
 	failures.append_array(controller.register_surface_plan(new_plan, "prov:swap:new"))
-	var new_position := Vector3(new_address.coordinate) * controller.streamer.cell_size + controller.streamer.cell_size * 0.5
+	var new_position: Vector3 = Vector3(new_address.coordinate) * controller.streamer.cell_size + controller.streamer.cell_size * 0.5
 	controller.update_player_position(new_position)
 	_expect(failures, "only new-world entrance state is registered after swap", controller.entrance_plans.size() == 1 and controller.entrance_plans.has(new_entrance_id) and controller.gates.size() == 1 and controller.gates.has(new_entrance_id))
 	_expect(failures, "new-world entrance participates while old entrance stays retired", _has_demand_source(controller.streamer.records, new_source) and not _has_demand_source(controller.streamer.records, old_source))
