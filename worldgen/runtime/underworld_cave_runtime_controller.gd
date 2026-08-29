@@ -20,7 +20,7 @@ const PartitionConfig := preload("res://worldgen/geometry/geometry_cell_partitio
 const PartitionRequest := preload("res://worldgen/geometry/geometry_cell_partition_request.gd")
 const Partitioner := preload("res://worldgen/geometry/geometry_cell_partitioner.gd")
 const VoxelRequest := preload("res://worldgen/geometry/cave_voxel_field_request.gd")
-const VoxelMesher := preload("res://worldgen/geometry/cave_voxel_mesher.gd")
+const MeshBuilder := preload("res://worldgen/geometry/cave_mesh_builder.gd")
 const CollisionBuilder := preload("res://worldgen/runtime/cave_collision_builder.gd")
 const SurfacePlan := preload("res://worldgen/surface/surface_entrance_chunk_plan.gd")
 
@@ -96,7 +96,7 @@ func bootstrap_fixture(world_seed: int, region: Vector2i, entrance_id: String) -
 	if not registration_failures.is_empty(): return _bootstrap_fail(registration_failures)
 	for plan in partition.data.plans:
 		var voxel_request := VoxelRequest.new(plan, cell_config, provenance, 0.0, partition.data, context)
-		var mesh_stage = VoxelMesher.build(voxel_request)
+		var mesh_stage = MeshBuilder.build(voxel_request)
 		if not mesh_stage.success: return _bootstrap_fail(mesh_stage.diagnostics)
 		if not accept_mesh_data(mesh_stage.data): return _bootstrap_fail(["Mesh realization failed for " + plan.cell_address.canonical_text()])
 		var collision_stage = CollisionBuilder.prepare(mesh_stage.data, provenance.fingerprint if provenance != null else "")
