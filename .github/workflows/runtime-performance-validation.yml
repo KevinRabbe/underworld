@@ -1,0 +1,64 @@
+name: Runtime Cave Performance Validation
+
+on:
+  pull_request:
+    paths:
+      - 'worldgen/runtime/**'
+      - 'worldgen/geometry/**'
+      - 'tests/run_performance.gd'
+      - 'tests/geometry/test_runtime_performance_contract.gd'
+      - 'docs/60_validation/RUNTIME_CAVE_PERFORMANCE.md'
+      - '.github/workflows/runtime-performance-validation.yml'
+  workflow_dispatch:
+  push:
+    branches:
+      - 'perf/**'
+    paths:
+      - 'worldgen/runtime/**'
+      - 'worldgen/geometry/**'
+      - 'tests/run_performance.gd'
+      - 'tests/geometry/test_runtime_performance_contract.gd'
+      - 'docs/60_validation/RUNTIME_CAVE_PERFORMANCE.md'
+      - '.github/workflows/runtime-performance-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-cave-profile:
+    name: MAP-015 runtime cave profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Show Godot version
+        run: godot --version
+
+      - name: Run PERF-001 runtime cave profile
+        run: |
+          set -o pipefail
+          godot --headless --path . --quit-after 1 \
+            --script res://tests/run_performance.gd 2>&1 \
+            | tee runtime-cave-performance.log
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' runtime-cave-performance.log; then
+            exit 1
+          fi
+          grep -Fq '[PERF-001] PASS' runtime-cave-performance.log
+
+      - name: Upload profiling report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-cave-performance-report
+          path: runtime-cave-performance.log
+          if-no-files-found: error
