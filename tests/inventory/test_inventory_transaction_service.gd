@@ -11,6 +11,7 @@ static func run() -> Array[String]:
 	_test_crafting_style_transaction_is_atomic(failures)
 	_test_insufficient_ingredient_changes_nothing(failures)
 	_test_destination_capacity_failure_changes_nothing(failures)
+	_test_destination_weight_failure_changes_nothing(failures)
 	_test_cross_container_stack_transfer_conserves_state(failures)
 	_test_instance_transfer_conserves_mutable_state(failures)
 	_test_authored_contract_mismatch_remains_fail_closed(failures)
@@ -92,6 +93,30 @@ static func _test_destination_capacity_failure_changes_nothing(failures: Array[S
 		failures.append("failed destination-capacity transfer mutated source")
 	if destination.canonical_json() != destination_before:
 		failures.append("failed destination-capacity transfer mutated destination")
+
+
+static func _test_destination_weight_failure_changes_nothing(failures: Array[String]) -> void:
+	var ore = _item("item.resource.tx_weight_ore", 16, 1.50)
+	var source = ItemContainerState.new().configure(2, 10.0)
+	var destination = ItemContainerState.new().configure(2, 2.0)
+	source.add_stack(ore, 2)
+	var source_before: String = source.canonical_json()
+	var destination_before: String = destination.canonical_json()
+
+	var plan = InventoryTransactionPlan.new()
+	plan.bind_container("source", source)
+	plan.bind_container("destination", destination)
+	plan.transfer_stack("source", "destination", ore, 2)
+	var result: Dictionary = InventoryTransactionService.new().commit(plan)
+
+	if bool(result.get("success", false)):
+		failures.append("weight-invalid cross-container transfer unexpectedly succeeded")
+	elif not _has_fragment(result, "weight capacity"):
+		failures.append("weight failure was not diagnostic: %s" % [result.get("diagnostics", [])])
+	if source.canonical_json() != source_before:
+		failures.append("failed destination-weight transfer mutated source")
+	if destination.canonical_json() != destination_before:
+		failures.append("failed destination-weight transfer mutated destination")
 
 
 static func _test_cross_container_stack_transfer_conserves_state(failures: Array[String]) -> void:
