@@ -188,12 +188,15 @@ static func _test_hotbar_failure_cannot_duplicate_or_lose_item(failures: Array[S
 
 static func _test_empty_selection_resolves_to_hands(failures: Array[String]) -> void:
 	var equipment = _equipment_state()
-	equipment.select_hotbar(4)
+	var selection_result: Dictionary = equipment.select_hotbar(4)
 	var selected: Dictionary = EquippedItemResolver.new().resolve_selected(equipment)
 	if str(selected.get("selection_kind", "")) != "hands":
 		failures.append("empty hotbar selection did not resolve to default hands state")
 	if not str(selected.get("item_id", "")).is_empty():
 		failures.append("hands/default state invented concrete item identity")
+	var events: Array = selection_result.get("events", [])
+	if events.size() != 1 or str(events[0].get("type", "")) != "equipment.hotbar_selected":
+		failures.append("hotbar selection did not expose semantic state-change event")
 
 
 static func _equipment_state():
