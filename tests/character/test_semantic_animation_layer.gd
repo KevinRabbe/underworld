@@ -150,8 +150,10 @@ static func _test_missing_role_diagnostics(failures: Array[String]) -> void:
 	var bad_set = AnimationSetDefinition.new()
 	bad_set.configure_animation_set("animation_set.humanoid.bad_role", rig.content_id)
 	bad_set.role_bindings = {"animation_role.action.not_registered": "bad.unknown"}
-	bad_set.required_role_ids = ["animation_role.action.not_registered"]
-	bad_set.required_rig_role_ids = ["rig_role.root"]
+	bad_set.configure_required_roles(
+		["animation_role.action.not_registered"],
+		["rig_role.root"]
+	)
 	var fixture: Dictionary = _validated_content([bad_set, rig])
 	if not bool(fixture.get("success", false)):
 		failures.append("unknown-role fixture should pass generic CONTENT-005 syntax/reference validation")
@@ -248,24 +250,26 @@ static func _animation_set_fixture(content_id: String, rig_profile_id: String, p
 		"animation_role.action.parry": prefix + ".parry",
 		"animation_role.action.block": prefix + ".block",
 	}
-	animation_set.required_role_ids = [
-		"animation_role.locomotion.idle",
-		"animation_role.locomotion.walk_forward",
-		"animation_role.locomotion.walk_backward",
-		"animation_role.locomotion.strafe_left",
-		"animation_role.locomotion.strafe_right",
-		"animation_role.locomotion.sprint",
-		"animation_role.locomotion.jump_start",
-		"animation_role.locomotion.fall",
-		"animation_role.action.attack.light_01",
-		"animation_role.action.dodge.forward",
-		"animation_role.action.dodge.backward",
-		"animation_role.action.dodge.left",
-		"animation_role.action.dodge.right",
-		"animation_role.action.parry",
-		"animation_role.action.block",
-	]
-	animation_set.required_rig_role_ids = ["rig_role.root", "rig_role.socket.hand.right"]
+	animation_set.configure_required_roles(
+		[
+			"animation_role.locomotion.idle",
+			"animation_role.locomotion.walk_forward",
+			"animation_role.locomotion.walk_backward",
+			"animation_role.locomotion.strafe_left",
+			"animation_role.locomotion.strafe_right",
+			"animation_role.locomotion.sprint",
+			"animation_role.locomotion.jump_start",
+			"animation_role.locomotion.fall",
+			"animation_role.action.attack.light_01",
+			"animation_role.action.dodge.forward",
+			"animation_role.action.dodge.backward",
+			"animation_role.action.dodge.left",
+			"animation_role.action.dodge.right",
+			"animation_role.action.parry",
+			"animation_role.action.block",
+		],
+		["rig_role.root", "rig_role.socket.hand.right"]
+	)
 	return animation_set
 
 
