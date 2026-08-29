@@ -10,7 +10,7 @@ static func prepare(mesh_data, provenance_fingerprint: String = "") -> StageResu
 		return StageResult.fail("collision_preparation", ["CaveMeshData is required"])
 	if not mesh_data.success:
 		return StageResult.fail("collision_preparation", ["Cannot build collision from failed mesh data"])
-	if mesh_data.indices.is_empty() or mesh_data.indices.size() % 3 != 0:
+	if mesh_data.indices.size() % 3 != 0:
 		return StageResult.fail("collision_preparation", ["Mesh data has no complete triangles"])
 	var faces := PackedVector3Array()
 	for index in mesh_data.indices:
