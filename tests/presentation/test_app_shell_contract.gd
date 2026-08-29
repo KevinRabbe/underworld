@@ -16,6 +16,100 @@ static func run() -> Array[String]:
 	return failures
 
 
+static func run_runtime(tree: SceneTree) -> Array[String]:
+	var failures: Array[String] = []
+	var app_packed = ResourceLoader.load(APP_ROOT_PATH)
+	var title_packed = ResourceLoader.load(TITLE_SCREEN_PATH)
+	var game_fixture: PackedScene = _make_fixture_scene("RuntimeGameFixture")
+	if app_packed == null or not app_packed is PackedScene:
+		failures.append("runtime app-shell proof could not load AppRoot PackedScene")
+		return failures
+	if title_packed == null or not title_packed is PackedScene:
+		failures.append("runtime app-shell proof could not load title PackedScene")
+		return failures
+	if game_fixture == null:
+		failures.append("runtime app-shell proof could not build lightweight game fixture")
+		return failures
+
+	var app: Node = app_packed.instantiate()
+	if app == null:
+		failures.append("runtime app-shell proof could not instantiate AppRoot")
+		return failures
+	if not bool(app.call("configure_route_scenes", title_packed, game_fixture)):
+		failures.append("AppRoot rejected pre-tree injected route scenes")
+		app.free()
+		return failures
+
+	tree.root.add_child(app)
+	await tree.process_frame
+
+	var scene_host: Node = app.get_node_or_null("SceneHost")
+	if scene_host == null:
+		failures.append("runtime AppRoot is missing SceneHost")
+		app.queue_free()
+		await tree.process_frame
+		return failures
+	if scene_host.get_child_count() != 1:
+		failures.append("AppRoot must realize exactly one title route child on SceneTree entry")
+
+	var title: Node = app.get("current_scene") as Node
+	if title == null or title.get_parent() != scene_host:
+		failures.append("AppRoot current scene must be the live title child after SceneTree entry")
+	elif str(app.call("current_route_id")) != "title":
+		failures.append("AppRoot must expose title as the current semantic route after entry")
+
+	if title != null:
+		title.emit_signal("continue_requested")
+		if app.get("current_scene") != title or scene_host.get_child_count() != 1:
+			failures.append("Continue must remain fail-closed and non-routing before persistence integration")
+
+		title.emit_signal("new_game_requested")
+		var first_game: Node = app.get("current_scene") as Node
+		if first_game == null or first_game == title:
+			failures.append("New Game semantic intent did not replace title with the game route")
+		elif first_game.get_parent() != scene_host or first_game.name != "RuntimeGameFixture":
+			failures.append("New Game did not realize the injected game route under SceneHost")
+		if scene_host.get_child_count() != 1:
+			failures.append("SceneHost retained overlapping title/game route children")
+		if title.get_parent() != null or not title.is_queued_for_deletion():
+			failures.append("stale title route must be detached and queued after New Game transition")
+		if str(app.call("current_route_id")) != "game":
+			failures.append("AppRoot did not commit semantic game route identity")
+
+		# The detached title can still emit before the queued free is processed. Its
+		# stale signal connection must not create a second game scene.
+		title.emit_signal("new_game_requested")
+		if app.get("current_scene") != first_game or scene_host.get_child_count() != 1:
+			failures.append("stale duplicate New Game intent replaced or duplicated the active game route")
+
+		var duplicate_result: bool = bool(app.call("start_new_game"))
+		if duplicate_result or app.get("current_scene") != first_game or scene_host.get_child_count() != 1:
+			failures.append("duplicate direct game-route request must be idempotent")
+
+		# Force the transition guard to model a nested route request while a route
+		# commit is active. The current game route must remain untouched.
+		app.set("_transition_in_progress", true)
+		var reentrant_result: bool = bool(app.call("show_title"))
+		app.set("_transition_in_progress", false)
+		if reentrant_result or app.get("current_scene") != first_game or scene_host.get_child_count() != 1:
+			failures.append("re-entrant route request must not mutate the active scene")
+
+	app.queue_free()
+	await tree.process_frame
+	return failures
+
+
+static func _make_fixture_scene(root_name: String) -> PackedScene:
+	var fixture_root := Node.new()
+	fixture_root.name = root_name
+	var packed := PackedScene.new()
+	var pack_result: Error = packed.pack(fixture_root)
+	fixture_root.free()
+	if pack_result != OK:
+		return null
+	return packed
+
+
 static func _test_main_scene_contract(failures: Array[String]) -> void:
 	var main_scene: String = str(ProjectSettings.get_setting("application/run/main_scene", ""))
 	if main_scene != APP_ROOT_PATH:
@@ -35,6 +129,8 @@ static func _test_app_root_contract(failures: Array[String]) -> void:
 		failures.append("application root is missing replaceable SceneHost")
 	if not root.has_method("show_title") or not root.has_method("start_new_game"):
 		failures.append("application root must expose explicit title/game routing operations")
+	if not root.has_method("configure_route_scenes") or not root.has_method("current_route_id"):
+		failures.append("application root must expose pre-tree route composition and semantic route inspection")
 	root.free()
 
 
