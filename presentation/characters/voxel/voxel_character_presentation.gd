@@ -46,6 +46,10 @@ func build() -> void:
 		tool_visual_root.position = Vector3(0.13, 0.02, 0.01)
 		tool_visual_root.rotation_degrees = Vector3(0.0, 0.0, -35.0)
 	_build_animation_graph()
+	if is_inside_tree():
+		_align_visual_ground()
+	else:
+		call_deferred("_align_visual_ground")
 
 
 func _build_materials() -> void:
@@ -171,6 +175,15 @@ func _material_for_palette(palette_index: int) -> StandardMaterial3D:
 		material.emission_enabled = true
 		material.emission = Color(entry.get("color", Color.WHITE)) * emission_strength
 	return material
+
+
+func _align_visual_ground() -> void:
+	# Keep presentation geometry aligned to the Player ground origin even when
+	# authored rigid-part bounds include a small voxel margin below y=0.
+	var bounds := realized_visual_bounds()
+	if bounds.size.y <= 0.0:
+		return
+	position.y -= bounds.position.y
 
 
 func _build_animation_graph() -> void:
