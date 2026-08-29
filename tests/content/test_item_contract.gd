@@ -29,6 +29,7 @@ static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_authored_definition_and_path_identity(failures)
 	_test_mutable_state_is_separate_from_definition(failures)
+	_test_wrong_item_definition_type_fails_closed(failures)
 	_test_family_extension_and_category_capability_rules(failures)
 	_test_typed_semantic_references(failures)
 	return failures
@@ -94,6 +95,27 @@ static func _test_mutable_state_is_separate_from_definition(failures: Array[Stri
 	compatible.compatibility_state["quality"] = "ordinary"
 	if stack.is_compatible_with(compatible):
 		failures.append("different item stack compatibility state was incorrectly merge-compatible")
+
+
+static func _test_wrong_item_definition_type_fails_closed(failures: Array[String]) -> void:
+	var wrong_type = ContentDefinition.new()
+	wrong_type.configure("item.invalid.generic_definition", "item", 1)
+	wrong_type.configure_schema_declarations([ITEM_RESOURCE], [])
+
+	var validator = ItemFamilyValidator.new()
+	validator.configure_item_rules([])
+	if not validator.applies_to(wrong_type):
+		failures.append("item validator did not select semantic item family when concrete subtype was wrong")
+		return
+
+	var result: Dictionary = ContentValidationPipeline.new().validate_all(
+		[wrong_type],
+		_categories(),
+		_capabilities(),
+		[validator]
+	)
+	if not _has_code_fragment(result, "family_rule", "must inherit ItemDefinition"):
+		failures.append("generic ContentDefinition under semantic item family bypassed the item rulebook")
 
 
 static func _test_family_extension_and_category_capability_rules(failures: Array[String]) -> void:
