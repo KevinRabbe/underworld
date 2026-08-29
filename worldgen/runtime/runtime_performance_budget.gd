@@ -43,15 +43,18 @@ static func evaluate(metrics: Dictionary, thresholds: Dictionary = {}) -> Array[
 			continue
 		var value = metrics[key]
 		var limit = limits[key]
-		if (value is int or value is float) and (limit is int or limit is float):
-			if float(value) > float(limit):
-				warnings.append(
-					"%s exceeded prototype warning budget: value=%s limit=%s" % [
-						str(key),
-						str(value),
-						str(limit),
-					]
-				)
+		var value_type := typeof(value)
+		var limit_type := typeof(limit)
+		var value_numeric := value_type == TYPE_INT or value_type == TYPE_FLOAT
+		var limit_numeric := limit_type == TYPE_INT or limit_type == TYPE_FLOAT
+		if value_numeric and limit_numeric and float(value) > float(limit):
+			warnings.append(
+				"%s exceeded prototype warning budget: value=%s limit=%s" % [
+					str(key),
+					str(value),
+					str(limit),
+				]
+			)
 	warnings.sort()
 	return warnings
 
