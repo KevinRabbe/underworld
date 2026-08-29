@@ -84,6 +84,7 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 		"fixture commitment starts",
 		bool(actions.call("try_start_tool_action", 0.10))
 	)
+	var expected_direction: Vector3 = player.call("_get_combat_forward")
 	player.call("_request_attack")
 	_expect_equal(
 		failures,
@@ -94,13 +95,12 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 	_expect_equal(failures, "buffered attack does not start immediately", String(actions.call("state_name")), "USING_TOOL")
 	_expect_equal(failures, "buffered attack emits nothing immediately", captured.size(), 0)
 
-	# A buffered attack is not committed yet. Current weapon and facing are
-	# deliberately resolved when the old action ends, so late camera/tool changes
-	# remain responsive rather than being frozen 120 ms early.
-	player.call("set_equipped_tool", "stone_pickaxe")
+	# Buffered attack intent is immutable: facing is snapshotted when input is
+	# accepted. A later camera change must not silently rewrite the request.
 	var camera_yaw = player.get("camera_yaw")
 	camera_yaw.set("rotation", Vector3(0.0, 0.45, 0.0))
-	var expected_direction: Vector3 = player.call("_get_combat_forward")
+	var changed_live_direction: Vector3 = player.call("_get_combat_forward")
+	_expect_true(failures, "camera rotation changes live facing for snapshot proof", not changed_live_direction.is_equal_approx(expected_direction))
 
 	actions.call("tick", 0.05)
 	buffer.call("tick", 0.05)
@@ -120,7 +120,7 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 	_expect_equal(failures, "buffer slot clears after consumption", String(player.call("get_buffered_action_name")), "")
 	_expect_vector_close(
 		failures,
-		"buffered attack uses execution-time facing",
+		"buffered attack preserves input-time facing",
 		player.get("pending_attack_direction"),
 		expected_direction
 	)
@@ -131,9 +131,9 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 	if captured.size() == 1:
 		_expect_equal(
 			failures,
-			"buffered attack uses execution-time weapon",
+			"buffered attack preserves input-time weapon",
 			captured[0].get("attack_id"),
-			&"stone_pickaxe_light"
+			&"stone_axe_light"
 		)
 
 	# Respawn/reset is a hard boundary: buffered input must never leak through it.
