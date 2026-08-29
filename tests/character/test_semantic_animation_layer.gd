@@ -160,8 +160,9 @@ static func _test_missing_role_diagnostics(failures: Array[String]) -> void:
 		return
 
 	var adapter = RecordingAdapter.new()
-	adapter.animation_bindings = ["bad.unknown"]
-	adapter.rig_bindings = ["bone:root_bad", "socket:hand_bad"]
+	adapter.animation_bindings.append("bad.unknown")
+	adapter.rig_bindings.append("bone:root_bad")
+	adapter.rig_bindings.append("socket:hand_bad")
 	var controller = CharacterAnimationController.new()
 	var diagnostics: Array[String] = controller.configure(
 		fixture["registry"], fixture["validation"], role_registry, bad_set.content_id, adapter
@@ -277,7 +278,8 @@ static func _adapter_for_set(animation_set, root_target: String, hand_target: St
 	var adapter = RecordingAdapter.new()
 	for raw_binding in animation_set.role_bindings.values():
 		adapter.animation_bindings.append(str(raw_binding))
-	adapter.rig_bindings = ["bone:%s" % root_target, "socket:%s" % hand_target]
+	adapter.rig_bindings.append("bone:%s" % root_target)
+	adapter.rig_bindings.append("socket:%s" % hand_target)
 	return adapter
 
 
