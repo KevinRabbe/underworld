@@ -12,7 +12,7 @@ const WOOD_ID := "item.resource.wood"
 const STONE_ID := "item.resource.stone"
 const AXE_ID := "item.tool.stone_axe"
 const PICKAXE_ID := "item.tool.stone_pickaxe"
-const AXE_CATEGORY_ROOT := "category.item.equipment.weapon.melee.axe"
+const AXE_CATEGORY_ROOT := "category.item.equipment.tool.axe"
 const PICKAXE_CATEGORY_ROOT := "category.item.equipment.tool.pickaxe"
 const HARVEST_TOOL := "capability.harvest_tool"
 
