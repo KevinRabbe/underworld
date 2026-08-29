@@ -13,7 +13,7 @@ const CREATURE_ROOT_CATEGORY := "category.creature"
 const ENEMY_CATEGORY := "category.creature.enemy"
 const MOVEMENT_CAPABILITY := "capability.movement"
 const SENSING_CAPABILITY := "capability.sensing"
-const MELEE_CAPABILITY := "capability.combat.melee"
+const DAMAGE_DEALER_CAPABILITY := "capability.damage_dealer"
 
 
 func configure_creature_rules() -> RefCounted:
@@ -89,7 +89,7 @@ func _validate_categories_and_capabilities(
 		for required_capability in [
 			MOVEMENT_CAPABILITY,
 			SENSING_CAPABILITY,
-			MELEE_CAPABILITY,
+			DAMAGE_DEALER_CAPABILITY,
 		]:
 			if required_capability not in definition.capability_ids:
 				failures.append(
