@@ -4,18 +4,15 @@ const ATTACK_PROFILE_FAMILY := "attack_profile"
 const _SEMANTIC_CHARS := "abcdefghijklmnopqrstuvwxyz0123456789_."
 
 @export var attack_style: String = "melee.contact"
-@export var parryable: bool = true
 
 
 func configure_attack_profile(
 	p_content_id: String,
 	p_attack_style: String = "melee.contact",
-	p_parryable: bool = true,
 	p_schema_revision: int = 1
 ) -> Resource:
 	configure(p_content_id, ATTACK_PROFILE_FAMILY, p_schema_revision)
 	attack_style = p_attack_style
-	parryable = p_parryable
 	return self
 
 
@@ -37,7 +34,6 @@ func validate_definition() -> Array[String]:
 func canonical_descriptor() -> Dictionary:
 	var descriptor: Dictionary = super.canonical_descriptor()
 	descriptor["attack_style"] = attack_style
-	descriptor["parryable"] = parryable
 	return descriptor
 
 
