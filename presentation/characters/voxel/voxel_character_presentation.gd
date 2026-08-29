@@ -41,10 +41,10 @@ func build() -> void:
 	super.build()
 	# The mannequin fixture carries a strongly diagonal primitive-tool socket.
 	# Voxel tools author their complete handle/head relationship in module space,
-	# so keep that authored silhouette nearly vertical at the hand.
+	# so keep that authored silhouette visibly outboard and diagonal at the hand.
 	if tool_visual_root != null:
-		tool_visual_root.position = Vector3(0.04, -0.02, 0.01)
-		tool_visual_root.rotation_degrees = Vector3(0.0, 0.0, -12.0)
+		tool_visual_root.position = Vector3(0.13, 0.02, 0.01)
+		tool_visual_root.rotation_degrees = Vector3(0.0, 0.0, -35.0)
 	_build_animation_graph()
 
 
