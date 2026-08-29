@@ -1,0 +1,86 @@
+name: Worldgen Benchmark
+
+on:
+  pull_request:
+    paths:
+      - 'tools/worldgen_benchmark/**'
+      - 'worldgen/**'
+      - '.github/workflows/worldgen-benchmark.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Godot deterministic worldgen benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Run fixed benchmark corpus
+        shell: bash
+        run: |
+          set -o pipefail
+          benchmark_log="$(mktemp)"
+          output_dir="$RUNNER_TEMP/underworld-worldgen-benchmark"
+          godot --headless --path . --quit-after 1 \
+            --script res://tools/worldgen_benchmark/run_worldgen_benchmark.gd -- \
+            --out-dir="$output_dir" --basename=worldgen_benchmark 2>&1 \
+            | tee "$benchmark_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$benchmark_log"; then
+            exit 1
+          fi
+          grep -Fq '[WORLDGEN BENCHMARK] PASS' "$benchmark_log"
+          test -s "$output_dir/worldgen_benchmark.json"
+          test -s "$output_dir/worldgen_benchmark.txt"
+
+      - name: Validate report structure
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ['RUNNER_TEMP']) / 'underworld-worldgen-benchmark' / 'worldgen_benchmark.json'
+          report = json.loads(path.read_text(encoding='utf-8'))
+          assert report['schema'] == 'underworld-worldgen-benchmark-v1'
+          assert report['corpus_revision'] == 'worldgen-benchmark-corpus-v1'
+          assert report['case_count'] == 20
+          assert len(report['cases']) == 20
+          for stage in ('macro_region', 'primary_topology', 'entrance_generation', 'secondary_connectivity'):
+              summary = report['stages'][stage]
+              assert summary['sample_count'] == 20
+              assert 'median_ms' in summary and 'p95_ms' in summary
+          PY
+
+      - name: Publish job summary
+        shell: bash
+        run: |
+          {
+            echo '## Deterministic worldgen benchmark'
+            echo '```text'
+            cat "$RUNNER_TEMP/underworld-worldgen-benchmark/worldgen_benchmark.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: worldgen-benchmark
+          path: |
+            ${{ runner.temp }}/underworld-worldgen-benchmark/worldgen_benchmark.json
+            ${{ runner.temp }}/underworld-worldgen-benchmark/worldgen_benchmark.txt
+          if-no-files-found: error
+          retention-days: 14
