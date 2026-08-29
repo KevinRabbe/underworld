@@ -10,7 +10,6 @@ const RigProfileDefinition := preload("res://presentation/characters/animation/r
 
 const CREATURE_FAMILY := "creature"
 const CREATURE_ROOT_CATEGORY := "category.creature"
-const ENEMY_CATEGORY := "category.creature.enemy"
 const MOVEMENT_CAPABILITY := "capability.movement"
 const SENSING_CAPABILITY := "capability.sensing"
 const DAMAGE_DEALER_CAPABILITY := "capability.damage_dealer"
@@ -43,61 +42,117 @@ func validate_definition(definition, context: Dictionary) -> Array[String]:
 		)
 		return failures
 
-	_validate_categories_and_capabilities(definition, context, failures)
+	_validate_category_contract(definition, context, failures)
+	_validate_capability_contracts(definition, failures)
 	_validate_semantic_targets(definition, context, failures)
 	failures.sort()
 	return failures
 
 
-func _validate_categories_and_capabilities(
+func _validate_category_contract(
 	definition,
 	context: Dictionary,
 	failures: Array[String]
 ) -> void:
 	var category_registry = context.get("category_registry", null)
 	if (
-		category_registry != null
-		and category_registry is CategorySchemaRegistry
-		and category_registry.is_valid()
+		category_registry == null
+		or not category_registry is CategorySchemaRegistry
+		or not category_registry.is_valid()
 	):
-		if not category_registry.has_schema(CREATURE_ROOT_CATEGORY):
+		return
+	if not category_registry.has_schema(CREATURE_ROOT_CATEGORY):
+		failures.append(
+			"creature root category schema is not registered: %s" % CREATURE_ROOT_CATEGORY
+		)
+		return
+	if definition.category_ids.is_empty():
+		failures.append("creature '%s' must declare a category under %s" % [
+			definition.content_id,
+			CREATURE_ROOT_CATEGORY,
+		])
+		return
+	for category_id in definition.category_ids:
+		if not category_registry.has_schema(category_id):
+			continue
+		if not category_registry.is_category_or_descendant(
+			category_id,
+			CREATURE_ROOT_CATEGORY
+		):
 			failures.append(
-				"creature root category schema is not registered: %s" % CREATURE_ROOT_CATEGORY
-			)
-		elif definition.category_ids.is_empty():
-			failures.append("creature '%s' must declare a category under %s" % [
-				definition.content_id,
-				CREATURE_ROOT_CATEGORY,
-			])
-		else:
-			for category_id in definition.category_ids:
-				if not category_registry.has_schema(category_id):
-					continue
-				if not category_registry.is_category_or_descendant(
+				"creature '%s' declares category outside %s: %s" % [
+					definition.content_id,
+					CREATURE_ROOT_CATEGORY,
 					category_id,
-					CREATURE_ROOT_CATEGORY
-				):
-					failures.append(
-						"creature '%s' declares category outside %s: %s" % [
-							definition.content_id,
-							CREATURE_ROOT_CATEGORY,
-							category_id,
-						]
-					)
+				]
+			)
 
-	if ENEMY_CATEGORY in definition.category_ids:
-		for required_capability in [
-			MOVEMENT_CAPABILITY,
-			SENSING_CAPABILITY,
-			DAMAGE_DEALER_CAPABILITY,
-		]:
-			if required_capability not in definition.capability_ids:
-				failures.append(
-					"enemy creature '%s' requires capability: %s" % [
-						definition.content_id,
-						required_capability,
-					]
-				)
+
+func _validate_capability_contracts(definition, failures: Array[String]) -> void:
+	var has_movement: bool = MOVEMENT_CAPABILITY in definition.capability_ids
+	var has_sensing: bool = SENSING_CAPABILITY in definition.capability_ids
+	var has_damage_dealer: bool = DAMAGE_DEALER_CAPABILITY in definition.capability_ids
+
+	if definition.move_speed > 0.0 and not has_movement:
+		failures.append(
+			"creature '%s' has movement tuning but lacks capability: %s" % [
+				definition.content_id,
+				MOVEMENT_CAPABILITY,
+			]
+		)
+	if has_movement and definition.move_speed <= 0.0:
+		failures.append(
+			"creature '%s' declares %s but move_speed is not > 0" % [
+				definition.content_id,
+				MOVEMENT_CAPABILITY,
+			]
+		)
+
+	if definition.detection_range > 0.0 and not has_sensing:
+		failures.append(
+			"creature '%s' has sensing tuning but lacks capability: %s" % [
+				definition.content_id,
+				SENSING_CAPABILITY,
+			]
+		)
+	if has_sensing and definition.detection_range <= 0.0:
+		failures.append(
+			"creature '%s' declares %s but detection_range is not > 0" % [
+				definition.content_id,
+				SENSING_CAPABILITY,
+			]
+		)
+
+	var has_attack_contract: bool = (
+		not definition.attack_profile_id.is_empty()
+		or definition.attack_range > 0.0
+		or definition.attack_damage > 0
+		or definition.attack_cooldown > 0.0
+		or definition.attack_windup > 0.0
+	)
+	if has_attack_contract and not has_damage_dealer:
+		failures.append(
+			"creature '%s' has attack tuning/reference but lacks capability: %s" % [
+				definition.content_id,
+				DAMAGE_DEALER_CAPABILITY,
+			]
+		)
+	if has_damage_dealer:
+		if definition.attack_profile_id.is_empty():
+			failures.append(
+				"creature '%s' declares %s but has no attack-profile reference" % [
+					definition.content_id,
+					DAMAGE_DEALER_CAPABILITY,
+				]
+			)
+		if definition.attack_range <= 0.0:
+			failures.append("damage-dealer creature attack_range must be > 0: %s" % definition.content_id)
+		if definition.attack_damage <= 0:
+			failures.append("damage-dealer creature attack_damage must be > 0: %s" % definition.content_id)
+		if definition.attack_cooldown <= 0.0:
+			failures.append("damage-dealer creature attack_cooldown must be > 0: %s" % definition.content_id)
+		if definition.attack_windup <= 0.0:
+			failures.append("damage-dealer creature attack_windup must be > 0: %s" % definition.content_id)
 
 
 func _validate_semantic_targets(
@@ -109,15 +164,16 @@ func _validate_semantic_targets(
 	if content_registry == null or not content_registry is ContentRegistry:
 		return
 
-	var attack_profile = _resolve_definition(
-		content_registry,
-		definition.attack_profile_id,
-		CreatureDefinition.ATTACK_PROFILE_FAMILY
-	)
-	if attack_profile != null and not attack_profile is CreatureAttackProfileDefinition:
-		failures.append(
-			"creature attack profile target must inherit CreatureAttackProfileDefinition: %s" % definition.attack_profile_id
+	if not definition.attack_profile_id.is_empty():
+		var attack_profile = _resolve_definition(
+			content_registry,
+			definition.attack_profile_id,
+			CreatureDefinition.ATTACK_PROFILE_FAMILY
 		)
+		if attack_profile != null and not attack_profile is CreatureAttackProfileDefinition:
+			failures.append(
+				"creature attack profile target must inherit CreatureAttackProfileDefinition: %s" % definition.attack_profile_id
+			)
 
 	var archetype = _resolve_definition(
 		content_registry,
@@ -129,50 +185,52 @@ func _validate_semantic_targets(
 			"creature archetype target must inherit accepted ArchetypeDefinition: %s" % definition.archetype_id
 		)
 
-	var animation_set = _resolve_definition(
-		content_registry,
-		definition.animation_set_id,
-		CreatureDefinition.ANIMATION_SET_FAMILY
-	)
-	if animation_set != null:
-		if not animation_set is AnimationSetDefinition:
-			failures.append(
-				"creature animation-set target must inherit AnimationSetDefinition: %s" % definition.animation_set_id
-			)
-		else:
-			if str(animation_set.rig_profile_id) != str(definition.rig_profile_id):
+	if not definition.animation_set_id.is_empty():
+		var animation_set = _resolve_definition(
+			content_registry,
+			definition.animation_set_id,
+			CreatureDefinition.ANIMATION_SET_FAMILY
+		)
+		if animation_set != null:
+			if not animation_set is AnimationSetDefinition:
 				failures.append(
-					"creature animation-set rig profile does not match creature rig profile: %s -> %s" % [
-						definition.animation_set_id,
-						definition.rig_profile_id,
-					]
+					"creature animation-set target must inherit AnimationSetDefinition: %s" % definition.animation_set_id
 				)
-			for role_id in definition.required_animation_role_ids:
-				var resolution: Dictionary = animation_set.resolve_role_binding(role_id)
-				if not resolution.get("diagnostics", []).is_empty():
+			else:
+				if str(animation_set.rig_profile_id) != str(definition.rig_profile_id):
 					failures.append(
-						"creature animation set does not satisfy required role %s: %s" % [
-							role_id,
-							resolution.get("diagnostics", []),
+						"creature animation-set rig profile does not match creature rig profile: %s -> %s" % [
+							definition.animation_set_id,
+							definition.rig_profile_id,
 						]
 					)
+				for role_id in definition.required_animation_role_ids:
+					var resolution: Dictionary = animation_set.resolve_role_binding(role_id)
+					if not resolution.get("diagnostics", []).is_empty():
+						failures.append(
+							"creature animation set does not satisfy required role %s: %s" % [
+								role_id,
+								resolution.get("diagnostics", []),
+							]
+						)
 
-	var rig_profile = _resolve_definition(
-		content_registry,
-		definition.rig_profile_id,
-		CreatureDefinition.RIG_PROFILE_FAMILY
-	)
-	if rig_profile != null:
-		if not rig_profile is RigProfileDefinition:
-			failures.append(
-				"creature rig-profile target must inherit RigProfileDefinition: %s" % definition.rig_profile_id
-			)
-		else:
-			for role_id in definition.required_rig_role_ids:
-				if rig_profile.binding_for_role(role_id).is_empty():
-					failures.append(
-						"creature rig profile does not satisfy required role: %s" % role_id
-					)
+	if not definition.rig_profile_id.is_empty():
+		var rig_profile = _resolve_definition(
+			content_registry,
+			definition.rig_profile_id,
+			CreatureDefinition.RIG_PROFILE_FAMILY
+		)
+		if rig_profile != null:
+			if not rig_profile is RigProfileDefinition:
+				failures.append(
+					"creature rig-profile target must inherit RigProfileDefinition: %s" % definition.rig_profile_id
+				)
+			else:
+				for role_id in definition.required_rig_role_ids:
+					if rig_profile.binding_for_role(role_id).is_empty():
+						failures.append(
+							"creature rig profile does not satisfy required role: %s" % role_id
+						)
 
 
 static func _resolve_definition(content_registry, content_id: String, family: String):
