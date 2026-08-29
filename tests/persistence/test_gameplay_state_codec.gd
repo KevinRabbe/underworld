@@ -21,11 +21,14 @@ static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_inventory_exact_slot_and_mutable_state_round_trip(failures)
 	_test_inventory_malformed_records_fail_closed(failures)
+	_test_inventory_structural_and_non_finite_fail_closed(failures)
 	_test_inventory_missing_and_drifted_definition_fail_closed(failures)
 	_test_equipment_round_trip_uses_current_authored_rules(failures)
 	_test_equipment_incompatible_current_rule_fails_closed(failures)
+	_test_equipment_selected_binding_compatibility(failures)
 	_test_pending_and_consumed_loot_round_trip(failures)
 	_test_malformed_pending_reward_never_reconstructs(failures)
+	_test_pending_loot_structural_keys_fail_closed(failures)
 	_test_canonical_evidence_is_order_independent(failures)
 	return failures
 
@@ -83,10 +86,7 @@ static func _test_inventory_malformed_records_fail_closed(failures: Array[String
 
 	var duplicate_snapshot: Dictionary = encoded.get("snapshot", {}).duplicate(true)
 	duplicate_snapshot["slots"].append(duplicate_snapshot["slots"][0].duplicate(true))
-	var duplicate_result: Dictionary = GameplayStateCodec.decode_inventory(
-		duplicate_snapshot,
-		registry
-	)
+	var duplicate_result: Dictionary = GameplayStateCodec.decode_inventory(duplicate_snapshot, registry)
 	if bool(duplicate_result.get("success", false)):
 		failures.append("duplicate saved inventory slot unexpectedly reconstructed")
 	if duplicate_result.has("state"):
@@ -104,6 +104,59 @@ static func _test_inventory_malformed_records_fail_closed(failures: Array[String
 	schema_snapshot["schema"] = "persistence.inventory.v999"
 	if bool(GameplayStateCodec.decode_inventory(schema_snapshot, registry).get("success", false)):
 		failures.append("unknown inventory persistence schema unexpectedly decoded")
+
+
+static func _test_inventory_structural_and_non_finite_fail_closed(
+	failures: Array[String]
+) -> void:
+	var authored = _definitions()
+	var registry = _registry(authored.values())
+	var encoded: Dictionary = GameplayStateCodec.encode_inventory(
+		_inventory_with_gap(authored),
+		registry
+	)
+	if not bool(encoded.get("success", false)):
+		failures.append("strict inventory schema regression setup failed")
+		return
+	var snapshot: Dictionary = encoded.get("snapshot", {})
+
+	var unknown_root: Dictionary = snapshot.duplicate(true)
+	unknown_root["future_field"] = true
+	if bool(GameplayStateCodec.decode_inventory(unknown_root, registry).get("success", false)):
+		failures.append("unknown inventory root field did not fail closed")
+
+	var unknown_record: Dictionary = snapshot.duplicate(true)
+	unknown_record["slots"][0]["future_field"] = true
+	if bool(GameplayStateCodec.decode_inventory(unknown_record, registry).get("success", false)):
+		failures.append("unknown inventory occupied-record field did not fail closed")
+
+	var nan_copy: Dictionary = snapshot.duplicate(true)
+	nan_copy["slots"][0]["state"]["per_copy_state"]["temperature"] = NAN
+	var nan_result: Dictionary = GameplayStateCodec.decode_inventory(nan_copy, registry)
+	if bool(nan_result.get("success", false)):
+		failures.append("NaN per-copy durable state unexpectedly decoded")
+	if nan_result.has("state"):
+		failures.append("NaN durable-state failure exposed partial inventory")
+
+	var infinite_stack: Dictionary = snapshot.duplicate(true)
+	infinite_stack["slots"][1]["state"]["stack_state"]["quality"] = INF
+	if bool(GameplayStateCodec.decode_inventory(infinite_stack, registry).get("success", false)):
+		failures.append("infinite stack durable state unexpectedly decoded")
+
+	var infinite_weight: Dictionary = snapshot.duplicate(true)
+	infinite_weight["max_weight"] = INF
+	if bool(GameplayStateCodec.decode_inventory(infinite_weight, registry).get("success", false)):
+		failures.append("infinite max_weight unexpectedly decoded")
+
+	var unsafe_inventory = ItemContainerState.new().configure(1, 20.0)
+	var unsafe_add: Dictionary = unsafe_inventory.add_instance(
+		authored["tool"],
+		{"temperature": NAN}
+	)
+	if not bool(unsafe_add.get("success", false)):
+		failures.append("non-finite encode regression setup could not create runtime state")
+	elif bool(GameplayStateCodec.encode_inventory(unsafe_inventory, registry).get("success", false)):
+		failures.append("NaN runtime state unexpectedly produced durable inventory evidence")
 
 
 static func _test_inventory_missing_and_drifted_definition_fail_closed(
@@ -187,6 +240,8 @@ static func _test_equipment_round_trip_uses_current_authored_rules(
 	var snapshot: Dictionary = encoded.get("snapshot", {})
 	if snapshot.has("hotbar_bindings"):
 		failures.append("equipment persistence snapshot captured authored hotbar configuration")
+	if str(snapshot.get("selected_slot_key", "")) != "equipment_slot.hotbar.2":
+		failures.append("equipment snapshot omitted selected-slot compatibility evidence")
 	var saved_slots: Array = snapshot.get("slots", [])
 	if saved_slots.size() != 1:
 		failures.append("equipment persistence snapshot did not retain exactly one occupied slot")
@@ -194,16 +249,11 @@ static func _test_equipment_round_trip_uses_current_authored_rules(
 	if saved_slots[0].has("rule"):
 		failures.append("equipment persistence snapshot captured authored slot rule as mutable state")
 
-	var tampered: Dictionary = snapshot.duplicate(true)
-	tampered["slots"][0]["rule"] = {
-		"slot_key": "equipment_slot.hotbar.2",
-		"required_capabilities": [],
-	}
 	var fresh_authored = _definitions()
 	var fresh_registry = _registry(fresh_authored.values())
 	var current_config: Dictionary = _equipment_config([EQUIPABLE])
 	var decoded: Dictionary = GameplayStateCodec.decode_equipment(
-		tampered,
+		snapshot,
 		fresh_registry,
 		current_config["rules"],
 		current_config["bindings"]
@@ -216,11 +266,29 @@ static func _test_equipment_round_trip_uses_current_authored_rules(
 		return
 	if restored.selected_hotbar() != 2:
 		failures.append("equipment round-trip lost selected hotbar")
+	if restored.selected_slot_key() != "equipment_slot.hotbar.2":
+		failures.append("equipment round-trip changed selected semantic slot")
 	var restored_state: Dictionary = restored.state_at("equipment_slot.hotbar.2")
 	if str(restored_state.get("state", {}).get("item_id", "")) != "item.persistence_tool":
 		failures.append("equipment round-trip lost semantic equipped item identity")
 	if int(restored_state.get("state", {}).get("per_copy_state", {}).get("durability", 0)) != 61:
 		failures.append("equipment round-trip lost per-copy equipped state")
+
+	var tampered: Dictionary = snapshot.duplicate(true)
+	tampered["slots"][0]["rule"] = {
+		"slot_key": "equipment_slot.hotbar.2",
+		"required_capabilities": [],
+	}
+	var tampered_result: Dictionary = GameplayStateCodec.decode_equipment(
+		tampered,
+		fresh_registry,
+		current_config["rules"],
+		current_config["bindings"]
+	)
+	if bool(tampered_result.get("success", false)):
+		failures.append("injected saved equipment rule unexpectedly bypassed strict schema")
+	if tampered_result.has("state"):
+		failures.append("unknown equipment structural field exposed partial state")
 
 
 static func _test_equipment_incompatible_current_rule_fails_closed(
@@ -260,12 +328,52 @@ static func _test_equipment_incompatible_current_rule_fails_closed(
 		failures.append("failed equipment reconstruction exposed partially restored state")
 
 
+static func _test_equipment_selected_binding_compatibility(failures: Array[String]) -> void:
+	var authored = _definitions()
+	var registry = _registry(authored.values())
+	var source_config: Dictionary = _equipment_config([EQUIPABLE])
+	var equipment = EquipmentHotbarState.new().configure(
+		source_config["rules"],
+		source_config["bindings"]
+	)
+	equipment.select_hotbar(2)
+	var encoded: Dictionary = GameplayStateCodec.encode_equipment(equipment, registry)
+	if not bool(encoded.get("success", false)):
+		failures.append("selected-binding regression setup failed")
+		return
+	var snapshot: Dictionary = encoded.get("snapshot", {})
+
+	var missing_config: Dictionary = _equipment_config([EQUIPABLE])
+	missing_config["bindings"].erase(2)
+	var missing_result: Dictionary = GameplayStateCodec.decode_equipment(
+		snapshot,
+		registry,
+		missing_config["rules"],
+		missing_config["bindings"]
+	)
+	if bool(missing_result.get("success", false)):
+		failures.append("missing current selected-hotbar binding silently decoded as hands")
+	if missing_result.has("state"):
+		failures.append("missing selected binding exposed partial equipment state")
+
+	var changed_config: Dictionary = _equipment_config([EQUIPABLE])
+	changed_config["bindings"][2] = "equipment_slot.hotbar.3"
+	var changed_result: Dictionary = GameplayStateCodec.decode_equipment(
+		snapshot,
+		registry,
+		changed_config["rules"],
+		changed_config["bindings"]
+	)
+	if bool(changed_result.get("success", false)):
+		failures.append("changed current selected-hotbar binding reinterpreted saved selection")
+	if changed_result.has("state"):
+		failures.append("changed selected binding exposed partial equipment state")
+
+
 static func _test_pending_and_consumed_loot_round_trip(failures: Array[String]) -> void:
 	var authored = _definitions()
 	var registry = _registry(authored.values())
-	var contract: String = InventoryStateCodec.canonical_json(
-		authored["ore"].canonical_descriptor()
-	)
+	var contract: String = InventoryStateCodec.canonical_json(authored["ore"].canonical_descriptor())
 	var pending = PendingLootState.new().configure(
 		"occurrence.persistence.001",
 		"loot_profile.persistence_test",
@@ -315,9 +423,7 @@ static func _test_malformed_pending_reward_never_reconstructs(
 ) -> void:
 	var authored = _definitions()
 	var registry = _registry(authored.values())
-	var contract: String = InventoryStateCodec.canonical_json(
-		authored["ore"].canonical_descriptor()
-	)
+	var contract: String = InventoryStateCodec.canonical_json(authored["ore"].canonical_descriptor())
 	var pending = PendingLootState.new().configure(
 		"occurrence.persistence.002",
 		"loot_profile.persistence_test",
@@ -340,6 +446,38 @@ static func _test_malformed_pending_reward_never_reconstructs(
 		failures.append("malformed pending reward exposed collectible partial state")
 
 
+static func _test_pending_loot_structural_keys_fail_closed(failures: Array[String]) -> void:
+	var authored = _definitions()
+	var registry = _registry(authored.values())
+	var contract: String = InventoryStateCodec.canonical_json(authored["ore"].canonical_descriptor())
+	var pending = PendingLootState.new().configure(
+		"occurrence.persistence.003",
+		"loot_profile.persistence_test",
+		[{
+			"item_id": "item.persistence_ore",
+			"quantity": 1,
+			"definition_contract": contract,
+		}]
+	)
+	var encoded: Dictionary = GameplayStateCodec.encode_pending_loot(pending, registry)
+	if not bool(encoded.get("success", false)):
+		failures.append("strict pending-loot schema regression setup failed")
+		return
+
+	var unknown_root: Dictionary = encoded.get("snapshot", {}).duplicate(true)
+	unknown_root["future_field"] = 1
+	if bool(GameplayStateCodec.decode_pending_loot(unknown_root, registry).get("success", false)):
+		failures.append("unknown pending-loot root field did not fail closed")
+
+	var unknown_reward: Dictionary = encoded.get("snapshot", {}).duplicate(true)
+	unknown_reward["rewards"][0]["future_field"] = 1
+	var reward_result: Dictionary = GameplayStateCodec.decode_pending_loot(unknown_reward, registry)
+	if bool(reward_result.get("success", false)):
+		failures.append("unknown pending-loot reward field did not fail closed")
+	if reward_result.has("state"):
+		failures.append("unknown pending-loot reward field exposed collectible partial state")
+
+
 static func _test_canonical_evidence_is_order_independent(failures: Array[String]) -> void:
 	var authored_a = _definitions()
 	var authored_b = _definitions()
@@ -348,14 +486,8 @@ static func _test_canonical_evidence_is_order_independent(failures: Array[String
 	var values_a: Array = authored_a.values()
 	var values_b: Array = authored_b.values()
 	values_b.reverse()
-	var encoded_a: Dictionary = GameplayStateCodec.encode_inventory(
-		inventory_a,
-		_registry(values_a)
-	)
-	var encoded_b: Dictionary = GameplayStateCodec.encode_inventory(
-		inventory_b,
-		_registry(values_b)
-	)
+	var encoded_a: Dictionary = GameplayStateCodec.encode_inventory(inventory_a, _registry(values_a))
+	var encoded_b: Dictionary = GameplayStateCodec.encode_inventory(inventory_b, _registry(values_b))
 	if not bool(encoded_a.get("success", false)) or not bool(encoded_b.get("success", false)):
 		failures.append("canonical evidence regression setup failed")
 		return
