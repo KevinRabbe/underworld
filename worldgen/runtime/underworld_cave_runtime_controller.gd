@@ -98,7 +98,8 @@ func bootstrap_fixture(world_seed: int, region: Vector2i, entrance_id: String) -
 		var voxel_request := VoxelRequest.new(plan, cell_config, provenance, 0.0, partition.data, context)
 		var mesh_stage = MeshBuilder.build(voxel_request)
 		if not mesh_stage.success: return _bootstrap_fail(mesh_stage.diagnostics)
-		if not accept_mesh_data(mesh_stage.data): return _bootstrap_fail(["Mesh realization failed for " + plan.cell_address.canonical_text()])
+		var semantic_snapshot: Dictionary = build_cell_semantic_snapshot(plan)
+		if not accept_mesh_data(mesh_stage.data, null, semantic_snapshot): return _bootstrap_fail(["Mesh realization failed for " + plan.cell_address.canonical_text()])
 		var collision_stage = CollisionBuilder.prepare(mesh_stage.data, provenance.fingerprint if provenance != null else "")
 		if not collision_stage.success: return _bootstrap_fail(collision_stage.diagnostics)
 		var collision_realized: Dictionary = CollisionBoundary.realize_main_thread(collision_stage.data, mesh_stage.data.output_fingerprint)
@@ -148,7 +149,48 @@ func update_player_position(position: Vector3) -> void:
 				streamer.release_entrance(address, entrance_id)
 		_update_gates()
 
-func accept_mesh_data(mesh_data, material = null) -> bool:
+## Builds the compact renderer-facing semantic snapshot consumed by replaceable
+## presentation. It contains value types only and deliberately excludes StableIds,
+## source/provenance fingerprints, fragment objects and other generation authority.
+static func build_cell_semantic_snapshot(source_cell_plan) -> Dictionary:
+	if source_cell_plan == null:
+		var empty_snapshot: Dictionary = {}
+		empty_snapshot.make_read_only()
+		return empty_snapshot
+	var source_kinds: Array[String] = []
+	var tags: Array[String] = []
+	var world_bounds := AABB()
+	var has_bounds := false
+	for fragment in source_cell_plan.fragments:
+		if fragment == null:
+			continue
+		var source_kind: String = str(fragment.source_kind)
+		if not source_kind.is_empty() and not source_kinds.has(source_kind):
+			source_kinds.append(source_kind)
+		if not has_bounds:
+			world_bounds = fragment.cell_bounds
+			has_bounds = true
+		var raw_tags = fragment.metadata.get("tags", [])
+		if raw_tags is Array:
+			for raw_tag in raw_tags:
+				var tag := str(raw_tag)
+				if not tag.is_empty() and not tags.has(tag):
+					tags.append(tag)
+	source_kinds.sort()
+	tags.sort()
+	source_kinds.make_read_only()
+	tags.make_read_only()
+	var snapshot: Dictionary = {
+		"source_kinds": source_kinds,
+		"has_entrance": not source_cell_plan.entrance_opening_metadata.is_empty(),
+		"has_reserved_site": not source_cell_plan.reserved_site_metadata.is_empty(),
+		"tags": tags,
+		"world_bounds": world_bounds if has_bounds else AABB(),
+	}
+	snapshot.make_read_only()
+	return snapshot
+
+func accept_mesh_data(mesh_data, material = null, cell_semantic_snapshot: Dictionary = {}) -> bool:
 	if streamer == null or mesh_data == null:
 		return false
 	var realized: Dictionary = MeshBoundary.realize_main_thread(mesh_data, material if material != null else _material, mesh_data.input_fingerprint)
@@ -162,6 +204,16 @@ func accept_mesh_data(mesh_data, material = null) -> bool:
 	node.mesh = realized.mesh
 	node.set_meta("cell_address", mesh_data.cell_address.canonical_text())
 	node.set_meta("source_fingerprint", mesh_data.output_fingerprint)
+	if not cell_semantic_snapshot.is_empty():
+		var stored_snapshot: Dictionary = cell_semantic_snapshot.duplicate(true)
+		var stored_kinds = stored_snapshot.get("source_kinds", [])
+		if stored_kinds is Array:
+			stored_kinds.make_read_only()
+		var stored_tags = stored_snapshot.get("tags", [])
+		if stored_tags is Array:
+			stored_tags.make_read_only()
+		stored_snapshot.make_read_only()
+		node.set_meta("cell_semantic_snapshot", stored_snapshot)
 	add_child(node)
 	render_nodes[mesh_data.cell_address.canonical_text()] = node
 	streamer.records[mesh_data.cell_address.canonical_text()].runtime_handle = realized.handle
