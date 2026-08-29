@@ -1,6 +1,5 @@
 extends "res://core/content/registry/content_definition.gd"
 
-const ContentId := preload("res://core/content/identity/content_id.gd")
 const ContentReference := preload("res://core/content/references/content_reference.gd")
 
 const LOOT_PROFILE_FAMILY := "loot_profile"
