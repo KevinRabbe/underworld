@@ -1,0 +1,16 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://gameplay/items/weapons/definitions/weapon_definition.gd" id="1_weapon"]
+
+[resource]
+script = ExtResource("1_weapon")
+content_id = "item.weapon.iron_sword"
+definition_family = "item"
+schema_revision = 1
+stack_limit = 1
+unit_weight = 3.0
+attack_set_id = "attack_set.weapon.sword.basic"
+archetype_id = "archetype.weapon.iron_sword"
+primary_technique_role = "weapon_technique.light.primary"
+attack_animation_role = "animation_role.action.attack.light_01"
+grip_rig_role = "rig_role.socket.hand.right"
