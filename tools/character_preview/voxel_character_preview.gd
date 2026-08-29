@@ -7,6 +7,7 @@ const VoxelPresentation := preload("res://presentation/characters/voxel/voxel_ch
 
 var character
 var locomotion_velocity := Vector3.ZERO
+var vertical_velocity := 0.0
 var grounded := true
 var sprinting := false
 var block_held := false
@@ -23,7 +24,8 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	if character != null:
-		character.update_voxel_visual(delta, locomotion_velocity, 0.0, grounded, sprinting)
+		character.update_voxel_visual(delta, locomotion_velocity, vertical_velocity, grounded, sprinting)
+		status_label.text = _status_text(str(character.current_animation_state))
 	if Input.is_key_pressed(KEY_Q):
 		character_root.rotate_y(delta * 1.25)
 	if Input.is_key_pressed(KEY_E):
@@ -59,6 +61,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _set_locomotion(state: StringName) -> void:
 	character.reset_pose()
 	grounded = true
+	vertical_velocity = 0.0
 	sprinting = state == &"sprint"
 	match state:
 		&"walk_forward": locomotion_velocity = Vector3(0.0, 0.0, 4.0)
@@ -75,14 +78,16 @@ func _set_airborne(ascending: bool) -> void:
 	character.reset_pose()
 	grounded = false
 	sprinting = false
-	locomotion_velocity = Vector3(0.0, 4.0 if ascending else -4.0, 0.0)
-	character.update_voxel_visual(0.0, Vector3.ZERO, locomotion_velocity.y, false, false)
+	locomotion_velocity = Vector3.ZERO
+	vertical_velocity = 4.0 if ascending else -4.0
+	character.update_voxel_visual(0.0, Vector3.ZERO, vertical_velocity, false, false)
 	status_label.text = _status_text("jump" if ascending else "fall")
 
 
 func _play_action(action: StringName) -> void:
 	character.reset_pose()
 	grounded = true
+	vertical_velocity = 0.0
 	sprinting = false
 	locomotion_velocity = Vector3.ZERO
 	block_held = false
@@ -119,4 +124,11 @@ func _reset_character() -> void:
 
 
 func _status_text(state: String) -> String:
-	return "FRONTIER UNDERWORLD EXPEDITION — %s\n1–6 locomotion  7/8 jump/fall  Z/X/C dodge  F/G attacks  H block  J parry  K hit  L tool  N death  T equipment  Q/E rotate  R reset" % state.to_upper()
+	var metrics: Dictionary = character.mesh_metrics if character != null else {}
+	return "FRONTIER UNDERWORLD EXPEDITION — %s   Parts %d  Cells %d  Triangles %d  Memory %.1f KiB\n1–6 locomotion  7/8 jump/fall  Z/X/C dodge  F/G attacks  H block  J parry  K hit  L tool  N death  T equipment  Q/E rotate  R reset" % [
+		state.to_upper(),
+		int(metrics.get("parts", 0)),
+		int(metrics.get("cells", 0)),
+		int(metrics.get("triangles", 0)),
+		float(metrics.get("estimated_bytes", 0)) / 1024.0,
+	]
