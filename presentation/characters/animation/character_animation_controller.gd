@@ -220,8 +220,11 @@ func rig_binding_for_role(role_id: String) -> Dictionary:
 	return _rig_profile.binding_for_role(role_id)
 
 
-func present_attack(duration: float) -> bool:
-	return _play_role(ROLE_ATTACK_LIGHT, {"duration": maxf(duration, 0.0)})
+func present_attack(duration: float, attack_kind: StringName = &"light") -> bool:
+	return _play_role(ROLE_ATTACK_LIGHT, {
+		"duration": maxf(duration, 0.0),
+		"attack_kind": attack_kind,
+	})
 
 
 func present_parry() -> bool:

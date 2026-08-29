@@ -47,10 +47,11 @@ func play_animation(binding: String, parameters: Dictionary = {}) -> void:
 	match binding:
 		"prototype.attack.light_01":
 			var duration: float = float(parameters.get("duration", 0.0))
+			var attack_kind: StringName = StringName(parameters.get("attack_kind", &"light"))
 			if duration > 0.0:
-				mannequin.play_attack(duration)
+				mannequin.play_attack(duration, attack_kind)
 			else:
-				mannequin.play_attack()
+				mannequin.play_attack(0.42, attack_kind)
 		"prototype.parry":
 			mannequin.play_parry()
 		"prototype.dodge.forward", "prototype.dodge.backward", "prototype.dodge.left", "prototype.dodge.right":

@@ -367,7 +367,7 @@ func _start_attack_from_intent(intent: Dictionary, require_current_source: bool 
 	var total_duration: float = float(attack_definition.call("total_duration"))
 	tool_swing_timer = total_duration
 	if animation_controller != null:
-		animation_controller.present_attack(total_duration)
+		animation_controller.present_attack(total_duration, attack_kind)
 	return true
 
 

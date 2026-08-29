@@ -28,6 +28,7 @@ var gait_phase: float = 0.0
 var current_action: StringName = ACTION_NONE
 var action_time: float = 0.0
 var attack_duration: float = ATTACK_DURATION
+var attack_kind: StringName = &"light"
 var dodge_local_direction: Vector2 = Vector2(0.0, -1.0)
 var blocking_pose_active: bool = false
 var _built: bool = false
@@ -71,8 +72,9 @@ func update_visual(
 		_apply_block_pose()
 
 
-func play_attack(duration: float = ATTACK_DURATION) -> void:
+func play_attack(duration: float = ATTACK_DURATION, kind: StringName = &"light") -> void:
 	attack_duration = maxf(duration, 0.05)
+	attack_kind = &"heavy" if kind == &"heavy" else &"light"
 	_start_action(ACTION_ATTACK)
 
 
@@ -103,6 +105,7 @@ func reset_pose() -> void:
 	current_action = ACTION_NONE
 	action_time = 0.0
 	attack_duration = ATTACK_DURATION
+	attack_kind = &"light"
 	blocking_pose_active = false
 	for bone_name_variant in bone_indices.keys():
 		var bone_name: String = str(bone_name_variant)
@@ -394,11 +397,12 @@ func _update_action(delta: float) -> void:
 
 func _apply_attack_pose(t_raw: float) -> void:
 	var t: float = clampf(t_raw, 0.0, 1.0)
+	var intensity: float = 1.25 if attack_kind == &"heavy" else 1.0
 	var windup: float = smoothstep(0.0, 0.32, t)
 	var strike: float = smoothstep(0.28, 0.72, t)
 	var recover: float = smoothstep(0.70, 1.0, t)
 	var swing: float = strike - recover
-	_set_rot("chest", Vector3(deg_to_rad(-6.0) * swing, deg_to_rad(-24.0) * windup + deg_to_rad(44.0) * swing, 0.0))
+	_set_rot("chest", Vector3(deg_to_rad(-6.0) * swing * intensity, deg_to_rad(-24.0) * windup * intensity + deg_to_rad(44.0) * swing * intensity, 0.0))
 	_set_rot("upperarm_r", Vector3(deg_to_rad(-55.0) * windup + deg_to_rad(38.0) * swing, deg_to_rad(-18.0), deg_to_rad(58.0) - deg_to_rad(82.0) * swing))
 	_set_rot("forearm_r", Vector3(deg_to_rad(-48.0) * windup + deg_to_rad(22.0) * swing, 0.0, deg_to_rad(18.0)))
 	_set_rot("upperarm_l", Vector3(deg_to_rad(-18.0) * windup, 0.0, deg_to_rad(-18.0)))
@@ -460,6 +464,7 @@ func _end_action() -> void:
 	action_time = 0.0
 	if ended_action == ACTION_ATTACK:
 		attack_duration = ATTACK_DURATION
+		attack_kind = &"light"
 
 
 func _set_rot(bone_name: String, euler: Vector3) -> void:
