@@ -544,8 +544,6 @@ func _is_valid_surface_object_id(object_id: String, object_type: String = "") ->
 		return false
 	if not _is_canonical_signed_int(segments[4]) or not _is_canonical_signed_int(segments[5]):
 		return false
-	if not _is_canonical_nonnegative_int(segments[7]):
-		return false
 
 	var domain: String = segments[2]
 	var expected_domain: String = _surface_domain_for_object_type(object_type)
@@ -566,7 +564,3 @@ func _surface_domain_for_object_type(object_type: String) -> String:
 
 func _is_canonical_signed_int(value: String) -> bool:
 	return value.is_valid_int() and str(int(value)) == value
-
-
-func _is_canonical_nonnegative_int(value: String) -> bool:
-	return value.is_valid_int() and int(value) >= 0 and str(int(value)) == value
