@@ -39,15 +39,15 @@ The catalog is descriptive. It does not create new acceptance gates, seeds, expe
 
 ## MAP-015 and MAP-016 manual-fixture relationship
 
-MAP-016 does **not** define a new traversal selector. Its protected manual observation reuses the accepted MAP-015 fixture:
+MAP-016 did **not** define a new traversal selector. Its post-acceptance manual observation reuses the accepted MAP-015 fixture:
 
 - seed `1`;
 - region `(0, -1)`;
 - entrance slot `2`.
 
-[OBS-001 / #160](https://github.com/KevinRabbe/underworld/issues/160) reserves the visual route `surface -> generated opening -> several underground cells -> same entrance back out` for Codex **after MAP-016 automated acceptance is green on the exact candidate head**. General workers must not treat that blocked observation as an independent task or as current MAP-016 acceptance evidence.
+[OBS-001 / #160](https://github.com/KevinRabbe/underworld/issues/160) reserves the visual route `surface -> generated opening -> several underground cells -> same entrance back out` as manual verification of the accepted MAP-016 implementation. It is not an independent fixture selector or an automated MAP-016 acceptance gate.
 
-The committed MAP-015 fixture remains valid deterministic input before and after the representation replacement; MAP-016 is expected to change runtime mesh realization, not this fixture's semantic selector contract.
+The committed MAP-015 fixture remains valid deterministic input after the accepted representation replacement; MAP-016 changed runtime mesh realization without changing this fixture's semantic selector contract.
 
 ## Direct reproduction entry points
 
@@ -75,4 +75,4 @@ Do not:
 - copy a historical PR selector into **accepted-main** unless the source actually exists on current `main`;
 - treat a malformed rejection fixture as valid world/content data;
 - change expected fingerprints from this catalog;
-- redefine protected MAP-016 or OBS-001 acceptance requirements here.
+- redefine accepted MAP-016 invariants or OBS-001 manual acceptance requirements here.
