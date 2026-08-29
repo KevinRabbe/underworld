@@ -43,13 +43,7 @@ func configure(world_node, player_node, world_settings) -> void:
 
 
 func _process(delta: float) -> void:
-	if (
-		world == null
-		or player == null
-		or settings == null
-		or not creature_definition_ready
-		or not loot_ready
-	):
+	if not _encounter_runtime_ready():
 		return
 
 	_release_distant_or_invalid_enemies()
@@ -57,6 +51,15 @@ func _process(delta: float) -> void:
 	if active_enemies.size() < TARGET_ENEMY_COUNT and spawn_timer <= 0.0:
 		spawn_timer = SPAWN_INTERVAL
 		_spawn_enemy_near_player()
+
+
+func _encounter_runtime_ready() -> bool:
+	return (
+		world != null
+		and player != null
+		and settings != null
+		and creature_definition_ready
+	)
 
 
 func get_active_enemy_count() -> int:
@@ -86,7 +89,7 @@ func collect_pending_loot(occurrence_id: String, destination_container) -> Dicti
 
 
 func _spawn_enemy_near_player() -> void:
-	if player == null or world == null or not creature_definition_ready or not loot_ready:
+	if not _encounter_runtime_ready():
 		return
 
 	var rng := RandomNumberGenerator.new()
