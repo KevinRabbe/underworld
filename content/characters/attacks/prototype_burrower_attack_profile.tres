@@ -8,4 +8,3 @@ content_id = "attack_profile.creature.burrower.melee"
 definition_family = "attack_profile"
 schema_revision = 1
 attack_style = "melee.contact"
-parryable = true
