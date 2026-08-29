@@ -32,16 +32,17 @@ func validate_validator() -> Array[String]:
 
 
 func applies_to(definition) -> bool:
-	return (
-		definition != null
-		and definition is ItemDefinition
-		and str(definition.definition_family) == ITEM_FAMILY
-	)
+	return super.applies_to(definition)
 
 
 func validate_definition(definition, context: Dictionary) -> Array[String]:
 	var failures: Array[String] = []
-	if definition == null or not definition is ItemDefinition:
+	if definition == null:
+		return failures
+	if not definition is ItemDefinition:
+		failures.append(
+			"item-family definition must inherit ItemDefinition: %s" % str(definition.content_id)
+		)
 		return failures
 
 	var category_registry = context.get("category_registry", null)
