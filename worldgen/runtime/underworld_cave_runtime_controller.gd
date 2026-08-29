@@ -43,6 +43,8 @@ var last_bootstrap_surface_position: Vector3 = Vector3.ZERO
 func configure(world_id_value: String, manifest_id_value: String, player_value: Node3D = null, executor = null) -> void:
 	_unbind_streamer()
 	_dispose_all_realizations()
+	entrance_plans.clear()
+	gates.clear()
 	world_id = world_id_value
 	generator_manifest_id = manifest_id_value
 	player = player_value
