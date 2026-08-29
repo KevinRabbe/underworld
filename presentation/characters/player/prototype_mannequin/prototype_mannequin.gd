@@ -111,10 +111,7 @@ func reset_pose() -> void:
 		var bone_name: String = str(bone_name_variant)
 		var bone_index: int = int(bone_indices[bone_name])
 		skeleton.set_bone_pose_rotation(bone_index, Quaternion.IDENTITY)
-		# Procedural bones have no imported bind-pose animation. Keep their
-		# authored rest translation when clearing rotations; zeroing it collapses
-		# the visual rig toward the root after runtime animation resets.
-		skeleton.set_bone_pose_position(bone_index, skeleton.get_bone_rest(bone_index).origin)
+		skeleton.set_bone_pose_position(bone_index, Vector3.ZERO)
 		skeleton.set_bone_pose_scale(bone_index, Vector3.ONE)
 
 
@@ -197,9 +194,9 @@ func _add_bone(bone_name: String, parent_name: String, local_offset: Vector3) ->
 	if not parent_name.is_empty():
 		skeleton.set_bone_parent(index, int(bone_indices[parent_name]))
 	skeleton.set_bone_rest(index, Transform3D(Basis.IDENTITY, local_offset))
-	# This procedural skeleton has no imported bind-pose animation. Initialize the
-	# live pose translations explicitly so BoneAttachment3D nodes resolve to the
-	# authored humanoid rest layout instead of all collapsing at the origin.
+	# Procedural attachments need an explicit live translation while the
+	# skeleton is assembled; reset_pose() later clears rotations without
+	# collapsing the authored layout.
 	skeleton.set_bone_pose_position(index, local_offset)
 
 
