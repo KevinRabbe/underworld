@@ -253,6 +253,52 @@ func update_world_object_physics(
 	)
 
 
+func find_nearby_pickups(player_world_position: Vector3, radius: float) -> Array:
+	var found: Array = []
+	var player_local: Vector3 = to_local(player_world_position)
+	var radius_sq: float = radius * radius
+	_find_pickup_set(
+		_branch_transforms,
+		_destroyed_branch_indices,
+		"branch",
+		player_local,
+		radius_sq,
+		found
+	)
+	_find_pickup_set(
+		_loose_stone_transforms,
+		_destroyed_loose_stone_indices,
+		"loose_stone",
+		player_local,
+		radius_sq,
+		found
+	)
+	found.sort_custom(func(a, b): return str(a.get("object_id", "")) < str(b.get("object_id", "")))
+	return found
+
+
+func _find_pickup_set(
+	transforms: Array,
+	destroyed: Dictionary,
+	object_type: String,
+	player_local: Vector3,
+	radius_sq: float,
+	found: Array
+) -> void:
+	for index in range(transforms.size()):
+		if destroyed.has(index):
+			continue
+		var instance_transform: Transform3D = transforms[index]
+		var delta: Vector3 = instance_transform.origin - player_local
+		if delta.length_squared() > radius_sq:
+			continue
+		found.append({
+			"object_id": _make_object_id(object_type, index),
+			"object_type": object_type,
+			"index": index,
+		})
+
+
 func collect_nearby_pickups(player_world_position: Vector3, radius: float) -> Array:
 	var collected: Array = []
 	var player_local: Vector3 = to_local(player_world_position)
