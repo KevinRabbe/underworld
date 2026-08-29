@@ -6,7 +6,7 @@ class_name UnderworldRuntimePerformanceBudget
 ## These are observational thresholds, not deterministic generation inputs and
 ## not hard correctness gates. PERF-002 may revise them only from measured
 ## evidence. Timing thresholds intentionally remain outside fingerprints.
-const REVISION: int = 1
+const REVISION: int = 2
 const MIB: int = 1024 * 1024
 
 const DEFAULT_THRESHOLDS: Dictionary = {
@@ -21,11 +21,12 @@ const DEFAULT_THRESHOLDS: Dictionary = {
 	"observer_update_max_ms": 4.0,
 	"mesh_memory_total_bytes": 256 * MIB,
 	"mesh_memory_cell_max_bytes": 8 * MIB,
-	# Default streaming radii are geometry=2 and render/collision=1, so the
-	# natural activation envelopes are 5^3 and 3^3 cells respectively.
-	"resident_geometry_cells": 125,
-	"resident_render_cells": 27,
-	"resident_collision_cells": 27,
+	# Streaming uses hysteresis. Budget logical residency against the accepted
+	# release envelopes, not the smaller activation cubes: geometry release=3
+	# -> 7^3=343; render/collision release=2 -> 5^3=125.
+	"resident_geometry_cells": 343,
+	"resident_render_cells": 125,
+	"resident_collision_cells": 125,
 }
 
 
