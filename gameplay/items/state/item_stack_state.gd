@@ -33,7 +33,7 @@ func validate_state() -> Array[String]:
 func is_compatible_with(other) -> bool:
 	return (
 		other != null
-		and other is get_script()
+		and other.get_script() == get_script()
 		and item_content_id == str(other.item_content_id)
 		and compatibility_state == other.compatibility_state
 	)
