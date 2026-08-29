@@ -22,6 +22,8 @@ const RIG_PROFILE_PATH := "res://content/characters/rig_profiles/prototype_human
 
 const CREATURE_ROOT := "category.creature"
 const ENEMY_CATEGORY := "category.creature.enemy"
+const ENEMY_DESCENDANT_CATEGORY := "category.creature.enemy.elite"
+const ORTHOGONAL_CATEGORY := "category.environment.cave"
 const MOVEMENT := "capability.movement"
 const SENSING := "capability.sensing"
 const DAMAGE_DEALER := "capability.damage_dealer"
@@ -36,6 +38,7 @@ static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_burrower_authored_baseline(failures)
 	_test_noncombat_creature_stays_generic(failures)
+	_test_enemy_descendant_requires_capabilities(failures)
 	_test_wrong_concrete_types_fail_closed(failures)
 	_test_invalid_semantic_bindings_fail(failures)
 	_test_two_creatures_reuse_same_boundary(failures)
@@ -97,7 +100,7 @@ static func _test_noncombat_creature_stays_generic(failures: Array[String]) -> v
 		0.0,
 		1
 	)
-	passive.configure_schema_declarations([CREATURE_ROOT], [])
+	passive.configure_schema_declarations([CREATURE_ROOT, ORTHOGONAL_CATEGORY], [])
 	passive.configure_semantic_bindings("", ARCHETYPE_ID, "", "", [], [])
 	var definitions: Array = _shared_targets()
 	definitions.push_front(passive)
@@ -109,10 +112,71 @@ static func _test_noncombat_creature_stays_generic(failures: Array[String]) -> v
 	)
 	if not bool(result.get("success", false)):
 		failures.append(
-			"generic non-combat/non-rigged creature was forced through enemy-only contracts: %s" % [
+			"generic non-combat creature or its orthogonal category was rejected: %s" % [
 				result.get("diagnostics", []),
 			]
 		)
+
+	var orthogonal_only = CreatureDefinition.new()
+	orthogonal_only.configure_creature(
+		"creature.passive.missing_creature_category",
+		"Missing Creature Category",
+		12,
+		0.0,
+		0.0,
+		0.0,
+		0,
+		0.0,
+		0.0,
+		1
+	)
+	orthogonal_only.configure_schema_declarations([ORTHOGONAL_CATEGORY], [])
+	orthogonal_only.configure_semantic_bindings("", ARCHETYPE_ID, "", "", [], [])
+	var orthogonal_definitions: Array = _shared_targets()
+	orthogonal_definitions.push_front(orthogonal_only)
+	var orthogonal_result: Dictionary = _pipeline().validate_all(
+		orthogonal_definitions,
+		_categories(),
+		_capabilities(),
+		[_validator()]
+	)
+	if not _has_code_fragment(
+		orthogonal_result,
+		"family_rule",
+		"at least one registered category under"
+	):
+		failures.append("creature with only an orthogonal category bypassed creature classification")
+
+
+static func _test_enemy_descendant_requires_capabilities(failures: Array[String]) -> void:
+	var descendant_enemy = CreatureDefinition.new()
+	descendant_enemy.configure_creature(
+		"creature.enemy.elite.descendant_probe",
+		"Enemy Descendant Probe",
+		20,
+		0.0,
+		0.0,
+		0.0,
+		0,
+		0.0,
+		0.0,
+		1
+	)
+	descendant_enemy.configure_schema_declarations([ENEMY_DESCENDANT_CATEGORY], [])
+	descendant_enemy.configure_semantic_bindings("", ARCHETYPE_ID, "", "", [], [])
+	var definitions: Array = _shared_targets()
+	definitions.push_front(descendant_enemy)
+	var result: Dictionary = _pipeline().validate_all(
+		definitions,
+		_categories(),
+		_capabilities(),
+		[_validator()]
+	)
+	for required_capability in [MOVEMENT, SENSING, DAMAGE_DEALER]:
+		if not _has_code_fragment(result, "family_rule", required_capability):
+			failures.append(
+				"registered enemy descendant did not require capability: %s" % required_capability
+			)
 
 
 static func _test_wrong_concrete_types_fail_closed(failures: Array[String]) -> void:
@@ -352,6 +416,8 @@ static func _categories():
 	var diagnostics: Array[String] = registry.index_schemas([
 		CategorySchema.new().configure(CREATURE_ROOT),
 		CategorySchema.new().configure(ENEMY_CATEGORY, [CREATURE_ROOT]),
+		CategorySchema.new().configure(ENEMY_DESCENDANT_CATEGORY, [ENEMY_CATEGORY]),
+		CategorySchema.new().configure(ORTHOGONAL_CATEGORY),
 	])
 	assert(diagnostics.is_empty())
 	return registry
