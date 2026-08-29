@@ -7,6 +7,7 @@ signal craft_requested(recipe_id: String)
 signal parry_succeeded(source_position: Vector3)
 
 const PrototypeMannequinScript := preload("res://presentation/characters/player/prototype_mannequin/prototype_mannequin.gd")
+const PrototypeAnimationRuntimeFactoryScript := preload("res://presentation/characters/player/prototype_mannequin/prototype_animation_runtime_factory.gd")
 const StaminaComponentScript := preload("res://gameplay/player/components/stamina_component.gd")
 const PlayerActionControllerScript := preload("res://gameplay/player/actions/player_action_controller.gd")
 const PlayerInputBufferScript := preload("res://gameplay/player/input/player_input_buffer.gd")
@@ -40,6 +41,7 @@ const SPRINT_FOV := 79.0
 const RESPAWN_FALL_HEIGHT := -100.0
 const MAX_HEALTH := 100
 const DAMAGE_INVULNERABILITY := 0.45
+const TOOL_HAND_RIG_ROLE := "rig_role.socket.hand.right"
 
 var look_sensitivity: float = 0.0025
 var camera_pitch: float = deg_to_rad(-12.0)
@@ -64,6 +66,7 @@ var pending_attack_direction: Vector3 = Vector3.ZERO
 
 var visual_root: Node3D
 var mannequin
+var animation_controller
 var tool_visual_root: Node3D
 var camera_yaw: Node3D
 var camera_pitch_pivot: Node3D
@@ -260,8 +263,8 @@ func _is_source_in_front_arc(source_position: Vector3, minimum_dot: float) -> bo
 func _apply_damage(amount: int, source_position: Vector3) -> void:
 	damage_invulnerability_timer = DAMAGE_INVULNERABILITY
 	health = maxi(health - amount, 0)
-	if mannequin != null:
-		mannequin.play_hit()
+	if animation_controller != null:
+		animation_controller.present_hit()
 
 	var away: Vector3 = global_position - source_position
 	away.y = 0.0
@@ -331,8 +334,8 @@ func _start_attack_from_intent(intent: Dictionary) -> bool:
 	_face_combat_direction(direction)
 	var total_duration: float = float(attack_definition.call("total_duration"))
 	tool_swing_timer = total_duration
-	if mannequin != null:
-		mannequin.play_attack(total_duration)
+	if animation_controller != null:
+		animation_controller.present_attack(total_duration)
 	return true
 
 
@@ -390,8 +393,8 @@ func _begin_tool_action() -> bool:
 	_face_combat_camera()
 	tool_use_cooldown_timer = tool_use_cooldown_duration
 	tool_swing_timer = tool_use_cooldown_duration
-	if mannequin != null:
-		mannequin.play_attack()
+	if animation_controller != null:
+		animation_controller.present_attack(tool_use_cooldown_duration)
 	return true
 
 
@@ -465,9 +468,9 @@ func _start_dodge(dodge_direction: Vector3) -> bool:
 	if not action_controller.try_start_dodge(horizontal):
 		return false
 	jump_buffer_timer = 0.0
-	if mannequin != null and visual_root != null:
+	if animation_controller != null and visual_root != null:
 		var local: Vector3 = visual_root.global_transform.basis.inverse() * horizontal
-		mannequin.play_dodge(Vector2(local.x, local.z))
+		animation_controller.present_dodge(Vector2(local.x, local.z))
 	return true
 
 
@@ -476,8 +479,8 @@ func _start_parry() -> bool:
 		return false
 	jump_buffer_timer = 0.0
 	_face_combat_camera()
-	if mannequin != null:
-		mannequin.play_parry()
+	if animation_controller != null:
+		animation_controller.present_parry()
 	return true
 
 
@@ -622,12 +625,18 @@ func _update_visual_facing(delta: float) -> void:
 
 
 func _update_mannequin(delta: float) -> void:
-	if mannequin == null or visual_root == null:
+	if animation_controller == null or visual_root == null:
 		return
 	var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
 	var local_velocity: Vector3 = visual_root.global_transform.basis.inverse() * horizontal_velocity
-	mannequin.set_blocking(action_controller.is_blocking())
-	mannequin.update_visual(delta, local_velocity, is_on_floor(), sprinting_this_frame)
+	animation_controller.set_blocking(action_controller.is_blocking())
+	animation_controller.update_locomotion(
+		delta,
+		local_velocity,
+		velocity.y,
+		is_on_floor(),
+		sprinting_this_frame
+	)
 
 
 func _update_camera_fov(delta: float) -> void:
@@ -651,7 +660,9 @@ func _respawn_after_defeat() -> void:
 	input_buffer.reset()
 	pending_attack_definition = null
 	pending_attack_direction = Vector3.ZERO
-	if mannequin != null:
+	if animation_controller != null:
+		animation_controller.reset_presentation()
+	elif mannequin != null:
 		mannequin.reset_pose()
 
 
@@ -673,7 +684,21 @@ func _build_character_visual() -> void:
 	mannequin.name = "PrototypeMannequin"
 	visual_root.add_child(mannequin)
 	mannequin.build()
-	tool_visual_root = mannequin.get_tool_visual_root()
+
+	var animation_runtime: Dictionary = PrototypeAnimationRuntimeFactoryScript.build(mannequin)
+	if bool(animation_runtime.get("success", false)):
+		animation_controller = animation_runtime.get("controller")
+	else:
+		animation_controller = null
+		for failure in animation_runtime.get("diagnostics", []):
+			push_error("Character animation runtime: %s" % failure)
+
+	if animation_controller != null:
+		tool_visual_root = animation_controller.attachment_root(TOOL_HAND_RIG_ROLE)
+	if tool_visual_root == null:
+		# Explicit presentation-only fallback keeps the prototype tool visible if
+		# semantic animation configuration fails; diagnostics above remain loud.
+		tool_visual_root = mannequin.get_tool_visual_root()
 	_rebuild_tool_visual()
 
 

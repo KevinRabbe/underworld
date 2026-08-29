@@ -2,6 +2,8 @@ extends RefCounted
 
 const CATEGORY_NAMESPACE := "category"
 const CAPABILITY_NAMESPACE := "capability"
+const ANIMATION_ROLE_NAMESPACE := "animation_role"
+const RIG_ROLE_NAMESPACE := "rig_role"
 const _LOWER := "abcdefghijklmnopqrstuvwxyz"
 const _TOKEN_CHARS := "abcdefghijklmnopqrstuvwxyz0123456789_"
 
@@ -14,6 +16,23 @@ static func validate_capability(value: String) -> Array[String]:
 	return _validate(value, CAPABILITY_NAMESPACE)
 
 
+static func validate_animation_role(value: String) -> Array[String]:
+	return _validate(value, ANIMATION_ROLE_NAMESPACE)
+
+
+static func validate_rig_role(value: String) -> Array[String]:
+	return _validate(value, RIG_ROLE_NAMESPACE)
+
+
+static func validate_semantic_role(value: String) -> Array[String]:
+	var schema_namespace: String = _raw_namespace(value)
+	if schema_namespace == ANIMATION_ROLE_NAMESPACE:
+		return validate_animation_role(value)
+	if schema_namespace == RIG_ROLE_NAMESPACE:
+		return validate_rig_role(value)
+	return ["semantic role id must use 'animation_role.' or 'rig_role.' namespace: %s" % value]
+
+
 static func is_valid_category(value: String) -> bool:
 	return validate_category(value).is_empty()
 
@@ -22,12 +41,34 @@ static func is_valid_capability(value: String) -> bool:
 	return validate_capability(value).is_empty()
 
 
+static func is_valid_animation_role(value: String) -> bool:
+	return validate_animation_role(value).is_empty()
+
+
+static func is_valid_rig_role(value: String) -> bool:
+	return validate_rig_role(value).is_empty()
+
+
+static func is_valid_semantic_role(value: String) -> bool:
+	return validate_semantic_role(value).is_empty()
+
+
 static func namespace_of(value: String) -> String:
 	if is_valid_category(value):
 		return CATEGORY_NAMESPACE
 	if is_valid_capability(value):
 		return CAPABILITY_NAMESPACE
+	if is_valid_animation_role(value):
+		return ANIMATION_ROLE_NAMESPACE
+	if is_valid_rig_role(value):
+		return RIG_ROLE_NAMESPACE
 	return ""
+
+
+static func _raw_namespace(value: String) -> String:
+	if value.is_empty() or not value.contains("."):
+		return ""
+	return value.get_slice(".", 0)
 
 
 static func _validate(value: String, expected_namespace: String) -> Array[String]:
