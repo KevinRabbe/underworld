@@ -2,6 +2,8 @@ extends Node3D
 class_name UnderworldPrototypeBurrowerEncounterController
 
 const EnemyScript := preload("res://gameplay/creatures/underworld/burrower/burrower.gd")
+const CreatureDefinition := preload("res://gameplay/creatures/definitions/creature_definition.gd")
+const BurrowerDefinition := preload("res://content/characters/creatures/prototype_burrower_definition.tres")
 
 const TARGET_ENEMY_COUNT := 4
 const SPAWN_MIN_DISTANCE := 18.0
@@ -15,6 +17,7 @@ var settings
 var active_enemies: Dictionary = {}
 var spawn_timer: float = 0.0
 var spawn_serial: int = 0
+var creature_definition_ready: bool = false
 
 
 func configure(world_node, player_node, world_settings) -> void:
@@ -22,10 +25,11 @@ func configure(world_node, player_node, world_settings) -> void:
 	player = player_node
 	settings = world_settings
 	spawn_timer = 0.25
+	creature_definition_ready = _validate_burrower_definition()
 
 
 func _process(delta: float) -> void:
-	if world == null or player == null or settings == null:
+	if world == null or player == null or settings == null or not creature_definition_ready:
 		return
 
 	_release_distant_or_invalid_enemies()
@@ -40,7 +44,7 @@ func get_active_enemy_count() -> int:
 
 
 func _spawn_enemy_near_player() -> void:
-	if player == null or world == null:
+	if player == null or world == null or not creature_definition_ready:
 		return
 
 	var rng := RandomNumberGenerator.new()
@@ -68,20 +72,23 @@ func _spawn_enemy_near_player() -> void:
 			id,
 			player,
 			spawn_position,
-			{
-				"health": 36,
-				"move_speed": 3.3,
-				"detection_range": 16.0,
-				"attack_range": 1.80,
-				"attack_damage": 10,
-				"attack_cooldown": 1.20,
-				"attack_windup": 0.42,
-			}
+			BurrowerDefinition.runtime_stats()
 		)
 		enemy.died.connect(_on_enemy_died)
 		add_child(enemy)
 		active_enemies[id] = enemy
 		return
+
+
+func _validate_burrower_definition() -> bool:
+	if BurrowerDefinition == null or not BurrowerDefinition is CreatureDefinition:
+		push_error("Burrower authored creature definition did not load as CreatureDefinition")
+		return false
+	var failures: Array[String] = BurrowerDefinition.validate_definition()
+	if not failures.is_empty():
+		push_error("Burrower authored creature definition is invalid: %s" % [failures])
+		return false
+	return true
 
 
 func _release_distant_or_invalid_enemies() -> void:
