@@ -124,6 +124,8 @@ static func _test_runtime_presentation(failures: Array[String]) -> void:
 	_expect_true(failures, "voxel presentation has canonical source fingerprint", character.presentation_fingerprint().begins_with("vpresentation1:sha256:"))
 	var mesh_instances := character.find_children("Voxel*", "MeshInstance3D", true, false)
 	_expect_equal(failures, "runtime owns one mesh node per rigid part", mesh_instances.size(), int(character.mesh_metrics.get("parts", 0)))
+	var all_body_meshes := character.find_children("*", "MeshInstance3D", true, false)
+	_expect_equal(failures, "voxel presentation contains no hidden mannequin duplicate meshes", all_body_meshes.size(), mesh_instances.size())
 	_expect_true(failures, "runtime never creates one Node per voxel", mesh_instances.size() < int(character.mesh_metrics.get("cells", 0)))
 	character.play_attack(0.6, &"heavy")
 	_expect_equal(failures, "heavy attack selects distinct animation state", character.current_animation_state, &"attack_heavy")
@@ -175,12 +177,18 @@ static func _test_player_default(tree: SceneTree, failures: Array[String]) -> vo
 	var collision_height: float = collision.shape.height
 	player.call("set_equipped_tool", "stone_axe")
 	var voxel_character = player.get("character_presentation")
+	var visual_root: Node3D = player.get("visual_root")
+	_expect_equal(failures, "Player owns exactly one character presentation", visual_root.get_child_count(), 1)
 	var visual_bounds: AABB = voxel_character.realized_visual_bounds()
 	_expect_true(failures, "voxel feet align with Player ground origin (got %.3f)" % visual_bounds.position.y, visual_bounds.position.y >= -0.15 and visual_bounds.position.y <= 0.05)
 	_expect_true(failures, "voxel survivor fills the gameplay capsule height (got %.3f)" % visual_bounds.end.y, visual_bounds.end.y >= 1.65 and visual_bounds.end.y <= 1.95)
 	var tool_root: Node3D = voxel_character.get_tool_visual_root()
 	_expect_true(failures, "equipped tool uses semantic hand socket", tool_root != null and tool_root.get_parent() == voxel_character.get_socket(&"hand_r"))
 	_expect_true(failures, "equipped axe realizes voxel modules", tool_root != null and tool_root.find_children("VoxelHeld*", "MeshInstance3D", true, false).size() == 2)
+	voxel_character.set_held_item("stone_axe")
+	_expect_equal(failures, "rapid held-item replacement cannot duplicate runtime tool parts", tool_root.find_children("VoxelHeld*", "MeshInstance3D", true, false).size(), 2)
+	_expect_equal(failures, "rapid axe replacement owns one handle", tool_root.find_children("VoxelHeldAxeHandle", "MeshInstance3D", true, false).size(), 1)
+	_expect_equal(failures, "rapid axe replacement owns one head", tool_root.find_children("VoxelHeldAxeHead", "MeshInstance3D", true, false).size(), 1)
 	voxel_character.character_definition.palette.entries[0]["color"] = Color.MAGENTA
 	_expect_true(failures, "palette replacement cannot alter Player collision", is_equal_approx(collision.shape.radius, collision_radius) and is_equal_approx(collision.shape.height, collision_height))
 

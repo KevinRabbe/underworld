@@ -19,6 +19,7 @@ func realize_held_item(_presentation, attachment_root: Node3D, tool_id: String) 
 	if attachment_root == null:
 		return false
 	for child in attachment_root.get_children():
+		attachment_root.remove_child(child)
 		child.queue_free()
 	if tool_id == "hands":
 		return true

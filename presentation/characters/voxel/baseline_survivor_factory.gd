@@ -16,12 +16,12 @@ const FACE := 6
 
 static func build() -> Resource:
 	var palette = PaletteScript.new().configure("palette.character.earth_teal", [
-		_entry("skin", Color("b98b68"), 0.78, 0.0),
-		_entry("cloth", Color("554b3f"), 0.92, 0.0),
-		_entry("leather", Color("35271e"), 0.76, 0.0),
-		_entry("metal", Color("686d70"), 0.38, 0.62),
-		_entry("hair", Color("241b17"), 0.88, 0.0),
-		_entry("accent", Color("245766"), 0.82, 0.0),
+		_entry("skin", Color("c39570"), 0.78, 0.0),
+		_entry("cloth", Color("716655"), 0.92, 0.0),
+		_entry("leather", Color("503a2b"), 0.76, 0.0),
+		_entry("metal", Color("858b8e"), 0.38, 0.62),
+		_entry("hair", Color("392820"), 0.88, 0.0),
+		_entry("accent", Color("2e7180"), 0.82, 0.0),
 		_entry("face", Color("171717"), 0.72, 0.0),
 	])
 	var modules: Array[Resource] = [
@@ -58,7 +58,7 @@ static func build() -> Resource:
 			_part("foot_r", "rig_role.foot.right", _box(Vector3i(-1,-2,-1), Vector3i(1,0,4), LEATHER), Vector3i(0,0,0)),
 		]),
 		_module("pouch", &"back_accessory", [
-			_part("back_roll", "rig_role.chest", _box(Vector3i(-2,-1,2), Vector3i(1,2,3), LEATHER), Vector3i.ZERO),
+			_part("hip_pouch", "rig_role.pelvis", _box(Vector3i(3,-1,1), Vector3i(5,2,2), LEATHER), Vector3i.ZERO),
 		]),
 		_module("tools", &"held_item", [
 			_tool_part("axe_handle", "stone_axe", _box(Vector3i(0,-7,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO),
