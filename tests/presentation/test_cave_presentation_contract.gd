@@ -100,7 +100,7 @@ static func _test_double_sided_material_and_disposable_realization(catalog, fail
 		failures.append("presentation realization replaced authoritative cave mesh geometry")
 
 	var first_attachment = first.get("attachment", null)
-	var first_attachment_id := first_attachment.get_instance_id() if first_attachment != null else 0
+	var first_attachment_id: int = first_attachment.get_instance_id() if first_attachment != null else 0
 	var entrance_profile = catalog.profile_by_id("presentation.cave.entrance")
 	var second: Dictionary = Realizer.realize(mesh_node, entrance_profile, {"volume_kind": "entrance", "world_bounds": AABB(Vector3.ZERO, Vector3(32, 32, 32))})
 	if str(second.get("profile_id", "")) != "presentation.cave.entrance":
