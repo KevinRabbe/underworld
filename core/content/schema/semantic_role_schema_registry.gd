@@ -88,10 +88,10 @@ func schema_ids() -> Array[String]:
 	return ids
 
 
-func schema_ids_for_namespace(namespace: String) -> Array[String]:
+func schema_ids_for_namespace(schema_namespace: String) -> Array[String]:
 	var ids: Array[String] = []
 	for schema_id in schema_ids():
-		if SchemaId.namespace_of(schema_id) == namespace:
+		if SchemaId.namespace_of(schema_id) == schema_namespace:
 			ids.append(schema_id)
 	return ids
 

@@ -25,10 +25,10 @@ static func validate_rig_role(value: String) -> Array[String]:
 
 
 static func validate_semantic_role(value: String) -> Array[String]:
-	var namespace: String = _raw_namespace(value)
-	if namespace == ANIMATION_ROLE_NAMESPACE:
+	var schema_namespace: String = _raw_namespace(value)
+	if schema_namespace == ANIMATION_ROLE_NAMESPACE:
 		return validate_animation_role(value)
-	if namespace == RIG_ROLE_NAMESPACE:
+	if schema_namespace == RIG_ROLE_NAMESPACE:
 		return validate_rig_role(value)
 	return ["semantic role id must use 'animation_role.' or 'rig_role.' namespace: %s" % value]
 
