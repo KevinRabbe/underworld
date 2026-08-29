@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ContentId := preload("res://core/content/identity/content_id.gd")
+const FiniteNumber := preload("res://core/content/validation/finite_number.gd")
 
 const RESOURCE_FAMILY := "resource"
 
@@ -31,14 +32,21 @@ func validate_state() -> Array[String]:
 		failures.append(
 			"depletion state must reference a resource.* definition: %s" % resource_content_id
 		)
-	if remaining_capacity_units < 0.0:
+	if not FiniteNumber.is_finite_number(remaining_capacity_units):
+		failures.append("resource remaining_capacity_units must be finite")
+	elif remaining_capacity_units < 0.0:
 		failures.append("remaining resource capacity units must be >= 0")
 	failures.sort()
 	return failures
 
 
 func consume_capacity(requested_units: float) -> float:
-	if requested_units <= 0.0 or remaining_capacity_units <= 0.0:
+	if (
+		not FiniteNumber.is_finite_number(requested_units)
+		or not FiniteNumber.is_finite_number(remaining_capacity_units)
+		or requested_units <= 0.0
+		or remaining_capacity_units <= 0.0
+	):
 		return 0.0
 	var consumed: float = minf(requested_units, remaining_capacity_units)
 	remaining_capacity_units -= consumed
