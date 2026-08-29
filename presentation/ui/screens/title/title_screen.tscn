@@ -30,10 +30,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 64
-theme_override_constants/margin_top = 48
-theme_override_constants/margin_right = 64
-theme_override_constants/margin_bottom = 48
+theme_type_variation = &"MenuSafeMargin"
 
 [node name="Center" type="CenterContainer" parent="SafeMargin"]
 layout_mode = 2
@@ -45,7 +42,7 @@ theme_type_variation = &"MenuPanel"
 
 [node name="Menu" type="VBoxContainer" parent="SafeMargin/Center/MenuPanel"]
 layout_mode = 2
-theme_override_constants/separation = 14
+theme_type_variation = &"MenuStack"
 alignment = 1
 
 [node name="Title" type="Label" parent="SafeMargin/Center/MenuPanel/Menu"]
@@ -67,14 +64,12 @@ mouse_filter = 2
 
 [node name="NewGameButton" type="Button" parent="SafeMargin/Center/MenuPanel/Menu"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
 focus_mode = 2
 text = "NEW GAME"
 
 [node name="ContinueButton" type="Button" parent="SafeMargin/Center/MenuPanel/Menu"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
 focus_mode = 0
 disabled = true
@@ -82,7 +77,6 @@ text = "CONTINUE"
 
 [node name="QuitButton" type="Button" parent="SafeMargin/Center/MenuPanel/Menu"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
 focus_mode = 2
 text = "QUIT"
