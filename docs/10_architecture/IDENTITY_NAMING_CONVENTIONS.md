@@ -1,64 +1,135 @@
 # Underworld — Identity and Naming Conventions
 
-Status: **architecture reference derived from existing authoritative contracts**
+Status: **architecture reference derived from accepted authoritative contracts**
 
 This file is a naming/review aid, not a new identity schema. The authoritative contracts linked below win if any summary here conflicts with them.
 
 Core rule:
 
-> Name an identifier for **what it identifies and which subsystem owns it**. Paths, runtime objects, indexes and fingerprints are not interchangeable with logical identity.
+> Name an identifier for **what it identifies and which subsystem owns it**. Semantic definitions, schema vocabulary, procedural identity, mutable state, paths, runtime objects, indexes and fingerprints are different concepts even when all are represented as strings or numbers.
 
-## Identity classes
+## Identity and state classes
 
-| Identity class | Question answered | Example / direction | Lifetime / owner |
+| Class | Question answered | Example / direction | Authority / lifetime |
 | --- | --- | --- | --- |
-| Semantic authored content ID | What authored kind is this? | `item.weapon.iron_sword` | Stable authored definition identity |
+| Authored `ContentId` | What authored definition is this? | `item.weapon.iron_sword`, `resource.node.copper`, `archetype.creature.burrower` | Stable authored content identity |
+| Controlled `SchemaId` | Which registered category/capability/semantic role is declared? | `category.item.weapon`, `capability.harvest_tool`, `animation_role.action.attack.light_01`, `rig_role.socket.hand.right` | Registered schema vocabulary |
 | Procedural `StableAddress` | Which deterministic candidate/location/lineage is this? | canonical worldgen address | Deterministic world definition |
 | Procedural `StableId` | Which generated procedural candidate/location is this? | `sid1:...` | Persistent generated-world identity |
-| Persistent instance ID | Which individually stateful player/gameplay-created copy is this? | future `build_instance_id`, `item_instance_id` | Durable gameplay/save state; exact encoding may remain open |
-| Stack state | Which compatible quantity/state is grouped together? | item content ID + quantity | Inventory/container state; often no per-unit ID |
-| Presentation definition/role | Which replaceable presentation concept is requested? | `visual.weapon.iron_sword`, animation/audio role | Authored presentation binding |
-| Runtime object identity | Which live engine object currently represents this? | `Node`, RID, resource instance | Transient runtime implementation |
-| Version/revision | Which contract/schema interprets this data? | `save_schema_version`, `stage_revision` | Compatibility metadata, not object identity |
-| Fingerprint | Do canonical contents/dependencies match? | provenance/output/manifest fingerprint | Derived verification/cache identity |
+| Mutable gameplay state | What mutable state belongs to a logical definition/copy/location? | `ItemStackState`, per-copy `ItemInstanceState`, `ResourceDepletionState` | Runtime/save-compatible gameplay state |
+| Future persistent per-copy item identity | Which individually persistent owned copy is this? | future `item_instance_id` | Identity category is accepted; exact encoding remains **OPEN** |
+| Presentation definition/binding | Which replaceable presentation concept/configuration is requested? | `archetype.*`, `animation_set.*`, `rig_profile.*`, cave presentation profile | Authored/replaceable presentation boundary |
+| Runtime object identity | Which live engine object currently represents this? | `Node`, `Object`, RID, Resource instance | Transient runtime implementation |
+| Version/revision | Which contract/schema interprets this data? | `save_schema_version`, `schema_revision` | Compatibility metadata, not object identity |
+| Fingerprint | Do canonical contents/dependencies match? | provenance/output/manifest fingerprint | Derived verification/cache value |
 | Address/partition key | Which deterministic/spatial partition is this? | region/cell address | Contract-specific partition identity |
-| Handle/index | Which current implementation slot is this? | render handle, pool/array index | Transient acceleration detail |
+| Handle/index | Which current implementation slot is this? | render handle, pool/array/slot index | Transient acceleration/detail |
+| Display/localization label | What text should a person see? | localized name, debug label | Human-facing text, never identity |
 
 The [Project Glossary](../00_project/GLOSSARY.md) remains the canonical terminology index.
 
-## 1. Semantic authored definition IDs
+---
 
-Semantic content IDs answer **what kind of authored concept is this?**
+## 1. `ContentId` — authored semantic definition identity
 
-Established examples include:
+A `ContentId` answers **what authored definition is this?**
+
+Accepted families include directions such as:
 
 ```text
 item.resource.wood
 item.weapon.iron_sword
+resource.node.copper
 creature.underworld.burrower
-attack_set.sword.basic
-animation_set.humanoid.one_handed_sword
-visual.weapon.iron_sword
-recipe.weapon.iron_sword
+archetype.creature.burrower
+animation_set.humanoid.prototype
+rig_profile.humanoid.prototype
+attack_set.weapon.sword.basic
 ```
 
-Use names such as:
+Use names that expose the target when useful:
 
 ```text
 content_id
-item_definition_id
-recipe_id
+item_content_id
+resource_definition_id
+archetype_id
+animation_set_id
+rig_profile_id
 attack_set_id
-visual_definition_id
 ```
 
-Rules from [Content IDs](../40_content/CONTENT_IDS.md): lowercase dot-separated semantic IDs are independent of file paths, runtime Nodes and procedural StableIds. A persisted content-ID rename is a migration, not a cosmetic file move.
+Rules:
 
-One definition ID may describe many logical/runtime instances. `item.weapon.iron_sword` does not identify one particular owned or dropped sword.
+- lowercase dotted spelling is semantic naming, not a filesystem path;
+- a file/resource move does not change a definition's `ContentId`;
+- one authored definition may describe many stacks, owned copies, generated placements and runtime Nodes;
+- a persisted `ContentId` rename is a migration, not a cosmetic refactor;
+- `ContentId` families and `SchemaId` families are not interchangeable.
 
-Authority: [Content Architecture](CONTENT_ARCHITECTURE.md), [Content IDs](../40_content/CONTENT_IDS.md), [Item / Inventory / Crafting](../30_gameplay/ITEM_INVENTORY_CRAFTING.md).
+For example, `item.weapon.iron_sword` says **what item definition** is involved. It does not identify one particular owned sword, one generated world placement, an equipment slot or the scene currently displaying it.
 
-## 2. Procedural `StableAddress` and `StableId`
+Authority: [Content Architecture](CONTENT_ARCHITECTURE.md), [Content IDs](../40_content/CONTENT_IDS.md), [Content Families](../40_content/CONTENT_FAMILIES.md), [Item Rulebook](../40_content/ITEM_RULEBOOK.md).
+
+---
+
+## 2. `SchemaId` — controlled vocabulary, not authored content identity
+
+The accepted schema namespaces are distinct from `ContentId`. Current controlled families include:
+
+```text
+category.*
+capability.*
+animation_role.*
+rig_role.*
+```
+
+Examples:
+
+```text
+category.item.weapon
+category.resource.deposit
+capability.equipable
+capability.harvest_tool
+animation_role.action.attack.light_01
+rig_role.socket.hand.right
+```
+
+Prefer the accepted field vocabulary where the domain is known:
+
+```text
+category_ids
+capability_ids
+attack_animation_role
+rig_role
+attachment_root_role
+```
+
+Do not call these values content definitions and do not resolve them through a parallel content-ID system.
+
+### Relationship ownership
+
+Dotted spelling does **not** create ancestry, implication or membership by itself.
+
+- category ancestry is owned by `CategorySchemaRegistry`;
+- capability implication/composition is owned by `CapabilitySchemaRegistry`;
+- animation/rig semantic-role membership is owned by `SemanticRoleSchemaRegistry`.
+
+Therefore:
+
+```text
+category.item.weapon.sword
+```
+
+is not automatically a descendant of `category.item.weapon` merely because its spelling has more tokens. The registered schema relationship is authoritative.
+
+Likewise, a capability name does not imply another capability because their text looks related, and an animation/rig role is valid because it belongs to the accepted role schema, not because a string happens to start with `animation_role.` or `rig_role.`.
+
+Authority: [Content Categories](../40_content/CONTENT_CATEGORIES.md), [Content Capabilities](../40_content/CONTENT_CAPABILITIES.md), accepted `core/content/schema/` contracts.
+
+---
+
+## 3. Procedural `StableAddress` and `StableId`
 
 Procedural identity answers **which deterministic generated candidate/location is this?**
 
@@ -67,31 +138,83 @@ StableAddress
     canonical procedural address/lineage
         ↓
 StableId
-    persistent procedural identifier derived from the address
+    persistent procedural identifier derived from that address
 ```
 
 Use `*_address` for canonical procedural/spatial addresses and `stable_id` / `*_stable_id` for procedural `StableId`s.
 
-Do not call a semantic content ID a `StableId`. Do not give player-created objects procedural StableAddresses merely because they exist in the world.
+Do not:
 
-A generated object may legitimately have both:
+- call a semantic `ContentId` a `StableId`;
+- use a category/capability/role `SchemaId` as procedural identity;
+- give player-created objects procedural `StableAddress` values merely because they exist in the world;
+- derive a `StableId` from runtime Node identity, array order or presentation assets.
+
+A generated resource placement may legitimately carry multiple independent facts:
 
 ```text
-content_id = "item.resource.copper_ore"
-stable_id  = "sid1:..."
+resource_content_id = "resource.node.copper"
+stable_id           = "sid1:..."
 ```
 
-The first says what it is; the second says which generated instance/location it is. A `StableId` alone is not full generation provenance.
+The first says what authored definition is realized; the second says which generated placement/candidate it is. Neither replaces the other, and a `StableId` alone is not complete generation provenance.
+
+MAP-016 is accepted-main. Its deterministic cave geometry/runtime representation does not change this ownership: generation addresses/StableIds remain world truth while mesh resources, collision objects and presentation Nodes remain replaceable runtime representation.
 
 Authority: [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md), [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md), [Project Glossary](../00_project/GLOSSARY.md).
 
-## 3. Persistent gameplay/player-created instance IDs
+---
 
-Use a separate persistent identity category when one player/gameplay-created copy must retain state independently.
+## 4. Mutable gameplay state is not authored definition identity
 
-Examples include a placed building piece or an individually stateful item with durability/modifiers.
+Mutable state describes the changing state associated with an authored definition, owned copy or generated location. It does not mutate the shared authored definition into a runtime instance.
 
-Prefer explicit names:
+Accepted examples include:
+
+```text
+ItemStackState
+ItemInstanceState
+ResourceDepletionState
+```
+
+### `ItemStackState`
+
+Fungible resources may use lightweight stack state:
+
+```text
+item_content_id = "item.resource.wood"
+quantity = 40
+compatibility_state = {...}
+```
+
+Forty ordinary units do not require forty persistent IDs.
+
+### Per-copy `ItemInstanceState`
+
+When one non-fungible copy requires mutable state, keep that state separate from `ItemDefinition`:
+
+```text
+item_content_id = "item.weapon.iron_sword"
+per_copy_state = { durability = 81 }
+```
+
+The accepted mutable-state class does **not** lock the future persistent per-copy item identity encoding. A later durable `item_instance_id` may be required when cross-session identity of one copy matters, but UUID/monotonic/save-scoped/other encoding remains intentionally **OPEN**.
+
+### `ResourceDepletionState`
+
+Placed resource/deposit depletion belongs to mutable placement/runtime state. It must not be stored by mutating the shared `ResourceDefinition`.
+
+Use explicit names for state fields and structures. Do not call mutable state itself a definition ID or a procedural `StableId`.
+
+Authority: [Item Rulebook](../40_content/ITEM_RULEBOOK.md), [Resource Rulebook](../40_content/RESOURCE_RULEBOOK.md), [Item / Inventory / Crafting](../30_gameplay/ITEM_INVENTORY_CRAFTING.md).
+
+---
+
+## 5. Future persistent gameplay/player-created instance IDs
+
+Use a separate persistent identity category when one gameplay-created copy must remain the same logical object across save/load even though its runtime representation changes.
+
+Potential examples:
 
 ```text
 build_instance_id
@@ -99,51 +222,50 @@ item_instance_id
 persistent_instance_id
 ```
 
-The exact encoding for future player-created/item-instance IDs is intentionally open; this reference does not choose UUID, monotonic, save-scoped or another format.
+The identity category is distinct from:
 
-A placed building instance remains the same logical object when its mesh, runtime Node, render batch or streamed cell changes.
+- authored `ContentId`;
+- controlled `SchemaId`;
+- procedural world `StableId`;
+- mutable per-copy state;
+- inventory/equipment slot indexes;
+- Node/Object/RID identity.
 
-Authority: [Building System](../30_gameplay/BUILDING_SYSTEM.md), [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md).
+The exact future per-copy item ID encoding remains open. This reference intentionally does not choose a format.
 
-## 4. Stack identity for fungible resources
+A placed building or individually persistent item remains the same logical copy when its mesh, Node, render batch, streamed cell or UI representation changes.
 
-Fungible items do not require one persistent ID per unit.
+Authority: [Building System](../30_gameplay/BUILDING_SYSTEM.md), [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md), [Item / Inventory / Crafting](../30_gameplay/ITEM_INVENTORY_CRAFTING.md).
 
-```text
-item_content_id = "item.resource.wood"
-quantity = 40
-```
+---
 
-may be sufficient stack state when all units are compatible under the item rules.
+## 6. Presentation identity and role vocabulary
 
-Use names such as `stack`, `stack_state`, `quantity`, and `item_content_id`. Introduce `item_instance_id` only when one copy needs persistent per-item state.
+Presentation is replaceable and must not become gameplay/world/save authority.
 
-Authority: [Item / Inventory / Crafting](../30_gameplay/ITEM_INVENTORY_CRAFTING.md).
-
-## 5. Presentation definitions, roles and asset references
-
-Presentation is replaceable and must not become authoritative identity.
+A typical boundary is:
 
 ```text
-logical identity/state
+authoritative logical identity/state
         ↓
-semantic visual / animation / audio definition or role
+semantic presentation definition / schema role
         ↓
-current mesh / scene / material / clip / sound resource
+replaceable asset/resource
+        ↓
+transient runtime Node/Object/RID/handle
 ```
 
-Semantic fields may use names such as:
+Keep authored presentation definitions and role vocabulary distinct:
 
 ```text
-visual_id
-animation_set_id
-presentation_role
-animation_role
-audio_role
-asset_reference
+archetype.*       -> authored ContentId family
+animation_set.*   -> authored ContentId family
+rig_profile.*     -> authored ContentId family
+animation_role.*  -> controlled semantic-role SchemaId
+rig_role.*        -> controlled semantic-role SchemaId
 ```
 
-Concrete storage/engine locations should be named as such:
+Concrete engine/storage locations should be named as such:
 
 ```text
 resource_path
@@ -153,16 +275,25 @@ material_path
 clip_name
 ```
 
-Changing those concrete assets must not silently rename the logical object. Renderer/MultiMesh/batch handles and indexes are transient even when they map back to logical identity.
+Changing a mesh, scene, animation library or material must not silently rename gameplay identity.
 
-Authority: [Replaceable Presentation Boundary](PRESENTATION_BOUNDARY.md), [Content References](../40_content/CONTENT_REFERENCES.md).
+### Accepted cave presentation boundary
 
-## 6. Runtime Node/object identity is transient
+PRESENTATION-001 is accepted-main. Cave presentation profiles/materials/lights/ambience and their runtime realization are replaceable presentation data. The compact cave semantic snapshot passed to presentation is **context for presentation selection**, not a new gameplay/persistence identity system.
+
+Do not invent a durable gameplay `StableId`, save identity or content identity merely for a cave presentation Node/profile/snapshot. Worldgen geometry/collision/StableId truth remains owned by MAP/worldgen contracts.
+
+Authority: [Replaceable Presentation Boundary](PRESENTATION_BOUNDARY.md), [Cave Presentation Layer](CAVE_PRESENTATION_LAYER.md), [Content References](../40_content/CONTENT_REFERENCES.md).
+
+---
+
+## 7. Runtime Node/Object/Resource identity is transient
 
 These values identify a current engine object or implementation slot, not durable game/world identity:
 
 ```text
 Node instance ID
+Object instance ID
 NodePath
 RID
 Resource memory identity
@@ -171,11 +302,25 @@ pool slot
 renderer batch index
 ```
 
-Name them explicitly (`node`, `node_path`, `runtime_handle`, `render_handle`, `pool_index`, `batch_index`). Do not persist them as semantic identity or derive content IDs/StableIds from them.
+Name them explicitly:
+
+```text
+node
+node_path
+runtime_handle
+render_handle
+pool_index
+batch_index
+slot_index
+```
+
+Do not persist them as semantic identity and do not derive `ContentId`, `SchemaId`, `StableAddress`, `StableId` or future persistent per-copy identity from them.
 
 Authority: [Replaceable Presentation Boundary](PRESENTATION_BOUNDARY.md), [Streaming Ownership](../STREAMING_OWNERSHIP.md), [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md).
 
-## 7. Versions and revisions are compatibility metadata
+---
+
+## 8. Versions and revisions are compatibility metadata
 
 Version/revision fields say how data or a contract is interpreted. They normally do not identify the logical object.
 
@@ -189,33 +334,40 @@ stage_revision
 schema_revision
 ```
 
-Use `_version` or `_revision` names for those concepts. Do not change a semantic/procedural identity merely because a compatible schema revision changes, and do not hide an incompatible identity change behind an unchanged revision.
+Use `_version` or `_revision` for those concepts. Do not change a semantic/procedural identity merely because a compatible schema revision changes, and do not hide an incompatible persistent identity change behind an unchanged revision.
 
 Authority: [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md), [Content Registry Architecture](CONTENT_REGISTRY.md).
 
-## 8. Fingerprints verify canonical contents/dependencies
+---
 
-A fingerprint answers whether defined canonical contents/dependencies match exactly.
+## 9. Fingerprints verify canonical contents/dependencies
 
-Examples include generation-stage, provenance, geometry/output, dependency and generator-manifest fingerprints.
+A fingerprint answers whether canonical contents/dependencies match exactly. It is normally derived, not the semantic identity of the underlying thing.
 
-Use specific names such as:
+Examples:
 
 ```text
-fingerprint
 content_fingerprint
 dependency_fingerprint
 provenance_fingerprint
+output_fingerprint
 manifest_id
 ```
 
-Do not use `fingerprint` as a generic synonym for every ID. Semantic concepts use content IDs; procedural candidates use StableAddress/StableId terminology; canonical-content verification uses fingerprints.
+Do not use `fingerprint` as a generic synonym for every ID:
+
+- authored definitions use `ContentId`;
+- schema vocabulary uses `SchemaId`;
+- generated candidates use `StableAddress` / `StableId`;
+- canonical-content verification uses fingerprints.
 
 Authority: [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md), [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md).
 
-## 9. Addresses and partition identities
+---
 
-`address` should mean a canonical procedural/spatial/logical location under a specific contract.
+## 10. Addresses and partition keys
+
+`address` should mean a canonical procedural/spatial/logical location under a specific owning contract.
 
 Examples:
 
@@ -230,30 +382,37 @@ A geometry-cell address is not automatically a gameplay `StableId`, and sharing 
 
 Authority: [Project Glossary](../00_project/GLOSSARY.md), [Streaming Ownership](../STREAMING_OWNERSHIP.md).
 
-## 10. References describe relationships
+---
 
-A reference points to another identity under a semantic role/type; it is not a new identity class.
+## 11. References describe relationships
+
+A reference points to another identity under a semantic role/type. It is not a new identity class.
+
+Examples:
 
 ```text
-weapon.attack_set -> attack_set.sword.basic
-recipe.output     -> item.weapon.iron_sword
+weapon.attack_set      -> attack_set.weapon.sword.basic
+presentation.archetype -> archetype.weapon.iron_sword
+resource yield         -> item.resource.copper_chunk
 ```
 
 Prefer names that expose the relationship/target when useful:
 
 ```text
 attack_set_id
-output_item_id
-visual_reference
+archetype_id
+yield_item_id
 source_stable_id
 owner_instance_id
 ```
 
-Authored cross-definition references use semantic IDs rather than current file paths. Do not name a path string `item_id` merely because it currently leads to the item Resource.
+Authored cross-definition references use semantic IDs rather than current file paths. Do not name a path string `item_id` merely because it currently leads to an item Resource.
 
 Authority: [Content References](../40_content/CONTENT_REFERENCES.md).
 
-## 11. Display names are not identity
+---
+
+## 12. Display/localization names are not identity
 
 Human-facing/debug names may change, localize or duplicate:
 
@@ -266,14 +425,26 @@ editor_label
 
 For example, `content_id = "item.weapon.iron_sword"` can remain stable while the visible name changes in every supported language.
 
-Authority: [Content IDs](../40_content/CONTENT_IDS.md), [Replaceable Presentation Boundary](PRESENTATION_BOUNDARY.md).
+Authority: [Content IDs](../40_content/CONTENT_IDS.md).
+
+---
 
 ## Cross-system examples
 
-### Worldgen
+### Content definition
 
 ```text
-world_id                -> which seeded world
+content_id      -> authored definition identity
+category_ids    -> registered classification SchemaIds
+capability_ids  -> registered capability SchemaIds
+schema_revision -> definition/schema compatibility metadata
+resource_path   -> current authored storage location only
+```
+
+### Worldgen / MAP
+
+```text
+world_id                -> which seeded world contract
 stable_address          -> which deterministic candidate/location
 stable_id               -> persistent procedural candidate/location
 provenance_fingerprint  -> exact generation ancestry verification
@@ -281,39 +452,39 @@ geometry_cell_address   -> deterministic geometry partition
 runtime_handle          -> current representation only
 ```
 
-Generation order, array position, load order and Node identity are not generated-object identity.
+Generation order, array position, mesh path, collision Node and load order are not generated-object identity.
 
-### Building
+### Items / inventory
 
 ```text
-piece_definition_id -> authored build-piece kind
-build_instance_id   -> persistent placed copy
-socket_role         -> semantic connection role
-mesh_path           -> current presentation resource only
-runtime_node        -> currently loaded representation only
+item_content_id   -> authored item definition
+category_ids      -> registered classification vocabulary
+capability_ids    -> registered behavior-contract vocabulary
+ItemStackState    -> fungible quantity + compatibility state
+ItemInstanceState -> mutable per-copy state
+item_instance_id  -> future persistent per-copy identity when required; encoding OPEN
+slot_index        -> current container/equipment position, not item identity
 ```
 
-### Items / inventory / crafting
+### Resources
 
 ```text
-item_content_id  -> authored item definition
-quantity         -> fungible grouped count
-item_instance_id -> individually stateful owned copy, when required
-slot_index       -> current container position, not item identity
-recipe_id        -> authored recipe definition
-world_stable_id  -> separate generated-world identity when applicable
+resource_content_id     -> authored resource/deposit definition
+stable_id               -> separate generated placement identity when applicable
+ResourceDepletionState  -> mutable depletion/delta state for that placement
+mesh/node                -> replaceable runtime presentation/realization
 ```
 
-### Presentation
+### Weapon / character presentation
 
 ```text
-logical content / StableId / persistent instance identity
-        ↓
-semantic presentation role/definition
-        ↓
-mesh/material/scene/clip path
-        ↓
-runtime render/audio handle
+item.weapon.iron_sword                  -> authored weapon ContentId
+attack_set.weapon.sword.basic           -> authored attack-set ContentId
+archetype.weapon.iron_sword             -> authored presentation ContentId
+animation_role.action.attack.light_01   -> controlled semantic-role SchemaId
+rig_role.socket.hand.right              -> controlled semantic-role SchemaId
+scene/mesh/clip                         -> concrete replaceable assets
+runtime Node/RID                        -> transient realization
 ```
 
 ### Persistence
@@ -323,30 +494,40 @@ save_schema_version    -> serialized-layout compatibility
 world_id               -> which seeded world
 generator_manifest_id  -> which deterministic generation contract
 stable_id              -> which generated procedural object/location
-persistent_instance_id -> which player/gameplay-created persistent object, when applicable
+content_id             -> which authored definition
+mutable state          -> durable state required by the owning contract
+item_instance_id       -> future per-copy identity only when required; encoding OPEN
 ```
 
-Runtime cell indexes, scene paths and renderer handles are not durable save identity.
+Runtime cell indexes, scene paths, UI slots and renderer handles are not durable save identity.
+
+---
 
 ## Preferred vocabulary
 
 | Suffix / term | Use when |
 | --- | --- |
 | `_id` | Stable logical identity under a named owning contract |
-| `content_id` | Semantic authored-definition identity |
+| `content_id` | Semantic authored-definition `ContentId` |
+| `category_ids` | Registered category `SchemaId` declarations |
+| `capability_ids` | Registered capability `SchemaId` declarations |
+| `animation_role` / `rig_role` | Registered semantic-role `SchemaId` |
 | `stable_id` | Procedural `StableId` specifically |
-| `*_instance_id` | Individually persistent gameplay/player-created instance identity |
+| `*_instance_id` | Individually persistent gameplay/player-created copy identity |
 | `*_address` | Canonical procedural/spatial/partition address |
 | `*_fingerprint` | Derived canonical-content/dependency verification value |
 | `*_version` | Versioned serialized/contract format |
 | `*_revision` | Revision of a specific schema/stage/definition contract |
 | `*_reference` / `*_ref` | Relationship/reference to another identity; public fields should clarify target semantics |
+| `*_state` | Mutable logical state, not automatically identity |
 | `*_handle` | Transient runtime/engine/renderer handle |
 | `*_index` | Collection/slot/batch position; transient unless an owning contract explicitly says otherwise |
 | `*_path` | Filesystem/scene/Node/resource location, not semantic identity |
 | `display_name` / `label` | Human-facing or diagnostic text |
 
-Avoid bare `id` in cross-system data when content, procedural, persistent-instance or runtime identity could all plausibly be meant.
+Avoid bare `id` in cross-system data when content, schema, procedural, persistent-instance or runtime identity could plausibly be meant.
+
+---
 
 ## Non-authoritative identity sources
 
@@ -356,10 +537,10 @@ Unless a specific owning contract explicitly says otherwise, never promote these
 filesystem/resource path
 PackedScene path
 NodePath
-Godot Node instance ID
+Godot Node/Object instance ID
 RID / Resource memory identity
 array position
-inventory/UI slot index
+inventory/equipment/UI slot index
 runtime cell load order
 worker completion order
 renderer/MultiMesh/batch index
@@ -367,34 +548,48 @@ mesh/material/texture/animation filename
 display/localized name
 ```
 
+Likewise, do not infer schema relationships from dotted spelling alone. Registry-declared category ancestry, capability implication and semantic-role membership are authoritative.
+
+---
+
 ## Naming checklist
 
 Before adding an identifier-like field, answer:
 
-1. What question does it answer: what kind, which generated candidate, which placed copy, which runtime object, which revision, or which exact contents?
-2. Which subsystem owns it?
-3. What is its lifetime: authored, world-persistent, save-persistent, runtime, or disposable?
-4. May files/assets/runtime representations move or rebuild without changing it? If yes, keep those transient details out of the identity.
-5. Is it really a fingerprint, address, reference, handle or index rather than an ID?
-6. Can several identity classes coexist on the object? If yes, qualify fields (`content_id`, `stable_id`, `item_instance_id`) instead of using bare `id`.
-7. Is the format intentionally open? Document the identity category without inventing an encoding.
+1. Does it identify authored content, controlled schema vocabulary, a generated candidate, a persistent gameplay-created copy, or only a current runtime representation?
+2. Is it actually mutable state, a fingerprint, address, reference, handle, index, path, version or display label rather than an ID?
+3. Which subsystem/registry owns its meaning?
+4. What is its lifetime: authored, world-persistent, save-persistent, runtime or disposable?
+5. May files/assets/runtime representations move or rebuild without changing it? If yes, keep those transient details out of the identity.
+6. Can several identity classes coexist on the same object? If yes, qualify fields (`content_id`, `stable_id`, `item_instance_id`) instead of using bare `id`.
+7. For `category.*`, `capability.*`, `animation_role.*` or `rig_role.*`, is the required relationship actually registered rather than guessed from spelling?
+8. Is a format intentionally open? Document the identity category without inventing an encoding.
+
+---
 
 ## Source contracts
 
 - [Project Glossary](../00_project/GLOSSARY.md) — canonical terminology and commonly confused boundaries.
 - [Content Architecture](CONTENT_ARCHITECTURE.md) — authored definitions versus runtime/presentation state.
-- [Content Registry Architecture](CONTENT_REGISTRY.md) — semantic lookup direction and registry responsibility boundary.
+- [Content Registry Architecture](CONTENT_REGISTRY.md) — semantic lookup and registry responsibility boundary.
 - [Content IDs](../40_content/CONTENT_IDS.md) — semantic ID format, stability and migrations.
+- [Content Families](../40_content/CONTENT_FAMILIES.md) — authored family vocabulary.
+- [Content Categories](../40_content/CONTENT_CATEGORIES.md) — category schema and ancestry ownership.
+- [Content Capabilities](../40_content/CONTENT_CAPABILITIES.md) — capability schema and implication/composition ownership.
 - [Content References](../40_content/CONTENT_REFERENCES.md) — typed semantic reference direction.
+- [Item Rulebook](../40_content/ITEM_RULEBOOK.md) — accepted item definition/state boundary.
+- [Resource Rulebook](../40_content/RESOURCE_RULEBOOK.md) — accepted resource/depletion boundary.
 - [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md) — procedural identity and provenance.
 - [Streaming Ownership](../STREAMING_OWNERSHIP.md) — geometry/runtime partition and lifetime boundaries.
-- [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md) — generated StableIds, player-created identity category and version concepts.
+- [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md) — generated StableIds, persistent gameplay identity category and version concepts.
 - [Building System](../30_gameplay/BUILDING_SYSTEM.md) — definition versus persistent placed instance.
-- [Item / Inventory / Crafting](../30_gameplay/ITEM_INVENTORY_CRAFTING.md) — definition, stack, item-instance and world StableId separation.
-- [Replaceable Presentation Boundary](PRESENTATION_BOUNDARY.md) — presentation resources/handles are not game identity.
+- [Item / Inventory / Crafting](../30_gameplay/ITEM_INVENTORY_CRAFTING.md) — definition, stack, item-state and world StableId separation.
+- [Replaceable Presentation Boundary](PRESENTATION_BOUNDARY.md) — presentation resources/handles are not gameplay identity.
+- [Cave Presentation Layer](CAVE_PRESENTATION_LAYER.md) — accepted presentation-only cave realization over value-only semantic context.
+- accepted `core/content/schema/` contracts — `SchemaId`, category/capability registries and `SemanticRoleSchemaRegistry`.
 
 ## Review invariant
 
-A field name should make it clear whether the value is a semantic definition, procedural generated identity, persistent gameplay instance, stack state, compatibility revision, verification fingerprint, canonical address, semantic reference, replaceable asset location, or transient runtime handle.
+A field name should make it clear whether the value is an authored `ContentId`, controlled `SchemaId`, procedural generated identity, persistent gameplay-created identity, mutable state, compatibility revision, verification fingerprint, canonical address, semantic reference, replaceable asset location, display label or transient runtime handle.
 
 If that meaning is ambiguous, qualify the name before it spreads into persistence, gameplay or cross-system APIs.
