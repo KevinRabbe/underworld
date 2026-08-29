@@ -22,8 +22,8 @@ static func run(tree: SceneTree) -> Array[String]:
 static func _test_definition_contract(failures: Array[String]) -> void:
 	var character = BaselineFactory.build()
 	_expect_true(failures, "baseline voxel survivor validates", character.validate_definition().is_empty())
-	_expect_equal(failures, "baseline voxel size", character.voxel_size, 0.05)
-	_expect_true(failures, "baseline survivor is 36 voxels tall", is_equal_approx(character.presentation_bounds.size.y, 1.8))
+	_expect_true(failures, "baseline voxel size is high-detail presentation pitch", is_equal_approx(character.voxel_size, 0.032142857))
+	_expect_true(failures, "baseline survivor is 56 authored voxels tall at 1.8 m", is_equal_approx(character.presentation_bounds.size.y, 1.8))
 	var palette_slots: Array[String] = []
 	for entry_value in character.palette.entries:
 		palette_slots.append(str(entry_value.get("slot", "")))

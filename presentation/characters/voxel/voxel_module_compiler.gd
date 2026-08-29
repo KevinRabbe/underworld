@@ -2,7 +2,7 @@ extends RefCounted
 class_name UnderworldVoxelModuleCompiler
 
 const MeshDataScript := preload("res://presentation/characters/voxel/voxel_module_mesh_data.gd")
-const COMPILER_REVISION: int = 1
+const COMPILER_REVISION: int = 2
 
 const DIRECTIONS: Array[Vector3i] = [Vector3i.RIGHT, Vector3i.LEFT, Vector3i.UP, Vector3i.DOWN, Vector3i.BACK, Vector3i.FORWARD]
 

@@ -17,6 +17,8 @@ const TROUSER := 8
 const CANVAS_DARK := 9
 const LEATHER_LIGHT := 10
 const SOLE := 11
+const PRESENTATION_VOXEL_SIZE := 0.032142857
+const DETAIL_SCALE := 1.555555556 # 36 authored voxels -> 56-voxel presentation
 
 
 static func build() -> Resource:
@@ -95,7 +97,11 @@ static func build() -> Resource:
 	var character := CharacterScript.new()
 	character.presentation_id = "character.voxel.grounded_survivor"
 	character.rig_profile_id = "rig_profile.humanoid.prototype"
-	character.voxel_size = 0.05
+	# The gameplay body remains 1.8 m tall, while the authored presentation
+	# grid is raised from the original 36 voxels to approximately 56.  This is
+	# presentation-only; rig, sockets, collision, and action dimensions stay
+	# in metres and are deliberately unchanged.
+	character.voxel_size = PRESENTATION_VOXEL_SIZE
 	character.presentation_scale = 1.0
 	character.presentation_bounds = AABB(Vector3(-0.45, 0.0, -0.30), Vector3(0.90, 1.80, 0.60))
 	character.palette = palette
@@ -112,13 +118,33 @@ static func _module(suffix: String, slot: StringName, parts: Array[Dictionary]) 
 
 
 static func _part(id_value: String, rig_role: String, cells: Array[Dictionary], pivot: Vector3i) -> Dictionary:
-	return {"part_id": id_value, "rig_role": rig_role, "pivot": pivot, "attachment_offset": Vector3.ZERO, "cells": cells}
+	return {"part_id": id_value, "rig_role": rig_role, "pivot": _scale_grid(pivot), "attachment_offset": Vector3.ZERO, "cells": _scale_cells(cells)}
 
 
 static func _tool_part(id_value: String, variant_id: String, cells: Array[Dictionary], pivot: Vector3i) -> Dictionary:
 	var part := _part(id_value, "rig_role.socket.hand.right", cells, pivot)
 	part["variant_id"] = variant_id
 	return part
+
+
+static func _scale_grid(value: Vector3i) -> Vector3i:
+	return Vector3i(roundi(float(value.x) * DETAIL_SCALE), roundi(float(value.y) * DETAIL_SCALE), roundi(float(value.z) * DETAIL_SCALE))
+
+
+static func _scale_cells(cells: Array[Dictionary]) -> Array[Dictionary]:
+	var scaled: Array[Dictionary] = []
+	var occupied: Dictionary = {}
+	for cell_value in cells:
+		var cell: Dictionary = cell_value
+		if not cell.get("position", null) is Vector3i:
+			continue
+		var position: Vector3i = _scale_grid(cell["position"])
+		var key := "%d,%d,%d" % [position.x, position.y, position.z]
+		if occupied.has(key):
+			continue
+		occupied[key] = true
+		scaled.append({"position": position, "palette_index": int(cell.get("palette_index", -1))})
+	return scaled
 
 
 static func _mirrored_part(id_value: String, rig_role: String, mirror_source: String, pivot: Vector3i) -> Dictionary:
