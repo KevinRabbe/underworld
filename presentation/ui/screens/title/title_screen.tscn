@@ -1,0 +1,101 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://presentation/ui/screens/title/title_screen.gd" id="1_script"]
+[ext_resource type="Theme" path="res://presentation/ui/theme/prototype_menu_theme.tres" id="2_theme"]
+
+[node name="TitleScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_script")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.012, 0.011, 0.012, 1)
+
+[node name="SafeMargin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 64
+theme_override_constants/margin_top = 48
+theme_override_constants/margin_right = 64
+theme_override_constants/margin_bottom = 48
+
+[node name="Center" type="CenterContainer" parent="SafeMargin"]
+layout_mode = 2
+
+[node name="MenuPanel" type="PanelContainer" parent="SafeMargin/Center"]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+
+[node name="Menu" type="VBoxContainer" parent="SafeMargin/Center/MenuPanel"]
+layout_mode = 2
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="Title" type="Label" parent="SafeMargin/Center/MenuPanel/Menu"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.79, 0.54, 1)
+theme_override_font_sizes/font_size = 54
+text = "UNDERWORLD"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="SafeMargin/Center/MenuPanel/Menu"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.53, 0.49, 0.43, 1)
+theme_override_font_sizes/font_size = 14
+text = "DESCEND  •  SURVIVE  •  RETURN"
+horizontal_alignment = 1
+
+[node name="Spacer" type="Control" parent="SafeMargin/Center/MenuPanel/Menu"]
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="NewGameButton" type="Button" parent="SafeMargin/Center/MenuPanel/Menu"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+focus_mode = 2
+text = "NEW GAME"
+
+[node name="ContinueButton" type="Button" parent="SafeMargin/Center/MenuPanel/Menu"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+focus_mode = 0
+disabled = true
+text = "CONTINUE"
+
+[node name="QuitButton" type="Button" parent="SafeMargin/Center/MenuPanel/Menu"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+focus_mode = 2
+text = "QUIT"
+
+[node name="FooterSpacer" type="Control" parent="SafeMargin/Center/MenuPanel/Menu"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Status" type="Label" parent="SafeMargin/Center/MenuPanel/Menu"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.34, 0.32, 0.30, 1)
+theme_override_font_sizes/font_size = 12
+text = "Prototype application shell"
+horizontal_alignment = 1
