@@ -147,6 +147,29 @@ static func _test_restore_schema_and_current_placement_compatibility(failures: A
 	var rejected_shape: Dictionary = service.restore_state(placement, fixture["registry"], store)
 	_expect_true(failures, "snapshot with unexpected envelope shape fails closed", not bool(rejected_shape.get("success", true)))
 
+	var schema_type_mismatch: Dictionary = valid.duplicate(true)
+	schema_type_mismatch["schema"] = StringName("resource.runtime.depletion.v1")
+	store.set_object_state(placement.placement_stable_id, schema_type_mismatch)
+	var rejected_schema_type: Dictionary = service.restore_state(placement, fixture["registry"], store)
+	_expect_true(failures, "coercible non-String snapshot schema fails closed", not bool(rejected_schema_type.get("success", true)))
+	_expect_equal(failures, "schema type rejection leaves malformed durable state untouched", store.get_object_state(placement.placement_stable_id), schema_type_mismatch)
+
+	var resource_id_type_mismatch: Dictionary = valid.duplicate(true)
+	resource_id_type_mismatch["resource_content_id"] = StringName("resource.deposit.iron_outcrop")
+	store.set_object_state(placement.placement_stable_id, resource_id_type_mismatch)
+	var rejected_resource_id_type: Dictionary = service.restore_state(placement, fixture["registry"], store)
+	_expect_true(failures, "coercible non-String saved resource ContentId fails closed", not bool(rejected_resource_id_type.get("success", true)))
+	_expect_equal(failures, "resource id type rejection leaves malformed durable state untouched", store.get_object_state(placement.placement_stable_id), resource_id_type_mismatch)
+
+	var remaining_type_mismatch: Dictionary = valid.duplicate(true)
+	var malformed_depletion: Dictionary = remaining_type_mismatch["depletion"]
+	malformed_depletion["remaining_capacity_units"] = "3.0"
+	remaining_type_mismatch["depletion"] = malformed_depletion
+	store.set_object_state(placement.placement_stable_id, remaining_type_mismatch)
+	var rejected_remaining_type: Dictionary = service.restore_state(placement, fixture["registry"], store)
+	_expect_true(failures, "coercible String remaining capacity fails closed", not bool(rejected_remaining_type.get("success", true)))
+	_expect_equal(failures, "remaining-capacity type rejection leaves malformed durable state untouched", store.get_object_state(placement.placement_stable_id), remaining_type_mismatch)
+
 	store.set_object_state(placement.placement_stable_id, valid)
 	var changed_placement = _placement("upf1:iron-runtime-replanned")
 	var rejected_fingerprint: Dictionary = service.restore_state(changed_placement, fixture["registry"], store)
