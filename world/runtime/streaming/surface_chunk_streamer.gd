@@ -174,6 +174,29 @@ func destroy_world_object(
 	return true
 
 
+func find_nearby_pickups(player_world_position: Vector3, radius: float) -> Array:
+	var found: Array = []
+	var chunk_coords: Array = chunks.keys()
+	chunk_coords.sort_custom(func(a, b):
+		var left: Vector2i = a
+		var right: Vector2i = b
+		return left.x < right.x or (left.x == right.x and left.y < right.y)
+	)
+	for chunk_coord_variant in chunk_coords:
+		var chunk_coord: Vector2i = chunk_coord_variant
+		var chunk = chunks[chunk_coord]
+		var chunk_pickups: Array = chunk.find_nearby_pickups(player_world_position, radius)
+		for pickup_variant in chunk_pickups:
+			var pickup: Dictionary = pickup_variant.duplicate(true)
+			var object_id: String = str(pickup.get("object_id", ""))
+			if object_id.is_empty() or destroyed_object_ids.has(object_id):
+				continue
+			pickup["object_chunk"] = chunk_coord
+			found.append(pickup)
+	found.sort_custom(func(a, b): return str(a.get("object_id", "")) < str(b.get("object_id", "")))
+	return found
+
+
 func collect_nearby_pickups(player_world_position: Vector3, radius: float) -> Array:
 	var collected: Array = []
 	for chunk in chunks.values():
@@ -357,6 +380,8 @@ func _start_next_worker_task() -> void:
 	while not pending_chunks.is_empty():
 		var coord: Vector2i = pending_chunks.pop_front()
 		if not desired_chunks.has(coord) or chunks.has(coord):
+			continue
+		if worker_task_id != -1 and coord == worker_coord:
 			continue
 
 		worker_coord = coord
