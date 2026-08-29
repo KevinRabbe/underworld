@@ -1,0 +1,53 @@
+name: Surface Contract Validation
+
+on:
+  pull_request:
+    paths:
+      - 'worldgen/surface/**'
+      - 'tests/surface_contract/**'
+      - 'tests/run_surface_contract.gd'
+      - '.github/workflows/surface-contract-validation.yml'
+  push:
+    branches:
+      - main
+      - 'validation/surface-sampler-*'
+    paths:
+      - 'worldgen/surface/**'
+      - 'tests/surface_contract/**'
+      - 'tests/run_surface_contract.gd'
+      - '.github/workflows/surface-contract-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  surface-contracts:
+    name: Godot deterministic surface sampler contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Show Godot version
+        run: godot --version
+
+      - name: Run surface sampler contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tests/run_surface_contract.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[SURFACE CONTRACT VALIDATION] PASS' "$validation_log"
