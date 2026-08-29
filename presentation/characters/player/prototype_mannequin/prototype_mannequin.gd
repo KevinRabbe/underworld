@@ -111,7 +111,11 @@ func reset_pose() -> void:
 		var bone_name: String = str(bone_name_variant)
 		var bone_index: int = int(bone_indices[bone_name])
 		skeleton.set_bone_pose_rotation(bone_index, Quaternion.IDENTITY)
-		skeleton.set_bone_pose_position(bone_index, Vector3.ZERO)
+		# This procedural skeleton has no imported bind pose. Its authored local
+		# translations therefore live in both the semantic rest metadata and the
+		# active pose used by BoneAttachment3D. Clearing pose translation to zero
+		# collapses every attachment onto the character origin on the next frame.
+		skeleton.set_bone_pose_position(bone_index, skeleton.get_bone_rest(bone_index).origin)
 		skeleton.set_bone_pose_scale(bone_index, Vector3.ONE)
 
 
@@ -371,10 +375,10 @@ func _apply_base_pose(
 		_set_rot("calf_l", Vector3(0.28, 0.0, 0.0))
 		_set_rot("calf_r", Vector3(0.18, 0.0, 0.0))
 
-	_set_rot("upperarm_l", Vector3(opposite_stride * arm_amplitude, 0.0, deg_to_rad(-5.0)))
-	_set_rot("upperarm_r", Vector3(stride * arm_amplitude, 0.0, deg_to_rad(5.0)))
-	_set_rot("forearm_l", Vector3(-0.12, 0.0, 0.0))
-	_set_rot("forearm_r", Vector3(-0.12, 0.0, 0.0))
+	_set_rot("upperarm_l", Vector3(opposite_stride * arm_amplitude, 0.0, deg_to_rad(68.0)))
+	_set_rot("upperarm_r", Vector3(stride * arm_amplitude, 0.0, deg_to_rad(-68.0)))
+	_set_rot("forearm_l", Vector3(-0.12, 0.0, deg_to_rad(16.0)))
+	_set_rot("forearm_r", Vector3(-0.12, 0.0, deg_to_rad(-16.0)))
 	_set_rot("hand_l", Vector3.ZERO)
 	_set_rot("hand_r", Vector3.ZERO)
 

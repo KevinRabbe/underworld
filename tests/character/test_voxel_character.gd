@@ -29,7 +29,11 @@ static func _test_definition_contract(failures: Array[String]) -> void:
 	var jacket_parts: Array[String] = []
 	for part_value in character.module_for_slot(&"torso_outfit").parts:
 		jacket_parts.append(str(part_value.get("part_id", "")))
-	_expect_true(failures, "expedition jacket authors connected shoulder, neck, and layered-front parts", jacket_parts.has("shoulder_l") and jacket_parts.has("shoulder_r") and jacket_parts.has("neck_connector") and jacket_parts.has("jacket_front"))
+	_expect_true(failures, "expedition jacket authors connected shoulder, neck, and layered shell parts", jacket_parts.has("shoulder_l") and jacket_parts.has("shoulder_r") and jacket_parts.has("neck_connector") and jacket_parts.has("jacket_front") and jacket_parts.has("jacket_lower"))
+	var leg_parts: Array[String] = []
+	for part_value in character.module_for_slot(&"leg_outfit").parts:
+		leg_parts.append(str(part_value.get("part_id", "")))
+	_expect_true(failures, "expedition leg module includes articulated boot shafts", leg_parts.has("boot_shaft_l") and leg_parts.has("boot_shaft_r"))
 	var accessory_parts: Array[String] = []
 	for part_value in character.module_for_slot(&"back_accessory").parts:
 		accessory_parts.append(str(part_value.get("part_id", "")))
@@ -123,11 +127,17 @@ static func _test_runtime_presentation(failures: Array[String]) -> void:
 	var character := VoxelPresentation.new()
 	character.build()
 	_expect_true(failures, "voxel presentation preserves semantic rig", character.has_required_rig())
+	character.skeleton.force_update_all_bone_transforms()
+	var pelvis_pose: Vector3 = character.skeleton.get_bone_global_pose(character.skeleton.find_bone("pelvis")).origin
+	var head_pose: Vector3 = character.skeleton.get_bone_global_pose(character.skeleton.find_bone("head")).origin
+	var foot_pose: Vector3 = character.skeleton.get_bone_global_pose(character.skeleton.find_bone("foot_l")).origin
+	_expect_true(failures, "procedural bone translations remain assembled after reset", pelvis_pose.y > 0.8 and head_pose.y > 1.6 and absf(foot_pose.y) < 0.05)
 	_expect_true(failures, "voxel presentation owns AnimationTree", character.get_animation_tree() != null)
 	var library: AnimationLibrary = character.animation_player.get_animation_library("")
 	for clip_name in ["idle", "walk_forward", "walk_backward", "strafe_left", "strafe_right", "sprint", "jump", "fall", "dodge_forward", "dodge_backward", "dodge_left", "dodge_right", "attack_light", "attack_heavy", "block", "parry", "hit", "death", "tool_use"]:
 		_expect_true(failures, "%s owns authored pose tracks" % clip_name, library.has_animation(clip_name) and library.get_animation(clip_name).get_track_count() > 0)
 	_expect_true(failures, "heavy attack owns a fuller silhouette than light attack", library.get_animation("attack_heavy").get_track_count() > library.get_animation("attack_light").get_track_count())
+	_expect_true(failures, "idle pose lowers both articulated arm chains", library.get_animation("idle").get_track_count() >= 6)
 	_expect_true(failures, "directional dodge poses include torso and all leg chains", library.get_animation("dodge_forward").get_track_count() >= 5 and library.get_animation("dodge_left").get_track_count() >= 5)
 	_expect_true(failures, "tool-use pose coordinates torso, arm, forearm, and gaze", library.get_animation("tool_use").get_track_count() >= 4)
 	var state_machine: AnimationNodeStateMachine = character.animation_tree.tree_root

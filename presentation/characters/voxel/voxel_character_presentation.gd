@@ -308,6 +308,7 @@ func _build_pose_clip(clip_name: String) -> Animation:
 		"idle":
 			_add_rotation_keys(animation, "chest", [[0.0, Vector3.ZERO], [0.5, Vector3(deg_to_rad(2),0,0)], [1.0, Vector3.ZERO]])
 			_add_rotation_keys(animation, "head", [[0.0, Vector3(0,deg_to_rad(-2),0)], [0.5, Vector3(0,deg_to_rad(2),0)], [1.0, Vector3(0,deg_to_rad(-2),0)]])
+			_add_relaxed_arm_keys(animation)
 		"walk_forward", "walk_backward":
 			_add_gait_keys(animation, 24.0 if clip_name == "walk_forward" else -20.0, 0.08)
 		"strafe_left", "strafe_right":
@@ -317,17 +318,15 @@ func _build_pose_clip(clip_name: String) -> Animation:
 		"sprint":
 			_add_gait_keys(animation, 42.0, 0.18)
 			_add_rotation_keys(animation, "spine_01", [[0.0, Vector3(deg_to_rad(10),0,0)], [1.0, Vector3(deg_to_rad(10),0,0)]])
-			_add_rotation_keys(animation, "forearm_l", [[0.0, Vector3(deg_to_rad(-28),0,0)], [1.0, Vector3(deg_to_rad(-28),0,0)]])
-			_add_rotation_keys(animation, "forearm_r", [[0.0, Vector3(deg_to_rad(-28),0,0)], [1.0, Vector3(deg_to_rad(-28),0,0)]])
 		"jump":
 			_add_rotation_keys(animation, "thigh_l", [[0.0, Vector3(-0.3,0,0)], [1.0, Vector3(-0.3,0,0)]])
 			_add_rotation_keys(animation, "thigh_r", [[0.0, Vector3(0.25,0,0)], [1.0, Vector3(0.25,0,0)]])
 			_add_rotation_keys(animation, "calf_l", [[0.0, Vector3(0.45,0,0)], [1.0, Vector3(0.45,0,0)]])
-			_add_rotation_keys(animation, "upperarm_l", [[0.0, Vector3(-0.25,0,-0.25)], [1.0, Vector3(-0.25,0,-0.25)]])
-			_add_rotation_keys(animation, "upperarm_r", [[0.0, Vector3(-0.25,0,0.25)], [1.0, Vector3(-0.25,0,0.25)]])
+			_add_rotation_keys(animation, "upperarm_l", [[0.0, Vector3(-0.25,0,deg_to_rad(54))], [1.0, Vector3(-0.25,0,deg_to_rad(54))]])
+			_add_rotation_keys(animation, "upperarm_r", [[0.0, Vector3(-0.25,0,deg_to_rad(-54))], [1.0, Vector3(-0.25,0,deg_to_rad(-54))]])
 		"fall":
-			_add_rotation_keys(animation, "upperarm_l", [[0.0, Vector3(0,0,-0.55)], [1.0, Vector3(0,0,-0.55)]])
-			_add_rotation_keys(animation, "upperarm_r", [[0.0, Vector3(0,0,0.55)], [1.0, Vector3(0,0,0.55)]])
+			_add_rotation_keys(animation, "upperarm_l", [[0.0, Vector3(0,0,deg_to_rad(40))], [1.0, Vector3(0,0,deg_to_rad(40))]])
+			_add_rotation_keys(animation, "upperarm_r", [[0.0, Vector3(0,0,deg_to_rad(-40))], [1.0, Vector3(0,0,deg_to_rad(-40))]])
 			_add_rotation_keys(animation, "thigh_l", [[0.0, Vector3(-0.12,0,0)], [1.0, Vector3(-0.12,0,0)]])
 			_add_rotation_keys(animation, "thigh_r", [[0.0, Vector3(0.16,0,0)], [1.0, Vector3(0.16,0,0)]])
 		"dodge_forward", "dodge_backward":
@@ -362,9 +361,18 @@ func _add_gait_keys(animation: Animation, degrees: float, forward_lean: float) -
 	_add_rotation_keys(animation, "thigh_r", [[0.0, Vector3(-amount,0,0)], [0.5, Vector3(amount,0,0)], [1.0, Vector3(-amount,0,0)]])
 	_add_rotation_keys(animation, "calf_l", [[0.0, Vector3(0,0,0)], [0.5, Vector3(amount*0.55,0,0)], [1.0, Vector3(0,0,0)]])
 	_add_rotation_keys(animation, "calf_r", [[0.0, Vector3(amount*0.55,0,0)], [0.5, Vector3(0,0,0)], [1.0, Vector3(amount*0.55,0,0)]])
-	_add_rotation_keys(animation, "upperarm_l", [[0.0, Vector3(-amount*0.7,0,0)], [0.5, Vector3(amount*0.7,0,0)], [1.0, Vector3(-amount*0.7,0,0)]])
-	_add_rotation_keys(animation, "upperarm_r", [[0.0, Vector3(amount*0.7,0,0)], [0.5, Vector3(-amount*0.7,0,0)], [1.0, Vector3(amount*0.7,0,0)]])
+	_add_rotation_keys(animation, "upperarm_l", [[0.0, Vector3(-amount*0.7,0,deg_to_rad(68))], [0.5, Vector3(amount*0.7,0,deg_to_rad(68))], [1.0, Vector3(-amount*0.7,0,deg_to_rad(68))]])
+	_add_rotation_keys(animation, "upperarm_r", [[0.0, Vector3(amount*0.7,0,deg_to_rad(-68))], [0.5, Vector3(-amount*0.7,0,deg_to_rad(-68))], [1.0, Vector3(amount*0.7,0,deg_to_rad(-68))]])
+	_add_rotation_keys(animation, "forearm_l", [[0.0, Vector3(-0.12,0,deg_to_rad(16))], [1.0, Vector3(-0.12,0,deg_to_rad(16))]])
+	_add_rotation_keys(animation, "forearm_r", [[0.0, Vector3(-0.12,0,deg_to_rad(-16))], [1.0, Vector3(-0.12,0,deg_to_rad(-16))]])
 	_add_rotation_keys(animation, "chest", [[0.0, Vector3(forward_lean,-amount*0.08,0)], [0.5, Vector3(forward_lean,amount*0.08,0)], [1.0, Vector3(forward_lean,-amount*0.08,0)]])
+
+
+func _add_relaxed_arm_keys(animation: Animation) -> void:
+	_add_rotation_keys(animation, "upperarm_l", [[0.0, Vector3(0,0,deg_to_rad(68))], [1.0, Vector3(0,0,deg_to_rad(68))]])
+	_add_rotation_keys(animation, "upperarm_r", [[0.0, Vector3(0,0,deg_to_rad(-68))], [1.0, Vector3(0,0,deg_to_rad(-68))]])
+	_add_rotation_keys(animation, "forearm_l", [[0.0, Vector3(-0.12,0,deg_to_rad(16))], [1.0, Vector3(-0.12,0,deg_to_rad(16))]])
+	_add_rotation_keys(animation, "forearm_r", [[0.0, Vector3(-0.12,0,deg_to_rad(-16))], [1.0, Vector3(-0.12,0,deg_to_rad(-16))]])
 
 
 func _add_light_attack_clip(animation: Animation) -> void:
