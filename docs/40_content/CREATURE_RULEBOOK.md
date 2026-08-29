@@ -44,10 +44,12 @@ The executable enemy-family rule requires the enemy proof to declare explicit ca
 ```text
 capability.movement
 capability.sensing
-capability.combat.melee
+capability.damage_dealer
 ```
 
-These are semantic schema declarations. They do not contain AI implementation.
+`capability.damage_dealer` reuses the project capability vocabulary for content that participates in an attack/damage contract. Melee specificity belongs to the referenced attack profile rather than creating a near-duplicate `capability.combat.melee` capability.
+
+`capability.movement` and `capability.sensing` are the creature-family contracts introduced by ENEMY-001 for runtime movement and detection participation. These capabilities are semantic schema declarations. They do not contain AI implementation or tuning numbers.
 
 ## Authored immutable tuning
 
@@ -84,7 +86,7 @@ Concrete clip names, bone names, meshes and scene filenames remain presentation-
 
 ## Attack-profile boundary
 
-ENEMY-001 adds a narrow `CreatureAttackProfileDefinition` semantic target. The initial profile records the attack style and whether the attack is parryable.
+ENEMY-001 adds a narrow `CreatureAttackProfileDefinition` semantic target. The initial profile identifies the current contact-melee style and its compatibility metadata without replacing the Burrower actor's existing melee-resolution implementation.
 
 The current Burrower melee execution remains in its existing actor/combat path. This card does not create a second damage-resolution system and does not move attack timing into animation.
 
@@ -147,7 +149,7 @@ The creature family fails closed when:
 
 - semantic family `creature` resolves to a definition that is not `CreatureDefinition`;
 - a creature category lies outside `category.creature`;
-- an enemy omits required movement/sensing/melee capability declarations;
+- an enemy omits required movement, sensing or damage-dealer capability declarations;
 - required semantic references are missing or use the wrong family;
 - the attack-profile target is not `CreatureAttackProfileDefinition`;
 - the archetype target is not an accepted `ArchetypeDefinition`;
@@ -155,7 +157,7 @@ The creature family fails closed when:
 - the selected animation set targets a different rig profile;
 - a required animation or rig role is not provided by the selected presentation contracts.
 
-Focused tests also prove two compatible creature definitions can use the same `CreatureDefinition` boundary with different authored tuning and no concrete-ID branch in the encounter/combat manager.
+Focused tests also prove two compatible creature definitions can use the same `CreatureDefinition -> runtime_stats() -> Burrower.configure(...)` boundary with different authored tuning and no concrete-ID branch in the encounter/combat manager.
 
 ## Forbidden patterns
 
@@ -168,6 +170,7 @@ Do not:
 - rewrite Burrower AI as part of authored-content migration;
 - rebalance the Burrower during ENEMY-001;
 - move melee resolution authority into animation clips or archetype presentation;
+- create near-duplicate capability vocabulary when an accepted capability already describes the behavior contract;
 - absorb CONTENT-002, WEAPON-001, CONTENT-006 or MAP-016 scope.
 
 ## Minimal conceptual example
@@ -178,7 +181,7 @@ category: category.creature.enemy
 capabilities:
   - capability.movement
   - capability.sensing
-  - capability.combat.melee
+  - capability.damage_dealer
 baseline tuning:
   health: 36
   move_speed: 3.3
