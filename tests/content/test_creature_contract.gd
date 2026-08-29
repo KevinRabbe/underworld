@@ -134,7 +134,8 @@ static func _test_invalid_semantic_bindings_fail(failures: Array[String]) -> voi
 		failures.append("missing creature attack reference did not fail through CONTENT-005")
 
 	var invalid_rig_role = _creature("creature.enemy.invalid_rig_role")
-	invalid_rig_role.required_rig_role_ids = ["rig_role.socket.nonexistent"]
+	invalid_rig_role.required_rig_role_ids.clear()
+	invalid_rig_role.required_rig_role_ids.append("rig_role.socket.nonexistent")
 	var invalid_rig_definitions: Array = _shared_targets()
 	invalid_rig_definitions.push_front(invalid_rig_role)
 	var invalid_rig_result: Dictionary = _pipeline().validate_all(
