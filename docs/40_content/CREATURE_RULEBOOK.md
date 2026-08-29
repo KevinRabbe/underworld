@@ -39,9 +39,12 @@ Creature classification lives under:
 ```text
 category.creature
 └─ category.creature.enemy
+   └─ ... registered enemy descendants
 ```
 
-The Burrower declares:
+Every creature definition must declare at least one **registered** category at or below `category.creature`. Other registered orthogonal categories are legal on the same definition; the creature rulebook does not reject them merely for belonging to another category tree.
+
+`category.creature.enemy` and any registered descendant activate the enemy capability contract. The Burrower declares:
 
 ```text
 capability.movement
@@ -58,9 +61,10 @@ Capability/tuning consistency is fail-closed:
 - positive `move_speed` requires `capability.movement`, and declaring movement requires positive movement tuning;
 - positive `detection_range` requires `capability.sensing`, and declaring sensing requires positive detection tuning;
 - any attack tuning or attack-profile reference requires `capability.damage_dealer`;
-- a damage dealer requires an attack-profile reference plus positive range, damage, cooldown and windup.
+- a damage dealer requires an attack-profile reference plus positive range, damage, cooldown and windup;
+- an enemy category or registered enemy descendant requires movement, sensing and damage-dealer capabilities even when its current tuning would otherwise be zero.
 
-A generic passive creature may therefore have zero movement, sensing and attack tuning, omit those three capabilities, and omit attack/animation/rig references while still using the same `CreatureDefinition` boundary.
+A generic passive creature may therefore have zero movement, sensing and attack tuning, omit those three capabilities, and omit attack/animation/rig references while still using the same `CreatureDefinition` boundary, as long as it has a valid creature-category declaration and its required archetype.
 
 ## Authored immutable tuning
 
@@ -151,6 +155,8 @@ CONTENT-002/#77 may later consume authored creature definitions for deterministi
 
 The encounter controller now loads the authored Burrower definition and passes `runtime_stats()` into the unchanged actor configuration seam.
 
+The controller's authored-resource guard is subtype-safe: it accepts any resource that `is CreatureDefinition` rather than demanding exact script identity. This keeps future specialized creature-definition subtypes compatible with the same seam.
+
 This removes the concrete stat dictionary from the encounter controller while preserving:
 
 - existing AI state-machine behavior;
@@ -168,8 +174,9 @@ The placeholder `_build_placeholder_visual()` remains replaceable presentation a
 The creature family fails closed when:
 
 - semantic family `creature` resolves to a definition that is not `CreatureDefinition`;
-- a creature category lies outside `category.creature`;
+- no declared registered category belongs to the `category.creature` tree;
 - behavior tuning and capability declarations disagree;
+- an enemy category or registered descendant omits movement, sensing or damage-dealer capability declarations;
 - a damage dealer lacks complete positive attack tuning or an attack-profile reference;
 - semantic references are missing when required or use the wrong family;
 - the attack-profile target is not `CreatureAttackProfileDefinition`;
@@ -179,7 +186,7 @@ The creature family fails closed when:
 - the selected animation set targets a different rig profile;
 - a required animation or rig role is not provided by the selected presentation contracts.
 
-Focused tests prove both sides of the reusable boundary: a passive non-combat/non-rigged creature validates without enemy-only data, while two combat-capable creature definitions use the same `CreatureDefinition -> runtime_stats() -> Burrower.configure(...)` seam with different authored tuning and no concrete-ID branch in the encounter/combat manager.
+Focused tests prove both sides of the reusable boundary: a passive non-combat/non-rigged creature with an orthogonal category validates without enemy-only data; a creature with only an orthogonal category fails; registered descendants of `category.creature.enemy` inherit the enemy capability requirements; and two combat-capable creature definitions use the same `CreatureDefinition -> runtime_stats() -> Burrower.configure(...)` seam with different authored tuning and no concrete-ID branch in the encounter/combat manager.
 
 ## Forbidden patterns
 
@@ -187,9 +194,12 @@ Do not:
 
 - put current health, timers, target state or wander state in shared creature definitions;
 - force every creature to carry enemy-only movement, sensing, attack or rig data;
+- treat valid orthogonal categories as invalid merely because they are outside the creature tree;
+- detect enemy semantics by exact category string membership when registered descendants exist;
 - move encounter counts/distances/terrain sampling into a creature definition;
 - use scene/mesh/script paths as creature identity;
 - add a concrete Burrower branch to a central content/combat manager;
+- require exact creature-definition script identity at runtime seams;
 - rewrite Burrower AI as part of authored-content migration;
 - rebalance the Burrower during ENEMY-001;
 - move melee resolution authority into animation clips or archetype presentation;
