@@ -1,0 +1,58 @@
+name: Numeric Validation
+
+on:
+  pull_request:
+    paths:
+      - 'core/content/validation/finite_number.gd'
+      - 'gameplay/items/definitions/item_definition.gd'
+      - 'gameplay/items/inventory/item_container_state.gd'
+      - 'gameplay/resources/**'
+      - 'tests/foundation/test_numeric_safety.gd'
+      - 'tests/run_numeric_validation.gd'
+      - '.github/workflows/numeric-validation.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'core/content/validation/finite_number.gd'
+      - 'gameplay/items/definitions/item_definition.gd'
+      - 'gameplay/items/inventory/item_container_state.gd'
+      - 'gameplay/resources/**'
+      - 'tests/foundation/test_numeric_safety.gd'
+      - 'tests/run_numeric_validation.gd'
+      - '.github/workflows/numeric-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  numeric-contracts:
+    name: Godot numeric safety contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Show Godot version
+        run: godot --version
+
+      - name: Run numeric safety contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tests/run_numeric_validation.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[NUMERIC VALIDATION] PASS' "$validation_log"
