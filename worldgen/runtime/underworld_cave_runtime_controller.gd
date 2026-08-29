@@ -98,7 +98,7 @@ func bootstrap_fixture(world_seed: int, region: Vector2i, entrance_id: String) -
 		var voxel_request := VoxelRequest.new(plan, cell_config, provenance, 0.0, partition.data, context)
 		var mesh_stage = VoxelMesher.build(voxel_request)
 		if not mesh_stage.success: return _bootstrap_fail(mesh_stage.diagnostics)
-		if not accept_mesh_data(mesh_stage.data): return _bootstrap_fail(["Mesh realization failed for " + plan.cell_address.canonical_text()])
+		if not accept_mesh_data(mesh_stage.data, null, plan): return _bootstrap_fail(["Mesh realization failed for " + plan.cell_address.canonical_text()])
 		var collision_stage = CollisionBuilder.prepare(mesh_stage.data, provenance.fingerprint if provenance != null else "")
 		if not collision_stage.success: return _bootstrap_fail(collision_stage.diagnostics)
 		var collision_realized: Dictionary = CollisionBoundary.realize_main_thread(collision_stage.data, mesh_stage.data.output_fingerprint)
@@ -148,7 +148,7 @@ func update_player_position(position: Vector3) -> void:
 				streamer.release_entrance(address, entrance_id)
 		_update_gates()
 
-func accept_mesh_data(mesh_data, material = null) -> bool:
+func accept_mesh_data(mesh_data, material = null, source_cell_plan = null) -> bool:
 	if streamer == null or mesh_data == null:
 		return false
 	var realized: Dictionary = MeshBoundary.realize_main_thread(mesh_data, material if material != null else _material, mesh_data.input_fingerprint)
@@ -162,6 +162,10 @@ func accept_mesh_data(mesh_data, material = null) -> bool:
 	node.mesh = realized.mesh
 	node.set_meta("cell_address", mesh_data.cell_address.canonical_text())
 	node.set_meta("source_fingerprint", mesh_data.output_fingerprint)
+	if source_cell_plan != null:
+		# Transient renderer context only. The plan already owns authoritative
+		# identity/fingerprints; attaching the reference here does not alter them.
+		node.set_meta("source_cell_plan", source_cell_plan)
 	add_child(node)
 	render_nodes[mesh_data.cell_address.canonical_text()] = node
 	streamer.records[mesh_data.cell_address.canonical_text()].runtime_handle = realized.handle
