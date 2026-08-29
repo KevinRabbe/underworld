@@ -1,8 +1,6 @@
 extends "res://core/content/registry/content_definition.gd"
 
-const ContentId := preload("res://core/content/identity/content_id.gd")
 const ContentReference := preload("res://core/content/references/content_reference.gd")
-const SchemaId := preload("res://core/content/schema/schema_id.gd")
 
 const CREATURE_FAMILY := "creature"
 const ATTACK_PROFILE_FAMILY := "attack_profile"
