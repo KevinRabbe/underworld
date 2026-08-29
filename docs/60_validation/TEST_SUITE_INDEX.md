@@ -6,7 +6,7 @@ This document explains **what each major validation surface protects, which doma
 
 This index does not create acceptance gates, duplicate workflow command tables, or define a permanent workflow count. Executable runners and workflow YAML remain authoritative for what actually runs.
 
-Current-main baseline used for this refresh: `5554b2f675506a58a5b65eaba345ff6237f30d9c`.
+Current-main baseline used for this refresh: `29860a0ef8af1b823d929b665194be80b8477dc9`.
 
 ## Failure-routing vocabulary
 
@@ -25,7 +25,7 @@ Route a failure to the invariant owner. Do not weaken the reporting aggregate or
 | --- | --- | --- | --- |
 | **Character Validation** | Player / combat / character gameplay | Character-state, movement/combat integration, mannequin/rig/socket contracts and gameplay ownership boundaries | Character/combat implementation or shared-contract integration |
 | **Repository Layout Validation** | Repository architecture | Canonical roots, forbidden dependency directions, retired paths and explicit structural exceptions | Architecture/integration defect; validator debt only after an intentional architecture change |
-| **Inventory Validation** | Inventory / item-state transactions | Container invariants, transaction atomicity and accepted equipment/hotbar state contracts | Inventory/equipment transaction implementation or integration |
+| **Inventory Validation** | Inventory / item-state transactions | Container invariants, transaction atomicity, accepted equipment/hotbar state and accepted surface-harvest inventory integration | Inventory/equipment transaction implementation or HARVEST integration |
 | **Cave Presentation Validation** | Cave presentation | Presentation/material/realization contracts that sit above semantic world truth | Presentation implementation/integration; do not rewrite worldgen semantics to satisfy appearance-only assumptions |
 | **Deterministic Worldgen fast contracts** | World definition + runtime worldgen integration | Deterministic identity/RNG/provenance/topology/geometry/runtime contracts including MAP-014/MAP-015 ownership | Owning worldgen/runtime implementation or intentional-contract integration |
 | **Deterministic Worldgen shard campaign** | Deterministic worldgen | Reproduction over the committed ten-shard seed/region campaign | Nondeterminism or generation regression unless an intentional versioned contract change was not propagated |
@@ -34,7 +34,7 @@ Route a failure to the invariant owner. Do not weaken the reporting aggregate or
 | **Cross-Region Validation** | Stage-4 cross-region graph ownership | Owner/reference endpoint structure, remote/local consistency and malformed-reference rejection | Connectivity/graph ownership implementation |
 | **Graph Canonicalization Validation** | Deterministic graph representation | Order-invariant canonical graph text/fingerprints without source mutation | Canonicalization/deterministic graph implementation |
 | **Seed Domain Audit** | Deterministic RNG-domain governance | Named, registry-backed persistent RNG domains and deterministic registry validity | RNG-domain call-site/registry implementation |
-| **Surface Contract Validation** | Surface definition | Deterministic sampler behavior, coordinate boundaries, normalized fields and DTO ownership | Surface sampler/contract implementation |
+| **Surface Contract Validation** | Surface definition + pickup runtime boundary | Deterministic sampler behavior, coordinate boundaries, normalized fields, DTO ownership, non-mutating pickup discovery and StableId-compatible runtime identity | Surface sampler/runtime-contract implementation or HARVEST integration |
 | **World Definition Service Validation** | World-definition service | Cache/request identity, descriptor lifecycle, ordering and negative-coordinate behavior | Service lifecycle/integration implementation |
 | **Generator Manifest Validation** | Generator compatibility identity | Stage/profile/contract revision identity, ordering and invalid revision rejection | Manifest/versioning implementation |
 | **TEST-056 Worldgen Edge Cases** | Worldgen edge replay / procedural identity | Fresh Stage-1→4 replay at signed/high-bit seeds and coordinate boundaries plus order invariance | Worldgen/StableAddress/StableId implementation or explicit compatibility revision |
@@ -72,9 +72,9 @@ If a candidate introduces a forbidden dependency, repair the dependency. Add or 
 Workflow: [`inventory-validation.yml`](../../.github/workflows/inventory-validation.yml)  
 Runner: [`tests/run_inventory.gd`](../../tests/run_inventory.gd)
 
-The accepted Inventory surface owns item-container invariants and atomic inventory transactions, and it grows with accepted inventory-adjacent state such as equipment/hotbar contracts. Family-specific consumers should integrate through that authority instead of mutating inventory state directly.
+The accepted Inventory surface owns item-container invariants and atomic inventory transactions, and it grows with accepted inventory-adjacent state such as equipment/hotbar contracts. At this baseline it also executes HARVEST-001 surface-harvest inventory integration, proving that accepted harvesting consumes INV-002 rather than mutating container state directly.
 
-A failed downstream loot/craft/harvest integration does not transfer transaction ownership to that feature. Diagnose whether the downstream feature violated INV contracts or whether the accepted inventory contract intentionally changed.
+Transaction/container semantics remain Inventory-owned. HARVEST still owns its tool eligibility, hit/depletion sequencing and surface-world mutation integration. Diagnose whether a failed harvest path violated INV contracts or whether the accepted harvest integration itself is wrong; do not move transaction authority into the feature merely because the feature test exposed the failure.
 
 ### Cave Presentation Validation
 
@@ -116,7 +116,7 @@ It is a stable umbrella result. It deliberately does **not** answer which subsys
 Current job: `Content registry contracts` in [`foundation-validation.yml`](../../.github/workflows/foundation-validation.yml)  
 Runner: [`tests/run_content.gd`](../../tests/run_content.gd)
 
-The Content runner is a **growing aggregate**. At this baseline it includes registry, category/capability schema, semantic-role schema, validation-pipeline, archetype definition/realization, item, resource, creature, weapon and reserved-site assignment contracts. Those correspond to accepted boundaries including CONTENT-003/004/005, ARCHETYPE-001, ITEM-001, ANIM-001, RESOURCE-001, ENEMY-001, WEAPON-001 and CONTENT-001, but this list is illustrative rather than a forever-exhaustive child inventory.
+The Content runner is a **growing aggregate**. At this baseline it includes registry, category/capability schema, semantic-role schema, validation-pipeline, archetype definition/realization, item, resource, creature, weapon, reserved-site assignment, underground placement and surface-harvest authored-content contracts. Those correspond to accepted boundaries including CONTENT-003/004/005, ARCHETYPE-001, ITEM-001, ANIM-001, RESOURCE-001, ENEMY-001, WEAPON-001, CONTENT-001, CONTENT-002 and HARVEST-001, but this list is illustrative rather than a forever-exhaustive child inventory.
 
 Content ownership includes:
 
@@ -157,7 +157,9 @@ Owns persistent RNG-domain naming/registry discipline. Magic numeric/undeclared 
 Workflow: [`surface-contract-validation.yml`](../../.github/workflows/surface-contract-validation.yml)  
 Runner: [`tests/run_surface_contract.gd`](../../tests/run_surface_contract.gd)
 
-Owns deterministic surface sampling, positive/negative coordinate-boundary behavior, finite normalized fields and the surface DTO contract. Surface failures should not be routed to underground presentation simply because a cave entrance consumes surface data.
+This suite owns both the deterministic surface sampler contract and the accepted HARVEST-001 pickup-runtime handoff. The sampler side covers positive/negative coordinate-boundary behavior, finite normalized fields and pure-data DTO ownership. The pickup-runtime side proves discovery is repeatable and non-mutating, excludes destroyed candidates, and preserves StableId-compatible candidate identity/order including negative-coordinate cases.
+
+Surface sampler defects remain surface-definition ownership. Pickup discovery/runtime-identity failures route to the surface-runtime/HARVEST integration boundary. Neither should be redirected to underground presentation merely because cave entrances also consume surface data.
 
 ### World Definition Service Validation
 
