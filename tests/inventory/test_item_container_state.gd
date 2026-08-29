@@ -96,16 +96,46 @@ static func _test_authored_stack_contract_mismatch_is_atomic(failures: Array[Str
 	for mismatch in mismatched_definitions:
 		var result: Dictionary = container.add_stack(mismatch, 1)
 		if bool(result.get("success", false)):
-			failures.append("authored stack definition mismatch was accepted for %s" % item_id)
-		elif not _has_fragment(result, "authored stack definition mismatch"):
-			failures.append("authored stack definition mismatch did not fail clearly: %s" % [result.get("diagnostics", [])])
+			failures.append("authored item definition mismatch was accepted for %s" % item_id)
+		elif not _has_fragment(result, "authored item definition mismatch"):
+			failures.append("authored item definition mismatch did not fail clearly: %s" % [result.get("diagnostics", [])])
 		if container.canonical_json() != baseline_json:
-			failures.append("authored stack definition mismatch mutated canonical inventory state")
+			failures.append("authored item definition mismatch mutated canonical inventory state")
+
+	var different_state_mismatch = _item(item_id, 8, 0.25, 1)
+	var different_state_result: Dictionary = container.add_stack(
+		different_state_mismatch,
+		1,
+		{"grade": "different"}
+	)
+	if bool(different_state_result.get("success", false)):
+		failures.append("different stack-state bypassed same-ContentId authored-contract guard")
+	elif not _has_fragment(different_state_result, "authored item definition mismatch"):
+		failures.append(
+			"different stack-state mismatch did not fail through authored-contract guard: %s" % [
+				different_state_result.get("diagnostics", []),
+			]
+		)
+	if container.canonical_json() != baseline_json:
+		failures.append("different stack-state authored-contract rejection mutated canonical inventory state")
+
+	var instance_definition = _item(item_id, 1, 0.25, 1)
+	var instance_result: Dictionary = container.add_instance(instance_definition, {"durability": 100})
+	if bool(instance_result.get("success", false)):
+		failures.append("non-stackable instance bypassed same-ContentId authored-contract guard")
+	elif not _has_fragment(instance_result, "authored item definition mismatch"):
+		failures.append(
+			"stack-vs-instance mismatch did not fail through authored-contract guard: %s" % [
+				instance_result.get("diagnostics", []),
+			]
+		)
+	if container.canonical_json() != baseline_json:
+		failures.append("stack-vs-instance authored-contract rejection mutated canonical inventory state")
 
 	var compatible_clone = _item(item_id, 4, 0.25, 1)
 	var compatible_result: Dictionary = container.add_stack(compatible_clone, 1)
 	if not bool(compatible_result.get("success", false)):
-		failures.append("equivalent authored stack definition object failed to merge: %s" % [compatible_result.get("diagnostics", [])])
+		failures.append("equivalent authored item definition object failed to merge: %s" % [compatible_result.get("diagnostics", [])])
 	_expect_equal(failures, "equivalent authored contract merged quantity", container.quantity_of(item_id), 3)
 
 
