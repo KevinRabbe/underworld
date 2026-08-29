@@ -7,6 +7,8 @@ const AttackDefinitionScript := preload("res://gameplay/combat/attacks/player_at
 const WeaponDefinitionScript := preload("res://gameplay/items/weapons/definitions/weapon_definition.gd")
 const WeaponAttackSetScript := preload("res://gameplay/items/weapons/definitions/weapon_attack_set_definition.gd")
 const WeaponAttackResolverScript := preload("res://gameplay/items/weapons/runtime/weapon_attack_resolver.gd")
+const EquipmentHotbarStateScript := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
+const EquipmentSlotRuleScript := preload("res://gameplay/items/equipment/equipment_slot_rule.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
 
 
@@ -18,6 +20,8 @@ static func run(tree: SceneTree) -> Array[String]:
 	_test_exact_dodge_iframe_boundaries(failures)
 	_test_live_heavy_attack(tree, failures)
 	_test_semantic_attack_inputs_and_generic_sword(tree, failures)
+	_test_semantic_hotbar_slot_four(tree, failures)
+	_test_buffered_attack_intent_snapshot(tree, failures)
 	return failures
 
 
@@ -169,6 +173,136 @@ static func _test_semantic_attack_inputs_and_generic_sword(tree: SceneTree, fail
 	_expect_equal(failures, "generic sword heavy enters committed heavy state", player.call("get_action_state_name"), "ATTACKING/STARTUP")
 	_expect_equal(failures, "generic sword spends its own authored stamina cost", float(stamina.current_stamina), before - heavy.stamina_cost)
 	root.free()
+
+
+static func _test_semantic_hotbar_slot_four(tree: SceneTree, failures: Array[String]) -> void:
+	if tree == null or tree.root == null:
+		failures.append("hotbar slot input integration requires SceneTree root")
+		return
+	var root := Node3D.new()
+	tree.root.add_child(root)
+	var player: Node = PlayerScript.new()
+	root.add_child(player)
+	for slot in range(1, 5):
+		_expect_true(failures, "hotbar slot %d is semantic InputMap action" % slot, InputMap.has_action(StringName("hotbar_slot_%d" % slot)))
+
+	var original_slot_four_events: Array[InputEvent] = InputMap.action_get_events(&"hotbar_slot_4")
+	InputMap.action_erase_events(&"hotbar_slot_4")
+	var rebound := InputEventKey.new()
+	rebound.physical_keycode = KEY_T
+	InputMap.action_add_event(&"hotbar_slot_4", rebound)
+	var rebound_player: Node = PlayerScript.new()
+	root.add_child(rebound_player)
+	_expect_true(failures, "custom slot-4 binding survives player initialization", _has_key_binding(&"hotbar_slot_4", KEY_T))
+	_expect_true(failures, "player initialization does not restore physical 4 authority", not _has_key_binding(&"hotbar_slot_4", KEY_4))
+
+	var rules: Array = []
+	var bindings: Dictionary = {}
+	for slot in range(1, 5):
+		var slot_key := "equipment_slot.hotbar_%d" % slot
+		rules.append(EquipmentSlotRuleScript.new().configure(slot_key))
+		bindings[slot] = slot_key
+	var equipment = EquipmentHotbarStateScript.new().configure(rules, bindings)
+	var requested: Array[int] = []
+	rebound_player.connect("hotbar_slot_requested", func(slot: int) -> void:
+		requested.append(slot)
+		equipment.select_hotbar(slot)
+	)
+	var event := InputEventKey.new()
+	event.physical_keycode = KEY_T
+	event.pressed = true
+	rebound_player.call("_unhandled_input", event)
+	_expect_equal(failures, "remapped slot-4 input emits semantic slot request", requested, [4])
+	_expect_equal(failures, "slot-4 request resolves through EQUIP selected index", equipment.selected_hotbar(), 4)
+	_expect_equal(failures, "slot-4 request resolves through EQUIP semantic binding", equipment.selected_slot_key(), "equipment_slot.hotbar_4")
+
+	InputMap.action_erase_events(&"hotbar_slot_4")
+	for original_event in original_slot_four_events:
+		InputMap.action_add_event(&"hotbar_slot_4", original_event)
+	root.free()
+
+
+static func _test_buffered_attack_intent_snapshot(tree: SceneTree, failures: Array[String]) -> void:
+	if tree == null or tree.root == null:
+		failures.append("buffered attack snapshot integration requires SceneTree root")
+		return
+	var root := Node3D.new()
+	tree.root.add_child(root)
+	var player: Node = PlayerScript.new()
+	root.add_child(player)
+	var alpha: Dictionary = _weapon_fixture("buffer_alpha", 4.0, 13.0)
+	var beta: Dictionary = _weapon_fixture("buffer_beta", 6.0, 19.0)
+	var actions = player.get("action_controller")
+	var buffer = player.get("input_buffer")
+	var stamina = player.get("stamina")
+
+	for heavy in [false, true]:
+		actions.reset()
+		buffer.reset()
+		player.set("pending_attack_definition", null)
+		player.set("pending_attack_direction", Vector3.ZERO)
+		stamina.reset()
+		player.call("configure_equipped_weapon_attack_source", alpha.weapon, alpha.attack_set, alpha.resolver)
+		player.get("camera_yaw").rotation.y = 0.0
+		_expect_true(failures, "committed tool action starts before buffered %s" % ("heavy" if heavy else "light"), actions.try_start_tool_action(0.05))
+		var stamina_before: float = float(stamina.current_stamina)
+		player.call("_request_attack", heavy)
+		_expect_equal(failures, "busy %s attack is buffered" % ("heavy" if heavy else "light"), player.call("get_buffered_action_name"), "attack")
+		player.call("configure_equipped_weapon_attack_source", beta.weapon, beta.attack_set, beta.resolver)
+		actions.tick(0.05)
+		player.call("_try_consume_buffered_action")
+		_expect_true(failures, "weapon-switched buffered %s fails closed" % ("heavy" if heavy else "light"), actions.is_free())
+		_expect_true(failures, "weapon-switched buffered %s cannot install new pending attack" % ("heavy" if heavy else "light"), player.get("pending_attack_definition") == null)
+		_expect_equal(failures, "cancelled buffered %s does not spend stamina" % ("heavy" if heavy else "light"), float(stamina.current_stamina), stamina_before)
+
+	actions.reset()
+	buffer.reset()
+	player.set("pending_attack_definition", null)
+	player.set("pending_attack_direction", Vector3.ZERO)
+	stamina.reset()
+	player.call("configure_equipped_weapon_attack_source", alpha.weapon, alpha.attack_set, alpha.resolver)
+	player.get("camera_yaw").rotation.y = 0.0
+	var original_direction: Vector3 = player.call("_get_combat_forward")
+	_expect_true(failures, "committed tool action starts before aim snapshot proof", actions.try_start_tool_action(0.05))
+	player.call("_request_attack", false)
+	player.get("camera_yaw").rotation.y = PI * 0.5
+	var live_direction_after_rotation: Vector3 = player.call("_get_combat_forward")
+	actions.tick(0.05)
+	player.call("_try_consume_buffered_action")
+	var committed_direction: Vector3 = player.get("pending_attack_direction")
+	_expect_true(failures, "buffered attack executes after unchanged semantic source", actions.is_attacking())
+	_expect_true(failures, "buffered attack keeps snapshotted aim direction", committed_direction.is_equal_approx(original_direction))
+	_expect_true(failures, "buffered attack does not rebuild from live rotated aim", not committed_direction.is_equal_approx(live_direction_after_rotation))
+	root.free()
+
+
+static func _weapon_fixture(prefix: String, light_cost: float, heavy_cost: float) -> Dictionary:
+	var light = AttackDefinitionScript.new(
+		StringName(prefix + "_light"), 0.12, 0.10, 0.20, 18, 2.8, 1.6, 1.0, 0.1, &"light", light_cost
+	)
+	var heavy = AttackDefinitionScript.new(
+		StringName(prefix + "_heavy"), 0.24, 0.12, 0.34, 31, 3.0, 1.75, 1.15, 0.06, &"heavy", heavy_cost
+	)
+	var attack_set = WeaponAttackSetScript.new()
+	attack_set.configure_attack_set("attack_set.weapon.%s" % prefix, {
+		"weapon_technique.light.primary": prefix + "_light",
+		"weapon_technique.heavy.primary": prefix + "_heavy",
+	})
+	var weapon = WeaponDefinitionScript.new()
+	weapon.configure_weapon(
+		"item.weapon.%s" % prefix,
+		attack_set.content_id,
+		"archetype.weapon.%s" % prefix
+	)
+	var resolver = WeaponAttackResolverScript.new()
+	resolver.configure_attack_definitions([light, heavy])
+	return {
+		"light": light,
+		"heavy": heavy,
+		"attack_set": attack_set,
+		"weapon": weapon,
+		"resolver": resolver,
+	}
 
 
 static func _has_property(target: Object, property_name: String) -> bool:
