@@ -11,6 +11,7 @@ const STATE_ATTACKING: int = 5
 const ATTACK_KIND_LIGHT: StringName = &"light"
 const ATTACK_KIND_HEAVY: StringName = &"heavy"
 const BUFFERED_ACTIONS: Array[StringName] = [&"attack", &"dodge", &"parry"]
+const BUFFER_PRIORITY: Array[StringName] = [&"dodge", &"parry", &"attack"]
 
 const DODGE_COST: float = 25.0
 const DODGE_DURATION: float = 0.48
@@ -23,8 +24,6 @@ const PARRY_STARTUP: float = 0.06
 const PARRY_ACTIVE_DURATION: float = 0.12
 const PARRY_RECOVERY: float = 0.30
 const PARRY_TOTAL_DURATION: float = PARRY_STARTUP + PARRY_ACTIVE_DURATION + PARRY_RECOVERY
-const HEAVY_ATTACK_COST: float = 12.0
-
 const BLOCK_MIN_START_STAMINA: float = 1.0
 
 var stamina
@@ -152,6 +151,20 @@ func can_queue_action(action: StringName) -> bool:
 	return BUFFERED_ACTIONS.has(action)
 
 
+func can_replace_buffered_action(candidate: StringName, pending: StringName) -> bool:
+	if not can_queue_action(candidate):
+		return false
+	if pending == &"":
+		return true
+	var candidate_priority: int = BUFFER_PRIORITY.find(candidate)
+	var pending_priority: int = BUFFER_PRIORITY.find(pending)
+	if candidate_priority < 0:
+		return false
+	if pending_priority < 0:
+		return true
+	return candidate_priority <= pending_priority
+
+
 func can_interrupt_action(action: StringName) -> bool:
 	# M3 uses committed actions: defensive inputs may queue, but never cancel an
 	# active attack/dodge/parry/tool action mid-window.
@@ -162,7 +175,7 @@ func transition_policy() -> Dictionary:
 	return {
 		"buffered": ["attack", "dodge", "parry"],
 		"interruptible": [],
-		"priority": ["dodge", "parry", "attack"],
+		"priority": BUFFER_PRIORITY.duplicate(),
 		"buffer_lifetime": 0.16,
 	}
 

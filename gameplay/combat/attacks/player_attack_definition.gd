@@ -15,7 +15,7 @@ var center_distance: float
 var radius: float
 var minimum_dot: float
 var attack_kind: StringName
-var guard_pressure: float
+var stamina_cost: float
 
 
 func _init(
@@ -29,7 +29,7 @@ func _init(
 	radius_value: float,
 	minimum_dot_value: float,
 	attack_kind_value: StringName = &"light",
-	guard_pressure_value: float = 0.0
+	stamina_cost_value: float = 0.0
 ) -> void:
 	attack_id = id_value
 	startup = maxf(startup_value, 0.0)
@@ -41,7 +41,7 @@ func _init(
 	radius = maxf(radius_value, 0.05)
 	minimum_dot = clampf(minimum_dot_value, -1.0, 1.0)
 	attack_kind = &"heavy" if attack_kind_value == &"heavy" else &"light"
-	guard_pressure = maxf(guard_pressure_value, 0.0)
+	stamina_cost = maxf(stamina_cost_value, 0.0)
 
 
 func total_duration() -> float:
@@ -74,5 +74,4 @@ func make_execution(source_position: Vector3, world_direction: Vector3) -> Dicti
 		"radius": radius,
 		"minimum_dot": minimum_dot,
 		"attack_kind": attack_kind,
-		"guard_pressure": guard_pressure,
 	}

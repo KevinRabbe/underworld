@@ -18,7 +18,7 @@ static func for_tool(tool_id: String, attack_kind: StringName = &"light") -> Ref
 				1.18 if heavy else 1.05,
 				0.06 if heavy else 0.10,
 				&"heavy" if heavy else &"light",
-				2.0 if heavy else 0.0
+				12.0 if heavy else 0.0
 			)
 		"stone_pickaxe":
 			return AttackDefinitionScript.new(
@@ -32,7 +32,7 @@ static func for_tool(tool_id: String, attack_kind: StringName = &"light") -> Ref
 				1.12 if heavy else 1.00,
 				0.08 if heavy else 0.12,
 				&"heavy" if heavy else &"light",
-				1.8 if heavy else 0.0
+				12.0 if heavy else 0.0
 			)
 		_:
 			return AttackDefinitionScript.new(
@@ -46,5 +46,5 @@ static func for_tool(tool_id: String, attack_kind: StringName = &"light") -> Ref
 				1.04 if heavy else 0.92,
 				0.10 if heavy else 0.15,
 				&"heavy" if heavy else &"light",
-				1.2 if heavy else 0.0
+				12.0 if heavy else 0.0
 			)
