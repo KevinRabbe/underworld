@@ -104,21 +104,11 @@ func add_stack(definition, quantity: int, stack_state: Dictionary = {}) -> Dicti
 	if not failures.is_empty():
 		return _failure(failures)
 
-	var compatibility_key: String = _stack_key(str(definition.content_id), stack_state)
-	var contract_failures: Array[String] = []
-	for index in range(_slots.size()):
-		var slot = _slots[index]
-		if slot == null or not slot is Dictionary:
-			continue
-		var state = slot.get("state", null)
-		if state == null or not state is ItemStackState or state.compatibility_key() != compatibility_key:
-			continue
-		var stored_definition = slot.get("definition", null)
-		for failure in _stack_definition_compatibility_failures(stored_definition, definition):
-			contract_failures.append("slot %d: %s" % [index, failure])
+	var contract_failures: Array[String] = _same_content_id_definition_failures(definition)
 	if not contract_failures.is_empty():
 		return _failure(contract_failures)
 
+	var compatibility_key: String = _stack_key(str(definition.content_id), stack_state)
 	var available_units: int = 0
 	for slot in _slots:
 		if slot == null:
@@ -226,6 +216,10 @@ func add_instance(definition, per_copy_state: Dictionary = {}) -> Dictionary:
 		failures.append(failure)
 	if not failures.is_empty():
 		return _failure(failures)
+
+	var contract_failures: Array[String] = _same_content_id_definition_failures(definition)
+	if not contract_failures.is_empty():
+		return _failure(contract_failures)
 
 	var empty_slot: int = _first_empty_slot()
 	if empty_slot < 0:
@@ -373,25 +367,46 @@ static func _stack_key(item_content_id: String, stack_state: Dictionary) -> Stri
 	return "%s|%s" % [item_content_id, InventoryStateCodec.canonical_json(stack_state)]
 
 
-static func _stack_definition_compatibility_failures(
+func _same_content_id_definition_failures(incoming_definition) -> Array[String]:
+	var failures: Array[String] = []
+	if incoming_definition == null or not incoming_definition is ItemDefinition:
+		return failures
+	var incoming_content_id: String = str(incoming_definition.content_id)
+	for index in range(_slots.size()):
+		var slot = _slots[index]
+		if slot == null or not slot is Dictionary:
+			continue
+		var state = slot.get("state", null)
+		if state == null or (not state is ItemStackState and not state is ItemInstanceState):
+			continue
+		if str(state.item_content_id) != incoming_content_id:
+			continue
+		var stored_definition = slot.get("definition", null)
+		for failure in _authored_definition_compatibility_failures(stored_definition, incoming_definition):
+			failures.append("slot %d: %s" % [index, failure])
+	failures.sort()
+	return failures
+
+
+static func _authored_definition_compatibility_failures(
 	stored_definition,
 	incoming_definition
 ) -> Array[String]:
 	var failures: Array[String] = []
 	if stored_definition == null or not stored_definition is ItemDefinition:
-		return ["authored stack definition mismatch: stored slot definition is not ItemDefinition"]
+		return ["authored item definition mismatch: stored slot definition is not ItemDefinition"]
 	if incoming_definition == null or not incoming_definition is ItemDefinition:
-		return ["authored stack definition mismatch: incoming definition is not ItemDefinition"]
+		return ["authored item definition mismatch: incoming definition is not ItemDefinition"]
 	if str(stored_definition.content_id) != str(incoming_definition.content_id):
 		failures.append(
-			"authored stack definition mismatch: content_id %s != %s" % [
+			"authored item definition mismatch: content_id %s != %s" % [
 				stored_definition.content_id,
 				incoming_definition.content_id,
 			]
 		)
 	if stored_definition.schema_revision != incoming_definition.schema_revision:
 		failures.append(
-			"authored stack definition mismatch for %s: schema_revision %d != %d" % [
+			"authored item definition mismatch for %s: schema_revision %d != %d" % [
 				incoming_definition.content_id,
 				stored_definition.schema_revision,
 				incoming_definition.schema_revision,
@@ -399,7 +414,7 @@ static func _stack_definition_compatibility_failures(
 		)
 	if stored_definition.stack_limit != incoming_definition.stack_limit:
 		failures.append(
-			"authored stack definition mismatch for %s: stack_limit %d != %d" % [
+			"authored item definition mismatch for %s: stack_limit %d != %d" % [
 				incoming_definition.content_id,
 				stored_definition.stack_limit,
 				incoming_definition.stack_limit,
@@ -407,7 +422,7 @@ static func _stack_definition_compatibility_failures(
 		)
 	if stored_definition.unit_weight != incoming_definition.unit_weight:
 		failures.append(
-			"authored stack definition mismatch for %s: unit_weight %.6f != %.6f" % [
+			"authored item definition mismatch for %s: unit_weight %.6f != %.6f" % [
 				incoming_definition.content_id,
 				stored_definition.unit_weight,
 				incoming_definition.unit_weight,
