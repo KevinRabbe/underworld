@@ -95,11 +95,19 @@ func select_hotbar(index: int) -> Dictionary:
 		return _failure(["hotbar selection must be 1..4: %d" % index])
 	var previous: int = _selected_hotbar
 	_selected_hotbar = index
-	return _success({
+	var slot_key: String = selected_slot_key()
+	var result: Dictionary = _success({
 		"previous_hotbar": previous,
 		"selected_hotbar": _selected_hotbar,
-		"slot_key": selected_slot_key(),
+		"slot_key": slot_key,
 	})
+	result["events"] = [{
+		"type": "equipment.hotbar_selected",
+		"previous_hotbar": previous,
+		"selected_hotbar": _selected_hotbar,
+		"slot_key": slot_key,
+	}]
+	return result
 
 
 func selected_hotbar() -> int:
