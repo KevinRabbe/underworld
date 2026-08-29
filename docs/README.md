@@ -95,6 +95,7 @@ The numeric prefixes are reading-order markers only. They are not game versions,
 - [`40_content/CONTENT_FAMILIES.md`](40_content/CONTENT_FAMILIES.md) — major scalable content families.
 - [`40_content/CONTENT_RULEBOOK.md`](40_content/CONTENT_RULEBOOK.md) — shared family-rulebook requirements.
 - [`40_content/ITEM_RULEBOOK.md`](40_content/ITEM_RULEBOOK.md) — accepted base item-definition/rulebook contract.
+- [`40_content/RESOURCE_RULEBOOK.md`](40_content/RESOURCE_RULEBOOK.md) — accepted authored underground resource/deposit definition and yield contract.
 - [`40_content/RULEBOOK_TEMPLATE.md`](40_content/RULEBOOK_TEMPLATE.md) — reusable rulebook structure.
 
 Animation and rig content specifications live under [`40_content/animations/`](40_content/animations/) and their authoring guides live in `50_authoring/`.
