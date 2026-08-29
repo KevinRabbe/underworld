@@ -36,6 +36,7 @@ var torso_material: StandardMaterial3D
 var limb_material: StandardMaterial3D
 var head_material: StandardMaterial3D
 var accent_material: StandardMaterial3D
+var face_material: StandardMaterial3D
 
 
 func build() -> void:
@@ -45,6 +46,7 @@ func build() -> void:
 	_build_materials()
 	_build_skeleton()
 	_build_body_boxes()
+	_build_face_details()
 	_build_sockets()
 	reset_pose()
 
@@ -142,6 +144,7 @@ func _build_materials() -> void:
 	limb_material = _material(Color(0.48, 0.51, 0.57))
 	head_material = _material(Color(0.58, 0.60, 0.64))
 	accent_material = _material(Color(0.30, 0.42, 0.54))
+	face_material = _material(Color(0.035, 0.045, 0.06))
 
 
 func _material(color: Color) -> StandardMaterial3D:
@@ -211,6 +214,25 @@ func _build_body_boxes() -> void:
 	_attach_box("foot_r", "FootR", Vector3(0.16, 0.12, 0.29), Vector3(0.0, -0.04, 0.10), accent_material)
 
 
+func _build_face_details() -> void:
+	# Small high-contrast eye/visor details make facing readable without tying the
+	# presentation to a production head mesh. They remain visual-only children of
+	# the presentation skeleton and never affect gameplay collision.
+	var head_attachment := skeleton.get_node_or_null("HeadAttachment")
+	if head_attachment == null:
+		return
+	var eye_mesh := SphereMesh.new()
+	eye_mesh.radius = 0.035
+	eye_mesh.height = 0.07
+	for side in [-1.0, 1.0]:
+		var eye := MeshInstance3D.new()
+		eye.name = "EyeL" if side < 0.0 else "EyeR"
+		eye.mesh = eye_mesh
+		eye.position = Vector3(0.075 * side, 0.12, -0.205)
+		eye.material_override = face_material
+		head_attachment.add_child(eye)
+
+
 func _attach_box(
 	bone_name: String,
 	visual_name: String,
@@ -225,9 +247,15 @@ func _attach_box(
 
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = visual_name
-	var box := BoxMesh.new()
-	box.size = size
-	mesh_instance.mesh = box
+	if visual_name == "Head":
+		var head := SphereMesh.new()
+		head.radius = maxf(size.x, size.z)
+		head.height = size.y * 1.45
+		mesh_instance.mesh = head
+	else:
+		var box := BoxMesh.new()
+		box.size = size
+		mesh_instance.mesh = box
 	mesh_instance.position = offset
 	mesh_instance.material_override = material
 	attachment.add_child(mesh_instance)
