@@ -29,6 +29,8 @@ static func run() -> Array[String]:
 	_test_spatial_request_is_value_only(catalog, failures)
 	_test_muted_and_no_stream_are_safe(catalog, failures)
 	_test_ambience_transitions_reuse_one_player(catalog, failures)
+	_test_unmute_restores_selected_ambience(catalog, failures)
+	_test_failed_ambience_transition_preserves_state(catalog, failures)
 	_test_asset_replacement_preserves_semantic_identity(catalog, failures)
 	_test_catalog_rejects_duplicate_or_missing_entries(catalog, failures)
 	_test_presentation_scope_has_no_gameplay_authority_imports(failures)
@@ -186,6 +188,82 @@ static func _test_ambience_transitions_reuse_one_player(catalog, failures: Array
 	controller.free()
 
 
+static func _test_unmute_restores_selected_ambience(catalog, failures: Array[String]) -> void:
+	var clone = _clone_catalog(catalog)
+	_set_stream(clone, "audio_cue.ambience.surface", AudioStreamGenerator.new(), failures)
+	var controller = AudioController.new()
+	var configure_failures: Array[String] = controller.configure(clone)
+	if not configure_failures.is_empty():
+		failures.append("unmute ambience setup failed: %s" % [configure_failures])
+		controller.free()
+		return
+	if not _mount_controller(controller, failures):
+		controller.free()
+		return
+
+	var surface: Dictionary = controller.set_ambience_role(CueCatalog.AMBIENCE_SURFACE)
+	if not bool(surface.get("success", false)) or not controller.ambience_is_playing():
+		failures.append("surface ambience was not active before mute")
+	controller.set_muted(true)
+	if controller.ambience_role() != CueCatalog.AMBIENCE_SURFACE:
+		failures.append("muting changed the selected semantic ambience role")
+	if controller.ambience_is_playing():
+		failures.append("muting did not stop active ambience playback")
+	if controller.ambience_player_count() != 1:
+		failures.append("muting changed ambience player cardinality")
+
+	controller.set_muted(false)
+	if controller.ambience_role() != CueCatalog.AMBIENCE_SURFACE:
+		failures.append("unmuting changed the selected semantic ambience role")
+	if not controller.ambience_is_playing():
+		failures.append("unmuting did not resume the selected surface ambience")
+	if controller.ambience_player_count() != 1:
+		failures.append("unmuting created duplicate ambience players")
+	var repeated: Dictionary = controller.set_ambience_role(CueCatalog.AMBIENCE_SURFACE)
+	if not bool(repeated.get("success", false)) or bool(repeated.get("changed", true)):
+		failures.append("same ambience role after unmute was not idempotent")
+	if not controller.ambience_is_playing() or controller.ambience_player_count() != 1:
+		failures.append("same selected role after unmute did not retain exactly one active ambience player")
+	_free_mounted_controller(controller)
+
+
+static func _test_failed_ambience_transition_preserves_state(catalog, failures: Array[String]) -> void:
+	var clone = _clone_catalog(catalog)
+	_set_stream(clone, "audio_cue.ambience.surface", AudioStreamGenerator.new(), failures)
+	_set_stream(clone, "audio_cue.ambience.cave", AudioStreamGenerator.new(), failures)
+	var controller = AudioController.new()
+	var configure_failures: Array[String] = controller.configure(clone)
+	if not configure_failures.is_empty():
+		failures.append("failed-transition ambience setup failed: %s" % [configure_failures])
+		controller.free()
+		return
+	if not _mount_controller(controller, failures):
+		controller.free()
+		return
+	var surface: Dictionary = controller.set_ambience_role(CueCatalog.AMBIENCE_SURFACE)
+	if not bool(surface.get("success", false)) or not controller.ambience_is_playing():
+		failures.append("surface ambience was not active before failed cave transition")
+		_free_mounted_controller(controller)
+		return
+	var before: Dictionary = controller.presentation_state().duplicate(true)
+	var cave_definition = clone.cue_by_id("audio_cue.ambience.cave")
+	if cave_definition == null:
+		failures.append("failed transition proof could not resolve cave cue")
+		_free_mounted_controller(controller)
+		return
+	cave_definition.playback_space = CueDefinition.PLAYBACK_GLOBAL
+	var rejected: Dictionary = controller.set_ambience_role(CueCatalog.AMBIENCE_CAVE)
+	if bool(rejected.get("success", true)):
+		failures.append("invalid cave ambience transition unexpectedly succeeded")
+	if controller.presentation_state() != before:
+		failures.append("failed cave ambience transition changed committed surface presentation state")
+	if controller.ambience_role() != CueCatalog.AMBIENCE_SURFACE or not controller.ambience_is_playing():
+		failures.append("failed cave transition did not preserve active surface ambience")
+	if controller.ambience_player_count() != 1:
+		failures.append("failed cave transition changed ambience player cardinality")
+	_free_mounted_controller(controller)
+
+
 static func _test_asset_replacement_preserves_semantic_identity(catalog, failures: Array[String]) -> void:
 	var first = _clone_catalog(catalog)
 	var second = _clone_catalog(catalog)
@@ -266,6 +344,26 @@ static func _set_stream(catalog, cue_id: String, stream: AudioStream, failures: 
 		failures.append("test could not resolve audio cue for stream replacement: %s" % cue_id)
 		return
 	definition.stream = stream
+
+
+static func _mount_controller(controller, failures: Array[String]) -> bool:
+	var main_loop = Engine.get_main_loop()
+	if main_loop == null or not main_loop is SceneTree or main_loop.root == null:
+		failures.append("audio presentation test could not access SceneTree root for live ambience proof")
+		return false
+	main_loop.root.add_child(controller)
+	if not controller.is_inside_tree():
+		failures.append("audio presentation controller did not enter SceneTree for live ambience proof")
+		return false
+	return true
+
+
+static func _free_mounted_controller(controller) -> void:
+	if controller == null or not is_instance_valid(controller):
+		return
+	if controller.get_parent() != null:
+		controller.get_parent().remove_child(controller)
+	controller.free()
 
 
 static func _has_fragment(values: Array, fragment: String) -> bool:
