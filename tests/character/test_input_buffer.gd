@@ -8,6 +8,7 @@ static func run(tree: SceneTree) -> Array[String]:
 	var failures: Array[String] = []
 	_test_buffer_component(failures)
 	_test_live_attack_buffer(tree, failures)
+	_test_live_priority_and_expiry(tree, failures)
 	return failures
 
 
@@ -148,6 +149,58 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 	player.call("_respawn_after_defeat")
 	_expect_equal(failures, "respawn clears buffered intent", String(player.call("get_buffered_action_name")), "")
 	_expect_true(failures, "respawn returns action controller to free", bool(actions.call("is_free")))
+
+	fixture_root.free()
+
+
+static func _test_live_priority_and_expiry(tree: SceneTree, failures: Array[String]) -> void:
+	if tree == null or tree.root == null:
+		failures.append("live priority/expiry test requires SceneTree root")
+		return
+	var fixture_root := Node3D.new()
+	tree.root.add_child(fixture_root)
+	var player: Node = PlayerScript.new()
+	fixture_root.add_child(player)
+	var actions = player.get("action_controller")
+	var buffer = player.get("input_buffer")
+
+	_expect_true(failures, "priority fixture commitment starts", actions.try_start_tool_action(0.20))
+	_expect_true(failures, "attack enters empty player buffer", player.call("_queue_buffered_action", &"attack", {"attack_kind": &"light"}, 0.16))
+	_expect_true(failures, "parry replaces lower-priority attack", player.call("_queue_buffered_action", &"parry"))
+	_expect_equal(failures, "parry is pending after priority replacement", buffer.peek_action(), &"parry")
+	_expect_true(failures, "attack cannot replace buffered parry", not player.call("_queue_buffered_action", &"attack", {"attack_kind": &"heavy"}, 0.16))
+	_expect_equal(failures, "failed lower-priority replacement preserves parry", buffer.peek_action(), &"parry")
+	_expect_true(failures, "dodge replaces buffered parry", player.call("_queue_buffered_action", &"dodge", {"direction": Vector3.FORWARD}))
+	_expect_true(failures, "parry cannot replace buffered dodge", not player.call("_queue_buffered_action", &"parry"))
+	_expect_true(failures, "attack cannot replace buffered dodge", not player.call("_queue_buffered_action", &"attack"))
+	_expect_equal(failures, "highest-priority dodge remains pending", buffer.peek_action(), &"dodge")
+
+	for attack_kind in [&"light", &"heavy"]:
+		actions.reset()
+		buffer.reset()
+		_expect_true(failures, "%s expiry fixture commitment starts" % attack_kind, actions.try_start_tool_action(0.05))
+		player.call("_request_attack", attack_kind == &"heavy")
+		_expect_equal(failures, "%s intent is initially buffered" % attack_kind, buffer.peek_action(), &"attack")
+		buffer.tick(0.161)
+		actions.tick(0.051)
+		player.call("_try_consume_buffered_action")
+		_expect_true(failures, "%s intent expires before becoming legal" % attack_kind, not buffer.has_pending())
+		_expect_true(failures, "%s expired intent never fires late" % attack_kind, actions.is_free())
+
+	# A heavy intent submitted near the end of commitment remains legal and fires once.
+	actions.reset()
+	buffer.reset()
+	_expect_true(failures, "late-heavy fixture commitment starts", actions.try_start_tool_action(0.10))
+	actions.tick(0.08)
+	player.call("_request_attack", true)
+	buffer.tick(0.019)
+	player.call("_try_consume_buffered_action")
+	_expect_equal(failures, "late heavy waits until commitment ends", actions.state_name(), "USING_TOOL")
+	actions.tick(0.021)
+	buffer.tick(0.021)
+	player.call("_try_consume_buffered_action")
+	_expect_equal(failures, "late legal heavy executes after commitment", actions.state_name(), "ATTACKING/STARTUP")
+	_expect_equal(failures, "late heavy buffer is consumed once", buffer.peek_action(), &"")
 
 	fixture_root.free()
 
