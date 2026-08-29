@@ -8,6 +8,7 @@ const DIRECTIONS: Array[Vector3i] = [Vector3i.RIGHT, Vector3i.LEFT, Vector3i.UP,
 
 
 static func compile_part(part: Dictionary, voxel_size: float, palette, module_fingerprint: String) -> RefCounted:
+	var compilation_started_usec: int = Time.get_ticks_usec()
 	var result = MeshDataScript.new()
 	result.part_id = str(part.get("part_id", ""))
 	result.rig_role = str(part.get("rig_role", ""))
@@ -57,10 +58,11 @@ static func compile_part(part: Dictionary, voxel_size: float, palette, module_fi
 			var split := group_key.split("|")
 			var plane: int = int(split[0])
 			var palette_index: int = int(split[1])
+			var ao_signature: String = str(split[2]) if split.size() > 2 else "3,3,3,3"
 			var rectangles := _greedy_rectangles(group)
 			merged_quads += rectangles.size()
 			for rectangle in rectangles:
-				_emit_quad(surface_builders, palette, palette_index, direction_index, plane, rectangle, pivot, offset, voxel_size)
+				_emit_quad(surface_builders, palette, palette_index, direction_index, plane, rectangle, pivot, offset, voxel_size, ao_signature)
 
 	var palette_indexes: Array[int] = []
 	for raw_index in surface_builders.keys():
@@ -89,8 +91,10 @@ static func compile_part(part: Dictionary, voxel_size: float, palette, module_fi
 		"vertices": all_points.size(),
 		"surface_count": result.surfaces.size(),
 		"estimated_bytes": all_points.size() * 40 + triangle_count * 12,
+		"compilation_usec": Time.get_ticks_usec() - compilation_started_usec,
 	}
-	result.source_fingerprint = "vmesh1:sha256:" + (module_fingerprint + "|" + result.part_id + "|" + str(COMPILER_REVISION) + "|" + _surface_descriptor(result.surfaces)).sha256_text()
+	var palette_fingerprint: String = palette.canonical_fingerprint() if palette.has_method("canonical_fingerprint") else "<unfingerprinted-palette>"
+	result.source_fingerprint = "vmesh1:sha256:" + (module_fingerprint + "|" + result.part_id + "|" + str(COMPILER_REVISION) + "|%.6f|" % voxel_size + palette_fingerprint + "|" + _surface_descriptor(result.surfaces)).sha256_text()
 	result.success = true
 	return result
 
@@ -106,7 +110,8 @@ static func _visible_face_groups(occupied: Dictionary, direction_index: int) -> 
 		if occupied.has(_cell_key(position + direction)):
 			continue
 		var mapped := _face_coordinates(position, direction_index)
-		var group_key := "%d|%d" % [mapped.x, int(occupied[key])]
+		var ao_signature := _face_ao_signature(occupied, position, direction_index)
+		var group_key := "%d|%d|%s" % [mapped.x, int(occupied[key]), ao_signature]
 		var group: Dictionary = groups.get(group_key, {})
 		group["%d,%d" % [mapped.y, mapped.z]] = true
 		groups[group_key] = group
@@ -151,7 +156,7 @@ static func _greedy_rectangles(group: Dictionary) -> Array[Vector4i]:
 	return rectangles
 
 
-static func _emit_quad(builders: Dictionary, palette, palette_index: int, direction_index: int, plane: int, rectangle: Vector4i, pivot: Vector3i, offset: Vector3, voxel_size: float) -> void:
+static func _emit_quad(builders: Dictionary, palette, palette_index: int, direction_index: int, plane: int, rectangle: Vector4i, pivot: Vector3i, offset: Vector3, voxel_size: float, ao_signature: String = "3,3,3,3") -> void:
 	var u0: int = rectangle.x
 	var v0: int = rectangle.y
 	var u1: int = u0 + rectangle.z
@@ -170,13 +175,39 @@ static func _emit_quad(builders: Dictionary, palette, palette_index: int, direct
 	var palette_entry: Dictionary = palette.entry(palette_index)
 	var base_color: Color = palette_entry.get("color", Color.WHITE)
 	var shade: float = 1.0 if normal.y > 0.5 else (0.72 if normal.y < -0.5 else 0.90)
-	var shaded := Color(base_color.r * shade, base_color.g * shade, base_color.b * shade, base_color.a)
-	for point in points:
+	var ao_values := ao_signature.split(",")
+	for point_index in range(points.size()):
+		var point: Vector3 = points[point_index]
+		var ao_level: float = float(int(ao_values[point_index])) / 3.0 if point_index < ao_values.size() else 1.0
+		var vertex_shade: float = shade * lerpf(0.76, 1.0, ao_level)
+		var shaded := Color(base_color.r * vertex_shade, base_color.g * vertex_shade, base_color.b * vertex_shade, base_color.a)
 		builder["vertices"].append((point - Vector3(pivot)) * voxel_size + offset)
 		builder["normals"].append(normal)
 		builder["colors"].append(shaded)
 	builder["indices"].append_array([base_index, base_index + 1, base_index + 2, base_index, base_index + 2, base_index + 3])
 	builders[palette_index] = builder
+
+
+static func _face_ao_signature(occupied: Dictionary, position: Vector3i, direction_index: int) -> String:
+	var normal: Vector3i = DIRECTIONS[direction_index]
+	var corner_axes: Array
+	match direction_index:
+		0: corner_axes = [[Vector3i.DOWN, Vector3i.FORWARD], [Vector3i.UP, Vector3i.FORWARD], [Vector3i.UP, Vector3i.BACK], [Vector3i.DOWN, Vector3i.BACK]]
+		1: corner_axes = [[Vector3i.DOWN, Vector3i.FORWARD], [Vector3i.DOWN, Vector3i.BACK], [Vector3i.UP, Vector3i.BACK], [Vector3i.UP, Vector3i.FORWARD]]
+		2: corner_axes = [[Vector3i.LEFT, Vector3i.FORWARD], [Vector3i.LEFT, Vector3i.BACK], [Vector3i.RIGHT, Vector3i.BACK], [Vector3i.RIGHT, Vector3i.FORWARD]]
+		3: corner_axes = [[Vector3i.LEFT, Vector3i.FORWARD], [Vector3i.RIGHT, Vector3i.FORWARD], [Vector3i.RIGHT, Vector3i.BACK], [Vector3i.LEFT, Vector3i.BACK]]
+		4: corner_axes = [[Vector3i.LEFT, Vector3i.DOWN], [Vector3i.RIGHT, Vector3i.DOWN], [Vector3i.RIGHT, Vector3i.UP], [Vector3i.LEFT, Vector3i.UP]]
+		_: corner_axes = [[Vector3i.LEFT, Vector3i.DOWN], [Vector3i.LEFT, Vector3i.UP], [Vector3i.RIGHT, Vector3i.UP], [Vector3i.RIGHT, Vector3i.DOWN]]
+	var outside := position + normal
+	var levels: Array[String] = []
+	for axes_value in corner_axes:
+		var axes: Array = axes_value
+		var side_a := occupied.has(_cell_key(outside + axes[0]))
+		var side_b := occupied.has(_cell_key(outside + axes[1]))
+		var corner := occupied.has(_cell_key(outside + axes[0] + axes[1]))
+		var level: int = 0 if side_a and side_b else 3 - int(side_a) - int(side_b) - int(corner)
+		levels.append(str(level))
+	return ",".join(levels)
 
 
 static func _bounds_for_points(points: PackedVector3Array) -> AABB:
@@ -195,7 +226,11 @@ static func _surface_descriptor(surfaces: Array[Dictionary]) -> String:
 		var vertices: PackedVector3Array = surface["vertices"]
 		var vertex_lines: Array[String] = []
 		for vertex in vertices: vertex_lines.append("%.6f,%.6f,%.6f" % [vertex.x, vertex.y, vertex.z])
-		lines.append("%d|%s|%s" % [int(surface["palette_index"]), ";".join(vertex_lines), str(surface["indices"])])
+		var normal_lines: Array[String] = []
+		for normal in surface["normals"]: normal_lines.append("%.6f,%.6f,%.6f" % [normal.x, normal.y, normal.z])
+		var color_lines: Array[String] = []
+		for color in surface["colors"]: color_lines.append("%.6f,%.6f,%.6f,%.6f" % [color.r, color.g, color.b, color.a])
+		lines.append("%d|%s|%s|%s|%s" % [int(surface["palette_index"]), ";".join(vertex_lines), ";".join(normal_lines), ";".join(color_lines), str(surface["indices"])])
 	return "\n".join(lines)
 
 

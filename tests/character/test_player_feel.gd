@@ -10,6 +10,7 @@ const WeaponAttackResolverScript := preload("res://gameplay/items/weapons/runtim
 const EquipmentHotbarStateScript := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
 const EquipmentSlotRuleScript := preload("res://gameplay/items/equipment/equipment_slot_rule.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
+const VoxelProvider := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
 
 
 static func run(tree: SceneTree) -> Array[String]:
@@ -100,6 +101,7 @@ static func _test_live_heavy_attack(tree: SceneTree, failures: Array[String]) ->
 	var root := Node3D.new()
 	tree.root.add_child(root)
 	var player: Node = PlayerScript.new()
+	player.set("character_presentation_provider", VoxelProvider.new())
 	root.add_child(player)
 	player.call("set_equipped_tool", "stone_axe")
 	var captured: Array[Dictionary] = []

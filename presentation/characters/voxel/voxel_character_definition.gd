@@ -10,6 +10,7 @@ const REQUIRED_SLOTS: Array[StringName] = [
 @export var rig_profile_id: String = "rig_profile.humanoid.prototype"
 @export var voxel_size: float = 0.05
 @export var presentation_scale: float = 1.0
+@export var presentation_bounds: AABB = AABB(Vector3(-0.45, 0.0, -0.30), Vector3(0.90, 1.80, 0.60))
 @export var palette: Resource
 @export var modules: Array[Resource] = []
 
@@ -26,6 +27,8 @@ func validate_definition() -> Array[String]:
 		failures.append("character voxel_size must be finite and positive")
 	if not is_finite(presentation_scale) or presentation_scale <= 0.0:
 		failures.append("character presentation_scale must be finite and positive")
+	if not presentation_bounds.position.is_finite() or not presentation_bounds.size.is_finite() or presentation_bounds.size.x <= 0.0 or presentation_bounds.size.y <= 0.0 or presentation_bounds.size.z <= 0.0:
+		failures.append("character presentation_bounds must be finite with positive size")
 	if palette == null or not palette.has_method("validate_definition"):
 		failures.append("character requires voxel palette definition")
 		return failures
@@ -58,6 +61,7 @@ func canonical_fingerprint() -> String:
 	var descriptor := "\n".join([
 		"voxel-character-v1", presentation_id, str(revision), rig_profile_id,
 		"%.6f" % voxel_size, "%.6f" % presentation_scale,
+		"%.6f,%.6f,%.6f|%.6f,%.6f,%.6f" % [presentation_bounds.position.x, presentation_bounds.position.y, presentation_bounds.position.z, presentation_bounds.size.x, presentation_bounds.size.y, presentation_bounds.size.z],
 		palette.canonical_fingerprint() if palette != null else "<missing-palette>",
 		";".join(module_fingerprints),
 	])

@@ -6,8 +6,6 @@ signal hotbar_slot_requested(slot: int)
 signal craft_requested(recipe_id: String)
 signal parry_succeeded(source_position: Vector3)
 
-const VoxelCharacterScript := preload("res://presentation/characters/voxel/voxel_character_presentation.gd")
-const VoxelAnimationRuntimeFactoryScript := preload("res://presentation/characters/voxel/voxel_animation_runtime_factory.gd")
 const StaminaComponentScript := preload("res://gameplay/player/components/stamina_component.gd")
 const PlayerActionControllerScript := preload("res://gameplay/player/actions/player_action_controller.gd")
 const PlayerInputBufferScript := preload("res://gameplay/player/input/player_input_buffer.gd")
@@ -68,7 +66,8 @@ var equipped_weapon_attack_set
 var equipped_weapon_attack_resolver
 
 var visual_root: Node3D
-var mannequin
+var character_presentation_provider
+var character_presentation
 var animation_controller
 var tool_visual_root: Node3D
 var camera_yaw: Node3D
@@ -227,7 +226,9 @@ func is_blocking() -> bool:
 
 
 func get_mannequin():
-	return mannequin
+	# Compatibility name retained for existing gameplay/regression callers. The
+	# value is now any injected semantic character presentation.
+	return character_presentation
 
 
 func take_damage(amount: int, source_position: Vector3) -> void:
@@ -736,8 +737,8 @@ func _respawn_after_defeat() -> void:
 	pending_attack_direction = Vector3.ZERO
 	if animation_controller != null:
 		animation_controller.reset_presentation()
-	elif mannequin != null:
-		mannequin.reset_pose()
+	elif character_presentation != null:
+		character_presentation.reset_pose()
 
 
 func _build_character_visual() -> void:
@@ -754,12 +755,17 @@ func _build_character_visual() -> void:
 	visual_root.name = "VisualRoot"
 	add_child(visual_root)
 
-	mannequin = VoxelCharacterScript.new()
-	mannequin.name = "VoxelSurvivor"
-	visual_root.add_child(mannequin)
-	mannequin.build()
+	if character_presentation_provider == null:
+		push_error("Player requires an injected character presentation provider before entering the tree")
+		return
+	character_presentation = character_presentation_provider.create_presentation()
+	if character_presentation == null:
+		push_error("Character presentation provider returned no presentation")
+		return
+	visual_root.add_child(character_presentation)
+	character_presentation.build()
 
-	var animation_runtime: Dictionary = VoxelAnimationRuntimeFactoryScript.build(mannequin)
+	var animation_runtime: Dictionary = character_presentation_provider.build_animation_runtime(character_presentation)
 	if bool(animation_runtime.get("success", false)):
 		animation_controller = animation_runtime.get("controller")
 	else:
@@ -772,45 +778,15 @@ func _build_character_visual() -> void:
 	if tool_visual_root == null:
 		# Explicit presentation-only fallback keeps the prototype tool visible if
 		# semantic animation configuration fails; diagnostics above remain loud.
-		tool_visual_root = mannequin.get_tool_visual_root()
+		tool_visual_root = character_presentation.get_tool_visual_root()
 	_rebuild_tool_visual()
 
 
 func _rebuild_tool_visual() -> void:
 	if tool_visual_root == null:
 		return
-	if mannequin != null and mannequin.has_method("set_held_item"):
-		mannequin.set_held_item(equipped_tool_visual)
-		return
-	for child in tool_visual_root.get_children():
-		child.queue_free()
-
-	if equipped_tool_visual == "hands":
-		return
-
-	var handle_material := StandardMaterial3D.new()
-	handle_material.albedo_color = Color(0.30, 0.17, 0.07)
-	var stone_material := StandardMaterial3D.new()
-	stone_material.albedo_color = Color(0.36, 0.37, 0.34)
-
-	var handle := MeshInstance3D.new()
-	var handle_mesh := BoxMesh.new()
-	handle_mesh.size = Vector3(0.10, 0.72, 0.10)
-	handle.mesh = handle_mesh
-	handle.material_override = handle_material
-	tool_visual_root.add_child(handle)
-
-	var head := MeshInstance3D.new()
-	var head_mesh := BoxMesh.new()
-	if equipped_tool_visual == "stone_axe":
-		head_mesh.size = Vector3(0.38, 0.28, 0.13)
-	else:
-		head_mesh.size = Vector3(0.62, 0.16, 0.13)
-	head.mesh = head_mesh
-	head.material_override = stone_material
-	head.position = Vector3(-0.10, 0.31, 0.0)
-	head.rotation_degrees.z = -18.0
-	tool_visual_root.add_child(head)
+	if not character_presentation_provider.realize_held_item(character_presentation, tool_visual_root, equipped_tool_visual):
+		push_error("Character presentation provider could not realize held item: %s" % equipped_tool_visual)
 
 
 func _build_camera() -> void:

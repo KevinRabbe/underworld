@@ -28,12 +28,16 @@ func validate_definition(palette_size: int) -> Array[String]:
 		failures.append("module must contain at least one rigid part")
 	var role_registry = CharacterSemanticSchemaCatalog.build_registry()
 	var part_ids: Dictionary = {}
+	var source_parts: Dictionary = {}
+	for part_value in parts:
+		var declared_id: String = str(part_value.get("part_id", ""))
+		if declared_id.is_empty() or part_ids.has(declared_id):
+			failures.append("module part id must be non-empty and unique: %s" % declared_id)
+		part_ids[declared_id] = true
+		source_parts[declared_id] = part_value
 	for part_index in range(parts.size()):
 		var part: Dictionary = parts[part_index]
 		var part_id: String = str(part.get("part_id", ""))
-		if part_id.is_empty() or part_ids.has(part_id):
-			failures.append("module part id must be non-empty and unique: %s" % part_id)
-		part_ids[part_id] = true
 		var rig_role: String = str(part.get("rig_role", ""))
 		if not role_registry.has_rig_role(rig_role):
 			failures.append("module part has unknown rig role: %s" % rig_role)
@@ -41,8 +45,13 @@ func validate_definition(palette_size: int) -> Array[String]:
 			failures.append("module part %s requires integer pivot" % part_id)
 		if not part.get("attachment_offset", Vector3.ZERO) is Vector3:
 			failures.append("module part %s requires Vector3 attachment_offset" % part_id)
+		var mirror_source: String = str(part.get("mirror_source", ""))
+		if not mirror_source.is_empty() and (mirror_source == part_id or not part_ids.has(mirror_source)):
+			failures.append("module part %s has invalid mirror source: %s" % [part_id, mirror_source])
+		elif not mirror_source.is_empty() and source_parts[mirror_source].get("cells", []).is_empty():
+			failures.append("module part %s mirror source has no authored cells: %s" % [part_id, mirror_source])
 		var cells: Array = part.get("cells", [])
-		if cells.is_empty():
+		if cells.is_empty() and mirror_source.is_empty():
 			failures.append("module part %s must contain cells" % part_id)
 		var occupied: Dictionary = {}
 		for cell_index in range(cells.size()):
@@ -62,6 +71,26 @@ func validate_definition(palette_size: int) -> Array[String]:
 	return failures
 
 
+func resolved_parts() -> Array[Dictionary]:
+	var source_parts: Dictionary = {}
+	for part_value in parts:
+		var part: Dictionary = part_value
+		source_parts[str(part.get("part_id", ""))] = part
+	var resolved: Array[Dictionary] = []
+	for part_value in parts:
+		var part: Dictionary = part_value.duplicate(true)
+		var mirror_source: String = str(part.get("mirror_source", ""))
+		if not mirror_source.is_empty() and source_parts.has(mirror_source):
+			var mirrored_cells: Array[Dictionary] = []
+			for source_cell_value in source_parts[mirror_source].get("cells", []):
+				var source_cell: Dictionary = source_cell_value
+				var source_position: Vector3i = source_cell.get("position", Vector3i.ZERO)
+				mirrored_cells.append({"position": Vector3i(-source_position.x, source_position.y, source_position.z), "palette_index": int(source_cell.get("palette_index", -1))})
+			part["cells"] = mirrored_cells
+		resolved.append(part)
+	return resolved
+
+
 func canonical_fingerprint() -> String:
 	var lines: Array[String] = ["voxel-module-v1", presentation_id, str(revision), str(slot_id)]
 	var part_lines: Array[String] = []
@@ -69,8 +98,9 @@ func canonical_fingerprint() -> String:
 		var part: Dictionary = part_value
 		var pivot: Vector3i = part.get("pivot", Vector3i.ZERO)
 		var offset: Vector3 = part.get("attachment_offset", Vector3.ZERO)
-		var header := "%s|%s|%d,%d,%d|%.6f,%.6f,%.6f" % [
+		var header := "%s|%s|%s|%d,%d,%d|%.6f,%.6f,%.6f" % [
 			str(part.get("part_id", "")), str(part.get("rig_role", "")),
+			str(part.get("mirror_source", "")),
 			pivot.x, pivot.y, pivot.z, offset.x, offset.y, offset.z,
 		]
 		var cell_lines: Array[String] = []

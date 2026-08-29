@@ -1,6 +1,7 @@
 extends RefCounted
 
 const PlayerScript := preload("res://gameplay/player/player.gd")
+const VoxelProvider := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
 
 
 static func run(tree: SceneTree) -> Array[String]:
@@ -16,6 +17,7 @@ static func run(tree: SceneTree) -> Array[String]:
 	# invoke custom members dynamically. Fresh Godot headless imports can otherwise
 	# reject statically inferred custom members on a preloaded external script.
 	var player: Node = PlayerScript.new()
+	player.set("character_presentation_provider", VoxelProvider.new())
 	fixture_root.add_child(player)
 	var mannequin = player.call("get_mannequin")
 	_expect_true(

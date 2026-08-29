@@ -8,6 +8,7 @@ const PrototypeCavePresentationCatalog := preload("res://content/presentation/ca
 const SurfaceChunkStreamerScript := preload("res://world/runtime/streaming/surface_chunk_streamer.gd")
 const PrototypeSurvivalControllerScript := preload("res://gameplay/survival/prototype_survival_controller.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
+const VoxelCharacterPresentationProviderScript := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
 const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
@@ -156,6 +157,7 @@ func _create_water_surface() -> void:
 func _create_player() -> void:
 	player = PlayerScript.new()
 	player.name = "Player"
+	player.character_presentation_provider = VoxelCharacterPresentationProviderScript.new()
 	add_child(player)
 
 	var spawn_height: float = world.get_height_at_world(spawn_xz.x, spawn_xz.z)

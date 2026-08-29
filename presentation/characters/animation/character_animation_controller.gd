@@ -247,7 +247,7 @@ func present_hit() -> bool:
 
 
 func present_death() -> bool:
-	return _play_role(ROLE_DEATH)
+	return _play_role(ROLE_DEATH, {"presentation_action": "death"})
 
 
 func set_blocking(active: bool) -> bool:

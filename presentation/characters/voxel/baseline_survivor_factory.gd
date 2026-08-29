@@ -51,7 +51,7 @@ static func build() -> Resource:
 		]),
 		_module("gloves", &"hands", [
 			_part("hand_l", "rig_role.hand.left", _box(Vector3i(-2,-1,-1), Vector3i(0,1,1), LEATHER), Vector3i(-1,0,0)),
-			_part("hand_r", "rig_role.hand.right", _box(Vector3i(0,-1,-1), Vector3i(2,1,1), LEATHER), Vector3i(1,0,0)),
+			_mirrored_part("hand_r", "rig_role.hand.right", "hand_l", Vector3i(1,0,0)),
 		]),
 		_module("boots", &"feet", [
 			_part("foot_l", "rig_role.foot.left", _box(Vector3i(-1,-2,-1), Vector3i(1,0,4), LEATHER), Vector3i(0,0,0)),
@@ -72,6 +72,7 @@ static func build() -> Resource:
 	character.rig_profile_id = "rig_profile.humanoid.prototype"
 	character.voxel_size = 0.05
 	character.presentation_scale = 1.0
+	character.presentation_bounds = AABB(Vector3(-0.45, 0.0, -0.30), Vector3(0.90, 1.80, 0.60))
 	character.palette = palette
 	character.modules = modules
 	return character
@@ -93,6 +94,10 @@ static func _tool_part(id_value: String, variant_id: String, cells: Array[Dictio
 	var part := _part(id_value, "rig_role.socket.hand.right", cells, pivot)
 	part["variant_id"] = variant_id
 	return part
+
+
+static func _mirrored_part(id_value: String, rig_role: String, mirror_source: String, pivot: Vector3i) -> Dictionary:
+	return {"part_id": id_value, "rig_role": rig_role, "pivot": pivot, "attachment_offset": Vector3.ZERO, "mirror_source": mirror_source, "cells": []}
 
 
 static func _box(minimum: Vector3i, maximum: Vector3i, palette_index: int) -> Array[Dictionary]:
