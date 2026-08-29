@@ -8,6 +8,10 @@ const STATE_BLOCKING: int = 3
 const STATE_USING_TOOL: int = 4
 const STATE_ATTACKING: int = 5
 
+const ATTACK_KIND_LIGHT: StringName = &"light"
+const ATTACK_KIND_HEAVY: StringName = &"heavy"
+const BUFFERED_ACTIONS: Array[StringName] = [&"attack", &"dodge", &"parry"]
+
 const DODGE_COST: float = 25.0
 const DODGE_DURATION: float = 0.48
 const DODGE_IFRAME_START: float = 0.09
@@ -19,6 +23,7 @@ const PARRY_STARTUP: float = 0.06
 const PARRY_ACTIVE_DURATION: float = 0.12
 const PARRY_RECOVERY: float = 0.30
 const PARRY_TOTAL_DURATION: float = PARRY_STARTUP + PARRY_ACTIVE_DURATION + PARRY_RECOVERY
+const HEAVY_ATTACK_COST: float = 12.0
 
 const BLOCK_MIN_START_STAMINA: float = 1.0
 
@@ -33,6 +38,7 @@ var attack_active: float = 0.0
 var attack_recovery: float = 0.0
 var attack_activation_pending: bool = false
 var attack_activation_emitted: bool = false
+var attack_kind: StringName = ATTACK_KIND_LIGHT
 
 
 func _init(stamina_component) -> void:
@@ -118,12 +124,18 @@ func try_start_tool_action(duration: float) -> bool:
 
 
 func try_start_attack(startup: float, active: float, recovery: float) -> bool:
+	return try_start_attack_profile(startup, active, recovery, ATTACK_KIND_LIGHT)
+
+
+func try_start_attack_profile(startup: float, active: float, recovery: float, kind: StringName = ATTACK_KIND_LIGHT, stamina_cost: float = 0.0) -> bool:
 	if state != STATE_FREE:
 		return false
 	var sanitized_startup: float = maxf(startup, 0.0)
 	var sanitized_active: float = maxf(active, 0.01)
 	var sanitized_recovery: float = maxf(recovery, 0.0)
 	if sanitized_startup + sanitized_active + sanitized_recovery < 0.05:
+		return false
+	if stamina != null and stamina_cost > 0.0 and not stamina.spend(stamina_cost):
 		return false
 	state = STATE_ATTACKING
 	elapsed = 0.0
@@ -132,7 +144,27 @@ func try_start_attack(startup: float, active: float, recovery: float) -> bool:
 	attack_recovery = sanitized_recovery
 	attack_activation_pending = false
 	attack_activation_emitted = false
+	attack_kind = ATTACK_KIND_HEAVY if kind == ATTACK_KIND_HEAVY else ATTACK_KIND_LIGHT
 	return true
+
+
+func can_queue_action(action: StringName) -> bool:
+	return BUFFERED_ACTIONS.has(action)
+
+
+func can_interrupt_action(action: StringName) -> bool:
+	# M3 uses committed actions: defensive inputs may queue, but never cancel an
+	# active attack/dodge/parry/tool action mid-window.
+	return false
+
+
+func transition_policy() -> Dictionary:
+	return {
+		"buffered": ["attack", "dodge", "parry"],
+		"interruptible": [],
+		"priority": ["dodge", "parry", "attack"],
+		"buffer_lifetime": 0.16,
+	}
 
 
 func consume_attack_activation() -> bool:
@@ -207,6 +239,7 @@ func reset() -> void:
 	state = STATE_FREE
 	elapsed = 0.0
 	dodge_direction_world = Vector3.ZERO
+	attack_kind = ATTACK_KIND_LIGHT
 	tool_action_duration = 0.0
 	_reset_attack_contract(true)
 
@@ -219,6 +252,10 @@ func state_name() -> String:
 		STATE_USING_TOOL: return "USING_TOOL"
 		STATE_ATTACKING: return "ATTACKING/%s" % get_attack_phase_name()
 	return "FREE"
+
+
+func get_attack_kind() -> StringName:
+	return attack_kind
 
 
 func _finish_action() -> void:

@@ -125,12 +125,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			_request_harvest()
 			return
 		if event.button_index == MOUSE_BUTTON_RIGHT:
-			_request_attack()
+			_request_attack(false)
 			return
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_set_camera_distance(camera_distance - CAMERA_ZOOM_STEP)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			_set_camera_distance(camera_distance + CAMERA_ZOOM_STEP)
+
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_E:
+		_request_attack(true)
+		return
 
 
 func _physics_process(delta: float) -> void:
@@ -284,20 +288,22 @@ func _request_harvest() -> void:
 	harvest_requested.emit(ray["origin"], ray["direction"], ray["distance"])
 
 
-func _request_attack() -> void:
-	var intent: Dictionary = _build_attack_intent()
+func _request_attack(heavy: bool = false) -> void:
+	var intent: Dictionary = _build_attack_intent(heavy)
 	if intent.is_empty():
 		return
 	if action_controller.is_free():
 		_start_attack_from_intent(intent)
 		return
-	input_buffer.push(&"attack")
+	if action_controller.can_queue_action(&"attack"):
+		input_buffer.push(&"attack", {"attack_kind": &"heavy" if heavy else &"light"}, 0.16)
 
 
-func _build_attack_intent() -> Dictionary:
+func _build_attack_intent(heavy: bool = false) -> Dictionary:
 	if camera == null:
 		return {}
-	var attack_definition = AttackCatalogScript.for_tool(equipped_tool_visual)
+	var attack_kind: StringName = &"heavy" if heavy else &"light"
+	var attack_definition = AttackCatalogScript.for_tool(equipped_tool_visual, attack_kind)
 	if attack_definition == null or not bool(attack_definition.call("is_valid")):
 		return {}
 	var direction: Vector3 = _get_combat_forward()
@@ -306,6 +312,7 @@ func _build_attack_intent() -> Dictionary:
 	return {
 		"tool_id": equipped_tool_visual,
 		"direction": direction,
+		"attack_kind": attack_kind,
 	}
 
 
@@ -314,18 +321,21 @@ func _start_attack_from_intent(intent: Dictionary) -> bool:
 		return false
 	var tool_id: String = str(intent.get("tool_id", "hands"))
 	var direction: Vector3 = intent.get("direction", Vector3.ZERO)
+	var attack_kind: StringName = StringName(intent.get("attack_kind", &"light"))
 	direction.y = 0.0
 	if direction.is_zero_approx():
 		return false
 	direction = direction.normalized()
 
-	var attack_definition = AttackCatalogScript.for_tool(tool_id)
+	var attack_definition = AttackCatalogScript.for_tool(tool_id, attack_kind)
 	if attack_definition == null or not bool(attack_definition.call("is_valid")):
 		return false
-	if not action_controller.try_start_attack(
+	if not action_controller.try_start_attack_profile(
 		float(attack_definition.get("startup")),
 		float(attack_definition.get("active")),
-		float(attack_definition.get("recovery"))
+		float(attack_definition.get("recovery")),
+		attack_kind,
+		PlayerActionControllerScript.HEAVY_ATTACK_COST if attack_kind == &"heavy" else 0.0
 	):
 		return false
 
@@ -372,7 +382,7 @@ func _try_consume_buffered_action() -> void:
 	var payload: Dictionary = intent.get("payload", {})
 	match StringName(intent.get("action", &"")):
 		&"attack":
-			var live_attack_intent: Dictionary = _build_attack_intent()
+			var live_attack_intent: Dictionary = _build_attack_intent(payload.get("attack_kind", &"light") == &"heavy")
 			if not live_attack_intent.is_empty():
 				_start_attack_from_intent(live_attack_intent)
 		&"dodge":
@@ -442,9 +452,11 @@ func _buffer_pressed_defensive_inputs() -> void:
 	if Input.is_action_just_pressed("dodge"):
 		var dodge_direction: Vector3 = _get_requested_dodge_direction()
 		if not dodge_direction.is_zero_approx():
-			input_buffer.push(&"dodge", {"direction": dodge_direction})
+			if action_controller.can_queue_action(&"dodge"):
+				input_buffer.push(&"dodge", {"direction": dodge_direction})
 	if Input.is_action_just_pressed("parry"):
-		input_buffer.push(&"parry")
+		if action_controller.can_queue_action(&"parry"):
+			input_buffer.push(&"parry")
 
 
 func _get_requested_dodge_direction() -> Vector3:
