@@ -169,6 +169,8 @@ The working character theme is **Frontier Underworld Expedition**. It is a rever
 
 The approved first-pass turnaround and action reference is [Frontier Underworld Expedition character reference v1](reference/frontier_underworld_expedition_character_reference_v1.png). It guides proportions, palette, module layering and pose readability; it is preview/reference material and is not loaded by the runtime.
 
+The isolated authoring scene at `res://tools/character_preview/voxel_character_preview.tscn` provides a neutral-lit character review environment. It can exercise directional locomotion, airborne poses, dodges, light/heavy attacks, block, parry, hit, death, tool use, equipment visibility and manual turntable rotation without changing the gameplay scene.
+
 ## Creatures and bosses
 
 Common creatures can use mid-detail assets with strong silhouettes and readable attack poses.
