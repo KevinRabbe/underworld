@@ -1,0 +1,39 @@
+name: Worldgen Purity Validation
+
+on:
+  pull_request:
+    paths:
+      - 'worldgen/**'
+      - 'tools/ci/worldgen_purity_guard.py'
+      - 'tools/ci/test_worldgen_purity_guard.py'
+      - 'tools/ci/worldgen_purity_fixtures/**'
+      - '.github/workflows/worldgen-purity-validation.yml'
+  push:
+    branches:
+      - main
+      - 'architecture/worldgen-purity-*'
+    paths:
+      - 'worldgen/**'
+      - 'tools/ci/worldgen_purity_guard.py'
+      - 'tools/ci/test_worldgen_purity_guard.py'
+      - 'tools/ci/worldgen_purity_fixtures/**'
+      - '.github/workflows/worldgen-purity-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  worldgen-purity:
+    name: Worldgen pure-data contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run purity-guard fixtures
+        run: python3 tools/ci/test_worldgen_purity_guard.py
+
+      - name: Scan production worldgen boundary
+        run: python3 tools/ci/worldgen_purity_guard.py
