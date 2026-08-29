@@ -235,14 +235,31 @@ func _load_or_create_state(placement, definition, delta_store) -> Dictionary:
 	var failures: Array[String] = []
 	if _sorted_string_keys(envelope) != EXPECTED_ENVELOPE_KEYS:
 		failures.append("resource runtime snapshot envelope keys do not match %s" % SNAPSHOT_SCHEMA)
-	if str(envelope.get("schema", "")) != SNAPSHOT_SCHEMA:
+
+	var schema_variant = envelope.get("schema", null)
+	if not schema_variant is String:
+		failures.append("resource runtime snapshot schema must be String")
+	elif schema_variant != SNAPSHOT_SCHEMA:
 		failures.append("resource runtime snapshot schema must be exactly %s" % SNAPSHOT_SCHEMA)
-	if str(envelope.get("placement_stable_id", "")) != placement.placement_stable_id:
+
+	var placement_id_variant = envelope.get("placement_stable_id", null)
+	if not placement_id_variant is String:
+		failures.append("saved resource placement StableId must be String")
+	elif placement_id_variant != placement.placement_stable_id:
 		failures.append("saved resource placement StableId does not match current placement")
-	if str(envelope.get("placement_fingerprint", "")) != placement.placement_fingerprint:
+
+	var placement_fingerprint_variant = envelope.get("placement_fingerprint", null)
+	if not placement_fingerprint_variant is String:
+		failures.append("saved resource placement fingerprint must be String")
+	elif placement_fingerprint_variant != placement.placement_fingerprint:
 		failures.append("saved resource placement fingerprint does not match current placement")
-	if str(envelope.get("resource_content_id", "")) != placement.target_content_id:
+
+	var resource_id_variant = envelope.get("resource_content_id", null)
+	if not resource_id_variant is String:
+		failures.append("saved resource ContentId must be String")
+	elif resource_id_variant != placement.target_content_id:
 		failures.append("saved resource ContentId does not match current placement target")
+
 	var depletion_variant = envelope.get("depletion", null)
 	if not depletion_variant is Dictionary:
 		failures.append("resource runtime snapshot depletion payload must be Dictionary")
@@ -250,6 +267,15 @@ func _load_or_create_state(placement, definition, delta_store) -> Dictionary:
 	var depletion: Dictionary = depletion_variant
 	if _sorted_string_keys(depletion) != EXPECTED_DEPLETION_KEYS:
 		failures.append("resource depletion descriptor has unexpected schema keys")
+
+	var depletion_resource_id_variant = depletion.get("resource_content_id", null)
+	if not depletion_resource_id_variant is String:
+		failures.append("resource depletion resource ContentId must be String")
+
+	var remaining_variant = depletion.get("remaining_capacity_units", null)
+	if typeof(remaining_variant) != TYPE_FLOAT and typeof(remaining_variant) != TYPE_INT:
+		failures.append("resource depletion remaining_capacity_units must be numeric")
+
 	var mutable_variant = depletion.get("mutable_delta", null)
 	if not mutable_variant is Dictionary:
 		failures.append("resource depletion mutable_delta must be Dictionary")
@@ -257,9 +283,12 @@ func _load_or_create_state(placement, definition, delta_store) -> Dictionary:
 	var mutable_delta: Dictionary = mutable_variant
 	var completed_failures: Array[String] = _validate_completed_operation_ids(mutable_delta.get("completed_operation_ids", []))
 	failures.append_array(completed_failures)
+	if not failures.is_empty():
+		return _failure(failures)
+
 	var state = ResourceDepletionState.new().configure(
-		str(depletion.get("resource_content_id", "")),
-		float(depletion.get("remaining_capacity_units", -1.0)),
+		depletion_resource_id_variant,
+		float(remaining_variant),
 		mutable_delta
 	)
 	failures.append_array(state.validate_state())
