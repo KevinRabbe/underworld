@@ -36,7 +36,11 @@ func adapter_ids() -> Array[String]:
 	return ids
 
 
-func realize(content_registry, content_id: String) -> Dictionary:
+func realize(
+	content_registry,
+	validation_result: Dictionary,
+	content_id: String
+) -> Dictionary:
 	var failures: Array[String] = []
 	if content_registry == null or not content_registry is ContentRegistry:
 		failures.append("expected ContentRegistry")
@@ -44,6 +48,11 @@ func realize(content_registry, content_id: String) -> Dictionary:
 	if not content_registry.is_valid():
 		for failure in content_registry.diagnostics():
 			failures.append("content registry: %s" % failure)
+		failures.sort()
+		return _result(content_id, null, "", failures)
+
+	failures.append_array(_validation_prerequisite_failures(validation_result, content_id))
+	if not failures.is_empty():
 		failures.sort()
 		return _result(content_id, null, "", failures)
 
@@ -79,6 +88,42 @@ func realize(content_registry, content_id: String) -> Dictionary:
 		instance.free()
 		instance = null
 	return _result(content_id, instance, adapter_id, failures)
+
+
+static func _validation_prerequisite_failures(
+	validation_result: Dictionary,
+	content_id: String
+) -> Array[String]:
+	var failures: Array[String] = []
+	if not validation_result.has("success"):
+		failures.append("expected CONTENT-005 validation result")
+		return failures
+
+	if not bool(validation_result.get("success", false)):
+		failures.append("CONTENT-005 validation did not accept archetype: %s" % content_id)
+		for candidate in validation_result.get("diagnostics", []):
+			if not candidate is Dictionary:
+				continue
+			var source_id: String = str(candidate.get("source_id", ""))
+			if source_id != content_id and source_id != "<validation>":
+				continue
+			failures.append(
+				"CONTENT-005 %s: %s" % [
+					str(candidate.get("code", "diagnostic")),
+					str(candidate.get("message", "")),
+				]
+			)
+		failures.sort()
+		return failures
+
+	var covered: bool = false
+	for raw_id in validation_result.get("validated_definition_ids", []):
+		if str(raw_id) == content_id:
+			covered = true
+			break
+	if not covered:
+		failures.append("CONTENT-005 validation result does not cover content id: %s" % content_id)
+	return failures
 
 
 static func _result(

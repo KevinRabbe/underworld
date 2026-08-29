@@ -26,12 +26,6 @@ func configure(
 	return self
 
 
-func packed_scene() -> PackedScene:
-	if resource_binding != null and resource_binding is PackedScene:
-		return resource_binding
-	return null
-
-
 func validate_contract() -> Array[String]:
 	var failures: Array[String] = []
 	if not _is_semantic_label(realization_adapter_id):
@@ -39,10 +33,13 @@ func validate_contract() -> Array[String]:
 			"realization adapter id must be a lowercase semantic label: %s" % realization_adapter_id
 		)
 
+	# The shared composition contract owns only the presence of a replaceable
+	# Resource binding. Concrete binding type belongs to the selected realization
+	# adapter (PackedScene, animation resource, generated composition descriptor,
+	# etc.) so the generic archetype boundary does not secretly encode one
+	# adapter's storage format.
 	if resource_binding == null:
 		failures.append("realization resource binding is required")
-	elif not resource_binding is PackedScene:
-		failures.append("realization resource binding must be a PackedScene")
 
 	var seen_roles: Dictionary = {}
 	for role in required_roles:

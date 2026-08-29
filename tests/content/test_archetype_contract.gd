@@ -19,6 +19,7 @@ static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_valid_headless_definitions(failures)
 	_test_binding_is_not_semantic_identity(failures)
+	_test_adapter_neutral_binding_contract(failures)
 	_test_static_failures_route_through_content_validation(failures)
 	return failures
 
@@ -62,8 +63,8 @@ static func _test_valid_headless_definitions(failures: Array[String]) -> void:
 
 	if alpha is Node or alpha.composition is Node or validator is Node or pipeline is Node:
 		failures.append("headless archetype definition/validation contracts unexpectedly own runtime Nodes")
-	if alpha.composition.packed_scene() == null:
-		failures.append("headless archetype proof did not retain a typed PackedScene resource binding")
+	if alpha.composition.resource_binding == null or not alpha.composition.resource_binding is PackedScene:
+		failures.append("headless archetype proof did not retain its replaceable PackedScene Resource binding")
 
 
 static func _test_binding_is_not_semantic_identity(failures: Array[String]) -> void:
@@ -79,6 +80,33 @@ static func _test_binding_is_not_semantic_identity(failures: Array[String]) -> v
 		failures.append("canonical archetype descriptor does not preserve ContentId across binding replacement")
 
 
+static func _test_adapter_neutral_binding_contract(failures: Array[String]) -> void:
+	var curve := Curve.new()
+	curve.add_point(Vector2(0.0, 0.0))
+	curve.add_point(Vector2(1.0, 1.0))
+	var tagged = _definition_with_binding(
+		"archetype.proof.curve_binding",
+		curve,
+		"test.tagged",
+		[SPAWNABLE],
+		[SPAWNABLE]
+	)
+	var validator = ArchetypeFamilyValidator.new()
+	validator.configure("archetype")
+	var result: Dictionary = ContentValidationPipeline.new().validate_all(
+		[tagged],
+		_categories(),
+		_capabilities(),
+		[validator]
+	)
+	if not bool(result.get("success", false)):
+		failures.append(
+			"shared archetype definition contract rejected adapter-specific non-PackedScene Resource: %s" % [
+				result.get("diagnostics", []),
+			]
+		)
+
+
 static func _test_static_failures_route_through_content_validation(failures: Array[String]) -> void:
 	var categories = _categories()
 	var capabilities = _capabilities()
@@ -86,24 +114,26 @@ static func _test_static_failures_route_through_content_validation(failures: Arr
 	validator.configure("archetype")
 	var pipeline = ContentValidationPipeline.new()
 
-	var incompatible_binding = _definition_with_binding(
+	var missing_binding = _definition_with_binding(
 		"archetype.invalid.binding",
-		Resource.new(),
+		null,
+		"packed.scene",
 		[SPAWNABLE],
 		[SPAWNABLE]
 	)
-	var incompatible_result: Dictionary = pipeline.validate_all(
-		[incompatible_binding],
+	var binding_result: Dictionary = pipeline.validate_all(
+		[missing_binding],
 		categories,
 		capabilities,
 		[validator]
 	)
-	if not _has_code_fragment(incompatible_result, "definition_invalid", "must be a PackedScene"):
-		failures.append("incompatible archetype resource binding did not fail before runtime")
+	if not _has_code_fragment(binding_result, "definition_invalid", "realization resource binding is required"):
+		failures.append("missing generic archetype resource binding did not fail before runtime")
 
 	var missing_capability = _definition_with_binding(
 		"archetype.invalid.capability",
 		ResourceLoader.load(ALPHA_SCENE),
+		"packed.scene",
 		[SPAWNABLE],
 		[]
 	)
@@ -140,6 +170,7 @@ static func _definition(content_id: String, scene_path: String):
 	return _definition_with_binding(
 		content_id,
 		ResourceLoader.load(scene_path),
+		"packed.scene",
 		[SPAWNABLE],
 		[SPAWNABLE]
 	)
@@ -148,12 +179,13 @@ static func _definition(content_id: String, scene_path: String):
 static func _definition_with_binding(
 	content_id: String,
 	binding: Resource,
+	adapter_id: String,
 	required_capabilities: Array,
 	declared_capabilities: Array
 ):
 	var composition = ArchetypeComposition.new()
 	composition.configure(
-		"packed.scene",
+		adapter_id,
 		binding,
 		["root", "interaction.primary"],
 		required_capabilities

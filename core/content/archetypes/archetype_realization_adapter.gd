@@ -29,6 +29,13 @@ func accepts(definition) -> bool:
 	)
 
 
+func validate_resource_binding(_resource_binding: Resource) -> Array[String]:
+	# Adapter-specific Resource type/shape validation belongs here rather than in
+	# ArchetypeComposition. The common composition contract only requires that a
+	# replaceable Resource binding exists.
+	return []
+
+
 func validate_realization(definition) -> Array[String]:
 	var failures: Array[String] = []
 	failures.append_array(validate_adapter())
@@ -49,6 +56,9 @@ func validate_realization(definition) -> Array[String]:
 				adapter_id,
 			]
 		)
+	if definition.composition.resource_binding != null:
+		for failure in validate_resource_binding(definition.composition.resource_binding):
+			failures.append("resource binding: %s" % failure)
 	failures.sort()
 	return failures
 

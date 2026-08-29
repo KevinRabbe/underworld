@@ -5,6 +5,15 @@ func _init() -> void:
 	configure("packed.scene")
 
 
+func validate_resource_binding(resource_binding: Resource) -> Array[String]:
+	var failures: Array[String] = []
+	if resource_binding != null and not resource_binding is PackedScene:
+		failures.append(
+			"expected PackedScene resource binding, got %s" % resource_binding.get_class()
+		)
+	return failures
+
+
 func realize(definition) -> Dictionary:
 	var failures: Array[String] = validate_realization(definition)
 	if not failures.is_empty():
@@ -13,8 +22,8 @@ func realize(definition) -> Dictionary:
 			"diagnostics": failures,
 		}
 
-	var scene: PackedScene = definition.composition.packed_scene()
-	if scene == null:
+	var scene = definition.composition.resource_binding
+	if scene == null or not scene is PackedScene:
 		return {
 			"instance": null,
 			"diagnostics": ["archetype resource binding is not a PackedScene"],
