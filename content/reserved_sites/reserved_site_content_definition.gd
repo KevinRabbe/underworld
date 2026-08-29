@@ -39,6 +39,8 @@ func _init(
 
 func validate_definition() -> Array[String]:
 	var failures: Array[String] = super.validate_definition()
+	if category_ids.is_empty():
+		failures.append("Reserved-site content definition requires at least one category_id")
 	if eligible_hook_categories.is_empty():
 		failures.append("Reserved-site content definition requires eligible hook categories")
 	var seen_hooks: Dictionary = {}
