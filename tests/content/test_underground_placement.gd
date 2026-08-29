@@ -200,8 +200,19 @@ static func _test_invalid_candidates_and_targets_fail_closed(failures: Array[Str
 	_expect_true(failures, "wrong target family fails through ContentRegistry", not bool(wrong_family_result.get("success", true)))
 	_expect_equal(failures, "wrong target family emits no placements", wrong_family_result.get("placements", []).size(), 0)
 
-	var wrong_category = _burrower_policy()
-	wrong_category.required_target_category_ids = [CATEGORY_RESOURCE_DEPOSIT]
+	var wrong_category = Policy.new().configure(
+		"placement_policy.encounter.wrong_target_category",
+		"creature.enemy.burrower",
+		"creature",
+		["reserved_site"],
+		[CATEGORY_SITE_ENCOUNTER],
+		[TRAIT_PRIMARY],
+		[CATEGORY_RESOURCE_DEPOSIT],
+		2,
+		6,
+		1,
+		1
+	)
 	var encounter_candidate = _candidate(10, CATEGORY_SITE_ENCOUNTER, Vector2i(-1, -1), 4, [TRAIT_PRIMARY], 1)
 	var wrong_category_result: Dictionary = Service.plan([encounter_candidate], [wrong_category], registry, 1)
 	_expect_true(failures, "incompatible authored target category fails closed", not bool(wrong_category_result.get("success", true)))
