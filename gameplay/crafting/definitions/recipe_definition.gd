@@ -1,7 +1,7 @@
 extends "res://core/content/registry/content_definition.gd"
 
 const ContentReference := preload("res://core/content/references/content_reference.gd")
-const SchemaId := preload("res://core/content/schema/schema_id.gd")
+const RecipeSchemaId := preload("res://core/content/schema/schema_id.gd")
 const RecipeItemAmount := preload("res://gameplay/crafting/definitions/recipe_item_amount.gd")
 
 const RECIPE_FAMILY := "recipe"
@@ -74,7 +74,7 @@ func validate_definition() -> Array[String]:
 
 	var seen_capabilities: Dictionary = {}
 	for capability_id in required_context_capabilities:
-		for failure in SchemaId.validate_capability(capability_id):
+		for failure in RecipeSchemaId.validate_capability(capability_id):
 			failures.append("required crafting context capability: %s" % failure)
 		if seen_capabilities.has(capability_id):
 			failures.append("duplicate required crafting context capability: %s" % capability_id)
