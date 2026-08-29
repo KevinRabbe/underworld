@@ -86,7 +86,7 @@ Concrete clip names, bone names, meshes and scene filenames remain presentation-
 
 ## Attack-profile boundary
 
-ENEMY-001 adds a narrow `CreatureAttackProfileDefinition` semantic target. The initial profile identifies the current contact-melee style and its compatibility metadata without replacing the Burrower actor's existing melee-resolution implementation.
+ENEMY-001 adds a narrow `CreatureAttackProfileDefinition` semantic target. The initial profile identifies the current `melee.contact` attack style; it does not duplicate damage, timing, parryability or melee-resolution fields already owned by the current creature/actor contracts.
 
 The current Burrower melee execution remains in its existing actor/combat path. This card does not create a second damage-resolution system and does not move attack timing into animation.
 
