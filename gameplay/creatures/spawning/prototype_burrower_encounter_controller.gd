@@ -81,7 +81,7 @@ func _spawn_enemy_near_player() -> void:
 
 
 func _validate_burrower_definition() -> bool:
-	if BurrowerDefinition == null or not BurrowerDefinition is CreatureDefinition:
+	if BurrowerDefinition == null or BurrowerDefinition.get_script() != CreatureDefinition:
 		push_error("Burrower authored creature definition did not load as CreatureDefinition")
 		return false
 	var failures: Array[String] = BurrowerDefinition.validate_definition()
