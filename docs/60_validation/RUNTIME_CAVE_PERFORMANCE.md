@@ -1,6 +1,6 @@
 # Runtime Cave Performance — PERF-001
 
-Status: **measurement contract / repaired baseline pending exact-head run**
+Status: **measurement contract / repaired acceptance baseline recorded**
 
 PERF-001 measures the accepted MAP-016 runtime cave vertical slice before any optimization work changes cell size, voxel pitch, streaming radii, collision detail or presentation quality.
 
@@ -102,17 +102,58 @@ The dedicated `Runtime Cave Performance Validation` workflow runs the same comma
 
 An earlier architecture-validation run on profiler head `0b57b764db5218951b420c5db8d8b9b54564bc35` confirmed the manual slow-build hypothesis, but its values are **not PERF-001 acceptance evidence** because PM review subsequently required the measurement-semantic repairs above. Do not use that run as the canonical baseline.
 
-## Acceptance baseline
+## Repaired acceptance baseline
 
-Populate this section only from the first exact repaired-head performance run after:
+The first repaired-head profile was executed by `Runtime Cave Performance Validation` run `33256370650`, job `99110717903`, against PERF source head `01aa6cea76d1b3b765c5fe59f3db2b9b7331c91e` merged for the PR check with then-current main `73a1631f71cdef6cde0725ff498250818d4cc18d`.
 
-1. controller route centers derive from runtime `cell_size`;
-2. extraction metrics are named/declared as synchronous staged extraction rather than worker scheduler latency;
-3. demand-update scenarios are explicitly distinguished from dynamic load/unload latency;
-4. revision-3 release-hysteresis budgets are active.
+Result: **PASS**. The independently staged pipeline and production controller bootstrap agreed on this deterministic fingerprint:
 
-The exact run/head/fingerprint and measured budget exceedances will be recorded in the PR/issue handoff without changing world truth.
+`entrances-sha256:8c11c563b2192f85a78d1760b4d8cb2a686d00e3662a8a9c7db2524d2094b5bc:geometry-sha256:d910dbc179903d8f26c92974f29641aad553c7bba56eb833ebcff6a583aef73a:gpartition-result1:sha256:2747883649716b5c0d3e6906f86308cbae7faa68e19cc4fc7801ff4e9a1183be`
+
+Measured values:
+
+| Metric | Repaired baseline |
+| --- | ---: |
+| deterministic generation | `296.818 ms` |
+| surface handoff + partition | `28.399 ms` |
+| staged mesh extraction total | `17234.002 ms` |
+| staged mesh extraction, worst cell | `4925.100 ms` |
+| collision-face preparation total | `5888.449 ms` |
+| collision-face preparation, worst cell | `3064.946 ms` |
+| mesh realization total | `9.735 ms` |
+| mesh realization, worst cell | `3.298 ms` |
+| collision realization total | `12.277 ms` |
+| collision realization, worst cell | `4.814 ms` |
+| main-thread resource realization total | `22.012 ms` |
+| staged extraction + collision preparation | `23122.451 ms` |
+| production controller bootstrap | `27237.739 ms` |
+| policy-route observer demand update, worst sample | `12.078 ms` |
+| controller demand-route update, worst sample | `10.821 ms` |
+| mesh-buffer estimate, 8 cells | `621516 bytes` |
+| worst-cell mesh-buffer estimate | `218092 bytes` |
+| vertices / triangles | `11379 / 21449` |
+| scalar samples / cubes | `2163864 / 270483` |
+| logical peak geometry/render/collision residency | `186 / 46 / 46` cells |
+| stale results | `0` |
+
+Budget exceedances from that repaired run:
+
+- `mesh_extraction_total_ms`: `17234.002 ms` > `1200 ms`;
+- `mesh_extraction_cell_max_ms`: `4925.100 ms` > `250 ms`;
+- `collision_prepare_cell_max_ms`: `3064.946 ms` > `8 ms`;
+- `controller_bootstrap_ms`: `27237.739 ms` > `2000 ms`;
+- `observer_update_max_ms`: `12.078 ms` > `4 ms`.
+
+The accepted release-hysteresis residency envelopes were **not** exceeded: measured geometry/render/collision peaks were `186/46/46` against `343/125/125`. Deterministic generation, partitioning, mesh/collision resource realization and mesh-buffer memory were also within their prototype warning budgets.
+
+### Bottleneck conclusion
+
+1. **Primary:** synchronous Marching-Cubes extraction CPU/wall work.
+2. **Secondary:** synchronous GDScript collision-face preparation.
+3. **Tertiary:** streamer observer demand/release bookkeeping.
+
+This baseline does **not** establish production worker scheduling latency, executor contention, dynamic post-bootstrap cave-cell realization latency, or scene-node reclamation cost. Those remain unmeasured boundaries.
 
 ## PERF-002 decision rule
 
-PERF-002 becomes justified only by the repaired measured CPU budget exceedances and remains dependency-blocked until PERF-001 is independently accepted. Every optimization must name the accepted PERF-001 metric it targets, provide before/after profiling, and rerun deterministic validation to prove world truth is unchanged.
+PERF-002 is justified by the repaired measured CPU budget exceedances but remains dependency-blocked until PERF-001 is independently accepted. Every optimization must name the accepted PERF-001 metric it targets, provide before/after profiling on the same fixture, and rerun deterministic validation to prove world truth is unchanged.
