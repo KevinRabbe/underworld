@@ -4,6 +4,7 @@ const ItemContainerTests := preload("res://tests/inventory/test_item_container_s
 const InventoryTransactionTests := preload("res://tests/inventory/test_inventory_transaction_service.gd")
 const EquipmentHotbarTests := preload("res://tests/inventory/test_equipment_hotbar_state.gd")
 const SurfaceHarvestTests := preload("res://tests/inventory/test_surface_harvest_inventory.gd")
+const LootCollectionTests := preload("res://tests/inventory/test_loot_collection.gd")
 
 
 func _init() -> void:
@@ -12,9 +13,10 @@ func _init() -> void:
 	failures.append_array(InventoryTransactionTests.run())
 	failures.append_array(EquipmentHotbarTests.run())
 	failures.append_array(SurfaceHarvestTests.run())
+	failures.append_array(LootCollectionTests.run())
 	if failures.is_empty():
 		print("[INVENTORY VALIDATION] PASS")
-		print("  container / transaction / equipment-hotbar / surface-harvest contracts passed")
+		print("  container / transaction / equipment-hotbar / surface-harvest / loot-collection contracts passed")
 		quit(0)
 		return
 
