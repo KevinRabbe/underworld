@@ -212,6 +212,40 @@ func _build_body_boxes() -> void:
 	_attach_box("thigh_r", "ThighR", Vector3(0.17, 0.42, 0.19), Vector3(0.0, -0.21, 0.0), limb_material)
 	_attach_box("calf_r", "CalfR", Vector3(0.15, 0.36, 0.16), Vector3(0.0, -0.18, 0.0), limb_material)
 	_attach_box("foot_r", "FootR", Vector3(0.16, 0.12, 0.29), Vector3(0.0, -0.04, 0.10), accent_material)
+	_add_round_detail("clavicle_l", "ShoulderL", 0.16, accent_material)
+	_add_round_detail("clavicle_r", "ShoulderR", 0.16, accent_material)
+	_add_belt_detail()
+
+
+func _add_round_detail(bone_name: String, visual_name: String, radius: float, material: Material) -> void:
+	var attachment := BoneAttachment3D.new()
+	attachment.name = visual_name + "Attachment"
+	attachment.bone_name = bone_name
+	skeleton.add_child(attachment)
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = visual_name
+	var sphere := SphereMesh.new()
+	sphere.radius = radius
+	sphere.height = radius * 2.0
+	mesh_instance.mesh = sphere
+	mesh_instance.material_override = material
+	attachment.add_child(mesh_instance)
+
+
+func _add_belt_detail() -> void:
+	var pelvis_attachment := skeleton.get_node_or_null("PelvisAttachment")
+	if pelvis_attachment == null:
+		return
+	var belt := MeshInstance3D.new()
+	belt.name = "Belt"
+	var belt_mesh := CylinderMesh.new()
+	belt_mesh.top_radius = 0.21
+	belt_mesh.bottom_radius = 0.21
+	belt_mesh.height = 0.08
+	belt.mesh = belt_mesh
+	belt.position = Vector3(0.0, 0.03, 0.0)
+	belt.material_override = accent_material
+	pelvis_attachment.add_child(belt)
 
 
 func _build_face_details() -> void:
