@@ -3,6 +3,7 @@ extends Node3D
 const TerrainGeneratorScript := preload("res://worldgen/surface/terrain_generator.gd")
 const TerrainChunkScript := preload("res://world/terrain_chunk.gd")
 const PickupGeneratorScript := preload("res://worldgen/surface/pickup_generator.gd")
+const StableIdScript := preload("res://worldgen/identity/stable_id.gd")
 
 var settings
 var main_generator
@@ -142,7 +143,10 @@ func _exit_tree() -> void:
 func load_destroyed_object_ids(object_ids: Array) -> void:
 	destroyed_object_ids.clear()
 	for object_id_variant in object_ids:
-		destroyed_object_ids[str(object_id_variant)] = true
+		var object_id: String = str(object_id_variant)
+		if StableIdScript.parse(object_id) == null:
+			continue
+		destroyed_object_ids[object_id] = true
 
 
 func get_destroyed_object_ids() -> Array:
@@ -156,6 +160,8 @@ func get_destroyed_object_count() -> int:
 
 
 func is_world_object_destroyed(object_id: String) -> bool:
+	if StableIdScript.parse(object_id) == null:
+		return false
 	return destroyed_object_ids.has(object_id)
 
 
@@ -165,7 +171,7 @@ func destroy_world_object(
 	object_index: int,
 	object_chunk: Vector2i
 ) -> bool:
-	if object_id.is_empty() or destroyed_object_ids.has(object_id):
+	if StableIdScript.parse(object_id) == null or destroyed_object_ids.has(object_id):
 		return false
 
 	destroyed_object_ids[object_id] = true
@@ -189,7 +195,7 @@ func find_nearby_pickups(player_world_position: Vector3, radius: float) -> Array
 		for pickup_variant in chunk_pickups:
 			var pickup: Dictionary = pickup_variant.duplicate(true)
 			var object_id: String = str(pickup.get("object_id", ""))
-			if object_id.is_empty() or destroyed_object_ids.has(object_id):
+			if StableIdScript.parse(object_id) == null or destroyed_object_ids.has(object_id):
 				continue
 			pickup["object_chunk"] = chunk_coord
 			found.append(pickup)
@@ -204,7 +210,7 @@ func collect_nearby_pickups(player_world_position: Vector3, radius: float) -> Ar
 		for pickup_variant in chunk_pickups:
 			var pickup: Dictionary = pickup_variant
 			var object_id: String = str(pickup.get("object_id", ""))
-			if object_id.is_empty() or destroyed_object_ids.has(object_id):
+			if StableIdScript.parse(object_id) == null or destroyed_object_ids.has(object_id):
 				continue
 			destroyed_object_ids[object_id] = true
 			collected.append(pickup)
