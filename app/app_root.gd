@@ -43,12 +43,14 @@ func _replace_scene(scene: PackedScene) -> bool:
 		return false
 
 	var previous_scene: Node = current_scene
+	if previous_scene != null and is_instance_valid(previous_scene):
+		if previous_scene.get_parent() == scene_host:
+			scene_host.remove_child(previous_scene)
+
 	scene_host.add_child(next_scene)
 	current_scene = next_scene
 
 	if previous_scene != null and is_instance_valid(previous_scene):
-		if previous_scene.get_parent() == scene_host:
-			scene_host.remove_child(previous_scene)
 		previous_scene.queue_free()
 
 	_transition_in_progress = false
