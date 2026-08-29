@@ -28,6 +28,9 @@ static func run() -> Array[String]:
 	_test_unequip_preserves_instance_state(failures)
 	_test_hotbar_failure_cannot_duplicate_or_lose_item(failures)
 	_test_empty_selection_resolves_to_hands(failures)
+	_test_occupied_selection_without_definition_fails_closed(failures)
+	_test_definition_without_stored_record_fails_closed(failures)
+	_test_mismatched_definition_fails_before_behavior_resolution(failures)
 	return failures
 
 
@@ -197,6 +200,104 @@ static func _test_empty_selection_resolves_to_hands(failures: Array[String]) -> 
 	var events: Array = selection_result.get("events", [])
 	if events.size() != 1 or str(events[0].get("type", "")) != "equipment.hotbar_selected":
 		failures.append("hotbar selection did not expose semantic state-change event")
+
+
+static func _test_occupied_selection_without_definition_fails_closed(failures: Array[String]) -> void:
+	var sword = _weapon(
+		"item.weapon.missing_definition_sword",
+		SWORD_CATEGORY,
+		[EQUIPABLE, DAMAGE_DEALER]
+	)
+	var inventory = ItemContainerState.new().configure(2, 20.0)
+	inventory.add_instance(sword, {"durability": 64})
+	var equipment = _equipment_state()
+	var equip_result: Dictionary = EquipmentService.new().equip_from_inventory(
+		equipment, inventory, 0, sword, "equipment_slot.hotbar.1"
+	)
+	if not bool(equip_result.get("success", false)):
+		failures.append("missing-definition regression setup failed")
+		return
+	equipment.select_hotbar(1)
+	equipment._commit_definition("equipment_slot.hotbar.1", null)
+	var resolver = EquippedItemResolver.new()
+	var selected: Dictionary = resolver.resolve_selected(equipment)
+	if bool(selected.get("success", false)):
+		failures.append("occupied equipment without definition did not fail closed")
+	if str(selected.get("selection_kind", "")) == "hands":
+		failures.append("occupied equipment without definition masqueraded as hands")
+	if not selected.get("diagnostics", []).has(
+		"occupied equipment slot is missing resolved ItemDefinition: equipment_slot.hotbar.1"
+	):
+		failures.append("occupied equipment without definition lacked deterministic diagnostic")
+	if resolver.selected_has_capability(equipment, DAMAGE_DEALER):
+		failures.append("missing-definition state leaked damage-dealer behavior")
+	var weapon_result: Dictionary = resolver.resolve_selected_weapon_attack(equipment, null, null)
+	if bool(weapon_result.get("success", false)):
+		failures.append("missing-definition state leaked weapon attack behavior")
+
+
+static func _test_definition_without_stored_record_fails_closed(failures: Array[String]) -> void:
+	var ghost_tool = _item(
+		"item.tool.definition_only_pickaxe",
+		PICKAXE_CATEGORY,
+		[EQUIPABLE, DAMAGE_DEALER, HARVEST_TOOL]
+	)
+	var equipment = _equipment_state()
+	equipment.select_hotbar(1)
+	equipment._commit_definition("equipment_slot.hotbar.1", ghost_tool)
+	var resolver = EquippedItemResolver.new()
+	var selected: Dictionary = resolver.resolve_selected(equipment)
+	if bool(selected.get("success", false)):
+		failures.append("definition without stored equipment record did not fail closed")
+	if str(selected.get("selection_kind", "")) == "hands":
+		failures.append("definition without stored equipment record masqueraded as hands")
+	if not selected.get("diagnostics", []).has(
+		"empty equipment slot retains resolved ItemDefinition: equipment_slot.hotbar.1"
+	):
+		failures.append("definition-only equipment state lacked deterministic diagnostic")
+	if resolver.selected_has_capability(equipment, HARVEST_TOOL):
+		failures.append("definition-only equipment state leaked harvest behavior")
+
+
+static func _test_mismatched_definition_fails_before_behavior_resolution(failures: Array[String]) -> void:
+	var stored_sword = _weapon(
+		"item.weapon.stored_sword",
+		SWORD_CATEGORY,
+		[EQUIPABLE, DAMAGE_DEALER]
+	)
+	var wrong_axe = _weapon(
+		"item.weapon.wrong_axe_definition",
+		AXE_CATEGORY,
+		[EQUIPABLE, DAMAGE_DEALER, HARVEST_TOOL]
+	)
+	var inventory = ItemContainerState.new().configure(2, 20.0)
+	inventory.add_instance(stored_sword, {"durability": 53})
+	var equipment = _equipment_state()
+	var equip_result: Dictionary = EquipmentService.new().equip_from_inventory(
+		equipment, inventory, 0, stored_sword, "equipment_slot.hotbar.1"
+	)
+	if not bool(equip_result.get("success", false)):
+		failures.append("mismatched-definition regression setup failed")
+		return
+	equipment.select_hotbar(1)
+	equipment._commit_definition("equipment_slot.hotbar.1", wrong_axe)
+	var resolver = EquippedItemResolver.new()
+	var selected: Dictionary = resolver.resolve_selected(equipment)
+	if bool(selected.get("success", false)):
+		failures.append("stored-item/definition mismatch did not fail closed")
+	if str(selected.get("selection_kind", "")) == "hands":
+		failures.append("stored-item/definition mismatch masqueraded as hands")
+	if not selected.get("diagnostics", []).has(
+		"equipment slot definition does not match stored item: equipment_slot.hotbar.1"
+	):
+		failures.append("stored-item/definition mismatch lacked deterministic diagnostic")
+	if resolver.selected_has_capability(equipment, HARVEST_TOOL):
+		failures.append("mismatched definition leaked harvest-tool capability")
+	if resolver.selected_matches_category_root(equipment, AXE_CATEGORY):
+		failures.append("mismatched definition leaked semantic category behavior")
+	var weapon_result: Dictionary = resolver.resolve_selected_weapon_attack(equipment, null, null)
+	if bool(weapon_result.get("success", false)):
+		failures.append("mismatched definition leaked weapon attack behavior")
 
 
 static func _equipment_state():
