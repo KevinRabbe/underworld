@@ -1,6 +1,5 @@
 extends "res://gameplay/items/equipment/equipment_hotbar_state.gd"
 
-const ItemDefinition := preload("res://gameplay/items/definitions/item_definition.gd")
 const RestoredItemContainerState := preload("res://gameplay/persistence/restored_item_container_state.gd")
 
 

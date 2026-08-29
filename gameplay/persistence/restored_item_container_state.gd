@@ -1,9 +1,5 @@
 extends "res://gameplay/items/inventory/item_container_state.gd"
 
-const ItemDefinition := preload("res://gameplay/items/definitions/item_definition.gd")
-const ItemStackState := preload("res://gameplay/items/inventory/item_stack_state.gd")
-const ItemInstanceState := preload("res://gameplay/items/inventory/item_instance_state.gd")
-const InventoryStateCodec := preload("res://gameplay/items/inventory/inventory_state_codec.gd")
 
 
 func restore_record_at(
