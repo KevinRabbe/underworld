@@ -72,7 +72,7 @@ static func _test_warning_budgets_are_explicit_and_non_gating(failures: Array[St
 	var thresholds: Dictionary = descriptor.get("thresholds", {})
 	for required_key in [
 		"controller_bootstrap_ms",
-		"mesh_worker_cell_max_ms",
+		"mesh_extraction_cell_max_ms",
 		"mesh_realization_cell_max_ms",
 		"collision_realization_cell_max_ms",
 		"mesh_memory_total_bytes",
@@ -82,7 +82,12 @@ static func _test_warning_budgets_are_explicit_and_non_gating(failures: Array[St
 	]:
 		if not thresholds.has(required_key):
 			failures.append("missing PERF-001 warning budget: " + required_key)
-	var synthetic := {"mesh_worker_cell_max_ms": 999999.0}
+	var semantics: Dictionary = descriptor.get("measurement_semantics", {})
+	if not str(semantics.get("mesh_extraction", "")).contains("excludes production executor"):
+		failures.append("PERF-001 descriptor does not distinguish staged extraction from production worker scheduling")
+	if not str(semantics.get("controller_route_observer_update", "")).contains("demand/gate update"):
+		failures.append("PERF-001 descriptor misstates controller-route observer measurements")
+	var synthetic := {"mesh_extraction_cell_max_ms": 999999.0}
 	var warnings := Budget.evaluate(synthetic)
 	if warnings.is_empty():
 		failures.append("runtime performance budget did not warn on synthetic over-budget sample")
