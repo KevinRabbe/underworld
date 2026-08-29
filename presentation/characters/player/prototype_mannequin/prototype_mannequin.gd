@@ -140,10 +140,10 @@ func has_required_rig() -> bool:
 
 
 func _build_materials() -> void:
-	torso_material = _material(Color(0.34, 0.37, 0.43))
-	limb_material = _material(Color(0.48, 0.51, 0.57))
-	head_material = _material(Color(0.58, 0.60, 0.64))
-	accent_material = _material(Color(0.30, 0.42, 0.54))
+	torso_material = _material(Color(0.22, 0.28, 0.36))
+	limb_material = _material(Color(0.43, 0.49, 0.58))
+	head_material = _material(Color(0.68, 0.58, 0.45))
+	accent_material = _material(Color(0.18, 0.35, 0.52))
 	face_material = _material(Color(0.035, 0.045, 0.06))
 
 
@@ -252,6 +252,15 @@ func _attach_box(
 		head.radius = maxf(size.x, size.z)
 		head.height = size.y * 1.45
 		mesh_instance.mesh = head
+	elif visual_name in ["Pelvis", "Torso", "Chest", "UpperArmL", "UpperArmR", "ForearmL", "ForearmR", "ThighL", "ThighR", "CalfL", "CalfR"]:
+		# Rounded primitive volumes keep the low-poly silhouette readable while
+		# remaining cheap, deterministic, and replaceable by a future authored mesh.
+		var capsule := CapsuleMesh.new()
+		capsule.radius = maxf(minf(size.x, size.z) * 0.52, 0.04)
+		capsule.height = maxf(size.y, capsule.radius * 2.0 + 0.02)
+		mesh_instance.mesh = capsule
+		if visual_name in ["UpperArmL", "UpperArmR", "ForearmL", "ForearmR"]:
+			mesh_instance.rotation.z = PI * 0.5
 	else:
 		var box := BoxMesh.new()
 		box.size = size
