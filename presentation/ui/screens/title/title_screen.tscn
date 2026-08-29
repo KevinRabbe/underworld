@@ -1,0 +1,93 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://presentation/ui/screens/title/title_screen.gd" id="1_script"]
+[ext_resource type="Theme" path="res://presentation/ui/theme/underworld_theme.tres" id="2_theme"]
+
+[node name="TitleScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_script")
+
+[node name="Background" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_type_variation = &"ScreenBackground"
+
+[node name="SafeMargin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_type_variation = &"MenuSafeMargin"
+
+[node name="Center" type="CenterContainer" parent="SafeMargin"]
+layout_mode = 2
+
+[node name="MenuPanel" type="PanelContainer" parent="SafeMargin/Center"]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+theme_type_variation = &"MenuPanel"
+
+[node name="Menu" type="VBoxContainer" parent="SafeMargin/Center/MenuPanel"]
+layout_mode = 2
+theme_type_variation = &"MenuStack"
+alignment = 1
+
+[node name="Title" type="Label" parent="SafeMargin/Center/MenuPanel/Menu"]
+layout_mode = 2
+theme_type_variation = &"TitleLabel"
+text = "UNDERWORLD"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="SafeMargin/Center/MenuPanel/Menu"]
+layout_mode = 2
+theme_type_variation = &"SubtitleLabel"
+text = "DESCEND  •  SURVIVE  •  RETURN"
+horizontal_alignment = 1
+
+[node name="Spacer" type="Control" parent="SafeMargin/Center/MenuPanel/Menu"]
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="NewGameButton" type="Button" parent="SafeMargin/Center/MenuPanel/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 2
+text = "NEW GAME"
+
+[node name="ContinueButton" type="Button" parent="SafeMargin/Center/MenuPanel/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+disabled = true
+text = "CONTINUE"
+
+[node name="QuitButton" type="Button" parent="SafeMargin/Center/MenuPanel/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 2
+text = "QUIT"
+
+[node name="FooterSpacer" type="Control" parent="SafeMargin/Center/MenuPanel/Menu"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Status" type="Label" parent="SafeMargin/Center/MenuPanel/Menu"]
+layout_mode = 2
+theme_type_variation = &"StatusLabel"
+text = "PRE-ALPHA"
+horizontal_alignment = 1

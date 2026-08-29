@@ -4,7 +4,7 @@ config_version=5
 
 [application]
 config/name="Underworld"
-run/main_scene="res://app/game/game.tscn"
+run/main_scene="res://app/app_root.tscn"
 
 [display]
 window/size/viewport_width=1280
