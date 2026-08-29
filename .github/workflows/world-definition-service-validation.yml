@@ -1,0 +1,61 @@
+name: World Definition Service Validation
+
+on:
+  pull_request:
+    paths:
+      - 'worldgen/services/**'
+      - 'worldgen/graph/surface_entrance_integration_descriptor.gd'
+      - 'worldgen/pipeline/world_generation_context.gd'
+      - 'worldgen/identity/**'
+      - 'tests/world_definition_service/**'
+      - 'tests/foundation/sample_graph_fixture.gd'
+      - 'tests/run_world_definition_service.gd'
+      - '.github/workflows/world-definition-service-validation.yml'
+  push:
+    branches:
+      - main
+      - 'validation/world-definition-service-*'
+    paths:
+      - 'worldgen/services/**'
+      - 'worldgen/graph/surface_entrance_integration_descriptor.gd'
+      - 'worldgen/pipeline/world_generation_context.gd'
+      - 'worldgen/identity/**'
+      - 'tests/world_definition_service/**'
+      - 'tests/foundation/sample_graph_fixture.gd'
+      - 'tests/run_world_definition_service.gd'
+      - '.github/workflows/world-definition-service-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  world-definition-service-contracts:
+    name: Godot world definition service contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Show Godot version
+        run: godot --version
+
+      - name: Run WorldDefinitionService contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tests/run_world_definition_service.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[WORLD DEFINITION SERVICE VALIDATION] PASS' "$validation_log"
