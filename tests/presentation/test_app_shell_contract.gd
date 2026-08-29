@@ -63,6 +63,18 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		if app.get("current_scene") != title or scene_host.get_child_count() != 1:
 			failures.append("Continue must remain fail-closed and non-routing before persistence integration")
 
+		# An unusable target route must fail before the current title route is
+		# detached. PackedScene.can_instantiate() keeps this proof free of expected
+		# engine errors from attempting to instantiate an empty PackedScene.
+		var invalid_game := PackedScene.new()
+		app.set("_game_scene", invalid_game)
+		title.emit_signal("new_game_requested")
+		if app.get("current_scene") != title or scene_host.get_child_count() != 1:
+			failures.append("uninstantiable replacement must leave the current title route intact")
+		if str(app.call("current_route_id")) != "title":
+			failures.append("failed replacement must not commit a new semantic route id")
+		app.set("_game_scene", game_fixture)
+
 		title.emit_signal("new_game_requested")
 		var first_game: Node = app.get("current_scene") as Node
 		if first_game == null or first_game == title:

@@ -64,6 +64,8 @@ func _replace_scene(scene: PackedScene, route_id: StringName) -> bool:
 		return false
 	if route_id == _current_route and current_scene != null and is_instance_valid(current_scene):
 		return false
+	if not scene.can_instantiate():
+		return false
 	_transition_in_progress = true
 
 	# Prepare the replacement before mutating the active scene. A broken future
