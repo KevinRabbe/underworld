@@ -95,7 +95,7 @@ func bootstrap_fixture(world_seed: int, region: Vector2i, entrance_id: String) -
 	var registration_failures := register_surface_plan(surface_result.data, provenance.fingerprint if provenance != null else "")
 	if not registration_failures.is_empty(): return _bootstrap_fail(registration_failures)
 	for plan in partition.data.plans:
-		var voxel_request := VoxelRequest.new(plan, cell_config, provenance)
+		var voxel_request := VoxelRequest.new(plan, cell_config, provenance, 0.0, partition.data, context)
 		var mesh_stage = VoxelMesher.build(voxel_request)
 		if not mesh_stage.success: return _bootstrap_fail(mesh_stage.diagnostics)
 		if not accept_mesh_data(mesh_stage.data): return _bootstrap_fail(["Mesh realization failed for " + plan.cell_address.canonical_text()])
@@ -140,7 +140,10 @@ func update_player_position(position: Vector3) -> void:
 				break
 		for address in handoff.cell_addresses:
 			if near:
-				streamer.set_demand(address, "entrance:" + entrance_id, ["definition", "fragment_plan", "voxel_geometry", "render", "collision"], handoff.fingerprint, "")
+				# The entrance pin established the accepted surface-plan/partition
+				# identity. Refresh only desired tiers here; never relabel a live
+				# cell with the handoff fingerprint and invalidate its generation.
+				streamer.set_demand(address, "entrance:" + entrance_id, ["definition", "fragment_plan", "voxel_geometry", "render", "collision"])
 			else:
 				streamer.release_entrance(address, entrance_id)
 		_update_gates()

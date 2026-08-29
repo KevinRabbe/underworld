@@ -38,6 +38,8 @@ static func run() -> Array[String]:
 	streamer.release_demand(address, "entrance:test")
 	streamer.demand_cell(address, "entrance:test", ["collision"], "plan", "prov")
 	_expect(failures, "null collision payload is rejected", not streamer.accept_result(invalid))
+	var wrong_type := Result.new(address, streamer.records[address.canonical_text()].generation, "collision", "plan", "prov", "not-a-shape", true, [], "world", "manifest")
+	_expect(failures, "wrong collision payload type is rejected", not streamer.accept_result(wrong_type))
 	streamer.release_demand(address, "entrance:test")
 	gate.update(streamer)
 	_expect(failures, "gate closes before release", not gate.is_open())
