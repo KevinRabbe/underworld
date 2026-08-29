@@ -10,6 +10,8 @@ A `CreatureDefinition` answers **what authored creature this is and which valida
 
 The first migration proof is the existing Burrower. ENEMY-001 preserves its current behavior and tuning rather than redesigning it.
 
+The base creature contract is deliberately broader than hostile mobile enemies. A passive or non-rigged creature may use the same definition family without inventing attack, sensing, movement or skeleton data it does not need. Capabilities activate those behavioral contracts compositionally.
+
 ## Stable semantic identity
 
 Creature definitions use the `creature.*` ContentId family.
@@ -32,14 +34,14 @@ Replacing presentation or moving an authored resource does not rename the creatu
 
 ## Category and capability contract
 
-The baseline enemy category is:
+Creature classification lives under:
 
 ```text
 category.creature
 └─ category.creature.enemy
 ```
 
-The executable enemy-family rule requires the enemy proof to declare explicit capabilities for:
+The Burrower declares:
 
 ```text
 capability.movement
@@ -50,6 +52,15 @@ capability.damage_dealer
 `capability.damage_dealer` reuses the project capability vocabulary for content that participates in an attack/damage contract. Melee specificity belongs to the referenced attack profile rather than creating a near-duplicate `capability.combat.melee` capability.
 
 `capability.movement` and `capability.sensing` are the creature-family contracts introduced by ENEMY-001 for runtime movement and detection participation. These capabilities are semantic schema declarations. They do not contain AI implementation or tuning numbers.
+
+Capability/tuning consistency is fail-closed:
+
+- positive `move_speed` requires `capability.movement`, and declaring movement requires positive movement tuning;
+- positive `detection_range` requires `capability.sensing`, and declaring sensing requires positive detection tuning;
+- any attack tuning or attack-profile reference requires `capability.damage_dealer`;
+- a damage dealer requires an attack-profile reference plus positive range, damage, cooldown and windup.
+
+A generic passive creature may therefore have zero movement, sensing and attack tuning, omit those three capabilities, and omit attack/animation/rig references while still using the same `CreatureDefinition` boundary.
 
 ## Authored immutable tuning
 
@@ -65,22 +76,31 @@ attack_cooldown  = 1.20
 attack_windup    = 0.42
 ```
 
+`max_health` remains required and positive for every creature. Movement, sensing and attack tuning may be zero when the corresponding behavior does not apply.
+
 `CreatureDefinition.runtime_stats()` is a narrow compatibility handoff into the existing Burrower actor. It does not create a second runtime-state model.
 
 The existing hit-stagger (`0.20`) and parry-stagger (`0.85`) behavior remain actor/combat-reaction contract values in this migration. ENEMY-001 does not duplicate them into authored content merely to claim ownership it does not consume.
 
 ## Semantic references
 
-A validated creature definition selects dependencies by semantic identity:
+A creature always selects its presentation archetype by semantic identity:
 
 ```text
-combat.attack_profile      -> attack_profile.*
-presentation.archetype     -> archetype.*
-presentation.animation_set -> animation_set.*
-presentation.rig_profile   -> rig_profile.*
+presentation.archetype -> archetype.*
 ```
 
-The Burrower proof also declares the animation and rig roles it requires. The creature family validator verifies that the selected animation set and rig profile actually provide those roles.
+Additional references are conditional:
+
+```text
+combat.attack_profile      -> attack_profile.*     when damage-dealer behavior applies
+presentation.animation_set -> animation_set.*      when rigged animation applies
+presentation.rig_profile   -> rig_profile.*        paired with animation_set
+```
+
+Animation set and rig profile are declared together. Required animation/rig roles are legal only when their corresponding semantic presentation reference is present.
+
+The Burrower uses all four references and declares the animation and rig roles it requires. The creature family validator verifies that the selected animation set and rig profile actually provide those roles.
 
 Concrete clip names, bone names, meshes and scene filenames remain presentation-owned.
 
@@ -149,21 +169,24 @@ The creature family fails closed when:
 
 - semantic family `creature` resolves to a definition that is not `CreatureDefinition`;
 - a creature category lies outside `category.creature`;
-- an enemy omits required movement, sensing or damage-dealer capability declarations;
-- required semantic references are missing or use the wrong family;
+- behavior tuning and capability declarations disagree;
+- a damage dealer lacks complete positive attack tuning or an attack-profile reference;
+- semantic references are missing when required or use the wrong family;
 - the attack-profile target is not `CreatureAttackProfileDefinition`;
 - the archetype target is not an accepted `ArchetypeDefinition`;
 - animation-set or rig-profile targets use the wrong concrete definition type;
+- only one of animation-set / rig-profile is declared;
 - the selected animation set targets a different rig profile;
 - a required animation or rig role is not provided by the selected presentation contracts.
 
-Focused tests also prove two compatible creature definitions can use the same `CreatureDefinition -> runtime_stats() -> Burrower.configure(...)` boundary with different authored tuning and no concrete-ID branch in the encounter/combat manager.
+Focused tests prove both sides of the reusable boundary: a passive non-combat/non-rigged creature validates without enemy-only data, while two combat-capable creature definitions use the same `CreatureDefinition -> runtime_stats() -> Burrower.configure(...)` seam with different authored tuning and no concrete-ID branch in the encounter/combat manager.
 
 ## Forbidden patterns
 
 Do not:
 
 - put current health, timers, target state or wander state in shared creature definitions;
+- force every creature to carry enemy-only movement, sensing, attack or rig data;
 - move encounter counts/distances/terrain sampling into a creature definition;
 - use scene/mesh/script paths as creature identity;
 - add a concrete Burrower branch to a central content/combat manager;
@@ -173,7 +196,7 @@ Do not:
 - create near-duplicate capability vocabulary when an accepted capability already describes the behavior contract;
 - absorb CONTENT-002, WEAPON-001, CONTENT-006 or MAP-016 scope.
 
-## Minimal conceptual example
+## Minimal Burrower example
 
 ```text
 content_id: creature.enemy.burrower
