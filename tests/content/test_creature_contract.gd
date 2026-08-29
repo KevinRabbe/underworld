@@ -9,6 +9,7 @@ const ContentValidationPipeline := preload("res://core/content/validation/conten
 const CreatureDefinition := preload("res://gameplay/creatures/definitions/creature_definition.gd")
 const CreatureAttackProfileDefinition := preload("res://gameplay/creatures/definitions/creature_attack_profile_definition.gd")
 const CreatureFamilyValidator := preload("res://gameplay/creatures/validation/creature_family_validator.gd")
+const EnemyScript := preload("res://gameplay/creatures/underworld/burrower/burrower.gd")
 const ArchetypeDefinition := preload("res://core/content/archetypes/archetype_definition.gd")
 const AnimationSetDefinition := preload("res://presentation/characters/animation/animation_set_definition.gd")
 const RigProfileDefinition := preload("res://presentation/characters/animation/rig_profile_definition.gd")
@@ -118,6 +119,26 @@ static func _test_wrong_concrete_types_fail_closed(failures: Array[String]) -> v
 	):
 		failures.append("creature accepted a generic attack-profile family target")
 
+	var wrong_archetype = ContentDefinition.new()
+	wrong_archetype.configure("archetype.creature.generic_wrong_type", "archetype", 1)
+	var archetype_creature = _creature("creature.enemy.wrong_archetype_type")
+	archetype_creature.archetype_id = wrong_archetype.content_id
+	var archetype_definitions: Array = _shared_targets()
+	archetype_definitions.push_front(archetype_creature)
+	archetype_definitions.append(wrong_archetype)
+	var wrong_archetype_result: Dictionary = _pipeline().validate_all(
+		archetype_definitions,
+		_categories(),
+		_capabilities(),
+		[_validator()]
+	)
+	if not _has_code_fragment(
+		wrong_archetype_result,
+		"family_rule",
+		"must inherit accepted ArchetypeDefinition"
+	):
+		failures.append("creature accepted a generic archetype-family presentation target")
+
 
 static func _test_invalid_semantic_bindings_fail(failures: Array[String]) -> void:
 	var missing_attack = _creature("creature.enemy.missing_attack")
@@ -184,6 +205,19 @@ static func _test_two_creatures_reuse_same_boundary(failures: Array[String]) -> 
 		failures.append("two compatible creature definitions did not retain independent authored tuning")
 	if first.get_script() != second.get_script():
 		failures.append("second creature proof bypassed the shared CreatureDefinition boundary")
+
+	var first_actor = EnemyScript.new()
+	var second_actor = EnemyScript.new()
+	first_actor.configure("first_probe", null, Vector3.ZERO, first.runtime_stats())
+	second_actor.configure("second_probe", null, Vector3.ZERO, second.runtime_stats())
+	_expect_equal(failures, "first generic actor health", first_actor.max_health, first.max_health)
+	_expect_equal(failures, "second generic actor health", second_actor.max_health, second.max_health)
+	_expect_close(failures, "first generic actor move speed", first_actor.move_speed, first.move_speed)
+	_expect_close(failures, "second generic actor move speed", second_actor.move_speed, second.move_speed)
+	_expect_equal(failures, "first generic actor attack damage", first_actor.attack_damage, first.attack_damage)
+	_expect_equal(failures, "second generic actor attack damage", second_actor.attack_damage, second.attack_damage)
+	first_actor.free()
+	second_actor.free()
 
 
 static func _test_runtime_and_encounter_state_stay_separate(failures: Array[String]) -> void:
