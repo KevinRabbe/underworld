@@ -9,6 +9,7 @@ static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_m3_inventory_proof(failures)
 	_test_stack_compatibility_and_limits(failures)
+	_test_authored_stack_contract_mismatch_is_atomic(failures)
 	_test_instance_state_is_separate(failures)
 	_test_failed_operations_are_atomic(failures)
 	_test_capacity_resize_is_atomic(failures)
@@ -75,6 +76,37 @@ static func _test_stack_compatibility_and_limits(failures: Array[String]) -> voi
 	var invalid_stack = ItemStackState.new().configure(definition, 5, {})
 	if not _array_has_fragment(invalid_stack.validate_against(definition), "exceeds authored stack limit"):
 		failures.append("ItemStackState accepted quantity above ItemDefinition.stack_limit")
+
+
+static func _test_authored_stack_contract_mismatch_is_atomic(failures: Array[String]) -> void:
+	var item_id := "item.resource.stack_contract_probe"
+	var stored_definition = _item(item_id, 4, 0.25, 1)
+	var container = ItemContainerState.new().configure(2, -1.0)
+	var initial: Dictionary = container.add_stack(stored_definition, 2)
+	if not bool(initial.get("success", false)):
+		failures.append("stack-contract mismatch setup add failed: %s" % [initial.get("diagnostics", [])])
+		return
+
+	var baseline_json: String = container.canonical_json()
+	var mismatched_definitions := [
+		_item(item_id, 8, 0.25, 1),
+		_item(item_id, 4, 0.50, 1),
+		_item(item_id, 4, 0.25, 2),
+	]
+	for mismatch in mismatched_definitions:
+		var result: Dictionary = container.add_stack(mismatch, 1)
+		if bool(result.get("success", false)):
+			failures.append("authored stack definition mismatch was accepted for %s" % item_id)
+		elif not _has_fragment(result, "authored stack definition mismatch"):
+			failures.append("authored stack definition mismatch did not fail clearly: %s" % [result.get("diagnostics", [])])
+		if container.canonical_json() != baseline_json:
+			failures.append("authored stack definition mismatch mutated canonical inventory state")
+
+	var compatible_clone = _item(item_id, 4, 0.25, 1)
+	var compatible_result: Dictionary = container.add_stack(compatible_clone, 1)
+	if not bool(compatible_result.get("success", false)):
+		failures.append("equivalent authored stack definition object failed to merge: %s" % [compatible_result.get("diagnostics", [])])
+	_expect_equal(failures, "equivalent authored contract merged quantity", container.quantity_of(item_id), 3)
 
 
 static func _test_instance_state_is_separate(failures: Array[String]) -> void:
@@ -190,8 +222,13 @@ static func _test_canonical_serialization_shape(failures: Array[String]) -> void
 	_expect_equal(failures, "serialization state kind", str(snapshot.get("slots", [])[0].get("kind", "")), "stack")
 
 
-static func _item(content_id: String, stack_limit: int, unit_weight: float):
-	return ItemDefinition.new().configure_item(content_id, stack_limit, unit_weight, 1)
+static func _item(
+	content_id: String,
+	stack_limit: int,
+	unit_weight: float,
+	schema_revision: int = 1
+):
+	return ItemDefinition.new().configure_item(content_id, stack_limit, unit_weight, schema_revision)
 
 
 static func _has_fragment(result: Dictionary, fragment: String) -> bool:
