@@ -205,7 +205,7 @@ func _resolve_pending_attack() -> void:
 
 
 func _attack_path_is_clear() -> bool:
-	var query := _build_attack_ray_query()
+	var query: PhysicsRayQueryParameters3D = _build_attack_ray_query()
 	if query == null:
 		return false
 	var world := get_world_3d()
@@ -217,7 +217,7 @@ func _attack_path_is_clear() -> bool:
 	return _collider_belongs_to_target(hit.get("collider", null))
 
 
-func _build_attack_ray_query():
+func _build_attack_ray_query() -> PhysicsRayQueryParameters3D:
 	if not is_inside_tree() or not is_instance_valid(target):
 		return null
 	var origin: Vector3 = global_position + Vector3.UP * ATTACK_QUERY_HEIGHT
