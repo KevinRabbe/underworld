@@ -25,6 +25,7 @@ static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_definition_uses_core_content_contract(failures)
 	_test_category_declarations_use_generic_validation(failures)
+	_test_reserved_site_requires_non_empty_category_ids(failures)
 	_test_assignment_preserves_procedural_site(failures)
 	_test_category_order_and_fingerprint_are_canonical(failures)
 	_test_assignment_order_independence(failures)
@@ -148,6 +149,46 @@ static func _test_category_declarations_use_generic_validation(failures: Array[S
 	)
 
 
+static func _test_reserved_site_requires_non_empty_category_ids(failures: Array[String]) -> void:
+	var empty_categories = Definition.new(
+		"structure.underworld.empty_categories",
+		[],
+		["reserved_site"],
+		1
+	)
+	var local_failures: Array[String] = empty_categories.validate_definition()
+	_expect_true(
+		failures,
+		"reserved-site family rejects empty category_ids locally",
+		_contains_diagnostic(local_failures, "at least one category_id")
+	)
+	var validation: Dictionary = ContentValidationPipeline.new().validate_all(
+		[empty_categories],
+		_categories(),
+		_capabilities()
+	)
+	_expect_true(
+		failures,
+		"empty reserved-site category_ids route through definition validation",
+		_has_code_fragment(validation, "definition_invalid", "at least one category_id")
+	)
+	var assignment_result: Dictionary = Service.assign(
+		[_hook(7, "reserved_site", Vector3(0.25, 0.25, 0.25))],
+		[empty_categories],
+		1
+	)
+	_expect_true(
+		failures,
+		"assignment rejects a reserved-site definition with empty category_ids",
+		not bool(assignment_result.get("success", true))
+	)
+	_expect_true(
+		failures,
+		"assignment preserves the family non-empty category diagnostic",
+		_contains_diagnostic(assignment_result.get("diagnostics", []), "at least one category_id")
+	)
+
+
 static func _test_assignment_preserves_procedural_site(failures: Array[String]) -> void:
 	var hook = _hook(0, "reserved_site", Vector3(0.25, 0.55, 0.75))
 	var before: Dictionary = hook.canonical_data()
@@ -177,9 +218,12 @@ static func _test_assignment_preserves_procedural_site(failures: Array[String]) 
 	_expect_equal(
 		failures,
 		"assignment category snapshot comes from inherited category_ids",
-		assignment.categories,
+		assignment.category_ids,
 		definition.canonical_descriptor().get("category_ids", [])
 	)
+	var canonical: Dictionary = assignment.canonical_data()
+	_expect_equal(failures, "assignment canonical data exposes category_ids", canonical.get("category_ids", []), assignment.category_ids)
+	_expect_true(failures, "assignment canonical data has no ambiguous categories key", not canonical.has("categories"))
 	_expect_true(failures, "semantic ID remains distinct from procedural StableId", assignment.content_id != assignment.site_stable_id)
 	_expect_true(failures, "assignment fingerprint has its own namespace", assignment.assignment_fingerprint.begins_with("rsa1:"))
 
