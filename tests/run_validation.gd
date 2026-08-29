@@ -117,6 +117,8 @@ func _run_fixture(fixture_name: String) -> void:
 					"[VALIDATION] graph fingerprint=%s" %
 					GraphCanonicalizer.region_bundle_fingerprint(bundle)
 				)
+		"mesh":
+			failures.append_array(CaveMeshTests.run())
 		_:
 			failures.append("unknown fixture: %s" % fixture_name)
 	_finish("fixture:%s" % fixture_name, failures)
@@ -229,6 +231,8 @@ func _run_geometry_cell_batch(args: Dictionary) -> void:
 					failures.append("non-deterministic geometry-cell seed=%d region=(%d,%d)" % [world_seed, region_x, region_z])
 					continue
 				fingerprints["%d:%d:%d" % [world_seed, region_x, region_z]] = first["fingerprint"]
+				if cases % 25 == 0:
+					print("[VALIDATION GEOMETRY CELL PROGRESS] cases=%d last_seed=%d region=(%d,%d)" % [cases, world_seed, region_x, region_z])
 	print("[VALIDATION GEOMETRY CELL BATCH] cases=%d seeds=%d start_seed=%d radius=%d unique_cases=%d" % [
 		cases, seed_count, start_seed, region_radius, fingerprints.size(),
 	])
