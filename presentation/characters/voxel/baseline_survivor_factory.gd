@@ -54,8 +54,8 @@ static func build() -> Resource:
 			_mirrored_part("hand_r", "rig_role.hand.right", "hand_l", Vector3i(1,0,0)),
 		]),
 		_module("boots", &"feet", [
-			_part("foot_l", "rig_role.foot.left", _box(Vector3i(-1,-2,-1), Vector3i(1,0,4), LEATHER), Vector3i(0,0,0)),
-			_part("foot_r", "rig_role.foot.right", _box(Vector3i(-1,-2,-1), Vector3i(1,0,4), LEATHER), Vector3i(0,0,0)),
+			_part("foot_l", "rig_role.foot.left", _box(Vector3i(-1,-1,-1), Vector3i(1,1,4), LEATHER), Vector3i(0,0,0)),
+			_part("foot_r", "rig_role.foot.right", _box(Vector3i(-1,-1,-1), Vector3i(1,1,4), LEATHER), Vector3i(0,0,0)),
 		]),
 		_module("pouch", &"back_accessory", [
 			_part("hip_pouch", "rig_role.pelvis", _box(Vector3i(3,-1,1), Vector3i(5,2,2), LEATHER), Vector3i.ZERO),
