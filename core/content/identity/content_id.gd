@@ -2,7 +2,12 @@ extends RefCounted
 
 const _LOWER := "abcdefghijklmnopqrstuvwxyz"
 const _TOKEN_CHARS := "abcdefghijklmnopqrstuvwxyz0123456789_"
-const _RESERVED_SCHEMA_FAMILIES := ["category", "capability"]
+const _RESERVED_SCHEMA_FAMILIES := [
+	"category",
+	"capability",
+	"animation_role",
+	"rig_role",
+]
 
 
 static func validate(value: String) -> Array[String]:

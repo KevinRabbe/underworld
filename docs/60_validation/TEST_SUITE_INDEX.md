@@ -2,257 +2,293 @@
 
 Status: **current-main validation ownership reference**
 
-This document explains **what each major validation suite proves, which domain owns the invariant, and how failures should be routed**. It complements [Validation Matrix](VALIDATION_MATRIX.md), which remains the quick-reference source for local commands, cost classes, workflow triggers, and exact-head execution guidance.
+This document explains **what each major validation surface protects, which domain owns the invariant, and where a failure should be routed**. It complements [Validation Matrix](VALIDATION_MATRIX.md), which remains the operational reference for commands, cadence, path filters, cost classes, and exact-head execution guidance.
 
-This index does not create acceptance gates or redefine test behavior. Executable runners and workflow YAML remain authoritative for what actually runs.
+This index does not create acceptance gates, duplicate workflow command tables, or define a permanent workflow count. Executable runners and workflow YAML remain authoritative for what actually runs.
 
-Current-main baseline used for this index: `64d32b691ea5e730534930ee47a08841e23f8d09`.
+Current-main baseline used for this refresh: `5554b2f675506a58a5b65eaba345ff6237f30d9c`.
 
 ## Failure-routing vocabulary
 
-Use these categories when a suite fails:
+Use these categories when a check fails:
 
-- **Implementation defect** — the owning production/domain contract is violated by the candidate implementation.
-- **Integration / staleness** — individually valid components or preserved evidence no longer compose against the current accepted baseline, or exact-head evidence is stale after a branch/base change.
-- **Tooling / documentation debt** — the validator, inspector, report contract, or documentation index is outdated while the underlying authoritative behavior is intentionally correct.
-- **Governance state** — merge/process authorization is absent, stale, revoked, or not enforceable. This is distinct from software correctness.
+- **Implementation defect** — the owning gameplay, content, worldgen, persistence, presentation, or tooling contract is violated by the candidate.
+- **Integration / staleness** — preserved components or evidence no longer compose with the accepted baseline, or validation belongs to an older head/base.
+- **Tooling / documentation debt** — a validator, report adapter, inspector, or reference document is stale while authoritative behavior intentionally remains correct.
+- **Governance state** — required review/acceptance/process state is missing, stale, revoked, or not repository-enforced. Governance evidence is distinct from software correctness.
 
-A failure should be routed to the owner of the invariant. Do not weaken an owning test merely because an unrelated feature wants a green check.
+Route a failure to the invariant owner. Do not weaken the reporting aggregate or an unrelated suite merely because it is the first red check visible in CI.
 
-## Current-main suite index
+## Ownership map
 
-| Suite / evidence | Owning domain | What it protects | Evidence class | Typical failure routing |
-| --- | --- | --- | --- | --- |
-| **Character contracts** | Character / combat / player gameplay | Prototype mannequin/rig/socket contracts, action state, stamina/dodge/parry/block, attack phases, input buffering, player/Burrower combat integration, gameplay ownership boundaries | Broad every-PR headless contract | Usually implementation defect in character/combat integration; occasionally integration staleness after an intentional shared-contract change |
-| **Repository layout contracts** | Repository architecture / dependency policy | Canonical roots, retired paths, forbidden dependency directions, explicit migration exceptions | Fast structural every-PR check | Structural/dependency violation = implementation/integration defect; obsolete validator/policy text = tooling/docs debt |
-| **Deterministic Worldgen fast runner** | Deterministic world definition + runtime integration contracts | Identity, RNG, manifests, provenance, topology, entrances, connectivity, cave/geometry cells, runtime-cell lifecycle, collision/readiness, runtime harness and MAP-015 bootstrap contracts | Fast headless contract executed in every worldgen shard | Implementation defect in owning worldgen/runtime contract or integration staleness against accepted upstream truth |
-| **Deterministic Worldgen ten-shard campaign** | Deterministic worldgen | Reproduction over ten 25-seed shards and a 3x3 region neighborhood per seed: 2,250 seed/region cases total | Broad deterministic campaign | Nondeterminism/generation defect unless an intentional contract revision was not propagated through fixtures/evidence |
-| **`Godot headless contracts` aggregate** | CI integration surface | Requires both the deterministic shard matrix and the complete content-contract job to succeed | Stable umbrella merge check | Do not diagnose from aggregate alone; inspect the failed dependency and route to that domain |
-| **Content registry + schema contracts** | Authored content core / semantic identity / category-capability schemas | Semantic ContentId validity, path independence, deterministic definition indexing, typed references, category ancestry, capability composition, schema-ID separation and deterministic schema registries | Focused headless contract, included in broad aggregate | Content-core/schema implementation or integration defect; validator debt only when authoritative content rules intentionally changed |
-| **MAP-014 / MAP-015 runtime integration contracts** | Underworld runtime streaming / collision / traversal readiness | Runtime-cell lifecycle, stale-result rejection, deterministic runtime-harness fingerprint/counters, entrance collision gate readiness, MAP-015 bootstrap/route/rebuild behavior | Current-main tests inside deterministic fast runner; focused modes also exist | Runtime/streaming/collision implementation defect or integration staleness; not a presentation-only failure |
-| **Map Data Serialization contracts** | Persistence / map-data serialization | Persistence serialization schema and round-trip/contract behavior under `worldgen/persistence/**` | Path-filtered focused workflow | Persistence implementation/migration/fixture integration defect; tooling debt only if the executable validator itself is stale |
-| **Worldgen Inspector contracts and exports** | Developer tooling / worldgen inspection | Topology inspector/atlas contracts and reproducible JSON/SVG snapshot/atlas exports, including expected schemas and region-frame counts | Path-filtered focused tooling workflow | Inspector/export tooling defect or integration with changed worldgen data; not authority to rewrite generator truth |
-| **Stable ID Audit** | Deterministic procedural identity | Large StableAddress/StableId corpus reproduction and collision resistance across required address families | Specialized path-filtered audit; 34,969 accepted cases | Identity implementation defect unless audit/report tooling is demonstrably stale |
-| **Operational PM acceptance** | Repository governance / PM process | Exact-head acceptance state, stale-label invalidation, draft/revocation behavior | Operational status publisher, not software validation | Governance state or gate implementation defect; a green status does not prove game/test correctness |
+| Validation surface | Owning domain | What it protects | Failure routing |
+| --- | --- | --- | --- |
+| **Character Validation** | Player / combat / character gameplay | Character-state, movement/combat integration, mannequin/rig/socket contracts and gameplay ownership boundaries | Character/combat implementation or shared-contract integration |
+| **Repository Layout Validation** | Repository architecture | Canonical roots, forbidden dependency directions, retired paths and explicit structural exceptions | Architecture/integration defect; validator debt only after an intentional architecture change |
+| **Inventory Validation** | Inventory / item-state transactions | Container invariants, transaction atomicity and accepted equipment/hotbar state contracts | Inventory/equipment transaction implementation or integration |
+| **Cave Presentation Validation** | Cave presentation | Presentation/material/realization contracts that sit above semantic world truth | Presentation implementation/integration; do not rewrite worldgen semantics to satisfy appearance-only assumptions |
+| **Deterministic Worldgen fast contracts** | World definition + runtime worldgen integration | Deterministic identity/RNG/provenance/topology/geometry/runtime contracts including MAP-014/MAP-015 ownership | Owning worldgen/runtime implementation or intentional-contract integration |
+| **Deterministic Worldgen shard campaign** | Deterministic worldgen | Reproduction over the committed ten-shard seed/region campaign | Nondeterminism or generation regression unless an intentional versioned contract change was not propagated |
+| **`Godot headless contracts` aggregate** | CI integration surface | Requires the shard matrix and current Content contracts to succeed | **Not a root-cause owner**; inspect the failed dependency and route there |
+| **Content registry/family aggregate** | Authored semantic content | ContentId/schema/reference/family/rulebook contracts and accepted semantic realization boundaries | Content family, registry/schema or content-integration owner |
+| **Cross-Region Validation** | Stage-4 cross-region graph ownership | Owner/reference endpoint structure, remote/local consistency and malformed-reference rejection | Connectivity/graph ownership implementation |
+| **Graph Canonicalization Validation** | Deterministic graph representation | Order-invariant canonical graph text/fingerprints without source mutation | Canonicalization/deterministic graph implementation |
+| **Seed Domain Audit** | Deterministic RNG-domain governance | Named, registry-backed persistent RNG domains and deterministic registry validity | RNG-domain call-site/registry implementation |
+| **Surface Contract Validation** | Surface definition | Deterministic sampler behavior, coordinate boundaries, normalized fields and DTO ownership | Surface sampler/contract implementation |
+| **World Definition Service Validation** | World-definition service | Cache/request identity, descriptor lifecycle, ordering and negative-coordinate behavior | Service lifecycle/integration implementation |
+| **Generator Manifest Validation** | Generator compatibility identity | Stage/profile/contract revision identity, ordering and invalid revision rejection | Manifest/versioning implementation |
+| **TEST-056 Worldgen Edge Cases** | Worldgen edge replay / procedural identity | Fresh Stage-1→4 replay at signed/high-bit seeds and coordinate boundaries plus order invariance | Worldgen/StableAddress/StableId implementation or explicit compatibility revision |
+| **Worldgen Purity Validation** | Worldgen architecture boundary | Pure-data production-worldgen boundary; rejects disallowed engine/runtime ownership crossing into deterministic definition code | Architecture/implementation boundary violation |
+| **Map Data Serialization Validation** | Persistence / map data | Serialization schema, durable representation and round-trip compatibility | Persistence/schema/migration implementation |
+| **Stable ID Audit** | StableAddress / StableId | Large deterministic identity corpus reproduction and collision resistance | Procedural identity implementation |
+| **Worldgen Inspector Validation** | Developer tooling / inspection | Reproducible inspector/atlas/export schemas over worldgen data | Inspector/export tooling or adapter integration, not generator truth by default |
+| **Worldgen Benchmark** | Diagnostic performance evidence | Fixed deterministic timing corpus and report schema | Benchmark/tooling or performance investigation; not semantic acceptance by itself |
+| **Runtime Cave Performance Validation** | Runtime performance evidence | MAP-015 runtime cave profiling/report contract | Runtime performance investigation; not semantic correctness by itself |
+| **PM Acceptance Gate** | Project governance | Exact-head PM acceptance metadata/status behavior | Governance state; never substitute it for domain validation |
 
-For commands and trigger details, use [Validation Matrix](VALIDATION_MATRIX.md) rather than copying command tables here.
+The table is an ownership index, not an exhaustive list of every test file or workflow. New focused suites may be added without changing the principle: the invariant owner remains the diagnostic destination.
 
-## Character contracts
+## Broad every-candidate surfaces
 
-Current workflow: [`character-validation.yml`](../../.github/workflows/character-validation.yml)  
+### Character Validation
+
+Workflow: [`character-validation.yml`](../../.github/workflows/character-validation.yml)  
 Runner: [`tests/run_character.gd`](../../tests/run_character.gd)
 
-The suite protects the current character/gameplay spine, including:
+Character Validation owns the current Player/combat character spine and its cross-system gameplay contracts. It covers the accepted mannequin/rig/socket layer, action state, combat timing and integration boundaries represented by the current runner.
 
-- articulated mannequin, rig/socket and placeholder-pose contracts;
-- stamina, dodge, parry and block action contracts;
-- player defensive melee and guard-break integration;
-- Burrower defense interactions;
-- phased startup/active/recovery attack contracts;
-- one-slot expiring combat input buffering;
-- combat resolution versus encounter ownership;
-- surface streaming/prototype survival ownership boundaries.
+A failure here should normally be repaired in Character/combat code or in an intentionally changed shared contract. Do not make presentation hierarchy authoritative for gameplay simply to restore green CI.
 
-**Do not fix a failure** by loosening combat timing/state ownership, skipping an integration case, or making presentation hierarchy authoritative for gameplay. Route real behavior regressions to character/combat implementation.
+### Repository Layout Validation
 
-Architecture pointer: [Prototype Character](../PROTOTYPE_CHARACTER.md).
+Workflow: [`repository-layout-validation.yml`](../../.github/workflows/repository-layout-validation.yml)
 
-## Repository layout contracts
+This is structural architecture evidence. It owns repository roots, dependency-policy boundaries and retired-path enforcement rather than gameplay behavior.
 
-Current workflow: [`repository-layout-validation.yml`](../../.github/workflows/repository-layout-validation.yml)  
-Detailed policy: [Repository Layout Validation](REPOSITORY_LAYOUT_VALIDATION.md)
+If a candidate introduces a forbidden dependency, repair the dependency. Add or relax a structural exception only when the architecture contract itself has intentionally changed.
 
-This suite owns repository structure and dependency-policy enforcement, not gameplay behavior. A candidate that introduces a forbidden dependency or retired root should normally change its implementation, not add a convenient validator exception.
+### Inventory Validation
 
-Treat an exception/policy mismatch as tooling/documentation debt only when the architecture owner has intentionally changed the structural contract.
+Workflow: [`inventory-validation.yml`](../../.github/workflows/inventory-validation.yml)  
+Runner: [`tests/run_inventory.gd`](../../tests/run_inventory.gd)
 
-## Deterministic Worldgen fast and campaign evidence
+The accepted Inventory surface owns item-container invariants and atomic inventory transactions, and it grows with accepted inventory-adjacent state such as equipment/hotbar contracts. Family-specific consumers should integrate through that authority instead of mutating inventory state directly.
 
-Current workflow: [`foundation-validation.yml`](../../.github/workflows/foundation-validation.yml)  
+A failed downstream loot/craft/harvest integration does not transfer transaction ownership to that feature. Diagnose whether the downstream feature violated INV contracts or whether the accepted inventory contract intentionally changed.
+
+### Cave Presentation Validation
+
+Workflow: [`cave-presentation-validation.yml`](../../.github/workflows/cave-presentation-validation.yml)  
+Runner: [`tests/run_cave_presentation.gd`](../../tests/run_cave_presentation.gd)
+
+This suite owns the accepted cave presentation boundary: semantic cave output may be realized with materials/presentation details without making those details authoritative world identity or topology.
+
+MAP-016 Marching-Cubes realization and PRESENTATION-001 are accepted-main context. A presentation failure should not be “fixed” by changing semantic topology, StableIds, fixture selectors, or deterministic world ownership unless an owning worldgen contract actually failed too.
+
+## Deterministic Worldgen aggregate
+
+Workflow: [`foundation-validation.yml`](../../.github/workflows/foundation-validation.yml)  
 Runner: [`tests/run_validation.gd`](../../tests/run_validation.gd)
 
-### Fast runner
+### Fast contracts
 
-The current fast runner composes tests for deterministic identity/RNG, manifest/graph and legacy migration behavior, service boundaries, provenance, topology, entrances, connectivity, cave geometry, geometry-cell partitioning, cave mesh realization, runtime-cell lifecycle, surface-entrance integration, collision/readiness, runtime validation harness, cave runtime controller and MAP-015 runtime bootstrap.
+Every deterministic shard first runs `tests/run_validation.gd -- --mode=fast`. The fast surface composes many current-main invariants: deterministic identity/RNG, manifest/provenance, graph/topology/entrances/connectivity, cave geometry/cell partitioning, runtime-cell lifecycle, surface handoff, collision/readiness and accepted runtime integration fixtures.
 
-A green fast runner therefore proves a **bundle of current-main contracts**. It does not transfer ownership of all of those domains to one monolithic test system.
+The fast runner is a bundle of owners, not one monolithic owner. Route a failure to the named failing contract/domain.
 
 ### Ten-shard campaign
 
-The workflow starts shards at seeds `1, 26, 51, 76, 101, 126, 151, 176, 201, 226`. Each shard checks 25 seeds across radius 1, which is a 3x3 region neighborhood. The complete configured campaign therefore covers **2,250 seed/region cases**.
+The workflow starts at seeds `1`, `26`, `51`, `76`, `101`, `126`, `151`, `176`, `201`, and `226`. Each shard runs 25 seeds over region radius 1, yielding the committed 2,250 seed/region deterministic campaign.
 
-This is broad reproduction evidence. Do not reduce seed counts, region coverage, or deterministic equality assertions to make a changed generator pass. If a deliberate generator-contract revision changes expected truth, update the owning version/fixture/migration contract explicitly.
+This campaign is broad reproduction evidence. Do not shrink seed counts, region coverage or equality checks to make a changed implementation pass. Intentional truth changes must travel through the owning compatibility/version/fixture contract.
 
-Architecture pointers: [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md), [Streaming Ownership](../STREAMING_OWNERSHIP.md), [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md).
+### Stable aggregate
 
-## Stable `Godot headless contracts` aggregate
+`Godot headless contracts` succeeds only after both:
 
-The current `foundation-validation.yml` publishes `Godot headless contracts` only after:
+1. the complete deterministic shard matrix succeeds; and
+2. the current `Content registry contracts` job succeeds.
 
-1. the full deterministic shard matrix succeeds; and
-2. the current content-contract job succeeds.
+It is a stable umbrella result. It deliberately does **not** answer which subsystem caused a failure.
 
-The aggregate is a stable integration status, **not a root-cause suite**. When it fails, inspect the dependency result first rather than changing the aggregate job or treating every failure as worldgen-owned.
+## Content registry and family contracts
 
-## Content registry and schema contracts
+Current job: `Content registry contracts` in [`foundation-validation.yml`](../../.github/workflows/foundation-validation.yml)  
+Runner: [`tests/run_content.gd`](../../tests/run_content.gd)
 
-Current workflow job: `Content registry contracts` inside [`foundation-validation.yml`](../../.github/workflows/foundation-validation.yml)  
-Runner: [`tests/run_content.gd`](../../tests/run_content.gd)  
-Schema-registry tests: [`test_content_schema_registries.gd`](../../tests/content/test_content_schema_registries.gd)
+The Content runner is a **growing aggregate**. At this baseline it includes registry, category/capability schema, semantic-role schema, validation-pipeline, archetype definition/realization, item, resource, creature, weapon and reserved-site assignment contracts. Those correspond to accepted boundaries including CONTENT-003/004/005, ARCHETYPE-001, ITEM-001, ANIM-001, RESOURCE-001, ENEMY-001, WEAPON-001 and CONTENT-001, but this list is illustrative rather than a forever-exhaustive child inventory.
 
-The job now composes the accepted CONTENT-003 / #82 registry contracts with accepted CONTENT-004 / #83 category/capability schema contracts.
+Content ownership includes:
 
-Registry coverage includes:
+- semantic authored ContentIds independent of filesystem path;
+- deterministic registry and typed-reference behavior;
+- controlled category/capability/semantic-role schema vocabularies;
+- family rulebooks and family-specific validator composition;
+- semantic definition/realization separation;
+- additive extension without converting one family into authority over another.
 
-- semantic authored IDs rather than filesystem or procedural identity;
-- path-independent definition identity;
-- deterministic definition registry ordering/logical results;
-- hard duplicate rejection;
-- typed family/reference validation;
-- missing/wrong-target diagnostics and optional references.
+When a family is added, wire it through the accepted validation pipeline/runner rather than bypassing generic rules. Do not solve one authored-definition failure by weakening duplicate-ID, unknown-schema, typed-reference, category/capability or family-rule checks globally.
 
-Schema coverage includes:
+## Specialized deterministic and architecture suites
 
-- category/capability SchemaId namespace separation from ordinary authored ContentIds;
-- deterministic category ancestry and registration-order independence;
-- category eligibility over explicit ancestry closure;
-- rejection of duplicate IDs, unknown parent references and ancestry cycles;
-- deterministic capability composition/closure and registration-order independence;
-- clear rejection of invalid/duplicate/unknown capability schema relationships;
-- content-definition category/capability declarations validated against the schema registries.
+### Cross-Region Validation
 
-Do not make duplicate definitions/schemas first/last-wins, collapse schema IDs into ordinary ContentIds, accept unknown ancestry/composition references, or weaken typed-reference/category/capability checks to accommodate one definition.
+Workflow: [`cross-region-validation.yml`](../../.github/workflows/cross-region-validation.yml)  
+Runner: [`tests/run_cross_region_validation.gd`](../../tests/run_cross_region_validation.gd)
 
-Architecture pointers: [Content Architecture](../10_architecture/CONTENT_ARCHITECTURE.md), [Content Registry](../10_architecture/CONTENT_REGISTRY.md), [Content IDs](../40_content/CONTENT_IDS.md), [Content References](../40_content/CONTENT_REFERENCES.md), [Content Categories](../40_content/CONTENT_CATEGORIES.md), [Content Capabilities](../40_content/CONTENT_CAPABILITIES.md).
+Owns Stage-4 cross-region owner/reference structure for real generated and deliberately malformed cases. Failures route to connectivity/graph ownership, not to UI or presentation.
 
-## MAP-014 / MAP-015 runtime integration evidence
+### Graph Canonicalization Validation
 
-These are **already current-main contracts** represented inside the deterministic fast runner; they are not separate top-level workflow checks.
+Workflow: [`graph-canonicalization-validation.yml`](../../.github/workflows/graph-canonicalization-validation.yml)  
+Runner: [`tests/run_graph_canonicalization.gd`](../../tests/run_graph_canonicalization.gd)
 
-Relevant current-main tests include:
+Owns permutation/order invariance of canonical graph representation and fingerprints. A failure is a deterministic graph/canonicalization defect unless an explicit logical-content change is expected to alter identity.
 
-- [`test_runtime_cell_lifecycle.gd`](../../tests/geometry/test_runtime_cell_lifecycle.gd);
-- [`test_surface_entrance_integration.gd`](../../tests/geometry/test_surface_entrance_integration.gd);
-- [`test_collision_and_gate.gd`](../../tests/geometry/test_collision_and_gate.gd);
-- [`test_runtime_validation_harness.gd`](../../tests/geometry/test_runtime_validation_harness.gd);
-- [`test_cave_runtime_controller.gd`](../../tests/geometry/test_cave_runtime_controller.gd);
-- [`test_map015_runtime_bootstrap.gd`](../../tests/geometry/test_map015_runtime_bootstrap.gd);
-- [`test_map015_fixture.gd`](../../tests/geometry/test_map015_fixture.gd).
+### Seed Domain Audit
 
-The deterministic runtime harness checks reproducible fingerprinting plus meaningful queued/ready/stale-discard/release counters. MAP-015 bootstrap validation checks render/collision realization, entrance-gate readiness, traversal across required runtime cells, no stale-result resurrection, retained runtime ownership and reproducible rebuild fingerprinting.
+Workflow: [`seed-domain-audit.yml`](../../.github/workflows/seed-domain-audit.yml)  
+Audit: [`tools/ci/seed_domain_audit.py`](../../tools/ci/seed_domain_audit.py)
 
-`tests/run_validation.gd` also exposes focused `runtime-harness` and `map015-fixture` modes for targeted evidence.
+Owns persistent RNG-domain naming/registry discipline. Magic numeric/undeclared persistent domains, duplicate registry identity, or invalid revisions belong to seed-domain implementation ownership.
 
-Do not weaken stale-discard, collision-gate, ownership, route or deterministic-fingerprint assertions merely to accommodate a new runtime representation. If an accepted upstream contract changed, synchronize the runtime integration deliberately.
+### Surface Contract Validation
 
-## Map Data Serialization contracts
+Workflow: [`surface-contract-validation.yml`](../../.github/workflows/surface-contract-validation.yml)  
+Runner: [`tests/run_surface_contract.gd`](../../tests/run_surface_contract.gd)
 
-Current workflow: [`map-data-serialization-validation.yml`](../../.github/workflows/map-data-serialization-validation.yml)  
+Owns deterministic surface sampling, positive/negative coordinate-boundary behavior, finite normalized fields and the surface DTO contract. Surface failures should not be routed to underground presentation simply because a cave entrance consumes surface data.
+
+### World Definition Service Validation
+
+Workflow: [`world-definition-service-validation.yml`](../../.github/workflows/world-definition-service-validation.yml)  
+Runner: [`tests/run_world_definition_service.gd`](../../tests/run_world_definition_service.gd)
+
+Owns world-definition cache/request/descriptor lifecycle and deterministic ordering. Failures route to the service boundary or its explicit integration contract.
+
+### Generator Manifest Validation
+
+Workflow: [`generator-manifest-validation.yml`](../../.github/workflows/generator-manifest-validation.yml)  
+Runner: [`tests/run_generator_manifest.gd`](../../tests/run_generator_manifest.gd)
+
+Owns generator compatibility identity: stage/profile/contract revisions, insertion-order invariance, copy isolation and rejection of invalid revisions. Do not hide compatibility changes by suppressing manifest identity changes.
+
+### TEST-056 Worldgen Edge Case Validation
+
+Workflow: [`worldgen-edge-case-validation.yml`](../../.github/workflows/worldgen-edge-case-validation.yml)  
+Runner: [`tests/worldgen_edge_cases/run_worldgen_edge_cases.gd`](../../tests/worldgen_edge_cases/run_worldgen_edge_cases.gd)
+
+TEST-056 is **accepted current-main evidence**. It owns genuinely fresh Stage-1→4 replay across the committed signed/high-bit seed and coordinate-edge corpus, including the four cardinal neighbor views needed by Stage 4, execution-order invariance and StableAddress/StableId canonical behavior.
+
+Do not describe this as an audit-branch-only candidate and do not replace its committed selectors with invented “representative” values.
+
+### Worldgen Purity Validation
+
+Workflow: [`worldgen-purity-validation.yml`](../../.github/workflows/worldgen-purity-validation.yml)  
+Guard: [`tools/ci/worldgen_purity_guard.py`](../../tools/ci/worldgen_purity_guard.py)  
+Fixtures/tests: [`tools/ci/test_worldgen_purity_guard.py`](../../tools/ci/test_worldgen_purity_guard.py)
+
+The purity guard scans production `worldgen/**` and owns the pure-data architectural boundary. Engine/runtime ownership that violates the allowed deterministic-definition boundary is an architecture defect, not something to waive locally for convenience.
+
+## Persistence, identity and tooling evidence
+
+### Map Data Serialization Validation
+
+Workflow: [`map-data-serialization-validation.yml`](../../.github/workflows/map-data-serialization-validation.yml)  
 Runner: [`tests/run_map_data_serialization_validation.gd`](../../tests/run_map_data_serialization_validation.gd)
 
-This is path-filtered persistence evidence. Failures belong first to persistence serialization/schema/migration ownership, not to general worldgen or presentation.
+Owns durable map-data serialization/round-trip compatibility. Intentional schema changes require their owning migration/versioning response; do not delete compatibility assertions simply to accept incompatible saved state.
 
-A changed durable format should update its owning compatibility/migration contract. Do not simply relax round-trip or schema assertions to hide incompatible state.
+### Stable ID Audit
 
-Architecture pointer: [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md).
-
-## Worldgen Inspector validation
-
-Current workflow: [`worldgen-inspector-validation.yml`](../../.github/workflows/worldgen-inspector-validation.yml)
-
-The current job checks:
-
-- topology inspector contracts;
-- multi-region atlas contracts;
-- sample JSON/SVG topology snapshot export;
-- sample 3x3 JSON/SVG atlas export;
-- X/Z elevation exports;
-- expected export schema markers and region-frame counts.
-
-This is developer-tooling evidence over worldgen data. The inspector may reveal a generation problem, but the inspector is not authoritative world truth. If generator data intentionally changes while remaining contract-correct, update the tooling adapter/export contract rather than changing generation solely to preserve an obsolete visualization.
-
-## Stable ID Audit
-
-Current workflow: [`stable-id-audit.yml`](../../.github/workflows/stable-id-audit.yml)  
+Workflow: [`stable-id-audit.yml`](../../.github/workflows/stable-id-audit.yml)  
 Runner: [`tools/stable_id_audit/run_stable_id_audit.gd`](../../tools/stable_id_audit/run_stable_id_audit.gd)
 
-Accepted through ID-058 / #59, the specialized audit requires:
+Owns large-corpus StableAddress/StableId reproduction and collision resistance. A collision or reproduction failure belongs to procedural identity unless the audit itself is demonstrably stale.
 
-- 34,969 expected cases and 34,969 actual cases;
-- 34,969 reproduction checks;
-- zero StableId collisions;
-- zero failures;
-- the complete required address-family set;
-- positive endpoint-order coverage.
+### Worldgen Inspector Validation
 
-This is deeper procedural-identity evidence than the ordinary fast suite, but it is path-filtered rather than an every-PR gate.
+Workflow: [`worldgen-inspector-validation.yml`](../../.github/workflows/worldgen-inspector-validation.yml)
 
-Do not shrink the corpus or collision/reproduction requirements to mask an identity regression. A genuine collision or reproduction failure belongs to StableAddress/StableId implementation ownership unless the audit itself is demonstrably wrong.
+Owns inspector/atlas/export tooling schemas and reproducible diagnostic exports. Inspector output may expose a generator defect, but the inspector is not authoritative world truth. If generator truth intentionally changes while remaining contract-correct, update the tooling adapter/export contract instead of forcing generation to preserve obsolete visualization assumptions.
 
-## Operational PM acceptance
+## Runtime fixture ownership
 
-Current workflow: [`pm-acceptance-gate.yml`](../../.github/workflows/pm-acceptance-gate.yml)  
-Governance contract: [Main Merge Gate](MAIN_MERGE_GATE.md)
+### MAP-014 / MAP-015
 
-This workflow coordinates exact-head PM metadata/status behavior. A synchronized new head is fail-closed until explicit acceptance, stale `pm-accepted` state is invalidated, draft/lifecycle transitions cannot manufacture acceptance, and only an explicit valid acceptance event can publish success for the exact head.
+MAP-014 and MAP-015 are accepted current-main runtime integration evidence embedded in the deterministic fast suite, with focused reproduction modes available through `tests/run_validation.gd`.
 
-This is **governance evidence, not game/test correctness**.
+Their ownership includes runtime-cell lifecycle/stale-result rejection, collision/traversal readiness, deterministic runtime-harness behavior and the committed MAP-015 bootstrap fixture/route/rebuild semantics.
 
-The workflow itself documents that the `PM acceptance` context is an operational same-principal guard and is not cryptographically isolated from every other same-repository GitHub Actions principal. Repository-owner branch/ruleset enforcement is a separate governance requirement.
+MAP-016 is also accepted-main: it replaced the cave realization representation without redefining the protected MAP-015 semantic selector. If a representation change breaks collision readiness, stale-result behavior, ownership or fixture reproducibility, route the failure to runtime/geometry integration rather than changing the selector.
+
+Manual OBS-001 remains separate observation evidence; it is not a substitute for deterministic automation.
+
+## Diagnostic performance evidence
+
+### Deterministic Worldgen Benchmark
+
+Workflow: [`worldgen-benchmark.yml`](../../.github/workflows/worldgen-benchmark.yml)  
+Runner: [`tools/worldgen_benchmark/run_worldgen_benchmark.gd`](../../tools/worldgen_benchmark/run_worldgen_benchmark.gd)
+
+The benchmark executes a fixed 20-case deterministic corpus and validates its report schema/stage timing summaries. It is useful for regression investigation and performance evidence, but a timing report is not semantic correctness authority.
+
+### Runtime Cave Performance Validation
+
+Workflow: [`runtime-performance-validation.yml`](../../.github/workflows/runtime-performance-validation.yml)  
+Runner: [`tests/run_performance.gd`](../../tests/run_performance.gd)
+
+This surface profiles the accepted MAP-015 runtime cave path and preserves the performance report contract. PERF-001 and PERF-002 are accepted-main optimization context at this baseline, but performance evidence still does not replace deterministic, collision, presentation or runtime correctness contracts.
+
+## Governance evidence
+
+### PM Acceptance Gate
+
+Workflow: [`pm-acceptance-gate.yml`](../../.github/workflows/pm-acceptance-gate.yml)  
+Governance reference: [Main Merge Gate](MAIN_MERGE_GATE.md)
+
+PM acceptance is exact-head process evidence. It coordinates stale/revoked/accepted state but does not prove game correctness.
+
+Repository-side `main` branch protection is **not enabled** at this baseline; owner configuration task #118 remains blocked. Do not interpret operational PM acceptance/status publication as equivalent to server-enforced branch protection.
 
 Therefore:
 
-- green PM acceptance does not substitute for Character, Layout, Worldgen, Content or specialized domain checks;
-- failed PM acceptance usually means missing/stale/revoked governance state, not broken gameplay;
-- do not bypass the workflow by treating a stale label or old-head status as equivalent acceptance.
+- green PM acceptance never substitutes for Character, Layout, Inventory, Presentation, Worldgen, Content or specialized domain validation;
+- stale-head acceptance must not be reused after synchronization;
+- a governance failure should not be “repaired” by weakening software tests;
+- a software failure should not be dismissed merely because PM metadata is green.
 
-## Current-main versus pending / parked evidence
+## Failure patterns that must not be solved by weakening validation
 
-### Generation Debug Report — pending, not current-main validation
-
-MAP-007 / #29 and draft PR #31 preserve a generation-debug report workflow/tooling change, but that branch still requires post-M2 synchronization and exact-head revalidation. Its proposed `generation-debug-report-validation.yml` is therefore **not current-main validation evidence**.
-
-Until accepted and merged, describe it as parked/pending tooling only. Do not cite the preserved old green head as a current gate.
-
-### MAP-016 protected Codex candidate — read-only status here
-
-MAP-016 / #159 owns the protected deterministic Marching-Cubes realization. Its branch-specific implementation and candidate tests are **not current-main accepted validation** until the protected task is independently accepted and merged.
-
-Current-main cave-mesh/runtime tests continue to protect the accepted M2 baseline and existing runtime integration contracts. This index does not define, expand or weaken MAP-016 acceptance criteria; #159 and the PM board own that protected contract.
-
-### Preserved post-M2 audit branches
-
-Preserved audit/validation branches may contain valuable historical evidence, but pre-refresh green heads are not current-main acceptance. A refreshed audit becomes current evidence only after it is synchronized, its logical scope is preserved, and the required exact-head checks pass.
-
-## Examples of failures that must not be solved by weakening the test
-
-- A StableId collision must not be hidden by removing the colliding corpus case.
-- Duplicate content or schema IDs must not be converted to implicit first/last-wins behavior.
-- Unknown category ancestry, capability composition references, or schema cycles must not be silently accepted.
-- A deterministic mismatch must not be hidden by reducing seeds/regions or comparing less state without an owning contract change.
-- A stale runtime result must not be accepted by lowering stale-discard or ownership expectations.
-- An entrance collision gate that loses readiness during the MAP-015 route must not be treated as a presentation issue.
-- A forbidden repository dependency must not be legalized with an ad-hoc exception unless architecture explicitly changes.
-- A serialization incompatibility must not be hidden by deleting migration/round-trip assertions.
-- A broken inspector export should not force generator semantics to match an obsolete visualization if the generator contract is intentionally correct.
-- Missing PM acceptance must not be bypassed by reusing a status from an older PR head.
+- StableId collisions must not be hidden by removing corpus cases.
+- Duplicate/unknown content or schema identity must not become silent first/last-wins behavior.
+- Category ancestry, capability implication or semantic-role errors must not be accepted because one authored definition needs them.
+- Deterministic mismatches must not be hidden by reducing shard/seed/region coverage.
+- TEST-056 failures must not be hidden by reusing cached stages where the contract requires fresh replay.
+- Cross-region malformed ownership/reference data must continue to fail closed.
+- Graph-order dependence must not be normalized away by mutating source fixtures.
+- Stale runtime results must not be accepted by weakening generation/source ownership checks.
+- MAP-015 collision/traversal readiness must not be treated as presentation-only.
+- Purity violations must not be waived by moving engine ownership into deterministic world-definition code.
+- Inventory consumers must not bypass atomic transaction authority to make a feature test pass.
+- Serialization incompatibility must not be hidden by deleting migration/round-trip assertions.
+- Presentation tests must not redefine semantic world identity.
+- Performance/benchmark regressions must not be used as justification to remove deterministic parity checks.
+- Missing PM acceptance must not be bypassed using an older head/status.
 
 ## Choosing the owning suite
 
-When a PR changes several layers, more than one suite may legitimately be relevant. Route each failure by the invariant it protects rather than by whichever workflow happened to report red first.
+A PR may legitimately exercise several surfaces. Diagnose each failure by **the invariant being protected**, not by the workflow name that happened to become red first.
 
-For practical command/trigger selection and exact-head evidence rules, use [Validation Matrix](VALIDATION_MATRIX.md). For structural policy, use [Repository Layout Validation](REPOSITORY_LAYOUT_VALIDATION.md). For merge-governance semantics, use [Main Merge Gate](MAIN_MERGE_GATE.md).
+Examples:
 
-### Documentation freshness note
+- A loot collection failure caused by non-atomic inventory mutation belongs to the Inventory transaction boundary even if a loot-focused test exposed it.
+- A cave material failure with unchanged topology belongs to Cave Presentation, not deterministic topology.
+- A generator fingerprint mismatch belongs to the relevant generator/identity contract even if `Godot headless contracts` is the only visible aggregate failure.
+- A content definition that violates generic item rules belongs to the Content/item rule stack, not to whichever gameplay feature authored the file.
 
-At the baseline used for this index, the executable repository contains seven workflow files, including the accepted Stable ID Audit and operational PM acceptance workflow. `VALIDATION_MATRIX.md` still states an older five-workflow inventory. That mismatch is **documentation debt**, not a reason to omit current executable suites from this index. Updating the matrix itself is outside QA-001's one-file scope.
+For practical execution commands, trigger/cadence selection and exact-head evidence requirements, use [Validation Matrix](VALIDATION_MATRIX.md). For structural constraints, use [Repository Layout Validation](REPOSITORY_LAYOUT_VALIDATION.md). For deterministic fixture selectors, use [Deterministic Fixture Catalog](DETERMINISTIC_FIXTURE_CATALOG.md). For merge-process semantics, use [Main Merge Gate](MAIN_MERGE_GATE.md).
 
-## Review invariant
+## Freshness rule
 
-A validation result should answer three separate questions explicitly:
-
-1. **What invariant did this suite actually prove or fail?**
-2. **Which domain owns that invariant?**
-3. **Is the failure implementation, integration/staleness, tooling/docs debt, or governance state?**
-
-Keeping those questions separate prevents unrelated teams from weakening tests, avoids treating tooling as world truth, and prevents governance status from being mistaken for software correctness.
+This index describes ownership on the baseline named above. When current `main` adds or retires a validation surface, update this ownership reference by meaning, not by maintaining a hard-coded workflow total. Executable workflow/runners remain authoritative when documentation and code temporarily disagree.

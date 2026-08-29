@@ -1,0 +1,11 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/content/fixtures/resources/prototype_harvest_node_definition.gd" id="1_definition"]
+
+[resource]
+script = ExtResource("1_definition")
+content_id = "resource.node.copper"
+definition_family = "resource"
+schema_revision = 1
+capacity_units = 20.0
+harvest_chunk_units = 2.0
