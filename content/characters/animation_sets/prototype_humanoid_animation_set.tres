@@ -1,0 +1,81 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://presentation/characters/animation/animation_set_definition.gd" id="1_set"]
+
+[resource]
+script = ExtResource("1_set")
+content_id = "animation_set.humanoid.prototype"
+definition_family = "animation_set"
+schema_revision = 1
+rig_profile_id = "rig_profile.humanoid.prototype"
+root_motion_policy = "disabled"
+role_bindings = {
+"animation_role.locomotion.idle": "prototype.idle",
+"animation_role.locomotion.walk_forward": "prototype.walk_forward",
+"animation_role.locomotion.walk_backward": "prototype.walk_backward",
+"animation_role.locomotion.strafe_left": "prototype.strafe_left",
+"animation_role.locomotion.strafe_right": "prototype.strafe_right",
+"animation_role.locomotion.sprint": "prototype.sprint",
+"animation_role.locomotion.jump_start": "prototype.jump_start",
+"animation_role.locomotion.fall": "prototype.fall",
+"animation_role.locomotion.land": "prototype.land",
+"animation_role.action.attack.light_01": "prototype.attack.light_01",
+"animation_role.action.dodge.forward": "prototype.dodge.forward",
+"animation_role.action.dodge.backward": "prototype.dodge.backward",
+"animation_role.action.dodge.left": "prototype.dodge.left",
+"animation_role.action.dodge.right": "prototype.dodge.right",
+"animation_role.action.parry": "prototype.parry",
+"animation_role.action.block": "prototype.block",
+"animation_role.reaction.hit.front": "prototype.hit.front"
+}
+fallback_roles = {
+"animation_role.reaction.death": "animation_role.reaction.hit.front"
+}
+required_role_ids = Array[String]([
+"animation_role.locomotion.idle",
+"animation_role.locomotion.walk_forward",
+"animation_role.locomotion.walk_backward",
+"animation_role.locomotion.strafe_left",
+"animation_role.locomotion.strafe_right",
+"animation_role.locomotion.sprint",
+"animation_role.locomotion.jump_start",
+"animation_role.locomotion.fall",
+"animation_role.locomotion.land",
+"animation_role.action.attack.light_01",
+"animation_role.action.dodge.forward",
+"animation_role.action.dodge.backward",
+"animation_role.action.dodge.left",
+"animation_role.action.dodge.right",
+"animation_role.action.parry",
+"animation_role.action.block",
+"animation_role.reaction.hit.front",
+"animation_role.reaction.death"
+])
+required_rig_role_ids = Array[String]([
+"rig_role.root",
+"rig_role.pelvis",
+"rig_role.spine.lower",
+"rig_role.spine.upper",
+"rig_role.chest",
+"rig_role.neck",
+"rig_role.head",
+"rig_role.clavicle.left",
+"rig_role.upper_arm.left",
+"rig_role.forearm.left",
+"rig_role.hand.left",
+"rig_role.clavicle.right",
+"rig_role.upper_arm.right",
+"rig_role.forearm.right",
+"rig_role.hand.right",
+"rig_role.thigh.left",
+"rig_role.calf.left",
+"rig_role.foot.left",
+"rig_role.thigh.right",
+"rig_role.calf.right",
+"rig_role.foot.right",
+"rig_role.socket.hand.left",
+"rig_role.socket.hand.right",
+"rig_role.socket.back",
+"rig_role.socket.hip.left",
+"rig_role.socket.hip.right"
+])
