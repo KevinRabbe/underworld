@@ -185,6 +185,12 @@ static func _test_player_default(tree: SceneTree, failures: Array[String]) -> vo
 	var tool_root: Node3D = voxel_character.get_tool_visual_root()
 	_expect_true(failures, "equipped tool uses semantic hand socket", tool_root != null and tool_root.get_parent() == voxel_character.get_socket(&"hand_r"))
 	_expect_true(failures, "equipped axe realizes voxel modules", tool_root != null and tool_root.find_children("VoxelHeld*", "MeshInstance3D", true, false).size() == 2)
+	var player_meshes := player.find_children("*", "MeshInstance3D", true, false)
+	var mesh_names: Dictionary = {}
+	for mesh_value in player_meshes:
+		var mesh: MeshInstance3D = mesh_value
+		_expect_true(failures, "Player visual mesh names remain unique (%s)" % mesh.name, not mesh_names.has(mesh.name))
+		mesh_names[mesh.name] = true
 	voxel_character.set_held_item("stone_axe")
 	_expect_equal(failures, "rapid held-item replacement cannot duplicate runtime tool parts", tool_root.find_children("VoxelHeld*", "MeshInstance3D", true, false).size(), 2)
 	_expect_equal(failures, "rapid axe replacement owns one handle", tool_root.find_children("VoxelHeldAxeHandle", "MeshInstance3D", true, false).size(), 1)
