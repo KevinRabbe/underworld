@@ -15,12 +15,12 @@ const ROLE_RIG_PROFILE := "presentation.rig_profile"
 
 @export var display_name: String = "Creature"
 @export var max_health: int = 1
-@export var move_speed: float = 1.0
-@export var detection_range: float = 1.0
-@export var attack_range: float = 1.0
-@export var attack_damage: int = 1
-@export var attack_cooldown: float = 1.0
-@export var attack_windup: float = 0.1
+@export var move_speed: float = 0.0
+@export var detection_range: float = 0.0
+@export var attack_range: float = 0.0
+@export var attack_damage: int = 0
+@export var attack_cooldown: float = 0.0
+@export var attack_windup: float = 0.0
 
 @export var attack_profile_id: String = ""
 @export var archetype_id: String = ""
@@ -88,14 +88,7 @@ func runtime_stats() -> Dictionary:
 
 
 func validation_references() -> Array:
-	return [
-		ContentReference.new(
-			content_id,
-			ROLE_ATTACK_PROFILE,
-			attack_profile_id,
-			ATTACK_PROFILE_FAMILY,
-			true
-		),
+	var references: Array = [
 		ContentReference.new(
 			content_id,
 			ROLE_ARCHETYPE,
@@ -103,21 +96,32 @@ func validation_references() -> Array:
 			ARCHETYPE_FAMILY,
 			true
 		),
-		ContentReference.new(
+	]
+	if not attack_profile_id.is_empty():
+		references.append(ContentReference.new(
+			content_id,
+			ROLE_ATTACK_PROFILE,
+			attack_profile_id,
+			ATTACK_PROFILE_FAMILY,
+			true
+		))
+	if not animation_set_id.is_empty():
+		references.append(ContentReference.new(
 			content_id,
 			ROLE_ANIMATION_SET,
 			animation_set_id,
 			ANIMATION_SET_FAMILY,
 			true
-		),
-		ContentReference.new(
+		))
+	if not rig_profile_id.is_empty():
+		references.append(ContentReference.new(
 			content_id,
 			ROLE_RIG_PROFILE,
 			rig_profile_id,
 			RIG_PROFILE_FAMILY,
 			true
-		),
-	]
+		))
+	return references
 
 
 func validate_definition() -> Array[String]:
@@ -130,18 +134,38 @@ func validate_definition() -> Array[String]:
 		failures.append("creature display name must be non-empty and trimmed for %s" % content_id)
 	if max_health <= 0:
 		failures.append("creature max health must be > 0 for %s" % content_id)
-	if move_speed <= 0.0:
-		failures.append("creature move speed must be > 0 for %s" % content_id)
-	if detection_range <= 0.0:
-		failures.append("creature detection range must be > 0 for %s" % content_id)
-	if attack_range <= 0.0:
-		failures.append("creature attack range must be > 0 for %s" % content_id)
-	if attack_damage <= 0:
-		failures.append("creature attack damage must be > 0 for %s" % content_id)
-	if attack_cooldown <= 0.0:
-		failures.append("creature attack cooldown must be > 0 for %s" % content_id)
-	if attack_windup <= 0.0:
-		failures.append("creature attack windup must be > 0 for %s" % content_id)
+	if move_speed < 0.0:
+		failures.append("creature move speed must be >= 0 for %s" % content_id)
+	if detection_range < 0.0:
+		failures.append("creature detection range must be >= 0 for %s" % content_id)
+	if attack_range < 0.0:
+		failures.append("creature attack range must be >= 0 for %s" % content_id)
+	if attack_damage < 0:
+		failures.append("creature attack damage must be >= 0 for %s" % content_id)
+	if attack_cooldown < 0.0:
+		failures.append("creature attack cooldown must be >= 0 for %s" % content_id)
+	if attack_windup < 0.0:
+		failures.append("creature attack windup must be >= 0 for %s" % content_id)
+
+	_validate_target_id(archetype_id, ARCHETYPE_FAMILY, "archetype", true, failures)
+	_validate_target_id(attack_profile_id, ATTACK_PROFILE_FAMILY, "attack profile", false, failures)
+	_validate_target_id(animation_set_id, ANIMATION_SET_FAMILY, "animation set", false, failures)
+	_validate_target_id(rig_profile_id, RIG_PROFILE_FAMILY, "rig profile", false, failures)
+	if animation_set_id.is_empty() != rig_profile_id.is_empty():
+		failures.append(
+			"creature animation set and rig profile must be declared together for %s" % content_id
+		)
+
+	_validate_animation_roles(required_animation_role_ids, failures)
+	_validate_rig_roles(required_rig_role_ids, failures)
+	if not required_animation_role_ids.is_empty() and animation_set_id.is_empty():
+		failures.append(
+			"creature required animation roles need an animation-set reference: %s" % content_id
+		)
+	if not required_rig_role_ids.is_empty() and rig_profile_id.is_empty():
+		failures.append(
+			"creature required rig roles need a rig-profile reference: %s" % content_id
+		)
 
 	for reference in validation_references():
 		if reference == null or not reference is ContentReference:
@@ -149,25 +173,6 @@ func validate_definition() -> Array[String]:
 			continue
 		for failure in reference.validate_reference():
 			failures.append("creature semantic reference '%s': %s" % [reference.role, failure])
-		if (
-			ContentId.is_valid(reference.target_id)
-			and not reference.expected_family.is_empty()
-			and ContentId.family_of(reference.target_id) != reference.expected_family
-		):
-			failures.append(
-				"creature semantic reference '%s' must target '%s' family: %s" % [
-					reference.role,
-					reference.expected_family,
-					reference.target_id,
-				]
-			)
-
-	_validate_animation_roles(required_animation_role_ids, failures)
-	_validate_rig_roles(required_rig_role_ids, failures)
-	if required_animation_role_ids.is_empty():
-		failures.append("creature must require at least one semantic animation role: %s" % content_id)
-	if required_rig_role_ids.is_empty():
-		failures.append("creature must require at least one semantic rig role: %s" % content_id)
 	failures.sort()
 	return failures
 
@@ -196,6 +201,29 @@ func canonical_descriptor() -> Dictionary:
 	rig_roles.sort()
 	descriptor["required_rig_role_ids"] = rig_roles
 	return descriptor
+
+
+static func _validate_target_id(
+	target_id: String,
+	expected_family: String,
+	label: String,
+	required: bool,
+	failures: Array[String]
+) -> void:
+	if target_id.is_empty():
+		if required:
+			failures.append("creature %s reference is required" % label)
+		return
+	for failure in ContentId.validate(target_id):
+		failures.append("creature %s id: %s" % [label, failure])
+	if ContentId.is_valid(target_id) and ContentId.family_of(target_id) != expected_family:
+		failures.append(
+			"creature %s id must use '%s.' content family: %s" % [
+				label,
+				expected_family,
+				target_id,
+			]
+		)
 
 
 static func _validate_animation_roles(roles: Array[String], failures: Array[String]) -> void:
