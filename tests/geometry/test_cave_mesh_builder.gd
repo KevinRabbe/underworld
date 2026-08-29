@@ -10,6 +10,7 @@ const Boundary := preload("res://worldgen/geometry/cave_mesh_realization_boundar
 const Context := preload("res://worldgen/pipeline/world_generation_context.gd")
 const MeshData := preload("res://worldgen/geometry/cave_mesh_data.gd")
 const PartitionResult := preload("res://worldgen/geometry/geometry_cell_partition_result.gd")
+const Map016AcceptanceTests := preload("res://tests/geometry/test_map016_acceptance_contract.gd")
 
 
 static func run() -> Array[String]:
@@ -91,6 +92,7 @@ static func run() -> Array[String]:
 	var entrance_partition = _partition_result(entrance_plan, Config.new(), provenance)
 	var entrance_result = Mesher.build(Request.new(entrance_plan, Config.new(), provenance, 0.0, entrance_partition, context))
 	_expect(failures, "oriented entrance descent volume builds", entrance_result.success and entrance_result.data.indices.size() > 0)
+	failures.append_array(Map016AcceptanceTests.run())
 	return failures
 
 
