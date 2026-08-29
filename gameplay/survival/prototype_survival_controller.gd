@@ -469,7 +469,7 @@ func _configure_semantic_runtime() -> void:
 	_inventory = ItemContainerState.new().configure(_inventory_slot_capacity, _inventory_max_weight)
 	var rules: Array = [
 		EquipmentSlotRule.new().configure(SLOT_HANDS, ["category.item.equipment"], ["capability.equipable"]),
-		EquipmentSlotRule.new().configure(SLOT_AXE, ["category.item.equipment.weapon.melee.axe"], ["capability.equipable", "capability.harvest_tool"]),
+		EquipmentSlotRule.new().configure(SLOT_AXE, ["category.item.equipment.tool.axe"], ["capability.equipable", "capability.harvest_tool"]),
 		EquipmentSlotRule.new().configure(SLOT_PICKAXE, ["category.item.equipment.tool.pickaxe"], ["capability.equipable", "capability.harvest_tool"]),
 		EquipmentSlotRule.new().configure(SLOT_UTILITY, ["category.item.equipment"], ["capability.equipable"]),
 	]
