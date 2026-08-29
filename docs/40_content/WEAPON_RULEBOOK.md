@@ -15,11 +15,11 @@ Authoritative parent contracts:
 
 ## 1. Identity and ownership
 
-A weapon is an `ItemDefinition` specialization with semantic `item.*` identity. Weapon identity is not a mesh, scene path, animation clip, inventory slot, equipped Node or attack-controller branch.
+A weapon is an `ItemDefinition` specialization with semantic `item.*` identity. Weapon identity is not a mesh, scene path, animation clip, character animation set, character rig profile, inventory slot, equipped Node or attack-controller branch.
 
 ```text
 WeaponDefinition
-  = item identity + weapon semantic bindings
+  = item identity + weapon semantic requirements/bindings
 
 ItemInstanceState / future durability state
   = mutable per-copy ownership
@@ -27,14 +27,14 @@ ItemInstanceState / future durability state
 Equipment state
   = which owned item is equipped where
 
-Presentation
-  = replaceable archetype/animation/rig realization
+Character presentation composition
+  = selected character Animation Set + Rig Profile satisfying weapon-required roles
 
 UnderworldPlayerAttackDefinition
   = gameplay-owned attack timing, damage and hit geometry
 ```
 
-Do not copy mutable durability/equipped state or attack phase timing into the shared weapon definition.
+Do not copy mutable durability/equipped state, concrete character presentation-pack identity or attack phase timing into the shared weapon definition.
 
 ## 2. Weapon classification and capabilities
 
@@ -71,40 +71,54 @@ weapon_technique.light.primary
 
 to gameplay attack IDs. It does not own startup/active/recovery duration, damage, reach or hit geometry.
 
-At runtime a resolver selects the existing `UnderworldPlayerAttackDefinition` by the semantic attack ID and returns that exact gameplay-owned definition. Adding a sword therefore does not require adding `sword` branches to the player action controller or combat resolver.
+At runtime a resolver selects the existing `UnderworldPlayerAttackDefinition` by semantic attack ID and returns that exact gameplay-owned definition. Adding a sword therefore does not require adding `sword` branches to the player action controller or combat resolver.
 
 Advanced combo trees, heavy attacks and skill progression are outside WEAPON-001.
 
-## 4. Presentation and equipment roles
+## 4. Presentation ownership and semantic requirements
 
-Weapons reference presentation definitions semantically:
+A weapon may reference its replaceable **weapon presentation archetype**:
 
 ```text
-presentation.archetype     -> archetype.*
-presentation.animation_set -> animation_set.*
-presentation.rig_profile   -> rig_profile.*
+presentation.archetype -> archetype.*
 ```
 
-The weapon also declares:
-- a semantic attack animation role such as `animation_role.action.attack.light_01`;
-- a semantic grip socket role such as `rig_role.socket.hand.right`.
+The weapon also declares semantic requirements that the active character/equipment presentation composition must satisfy:
+- an attack animation role such as `animation_role.action.attack.light_01`;
+- a grip socket role such as `rig_role.socket.hand.right`.
 
-Concrete animation clip names, bone names, socket Node names and scene/resource paths remain owned by the referenced presentation definitions. The foundational weapon grip must resolve to an accepted hand-socket role.
+A foundational `WeaponDefinition` does **not** select a concrete character `animation_set.*` or `rig_profile.*`.
 
-The referenced Animation Set must be compatible with the referenced Rig Profile and must resolve the weapon's attack-animation role. The Rig Profile must resolve the weapon's grip role to a socket binding.
+That distinction is intentional:
+
+```text
+weapon definition
+  requires animation_role.action.attack.light_01
+  requires rig_role.socket.hand.right
+
+character presentation pack A
+  animation_set.character.a -> resolves attack role
+  rig_profile.character.a    -> resolves right-hand socket
+
+character presentation pack B
+  animation_set.character.b -> resolves same attack role
+  rig_profile.character.b    -> resolves same right-hand socket
+```
+
+Both presentation packs may consume the same unchanged weapon ContentId and gameplay attack definition even when their concrete clip names, bones, sockets or scenes differ.
+
+Weapon-family validation proves the semantic role IDs exist in the accepted role registry and that the grip role is an allowed hand socket. The later active character/equipment composition boundary owns the check that its selected Animation Set and Rig Profile can actually resolve those requirements.
 
 ## 5. Required typed references
 
-A valid foundational weapon has all four required semantic targets:
+A valid foundational weapon has two required semantic content targets:
 
 | Role | Expected family |
 | --- | --- |
 | `weapon.attack_set` | `attack_set` |
 | `presentation.archetype` | `archetype` |
-| `presentation.animation_set` | `animation_set` |
-| `presentation.rig_profile` | `rig_profile` |
 
-Missing targets, wrong target families and incompatible concrete definitions fail during CONTENT-005 validation rather than becoming runtime surprises.
+Character `animation_set` and `rig_profile` targets are deliberately absent from weapon identity. Missing/wrong attack-set or weapon-archetype targets fail during CONTENT-005 validation. Unknown attack-animation roles and invalid/non-hand grip roles also fail during weapon-family validation.
 
 ## 6. Fail-closed child-family rule
 
@@ -123,12 +137,13 @@ A new simple sword should require only authored content plus existing generic re
 1. create a `WeaponDefinition` with stable `item.weapon.*` ID;
 2. declare the weapon category and required capabilities;
 3. reference a compatible `attack_set.*`;
-4. reference archetype, animation set and rig profile content;
-5. choose accepted semantic technique/animation/grip roles;
+4. reference the replaceable weapon presentation archetype;
+5. choose accepted semantic technique/attack-animation/grip roles;
 6. run CONTENT-005 and focused weapon contracts;
-7. let existing gameplay attack/controller code consume the resolved gameplay attack definition.
+7. let the active character/equipment presentation later prove its current Animation Set/Rig Profile satisfy the weapon-required semantic roles;
+8. let existing gameplay attack/controller code consume the resolved gameplay attack definition.
 
-No central `match sword`, scene-path identity or duplicated combat-resolution implementation is allowed.
+No central `match sword`, scene-path identity, character-presentation pinning or duplicated combat-resolution implementation is allowed.
 
 ## 8. Persistence and mutable state
 
@@ -147,8 +162,9 @@ This foundational rulebook does not implement:
 - combo trees, heavy attacks, skill trees or weapon progression;
 - a new combat resolver or attack-phase controller;
 - final durability/balance values;
-- inventory/equipment UI;
+- inventory/equipment runtime or UI;
 - final weapon meshes/animations;
+- character presentation-pack selection;
 - enemy definitions or encounter placement;
 - MAP-016/worldgen behavior.
 

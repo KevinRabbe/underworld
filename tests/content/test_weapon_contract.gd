@@ -36,13 +36,10 @@ const HARVEST_TOOL := "capability.harvest_tool"
 
 const ATTACK_ROLE := "animation_role.action.attack.light_01"
 const RIGHT_GRIP := "rig_role.socket.hand.right"
-const LEFT_GRIP := "rig_role.socket.hand.left"
 const LIGHT_TECHNIQUE := "weapon_technique.light.primary"
 
 const SWORD_ATTACK_SET := "attack_set.weapon.sword.basic"
 const SWORD_ARCHETYPE := "archetype.weapon.iron_sword"
-const SWORD_ANIMATION_SET := "animation_set.weapon.iron_sword"
-const SWORD_RIG := "rig_profile.humanoid.weapon_test"
 
 
 static func run() -> Array[String]:
@@ -51,7 +48,8 @@ static func run() -> Array[String]:
 	_test_attack_resolution_preserves_gameplay_authority(failures)
 	_test_weapon_and_tool_capability_composition(failures)
 	_test_weapon_family_fails_closed(failures)
-	_test_incompatible_semantic_bindings_fail(failures)
+	_test_semantic_role_requirements_fail_closed(failures)
+	_test_character_presentation_pack_replaceability(failures)
 	return failures
 
 
@@ -82,10 +80,18 @@ static func _test_authored_sword_and_path_identity(failures: Array[String]) -> v
 	if first.stack_limit != 1 or not is_equal_approx(first.unit_weight, 3.0):
 		failures.append("authored sword did not retain ITEM-001 base fields")
 
+	if _has_property(first, "animation_set_id") or _has_property(first, "rig_profile_id"):
+		failures.append("WeaponDefinition still owns a concrete character Animation Set or Rig Profile")
+	var descriptor: Dictionary = first.canonical_descriptor()
+	if descriptor.has("animation_set_id") or descriptor.has("rig_profile_id"):
+		failures.append("weapon canonical identity still includes concrete character presentation-pack ids")
+	if _has_reference_role(first, "presentation.animation_set") or _has_reference_role(first, "presentation.rig_profile"):
+		failures.append("weapon validation references still select concrete character presentation definitions")
+
 	var stable_id: String = first.content_id
 	first.archetype_id = "archetype.weapon.iron_sword.presentation_replacement"
 	if first.content_id != stable_id:
-		failures.append("replaceable weapon presentation binding changed semantic weapon identity")
+		failures.append("replaceable weapon presentation archetype changed semantic weapon identity")
 	if _has_property(first, "startup") or _has_property(first, "active") or _has_property(first, "recovery"):
 		failures.append("gameplay attack timing leaked into authored WeaponDefinition")
 	if _has_property(first, "damage") or _has_property(first, "reach"):
@@ -97,8 +103,6 @@ static func _test_attack_resolution_preserves_gameplay_authority(failures: Array
 		"item.weapon.runtime_sword",
 		SWORD_ATTACK_SET,
 		SWORD_ARCHETYPE,
-		SWORD_ANIMATION_SET,
-		SWORD_RIG,
 		ITEM_SWORD,
 		[EQUIPABLE, DAMAGE_DEALER],
 		RIGHT_GRIP
@@ -148,8 +152,6 @@ static func _test_attack_resolution_preserves_gameplay_authority(failures: Array
 		"item.weapon.prototype_axe",
 		second_set.content_id,
 		"archetype.weapon.prototype_axe",
-		"animation_set.weapon.prototype_axe",
-		SWORD_RIG,
 		ITEM_AXE,
 		[EQUIPABLE, DAMAGE_DEALER, HARVEST_TOOL],
 		RIGHT_GRIP
@@ -164,8 +166,6 @@ static func _test_weapon_and_tool_capability_composition(failures: Array[String]
 		"item.weapon.harvest_axe",
 		"attack_set.weapon.axe.harvest",
 		"archetype.weapon.harvest_axe",
-		"animation_set.weapon.harvest_axe",
-		SWORD_RIG,
 		ITEM_AXE,
 		[EQUIPABLE, DAMAGE_DEALER, HARVEST_TOOL],
 		RIGHT_GRIP
@@ -173,8 +173,6 @@ static func _test_weapon_and_tool_capability_composition(failures: Array[String]
 	var axe_targets: Array = [
 		_attack_set(axe.attack_set_id, LIGHT_TECHNIQUE, "stone_axe_light"),
 		_archetype(axe.archetype_id),
-		_animation_set(axe.animation_set_id, axe.rig_profile_id, axe.attack_animation_role, axe.grip_rig_role),
-		_rig_profile(axe.rig_profile_id, axe.grip_rig_role),
 	]
 	var axe_result: Dictionary = _validate_weapon(axe, axe_targets)
 	if not bool(axe_result.get("success", false)):
@@ -210,8 +208,6 @@ static func _test_weapon_family_fails_closed(failures: Array[String]) -> void:
 		"item.weapon.missing_damage_capability",
 		SWORD_ATTACK_SET,
 		SWORD_ARCHETYPE,
-		SWORD_ANIMATION_SET,
-		SWORD_RIG,
 		ITEM_SWORD,
 		[EQUIPABLE],
 		RIGHT_GRIP
@@ -224,20 +220,13 @@ static func _test_weapon_family_fails_closed(failures: Array[String]) -> void:
 		"item.weapon.generic_attack_set_target",
 		"attack_set.weapon.generic_wrong_type",
 		SWORD_ARCHETYPE,
-		SWORD_ANIMATION_SET,
-		SWORD_RIG,
 		ITEM_SWORD,
 		[EQUIPABLE, DAMAGE_DEALER],
 		RIGHT_GRIP
 	)
 	var generic_attack_set = ContentDefinition.new()
 	generic_attack_set.configure(wrong_attack_target.attack_set_id, "attack_set", 1)
-	var wrong_targets: Array = [
-		generic_attack_set,
-		_archetype(SWORD_ARCHETYPE),
-		_animation_set(SWORD_ANIMATION_SET, SWORD_RIG, ATTACK_ROLE, RIGHT_GRIP),
-		_rig_profile(SWORD_RIG, RIGHT_GRIP),
-	]
+	var wrong_targets: Array = [generic_attack_set, _archetype(SWORD_ARCHETYPE)]
 	var wrong_target_result: Dictionary = _validate_weapon(wrong_attack_target, wrong_targets)
 	if not _has_code_fragment(wrong_target_result, "family_rule", "must inherit WeaponAttackSetDefinition"):
 		failures.append("generic attack_set content bypassed the weapon attack-set contract")
@@ -246,8 +235,6 @@ static func _test_weapon_family_fails_closed(failures: Array[String]) -> void:
 		"item.weapon.missing_technique",
 		"attack_set.weapon.missing_technique",
 		SWORD_ARCHETYPE,
-		SWORD_ANIMATION_SET,
-		SWORD_RIG,
 		ITEM_SWORD,
 		[EQUIPABLE, DAMAGE_DEALER],
 		RIGHT_GRIP
@@ -257,88 +244,166 @@ static func _test_weapon_family_fails_closed(failures: Array[String]) -> void:
 		"weapon_technique.heavy.primary",
 		"sword_heavy_01"
 	)
-	var alternate_targets: Array = [
-		alternate_set,
-		_archetype(SWORD_ARCHETYPE),
-		_animation_set(SWORD_ANIMATION_SET, SWORD_RIG, ATTACK_ROLE, RIGHT_GRIP),
-		_rig_profile(SWORD_RIG, RIGHT_GRIP),
-	]
+	var alternate_targets: Array = [alternate_set, _archetype(SWORD_ARCHETYPE)]
 	var missing_technique_result: Dictionary = _validate_weapon(missing_technique, alternate_targets)
 	if not _has_code_fragment(missing_technique_result, "family_rule", "does not provide primary technique role"):
 		failures.append("weapon attack set missing the selected semantic technique did not fail")
 
 
-static func _test_incompatible_semantic_bindings_fail(failures: Array[String]) -> void:
+static func _test_semantic_role_requirements_fail_closed(failures: Array[String]) -> void:
 	var bad_grip = _weapon(
 		"item.weapon.bad_grip",
 		SWORD_ATTACK_SET,
 		SWORD_ARCHETYPE,
-		SWORD_ANIMATION_SET,
-		SWORD_RIG,
 		ITEM_SWORD,
 		[EQUIPABLE, DAMAGE_DEALER],
 		"rig_role.head"
 	)
-	var bad_grip_targets: Array = [
-		_attack_set(SWORD_ATTACK_SET, LIGHT_TECHNIQUE, "sword_light_01"),
-		_archetype(SWORD_ARCHETYPE),
-		_animation_set(SWORD_ANIMATION_SET, SWORD_RIG, ATTACK_ROLE, "rig_role.head"),
-		_rig_profile(SWORD_RIG, "rig_role.head", RigProfileDefinition.BINDING_KIND_BONE),
-	]
-	var bad_grip_result: Dictionary = _validate_weapon(bad_grip, bad_grip_targets)
+	var bad_grip_result: Dictionary = _validate_weapon(bad_grip, _sword_targets())
 	if not _has_code_fragment(bad_grip_result, "family_rule", "must be a hand socket"):
-		failures.append("weapon grip accepted a non-socket/non-hand rig role")
+		failures.append("weapon grip accepted a non-hand rig role")
 
 	var unknown_animation = _weapon(
 		"item.weapon.unknown_animation_role",
 		SWORD_ATTACK_SET,
 		SWORD_ARCHETYPE,
-		SWORD_ANIMATION_SET,
-		SWORD_RIG,
 		ITEM_SWORD,
 		[EQUIPABLE, DAMAGE_DEALER],
 		RIGHT_GRIP
 	)
 	unknown_animation.attack_animation_role = "animation_role.action.attack.unknown"
-	var unknown_targets: Array = [
-		_attack_set(SWORD_ATTACK_SET, LIGHT_TECHNIQUE, "sword_light_01"),
-		_archetype(SWORD_ARCHETYPE),
-		_animation_set(SWORD_ANIMATION_SET, SWORD_RIG, unknown_animation.attack_animation_role, RIGHT_GRIP),
-		_rig_profile(SWORD_RIG, RIGHT_GRIP),
-	]
-	var unknown_result: Dictionary = _validate_weapon(unknown_animation, unknown_targets)
+	var unknown_result: Dictionary = _validate_weapon(unknown_animation, _sword_targets())
 	if not _has_code_fragment(unknown_result, "family_rule", "unknown weapon attack animation role"):
 		failures.append("unknown semantic weapon animation role did not fail")
 
-	var mismatch = _weapon(
-		"item.weapon.rig_mismatch",
+
+static func _test_character_presentation_pack_replaceability(failures: Array[String]) -> void:
+	var weapon = _weapon(
+		"item.weapon.presentation_independent_sword",
 		SWORD_ATTACK_SET,
 		SWORD_ARCHETYPE,
-		SWORD_ANIMATION_SET,
-		SWORD_RIG,
 		ITEM_SWORD,
 		[EQUIPABLE, DAMAGE_DEALER],
 		RIGHT_GRIP
 	)
-	var other_rig_id := "rig_profile.humanoid.other_weapon_test"
-	var mismatch_targets: Array = [
-		_attack_set(SWORD_ATTACK_SET, LIGHT_TECHNIQUE, "sword_light_01"),
-		_archetype(SWORD_ARCHETYPE),
-		_animation_set(SWORD_ANIMATION_SET, other_rig_id, ATTACK_ROLE, RIGHT_GRIP),
-		_rig_profile(SWORD_RIG, RIGHT_GRIP),
-		_rig_profile(other_rig_id, RIGHT_GRIP),
-	]
-	var mismatch_result: Dictionary = _validate_weapon(mismatch, mismatch_targets)
-	if not _has_code_fragment(mismatch_result, "family_rule", "incompatible rig profile"):
-		failures.append("weapon accepted animation set bound to a different rig profile")
+	var weapon_result: Dictionary = _validate_weapon(weapon, _sword_targets())
+	if not bool(weapon_result.get("success", false)):
+		failures.append("presentation-independent weapon failed its own authored validation: %s" % [weapon_result.get("diagnostics", [])])
+		return
+
+	var rig_a = _rig_profile(
+		"rig_profile.humanoid.weapon_pack_a",
+		RIGHT_GRIP,
+		RigProfileDefinition.BINDING_KIND_SOCKET,
+		"HandSocket_A"
+	)
+	var animation_a = _animation_set(
+		"animation_set.character.weapon_pack_a",
+		rig_a.content_id,
+		ATTACK_ROLE,
+		RIGHT_GRIP,
+		"character_a.sword_light"
+	)
+	var rig_b = _rig_profile(
+		"rig_profile.humanoid.weapon_pack_b",
+		RIGHT_GRIP,
+		RigProfileDefinition.BINDING_KIND_SOCKET,
+		"HandSocket_B"
+	)
+	var animation_b = _animation_set(
+		"animation_set.character.weapon_pack_b",
+		rig_b.content_id,
+		ATTACK_ROLE,
+		RIGHT_GRIP,
+		"character_b.sword_light"
+	)
+
+	if animation_a.content_id == animation_b.content_id or rig_a.content_id == rig_b.content_id:
+		failures.append("presentation replaceability proof did not use two distinct character presentation packs")
+	if (
+		str(animation_a.resolve_role_binding(ATTACK_ROLE).get("binding", ""))
+		== str(animation_b.resolve_role_binding(ATTACK_ROLE).get("binding", ""))
+	):
+		failures.append("presentation replaceability proof did not vary concrete animation bindings")
+	if (
+		str(rig_a.binding_for_role(RIGHT_GRIP).get("target", ""))
+		== str(rig_b.binding_for_role(RIGHT_GRIP).get("target", ""))
+	):
+		failures.append("presentation replaceability proof did not vary concrete rig/socket bindings")
+
+	var before_id: String = weapon.content_id
+	var before_descriptor: Dictionary = weapon.canonical_descriptor().duplicate(true)
+	for pack in [[animation_a, rig_a], [animation_b, rig_b]]:
+		var compatibility_failures: Array[String] = _presentation_pack_failures(
+			weapon,
+			pack[0],
+			pack[1]
+		)
+		if not compatibility_failures.is_empty():
+			failures.append("compatible character presentation pack rejected weapon semantic requirements: %s" % [compatibility_failures])
+
+	if weapon.content_id != before_id or weapon.canonical_descriptor() != before_descriptor:
+		failures.append("consuming a different compatible character presentation pack mutated weapon identity")
+
+	var attack_set = _attack_set(SWORD_ATTACK_SET, LIGHT_TECHNIQUE, "sword_light_01")
+	var attack = PlayerAttackDefinition.new(
+		&"sword_light_01",
+		0.18,
+		0.11,
+		0.27,
+		22,
+		2.9,
+		1.7,
+		1.05,
+		0.10
+	)
+	var timing_before := [attack.startup, attack.active, attack.recovery, attack.damage, attack.reach]
+	var resolver = WeaponAttackResolver.new()
+	resolver.configure_attack_definitions([attack])
+	for _pack in [[animation_a, rig_a], [animation_b, rig_b]]:
+		var resolved: Dictionary = resolver.resolve_primary_attack(weapon, attack_set)
+		if resolved.get("attack_definition", null) != attack:
+			failures.append("character presentation choice changed gameplay attack-definition identity")
+	if timing_before != [attack.startup, attack.active, attack.recovery, attack.damage, attack.reach]:
+		failures.append("character presentation choice changed gameplay attack timing/combat data")
+
+
+static func _presentation_pack_failures(weapon, animation_set, rig_profile) -> Array[String]:
+	var failures: Array[String] = []
+	if animation_set == null or not animation_set is AnimationSetDefinition:
+		failures.append("expected AnimationSetDefinition")
+		return failures
+	if rig_profile == null or not rig_profile is RigProfileDefinition:
+		failures.append("expected RigProfileDefinition")
+		return failures
+	if str(animation_set.rig_profile_id) != str(rig_profile.content_id):
+		failures.append("animation set does not target supplied rig profile")
+
+	var role_registry = CharacterSemanticSchemaCatalog.build_registry()
+	for failure in animation_set.validate_definition():
+		failures.append("animation definition: %s" % failure)
+	for failure in rig_profile.validate_definition():
+		failures.append("rig definition: %s" % failure)
+	for failure in animation_set.validate_semantic_contract(role_registry):
+		failures.append("animation semantic contract: %s" % failure)
+	for failure in rig_profile.validate_semantic_contract(role_registry):
+		failures.append("rig semantic contract: %s" % failure)
+
+	var animation_resolution: Dictionary = animation_set.resolve_role_binding(weapon.attack_animation_role)
+	if not animation_resolution.get("diagnostics", []).is_empty():
+		failures.append("animation pack cannot resolve weapon attack role")
+	var grip_binding: Dictionary = rig_profile.binding_for_role(weapon.grip_rig_role)
+	if grip_binding.is_empty():
+		failures.append("rig pack cannot resolve weapon grip role")
+	elif str(grip_binding.get("kind", "")) != RigProfileDefinition.BINDING_KIND_SOCKET:
+		failures.append("rig pack resolves weapon grip role to a non-socket binding")
+	return failures
 
 
 static func _weapon(
 	content_id: String,
 	attack_set_id: String,
 	archetype_id: String,
-	animation_set_id: String,
-	rig_profile_id: String,
 	category_id: String,
 	capabilities: Array,
 	grip_role: String
@@ -348,8 +413,6 @@ static func _weapon(
 		content_id,
 		attack_set_id,
 		archetype_id,
-		animation_set_id,
-		rig_profile_id,
 		LIGHT_TECHNIQUE,
 		ATTACK_ROLE,
 		grip_role,
@@ -364,8 +427,6 @@ static func _sword_targets() -> Array:
 	return [
 		_attack_set(SWORD_ATTACK_SET, LIGHT_TECHNIQUE, "sword_light_01"),
 		_archetype(SWORD_ARCHETYPE),
-		_animation_set(SWORD_ANIMATION_SET, SWORD_RIG, ATTACK_ROLE, RIGHT_GRIP),
-		_rig_profile(SWORD_RIG, RIGHT_GRIP),
 	]
 
 
@@ -387,11 +448,12 @@ static func _animation_set(
 	content_id: String,
 	rig_profile_id: String,
 	animation_role: String,
-	rig_role: String
+	rig_role: String,
+	binding: String = "weapon_attack_clip"
 ):
 	var definition = AnimationSetDefinition.new()
 	definition.configure_animation_set(content_id, rig_profile_id, 1)
-	definition.set_role_binding(animation_role, "weapon_attack_clip")
+	definition.set_role_binding(animation_role, binding)
 	definition.configure_required_roles([animation_role], [rig_role])
 	return definition
 
@@ -399,11 +461,12 @@ static func _animation_set(
 static func _rig_profile(
 	content_id: String,
 	rig_role: String,
-	binding_kind: String = RigProfileDefinition.BINDING_KIND_SOCKET
+	binding_kind: String = RigProfileDefinition.BINDING_KIND_SOCKET,
+	target: String = "WeaponBinding"
 ):
 	var definition = RigProfileDefinition.new()
 	definition.configure_rig_profile(content_id, "humanoid", 1)
-	definition.set_role_binding(rig_role, binding_kind, "WeaponBinding")
+	definition.set_role_binding(rig_role, binding_kind, target)
 	return definition
 
 
@@ -455,6 +518,13 @@ static func _capabilities():
 static func _has_property(value, property_name: String) -> bool:
 	for descriptor in value.get_property_list():
 		if str(descriptor.get("name", "")) == property_name:
+			return true
+	return false
+
+
+static func _has_reference_role(value, role: String) -> bool:
+	for reference in value.validation_references():
+		if reference != null and str(reference.role) == role:
 			return true
 	return false
 

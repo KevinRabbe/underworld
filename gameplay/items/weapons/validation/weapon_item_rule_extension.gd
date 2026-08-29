@@ -7,8 +7,6 @@ const CategorySchemaRegistryScript := preload("res://core/content/schema/categor
 const SemanticRoleSchemaRegistryScript := preload("res://core/content/schema/semantic_role_schema_registry.gd")
 const ContentRegistryScript := preload("res://core/content/registry/content_registry.gd")
 const ArchetypeDefinitionScript := preload("res://core/content/archetypes/archetype_definition.gd")
-const AnimationSetDefinitionScript := preload("res://presentation/characters/animation/animation_set_definition.gd")
-const RigProfileDefinitionScript := preload("res://presentation/characters/animation/rig_profile_definition.gd")
 
 const WEAPON_ROOT_CATEGORY := "category.item.equipment.weapon"
 const EQUIPABLE_CAPABILITY := "capability.equipable"
@@ -147,49 +145,6 @@ func _validate_reference_targets(
 	)
 	if archetype != null and not archetype is ArchetypeDefinitionScript:
 		failures.append("weapon archetype target must inherit ArchetypeDefinition: %s" % definition.archetype_id)
-
-	var animation_set = _resolved_definition(
-		content_registry,
-		definition.animation_set_id,
-		WeaponDefinitionScript.ANIMATION_SET_FAMILY
-	)
-	if animation_set != null:
-		if not animation_set is AnimationSetDefinitionScript:
-			failures.append(
-				"weapon animation-set target must inherit AnimationSetDefinition: %s" % definition.animation_set_id
-			)
-		else:
-			if str(animation_set.rig_profile_id) != str(definition.rig_profile_id):
-				failures.append("weapon animation set targets incompatible rig profile: %s -> %s" % [
-					animation_set.rig_profile_id,
-					definition.rig_profile_id,
-				])
-			var resolved_animation: Dictionary = animation_set.resolve_role_binding(
-				definition.attack_animation_role
-			)
-			if not resolved_animation.get("diagnostics", []).is_empty():
-				failures.append("weapon animation set cannot resolve attack role: %s" % definition.attack_animation_role)
-			for failure in animation_set.validate_semantic_contract(_role_registry):
-				failures.append("weapon animation semantic contract: %s" % failure)
-
-	var rig_profile = _resolved_definition(
-		content_registry,
-		definition.rig_profile_id,
-		WeaponDefinitionScript.RIG_PROFILE_FAMILY
-	)
-	if rig_profile != null:
-		if not rig_profile is RigProfileDefinitionScript:
-			failures.append(
-				"weapon rig-profile target must inherit RigProfileDefinition: %s" % definition.rig_profile_id
-			)
-		else:
-			var binding: Dictionary = rig_profile.binding_for_role(definition.grip_rig_role)
-			if binding.is_empty():
-				failures.append("weapon rig profile has no grip-role binding: %s" % definition.grip_rig_role)
-			elif str(binding.get("kind", "")) != RigProfileDefinitionScript.BINDING_KIND_SOCKET:
-				failures.append("weapon grip rig role must resolve to a socket binding: %s" % definition.grip_rig_role)
-			for failure in rig_profile.validate_semantic_contract(_role_registry):
-				failures.append("weapon rig semantic contract: %s" % failure)
 
 
 static func _resolved_definition(content_registry, content_id: String, family: String):
