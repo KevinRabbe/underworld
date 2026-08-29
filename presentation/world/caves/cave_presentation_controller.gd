@@ -39,14 +39,14 @@ func configure(runtime_controller_value, catalog_value, biome_id_value: String =
 		if existing_render_nodes is Dictionary:
 			for node in existing_render_nodes.values():
 				if node != null:
-					apply_to_render_node(node, node.get_meta("source_cell_plan", null))
+					apply_to_render_node(node, node.get_meta("cell_semantic_snapshot", {}))
 	return last_diagnostics.duplicate()
 
 
-func apply_to_render_node(mesh_node, source_cell_plan = null) -> Dictionary:
+func apply_to_render_node(mesh_node, cell_semantic_snapshot: Dictionary = {}) -> Dictionary:
 	if catalog == null or not catalog is CatalogScript:
 		return {"attachment": null, "material": null, "profile_id": "", "diagnostics": ["CavePresentationCatalog is not configured"]}
-	var context: Dictionary = ContextBuilder.from_cell_plan(source_cell_plan, biome_id)
+	var context: Dictionary = ContextBuilder.from_runtime_snapshot(cell_semantic_snapshot, biome_id)
 	var resolved: Dictionary = catalog.resolve(context)
 	if not resolved.get("diagnostics", []).is_empty():
 		return {"attachment": null, "material": null, "profile_id": "", "diagnostics": resolved.get("diagnostics", [])}
@@ -63,6 +63,7 @@ func _on_cell_attached(address, tier: String) -> void:
 	var mesh_node = render_nodes.get(key, null)
 	if mesh_node == null:
 		return
-	var result: Dictionary = apply_to_render_node(mesh_node, mesh_node.get_meta("source_cell_plan", null))
+	var snapshot: Dictionary = mesh_node.get_meta("cell_semantic_snapshot", {})
+	var result: Dictionary = apply_to_render_node(mesh_node, snapshot)
 	for failure in result.get("diagnostics", []):
 		last_diagnostics.append(str(failure))
