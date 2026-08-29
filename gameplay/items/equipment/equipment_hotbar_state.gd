@@ -56,7 +56,7 @@ func validate_state() -> Array[String]:
 			continue
 		for failure in container.validate_container():
 			failures.append("%s: %s" % [slot_key, failure])
-		var occupied := container.occupied_slot_count() > 0
+		var occupied: bool = container.occupied_slot_count() > 0
 		var definition = _definitions.get(slot_key, null)
 		if occupied and (definition == null or not definition is ItemDefinition):
 			failures.append("occupied equipment slot is missing resolved ItemDefinition: %s" % slot_key)
