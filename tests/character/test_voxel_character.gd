@@ -127,6 +127,9 @@ static func _test_runtime_presentation(failures: Array[String]) -> void:
 	var library: AnimationLibrary = character.animation_player.get_animation_library("")
 	for clip_name in ["idle", "walk_forward", "walk_backward", "strafe_left", "strafe_right", "sprint", "jump", "fall", "dodge_forward", "dodge_backward", "dodge_left", "dodge_right", "attack_light", "attack_heavy", "block", "parry", "hit", "death", "tool_use"]:
 		_expect_true(failures, "%s owns authored pose tracks" % clip_name, library.has_animation(clip_name) and library.get_animation(clip_name).get_track_count() > 0)
+	_expect_true(failures, "heavy attack owns a fuller silhouette than light attack", library.get_animation("attack_heavy").get_track_count() > library.get_animation("attack_light").get_track_count())
+	_expect_true(failures, "directional dodge poses include torso and all leg chains", library.get_animation("dodge_forward").get_track_count() >= 5 and library.get_animation("dodge_left").get_track_count() >= 5)
+	_expect_true(failures, "tool-use pose coordinates torso, arm, forearm, and gaze", library.get_animation("tool_use").get_track_count() >= 4)
 	var state_machine: AnimationNodeStateMachine = character.animation_tree.tree_root
 	var locomotion: AnimationNodeBlendSpace2D = state_machine.get_node("locomotion")
 	_expect_equal(failures, "directional locomotion blend owns five canonical points", locomotion.get_blend_point_count(), 5)
@@ -159,6 +162,11 @@ static func _test_runtime_presentation(failures: Array[String]) -> void:
 	_expect_equal(failures, "positive airborne velocity selects jump", character.current_animation_state, &"jump")
 	character.update_voxel_visual(1.0 / 60.0, Vector3.ZERO, -4.0, false, false)
 	_expect_equal(failures, "negative airborne velocity selects fall", character.current_animation_state, &"fall")
+	character.play_death()
+	character.update_voxel_visual(1.0 / 60.0, Vector3(0,0,4), 0.0, true, false)
+	_expect_equal(failures, "death pose cannot be replaced by later locomotion", character.current_animation_state, &"death")
+	character.reset_pose()
+	_expect_equal(failures, "explicit presentation reset releases death pose", character.current_animation_state, &"locomotion")
 	var recolored_definition = BaselineFactory.build()
 	recolored_definition.palette.entries[0]["color"] = Color.MAGENTA
 	var recolored_character := VoxelPresentation.new(recolored_definition)
