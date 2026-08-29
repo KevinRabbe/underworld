@@ -1,0 +1,12 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://gameplay/resources/definitions/resource_node_definition.gd" id="1_definition"]
+
+[resource]
+script = ExtResource("1_definition")
+content_id = "resource_node.iron.prototype"
+definition_family = "resource_node"
+schema_revision = 1
+capacity_units = 12.0
+harvest_capacity_cost = 1.0
+interaction_radius = 1.4
