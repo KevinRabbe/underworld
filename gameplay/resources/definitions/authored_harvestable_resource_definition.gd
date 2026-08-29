@@ -1,8 +1,5 @@
 extends "res://gameplay/resources/definitions/resource_definition.gd"
 
-const ContentReference := preload("res://core/content/references/content_reference.gd")
-const ResourceYieldRule := preload("res://gameplay/resources/definitions/resource_yield_rule.gd")
-
 const PRIMARY_YIELD_ROLE := "yield.primary"
 const PRESENTATION_ARCHETYPE_ROLE := "presentation.archetype"
 
