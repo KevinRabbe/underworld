@@ -157,6 +157,20 @@ static func build(request) -> StageResult:
 					field_cache[_sample_index(local_x, local_y, local_z, sample_size)] = (
 						LegacyMesher._field(point, fragments, request.iso_level)
 					)
+	var logical_sample_capacity: int = (
+		maxi(maximum.x - minimum.x, 0)
+		* maxi(maximum.y - minimum.y, 0)
+		* maxi(maximum.z - minimum.z, 0)
+		* 8
+	)
+	print(
+		"[PERF-002] scalar-cache cell=%s physical_sdf=%d logical_samples=%d cache_bytes=%d" % [
+			plan.cell_address.canonical_text(),
+			field_cache.size(),
+			logical_sample_capacity,
+			field_cache.size() * 8,
+		]
+	)
 
 	for x in range(minimum.x, maximum.x):
 		for y in range(minimum.y, maximum.y):
