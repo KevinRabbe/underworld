@@ -1,0 +1,11 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://gameplay/creatures/definitions/creature_attack_profile_definition.gd" id="1_attack"]
+
+[resource]
+script = ExtResource("1_attack")
+content_id = "attack_profile.creature.burrower.melee"
+definition_family = "attack_profile"
+schema_revision = 1
+attack_style = "melee.contact"
+parryable = true
