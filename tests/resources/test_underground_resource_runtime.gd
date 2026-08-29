@@ -26,6 +26,9 @@ static func run() -> Array[String]:
 	_test_pickaxe_mining_depletion_and_idempotence(failures)
 	_test_inventory_failure_is_atomic(failures)
 	_test_restore_schema_and_current_placement_compatibility(failures)
+	_test_non_finite_authored_capacity_fails_closed(failures)
+	_test_non_finite_authored_yield_fails_closed(failures)
+	_test_non_finite_durable_depletion_fails_closed(failures)
 	_test_wrong_tool_fails_closed(failures)
 	return failures
 
@@ -177,6 +180,209 @@ static func _test_restore_schema_and_current_placement_compatibility(failures: A
 	_expect_equal(failures, "failed compatibility restore does not rewrite saved state", store.get_object_state(placement.placement_stable_id), valid)
 
 
+static func _test_non_finite_authored_capacity_fails_closed(failures: Array[String]) -> void:
+	var fixture: Dictionary = _content_fixture(failures)
+	if fixture.is_empty():
+		return
+	var equipment_fixture: Dictionary = _pickaxe_equipment(fixture["pickaxe"], failures)
+	if equipment_fixture.is_empty():
+		return
+	var definition = fixture["resource"]
+	var original_capacity: float = float(definition.capacity_units)
+	var service = RuntimeService.new()
+	var placement = _placement()
+	var values: Array = _non_finite_values()
+	for index in range(values.size()):
+		var invalid_value: float = float(values[index])
+		var output = ItemContainerState.new().configure(2)
+		var store = WorldDeltaStore.new()
+		var before_inventory: String = output.canonical_json()
+		var before_store: Dictionary = store.snapshot()
+		definition.capacity_units = invalid_value
+		var result: Dictionary = service.mine(
+			placement,
+			fixture["registry"],
+			equipment_fixture["equipment"],
+			output,
+			store,
+			"numeric-capacity-%d" % index
+		)
+		definition.capacity_units = original_capacity
+		_expect_true(
+			failures,
+			"runtime rejects %s authored capacity" % _non_finite_label(invalid_value),
+			not bool(result.get("success", true))
+		)
+		_expect_true(
+			failures,
+			"authored capacity rejection uses accepted finite diagnostic",
+			_result_has_fragment(result, "capacity_units must be finite")
+		)
+		_expect_equal(
+			failures,
+			"non-finite authored capacity leaves inventory unchanged",
+			output.canonical_json(),
+			before_inventory
+		)
+		_expect_equal(
+			failures,
+			"non-finite authored capacity leaves WorldDeltaStore unchanged",
+			store.snapshot(),
+			before_store
+		)
+	definition.capacity_units = original_capacity
+
+
+static func _test_non_finite_authored_yield_fails_closed(failures: Array[String]) -> void:
+	var fixture: Dictionary = _content_fixture(failures)
+	if fixture.is_empty():
+		return
+	var equipment_fixture: Dictionary = _pickaxe_equipment(fixture["pickaxe"], failures)
+	if equipment_fixture.is_empty():
+		return
+	var definition = fixture["resource"]
+	var original_yield: float = float(definition.primary_yield_quantity_per_capacity_unit)
+	var service = RuntimeService.new()
+	var placement = _placement()
+	var values: Array = _non_finite_values()
+	for index in range(values.size()):
+		var invalid_value: float = float(values[index])
+		var output = ItemContainerState.new().configure(2)
+		var store = WorldDeltaStore.new()
+		var before_inventory: String = output.canonical_json()
+		var before_store: Dictionary = store.snapshot()
+		definition.primary_yield_quantity_per_capacity_unit = invalid_value
+		var result: Dictionary = service.mine(
+			placement,
+			fixture["registry"],
+			equipment_fixture["equipment"],
+			output,
+			store,
+			"numeric-yield-%d" % index
+		)
+		definition.primary_yield_quantity_per_capacity_unit = original_yield
+		# Refresh the authored adapter after restoring the exported source value so
+		# ResourceLoader's cached production fixture cannot leak invalid state.
+		definition.validate_definition()
+		_expect_true(
+			failures,
+			"runtime rejects %s authored yield" % _non_finite_label(invalid_value),
+			not bool(result.get("success", true))
+		)
+		_expect_true(
+			failures,
+			"authored yield rejection uses accepted finite diagnostic",
+			_result_has_fragment(result, "quantity_per_capacity_unit must be finite")
+		)
+		_expect_equal(
+			failures,
+			"non-finite authored yield leaves inventory unchanged",
+			output.canonical_json(),
+			before_inventory
+		)
+		_expect_equal(
+			failures,
+			"non-finite authored yield leaves WorldDeltaStore unchanged",
+			store.snapshot(),
+			before_store
+		)
+	definition.primary_yield_quantity_per_capacity_unit = original_yield
+	definition.validate_definition()
+
+
+static func _test_non_finite_durable_depletion_fails_closed(failures: Array[String]) -> void:
+	var fixture: Dictionary = _content_fixture(failures)
+	if fixture.is_empty():
+		return
+	var equipment_fixture: Dictionary = _pickaxe_equipment(fixture["pickaxe"], failures)
+	if equipment_fixture.is_empty():
+		return
+	var service = RuntimeService.new()
+	var placement = _placement()
+	var values: Array = _non_finite_values()
+	for index in range(values.size()):
+		var invalid_value: float = float(values[index])
+		var output = ItemContainerState.new().configure(2)
+		var store = WorldDeltaStore.new()
+		var setup: Dictionary = service.mine(
+			placement,
+			fixture["registry"],
+			equipment_fixture["equipment"],
+			output,
+			store,
+			"numeric-durable-setup-%d" % index
+		)
+		if not bool(setup.get("success", false)):
+			failures.append("non-finite durable fixture setup failed: %s" % [setup.get("diagnostics", [])])
+			continue
+
+		var malformed: Dictionary = store.get_object_state(placement.placement_stable_id)
+		var malformed_depletion: Dictionary = malformed.get("depletion", {}).duplicate(true)
+		malformed_depletion["remaining_capacity_units"] = invalid_value
+		malformed["depletion"] = malformed_depletion
+		store.set_object_state(placement.placement_stable_id, malformed)
+		var before_inventory: String = output.canonical_json()
+
+		var restored: Dictionary = service.restore_state(placement, fixture["registry"], store)
+		_expect_true(
+			failures,
+			"restore rejects %s durable remaining capacity" % _non_finite_label(invalid_value),
+			not bool(restored.get("success", true))
+		)
+		_expect_true(
+			failures,
+			"durable restore rejection uses accepted finite diagnostic",
+			_result_has_fragment(restored, "remaining_capacity_units must be finite")
+		)
+		_expect_equal(
+			failures,
+			"non-finite durable restore leaves inventory unchanged",
+			output.canonical_json(),
+			before_inventory
+		)
+		_expect_non_finite_store_preserved(
+			failures,
+			"restore",
+			store,
+			placement.placement_stable_id,
+			malformed,
+			invalid_value
+		)
+
+		var mined: Dictionary = service.mine(
+			placement,
+			fixture["registry"],
+			equipment_fixture["equipment"],
+			output,
+			store,
+			"numeric-durable-next-%d" % index
+		)
+		_expect_true(
+			failures,
+			"mine rejects %s durable remaining capacity" % _non_finite_label(invalid_value),
+			not bool(mined.get("success", true))
+		)
+		_expect_true(
+			failures,
+			"durable mine rejection uses accepted finite diagnostic",
+			_result_has_fragment(mined, "remaining_capacity_units must be finite")
+		)
+		_expect_equal(
+			failures,
+			"non-finite durable mine yields no additional inventory",
+			output.canonical_json(),
+			before_inventory
+		)
+		_expect_non_finite_store_preserved(
+			failures,
+			"mine",
+			store,
+			placement.placement_stable_id,
+			malformed,
+			invalid_value
+		)
+
+
 static func _test_wrong_tool_fails_closed(failures: Array[String]) -> void:
 	var fixture: Dictionary = _content_fixture(failures)
 	if fixture.is_empty():
@@ -270,6 +476,68 @@ static func _placement(fingerprint: String = "upf1:iron-runtime-current"):
 		"resource",
 		fingerprint
 	)
+
+
+static func _non_finite_values() -> Array:
+	return [NAN, INF, -INF]
+
+
+static func _non_finite_label(value: float) -> String:
+	if is_nan(value):
+		return "NaN"
+	return "+INF" if value > 0.0 else "-INF"
+
+
+static func _same_non_finite(actual: float, expected: float) -> bool:
+	if is_nan(expected):
+		return is_nan(actual)
+	if is_inf(expected):
+		return is_inf(actual) and ((actual > 0.0) == (expected > 0.0))
+	return actual == expected
+
+
+static func _expect_non_finite_store_preserved(
+	failures: Array[String],
+	label: String,
+	store,
+	placement_id: String,
+	expected_envelope: Dictionary,
+	expected_value: float
+) -> void:
+	var actual: Dictionary = store.get_object_state(placement_id)
+	var actual_depletion_variant = actual.get("depletion", null)
+	if not actual_depletion_variant is Dictionary:
+		failures.append("%s non-finite durable state lost depletion payload" % label)
+		return
+	var actual_depletion: Dictionary = actual_depletion_variant
+	var actual_remaining = actual_depletion.get("remaining_capacity_units", null)
+	if typeof(actual_remaining) != TYPE_FLOAT and typeof(actual_remaining) != TYPE_INT:
+		failures.append("%s non-finite durable state changed remaining capacity type" % label)
+		return
+	if not _same_non_finite(float(actual_remaining), expected_value):
+		failures.append("%s rewrote non-finite durable remaining capacity" % label)
+
+	var sanitized_actual: Dictionary = actual.duplicate(true)
+	var sanitized_expected: Dictionary = expected_envelope.duplicate(true)
+	var sanitized_actual_depletion: Dictionary = sanitized_actual.get("depletion", {}).duplicate(true)
+	var sanitized_expected_depletion: Dictionary = sanitized_expected.get("depletion", {}).duplicate(true)
+	sanitized_actual_depletion["remaining_capacity_units"] = 0.0
+	sanitized_expected_depletion["remaining_capacity_units"] = 0.0
+	sanitized_actual["depletion"] = sanitized_actual_depletion
+	sanitized_expected["depletion"] = sanitized_expected_depletion
+	_expect_equal(
+		failures,
+		"%s rejection preserves all durable fields around non-finite value" % label,
+		sanitized_actual,
+		sanitized_expected
+	)
+
+
+static func _result_has_fragment(result: Dictionary, fragment: String) -> bool:
+	for value in result.get("diagnostics", []):
+		if str(value).contains(fragment):
+			return true
+	return false
 
 
 static func _expect_true(failures: Array[String], label: String, condition: bool) -> void:
