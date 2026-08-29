@@ -4,6 +4,10 @@ const AudioPresentationTests := preload("res://tests/presentation/test_audio_pre
 
 
 func _init() -> void:
+	call_deferred("_run_validation")
+
+
+func _run_validation() -> void:
 	var failures: Array[String] = AudioPresentationTests.run()
 	if failures.is_empty():
 		print("[AUDIO PRESENTATION VALIDATION] PASS")
