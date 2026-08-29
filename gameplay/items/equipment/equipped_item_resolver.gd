@@ -19,10 +19,19 @@ func resolve_selected(equipment_state) -> Dictionary:
 		return _hands_result(equipment_state.selected_hotbar(), "")
 	var definition = equipment_state.selected_definition()
 	var stored_state: Dictionary = equipment_state.selected_state()
-	if definition == null or stored_state.is_empty():
+	var has_definition: bool = definition != null
+	var has_record: bool = not stored_state.is_empty()
+	if not has_definition and not has_record:
 		return _hands_result(equipment_state.selected_hotbar(), slot_key)
+	if has_record and not has_definition:
+		return _failure(["occupied equipment slot is missing resolved ItemDefinition: %s" % slot_key])
+	if has_definition and not has_record:
+		return _failure(["empty equipment slot retains resolved ItemDefinition: %s" % slot_key])
 	if not definition is ItemDefinition:
 		return _failure(["selected equipment definition is not ItemDefinition"])
+	var stored_item_id: String = str(stored_state.get("state", {}).get("item_id", ""))
+	if stored_item_id != str(definition.content_id):
+		return _failure(["equipment slot definition does not match stored item: %s" % slot_key])
 	var categories: Array[String] = []
 	categories.append_array(definition.category_ids)
 	categories.sort()
