@@ -10,6 +10,7 @@ const RigProfileDefinition := preload("res://presentation/characters/animation/r
 
 const CREATURE_FAMILY := "creature"
 const CREATURE_ROOT_CATEGORY := "category.creature"
+const ENEMY_CATEGORY := "category.creature.enemy"
 const MOVEMENT_CAPABILITY := "capability.movement"
 const SENSING_CAPABILITY := "capability.sensing"
 const DAMAGE_DEALER_CAPABILITY := "capability.damage_dealer"
@@ -43,7 +44,7 @@ func validate_definition(definition, context: Dictionary) -> Array[String]:
 		return failures
 
 	_validate_category_contract(definition, context, failures)
-	_validate_capability_contracts(definition, failures)
+	_validate_capability_contracts(definition, context, failures)
 	_validate_semantic_targets(definition, context, failures)
 	failures.sort()
 	return failures
@@ -72,23 +73,28 @@ func _validate_category_contract(
 			CREATURE_ROOT_CATEGORY,
 		])
 		return
+
+	var has_creature_category: bool = false
 	for category_id in definition.category_ids:
 		if not category_registry.has_schema(category_id):
 			continue
-		if not category_registry.is_category_or_descendant(
-			category_id,
-			CREATURE_ROOT_CATEGORY
-		):
-			failures.append(
-				"creature '%s' declares category outside %s: %s" % [
-					definition.content_id,
-					CREATURE_ROOT_CATEGORY,
-					category_id,
-				]
-			)
+		if category_registry.is_category_or_descendant(category_id, CREATURE_ROOT_CATEGORY):
+			has_creature_category = true
+
+	if not has_creature_category:
+		failures.append(
+			"creature '%s' must declare at least one registered category under %s" % [
+				definition.content_id,
+				CREATURE_ROOT_CATEGORY,
+			]
+		)
 
 
-func _validate_capability_contracts(definition, failures: Array[String]) -> void:
+func _validate_capability_contracts(
+	definition,
+	context: Dictionary,
+	failures: Array[String]
+) -> void:
 	var has_movement: bool = MOVEMENT_CAPABILITY in definition.capability_ids
 	var has_sensing: bool = SENSING_CAPABILITY in definition.capability_ids
 	var has_damage_dealer: bool = DAMAGE_DEALER_CAPABILITY in definition.capability_ids
@@ -153,6 +159,27 @@ func _validate_capability_contracts(definition, failures: Array[String]) -> void
 			failures.append("damage-dealer creature attack_cooldown must be > 0: %s" % definition.content_id)
 		if definition.attack_windup <= 0.0:
 			failures.append("damage-dealer creature attack_windup must be > 0: %s" % definition.content_id)
+
+	var category_registry = context.get("category_registry", null)
+	if (
+		category_registry != null
+		and category_registry is CategorySchemaRegistry
+		and category_registry.is_valid()
+		and category_registry.has_schema(ENEMY_CATEGORY)
+		and _has_category_or_descendant(definition, category_registry, ENEMY_CATEGORY)
+	):
+		for required_capability in [
+			MOVEMENT_CAPABILITY,
+			SENSING_CAPABILITY,
+			DAMAGE_DEALER_CAPABILITY,
+		]:
+			if required_capability not in definition.capability_ids:
+				failures.append(
+					"enemy creature '%s' requires capability: %s" % [
+						definition.content_id,
+						required_capability,
+					]
+				)
 
 
 func _validate_semantic_targets(
@@ -231,6 +258,19 @@ func _validate_semantic_targets(
 						failures.append(
 							"creature rig profile does not satisfy required role: %s" % role_id
 						)
+
+
+static func _has_category_or_descendant(
+	definition,
+	category_registry,
+	ancestor_category: String
+) -> bool:
+	for category_id in definition.category_ids:
+		if not category_registry.has_schema(category_id):
+			continue
+		if category_registry.is_category_or_descendant(category_id, ancestor_category):
+			return true
+	return false
 
 
 static func _resolve_definition(content_registry, content_id: String, family: String):
