@@ -53,6 +53,7 @@ CONTENT-001 must not maintain a second semantic-ID parser, base definition model
 
 The reserved-site subtype owns only:
 
+- the family invariant that at least one inherited `category_id` is declared;
 - `eligible_hook_categories` — deterministic world-hook vocabulary, separate from CategorySchema identity;
 - `selection_weight` — positive deterministic relative selection weight;
 - `minimum_profile` / `maximum_profile` — normalized hook-profile eligibility window;
@@ -71,11 +72,13 @@ category_ids:
   - category.structure.underworld.shrine
 ```
 
+A reserved-site definition must declare at least one `category_id`. That non-empty requirement is a family invariant owned by `ReservedSiteContentDefinition`; syntax and duplicate checks remain inherited from `ContentDefinition`/`SchemaId`, while registered-schema existence and compatibility remain CONTENT-005/`CategorySchemaRegistry` responsibilities.
+
 The subtype does not declare or validate a parallel `categories` field. Generic syntax and duplicate checks are inherited from `ContentDefinition`/`SchemaId`; registered-schema existence and compatibility are checked by the accepted validation pipeline and `CategorySchemaRegistry` before definitions are admitted to normal authored-content use.
 
 The deterministic assignment service remains registry-independent. It receives definition objects that are expected to have passed the appropriate authoring/load validation and uses their canonical semantic data without resolving a global registry during world assignment.
 
-`ReservedSiteAssignment.categories` is only an immutable **assignment snapshot** copied from the selected definition's inherited `category_ids`. It is not a second authored declaration source.
+`ReservedSiteAssignment.category_ids` is only an immutable **assignment snapshot** copied from the selected definition's inherited `category_ids`. It is not a second authored declaration source.
 
 The assignment fingerprint likewise consumes that same inherited category list in canonical sorted order. Therefore:
 
@@ -122,7 +125,7 @@ Assignment must never replace, derive, rewrite, or alias the hook StableId. `rsa
 
 For a fixed input contract, `ReservedSiteAssignmentService`:
 
-1. checks local definition validity through the inherited ContentDefinition boundary plus reserved-site hook/profile/weight rules;
+1. checks local definition validity through the inherited ContentDefinition boundary plus the reserved-site non-empty-category, hook/profile and weight rules;
 2. canonicalizes definitions by `content_id`;
 3. canonicalizes hooks by procedural StableId;
 4. filters by explicit hook category and profile eligibility;
@@ -141,7 +144,7 @@ A `ReservedSiteAssignment` records:
 - original `site_stable_id`;
 - original site AABB;
 - assigned semantic `content_id`;
-- canonical category snapshot sourced from inherited `category_ids`;
+- canonical `category_ids` snapshot sourced from inherited `category_ids`;
 - assignment `rulebook_revision`;
 - selected definition's `content_schema_revision` snapshot;
 - `assignment_fingerprint`;
@@ -154,6 +157,7 @@ The overlay does not own or mutate the source hook or registered definition.
 Assignment fails clearly for local deterministic-input defects such as:
 
 - invalid ContentId/family/schema revision;
+- missing/empty reserved-site `category_ids` declaration;
 - invalid reserved-site hook vocabulary;
 - non-positive selection weight;
 - invalid profile bounds;
@@ -189,12 +193,13 @@ CONTENT-002 owns underworld encounter/resource placement. ENEMY-001 owns creatur
 Focused executable validation must prove:
 
 - ReservedSiteContentDefinition is a normal ContentDefinition subtype;
+- every reserved-site definition declares at least one inherited `category_id`;
 - ContentRegistry manifest data uses inherited `category_ids` and exposes no duplicate `categories` authored truth;
 - registered categories pass CONTENT-005 validation;
 - malformed/duplicate category SchemaIds fail through inherited generic validation;
 - unknown registered-category references fail through CONTENT-005 rather than a local CONTENT-001 parser;
 - assignment remains registry-independent after authoring validation;
-- assignment category snapshots come from inherited `category_ids`;
+- assignment `category_ids` snapshots come from inherited `category_ids` and expose no ambiguous `categories` key;
 - caller category order cannot alter canonical descriptors, assignment output, or fingerprints;
 - changing category declarations changes the assignment compatibility fingerprint without changing StableId/bounds;
 - `eligible_hook_categories` remains independent from CategorySchema identity;
@@ -235,4 +240,4 @@ profile:
   max: (1, 1, 1)
 ```
 
-When assigned, the result retains the original site's `sid1:...` and AABB and adds the semantic content reference plus a canonical category snapshot as overlay data.
+When assigned, the result retains the original site's `sid1:...` and AABB and adds the semantic content reference plus a canonical `category_ids` snapshot as overlay data.
