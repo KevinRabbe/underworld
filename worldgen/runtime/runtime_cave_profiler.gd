@@ -42,11 +42,7 @@ class Report extends RefCounted:
 static func run_map015() -> Report:
 	var report := Report.new()
 	report.budget = Budget.descriptor()
-	var staged: Dictionary = _profile_pipeline(
-		Fixture.SEED,
-		Fixture.REGION,
-		Fixture.ENTRANCE_ID
-	)
+	var staged: Dictionary = _profile_pipeline(Fixture.SEED, Fixture.REGION, Fixture.ENTRANCE_ID)
 	if not bool(staged.get("success", false)):
 		for failure in staged.get("failures", []):
 			report.failures.append(str(failure))
@@ -55,12 +51,12 @@ static func run_map015() -> Report:
 	report.deterministic_fingerprint = str(staged.get("deterministic_fingerprint", ""))
 	_merge_metrics(report.metrics, staged.get("metrics", {}))
 
-	var controller := Controller.new()
+	var controller = Controller.new()
 	controller.configure(
 		WorldId.from_seed(Fixture.SEED).value(),
 		Manifest.foundation_default().manifest_id()
 	)
-	var bootstrap_started := Time.get_ticks_usec()
+	var bootstrap_started: int = Time.get_ticks_usec()
 	var diagnostics: Array[String] = controller.bootstrap_fixture(
 		Fixture.SEED,
 		Fixture.REGION,
@@ -71,18 +67,18 @@ static func run_map015() -> Report:
 		for diagnostic in diagnostics:
 			report.failures.append("controller bootstrap: " + str(diagnostic))
 	else:
-		if controller.last_bootstrap_fingerprint != report.deterministic_fingerprint:
+		if str(controller.last_bootstrap_fingerprint) != report.deterministic_fingerprint:
 			report.failures.append(
 				"profiling changed deterministic bootstrap truth: staged=%s controller=%s" % [
 					report.deterministic_fingerprint,
-					controller.last_bootstrap_fingerprint,
+					str(controller.last_bootstrap_fingerprint),
 				]
 			)
-		var route: Dictionary = _profile_controller_route(controller, Fixture.ENTRANCE_ID)
-		_merge_metrics(report.metrics, route.get("metrics", {}))
-		for scenario in route.get("scenarios", []):
+		var controller_route: Dictionary = _profile_controller_route(controller, Fixture.ENTRANCE_ID)
+		_merge_metrics(report.metrics, controller_route.get("metrics", {}))
+		for scenario in controller_route.get("scenarios", []):
 			report.scenarios.append(scenario)
-		for failure in route.get("failures", []):
+		for failure in controller_route.get("failures", []):
 			report.failures.append(str(failure))
 	controller.free()
 
@@ -98,11 +94,10 @@ static func run_map015() -> Report:
 
 
 static func _profile_pipeline(world_seed: int, region: Vector2i, entrance_id: String) -> Dictionary:
-	var failures: Array[String] = []
 	var metrics: Dictionary = {}
-	var generation_started := Time.get_ticks_usec()
-	var context := WorldContext.new(world_seed)
-	var sampler := SurfaceSampler.new(world_seed)
+	var generation_started: int = Time.get_ticks_usec()
+	var context = WorldContext.new(world_seed)
+	var sampler = SurfaceSampler.new(world_seed)
 	var macro = MacroGenerator.generate(context, region)
 	if not macro.success:
 		return _pipeline_fail("macro", macro.diagnostics)
@@ -112,6 +107,7 @@ static func _profile_pipeline(world_seed: int, region: Vector2i, entrance_id: St
 	var entrances = EntranceGenerator.generate(context, macro.data, topology.data, sampler)
 	if not entrances.success:
 		return _pipeline_fail("entrances", entrances.diagnostics)
+
 	var selected = null
 	for descriptor in entrances.data.surface_integration_descriptors:
 		if str(descriptor.entrance_id) == entrance_id:
@@ -132,6 +128,7 @@ static func _profile_pipeline(world_seed: int, region: Vector2i, entrance_id: St
 			"region_plan": neighbor_macro.data,
 			"primary_topology": neighbor_topology.data,
 		})
+
 	var connectivity = ConnectivityGenerator.generate(
 		context,
 		macro.data,
@@ -144,31 +141,17 @@ static func _profile_pipeline(world_seed: int, region: Vector2i, entrance_id: St
 	var hooks = HookGenerator.generate(context, macro.data, connectivity.data)
 	if not hooks.success:
 		return _pipeline_fail("hooks", hooks.diagnostics)
-	var finalized = RegionFinalizer.generate(
-		context,
-		macro.data,
-		entrances.data,
-		connectivity.data,
-		hooks.data
-	)
+	var finalized = RegionFinalizer.generate(context, macro.data, entrances.data, connectivity.data, hooks.data)
 	if not finalized.success:
 		return _pipeline_fail("finalization", finalized.diagnostics)
-	var geometry = GeometryGenerator.generate(
-		context,
-		macro.data,
-		finalized.data,
-		neighbor_views
-	)
+	var geometry = GeometryGenerator.generate(context, macro.data, finalized.data, neighbor_views)
 	if not geometry.success:
 		return _pipeline_fail("geometry", geometry.diagnostics)
 	metrics["deterministic_generation_ms"] = _elapsed_ms(generation_started)
 
-	var partition_started := Time.get_ticks_usec()
-	var cell_config := PartitionConfig.new()
-	var bounds := AABB(
-		selected.surface_world_position - Vector3(32, 32, 32),
-		Vector3(64, 64, 64)
-	)
+	var partition_started: int = Time.get_ticks_usec()
+	var cell_config = PartitionConfig.new()
+	var bounds := AABB(selected.surface_world_position - Vector3(32, 32, 32), Vector3(64, 64, 64))
 	var surface_result = SurfacePlan.build(
 		bounds,
 		[selected],
@@ -181,12 +164,12 @@ static func _profile_pipeline(world_seed: int, region: Vector2i, entrance_id: St
 	if surface_result.data.demand_handoffs.is_empty():
 		return _pipeline_fail("surface-plan", ["Fixture produced no runtime demand handoff"])
 	var handoff = surface_result.data.demand_handoffs[0]
-	var expected_geometry_sources := GeometryGenerator.expected_provenance_sources(
+	var expected_geometry_sources = GeometryGenerator.expected_provenance_sources(
 		macro.data,
 		finalized.data,
 		neighbor_views
 	)
-	var partition_request := PartitionRequest.new(
+	var partition_request = PartitionRequest.new(
 		geometry.data,
 		finalized.data,
 		cell_config,
@@ -199,41 +182,34 @@ static func _profile_pipeline(world_seed: int, region: Vector2i, entrance_id: St
 		return _pipeline_fail("partition", partition.diagnostics)
 	metrics["surface_partition_ms"] = _elapsed_ms(partition_started)
 
-	var mesh_total_ms := 0.0
-	var mesh_max_ms := 0.0
-	var mesh_realization_total_ms := 0.0
-	var mesh_realization_max_ms := 0.0
-	var collision_prepare_total_ms := 0.0
-	var collision_prepare_max_ms := 0.0
-	var collision_realization_total_ms := 0.0
-	var collision_realization_max_ms := 0.0
-	var mesh_memory_total := 0
-	var mesh_memory_max := 0
-	var vertex_total := 0
-	var triangle_total := 0
-	var sample_total := 0
-	var cube_total := 0
+	var mesh_total_ms: float = 0.0
+	var mesh_max_ms: float = 0.0
+	var mesh_realization_total_ms: float = 0.0
+	var mesh_realization_max_ms: float = 0.0
+	var collision_prepare_total_ms: float = 0.0
+	var collision_prepare_max_ms: float = 0.0
+	var collision_realization_total_ms: float = 0.0
+	var collision_realization_max_ms: float = 0.0
+	var mesh_memory_total: int = 0
+	var mesh_memory_max: int = 0
+	var vertex_total: int = 0
+	var triangle_total: int = 0
+	var sample_total: int = 0
+	var cube_total: int = 0
 	var provenance = partition.provenance
 
 	for plan in partition.data.plans:
-		var mesh_started := Time.get_ticks_usec()
-		var voxel_request := VoxelRequest.new(
-			plan,
-			cell_config,
-			provenance,
-			0.0,
-			partition.data,
-			context
-		)
+		var mesh_started: int = Time.get_ticks_usec()
+		var voxel_request = VoxelRequest.new(plan, cell_config, provenance, 0.0, partition.data, context)
 		var mesh_stage = VoxelMesher.build(voxel_request)
-		var mesh_wall_ms := _elapsed_ms(mesh_started)
+		var mesh_wall_ms: float = _elapsed_ms(mesh_started)
 		if not mesh_stage.success:
 			return _pipeline_fail("mesh", mesh_stage.diagnostics)
 		var mesh_data = mesh_stage.data
-		var extraction_ms := float(mesh_data.metrics.get("extraction_ms", mesh_wall_ms))
+		var extraction_ms: float = float(mesh_data.metrics.get("extraction_ms", mesh_wall_ms))
 		mesh_total_ms += extraction_ms
 		mesh_max_ms = maxf(mesh_max_ms, extraction_ms)
-		var memory_bytes := int(mesh_data.metrics.get("memory_bytes", 0))
+		var memory_bytes: int = int(mesh_data.metrics.get("memory_bytes", 0))
 		mesh_memory_total += memory_bytes
 		mesh_memory_max = maxi(mesh_memory_max, memory_bytes)
 		vertex_total += int(mesh_data.metrics.get("vertex_count", mesh_data.vertices.size()))
@@ -241,45 +217,39 @@ static func _profile_pipeline(world_seed: int, region: Vector2i, entrance_id: St
 		sample_total += int(mesh_data.metrics.get("sample_count", 0))
 		cube_total += int(mesh_data.metrics.get("cube_count", 0))
 
-		var render_started := Time.get_ticks_usec()
+		var render_started: int = Time.get_ticks_usec()
 		var realized: Dictionary = MeshBoundary.realize_main_thread(
 			mesh_data,
 			null,
 			mesh_data.input_fingerprint
 		)
-		var render_ms := _elapsed_ms(render_started)
+		var render_ms: float = _elapsed_ms(render_started)
 		if not bool(realized.get("success", false)):
 			return _pipeline_fail("mesh-realization", realized.get("diagnostics", []))
 		mesh_realization_total_ms += render_ms
 		mesh_realization_max_ms = maxf(mesh_realization_max_ms, render_ms)
 
-		var collision_prepare_started := Time.get_ticks_usec()
+		var collision_prepare_started: int = Time.get_ticks_usec()
 		var collision_stage = CollisionBuilder.prepare(
 			mesh_data,
 			provenance.fingerprint if provenance != null else ""
 		)
-		var collision_prepare_ms := _elapsed_ms(collision_prepare_started)
+		var collision_prepare_ms: float = _elapsed_ms(collision_prepare_started)
 		if not collision_stage.success:
 			return _pipeline_fail("collision-preparation", collision_stage.diagnostics)
 		collision_prepare_total_ms += collision_prepare_ms
 		collision_prepare_max_ms = maxf(collision_prepare_max_ms, collision_prepare_ms)
 
-		var collision_realization_started := Time.get_ticks_usec()
+		var collision_realization_started: int = Time.get_ticks_usec()
 		var collision_realized: Dictionary = CollisionBoundary.realize_main_thread(
 			collision_stage.data,
 			mesh_data.output_fingerprint
 		)
-		var collision_realization_ms := _elapsed_ms(collision_realization_started)
+		var collision_realization_ms: float = _elapsed_ms(collision_realization_started)
 		if not bool(collision_realized.get("success", false)):
-			return _pipeline_fail(
-				"collision-realization",
-				collision_realized.get("diagnostics", [])
-			)
+			return _pipeline_fail("collision-realization", collision_realized.get("diagnostics", []))
 		collision_realization_total_ms += collision_realization_ms
-		collision_realization_max_ms = maxf(
-			collision_realization_max_ms,
-			collision_realization_ms
-		)
+		collision_realization_max_ms = maxf(collision_realization_max_ms, collision_realization_ms)
 
 	metrics["profiled_cell_count"] = partition.data.plans.size()
 	metrics["mesh_worker_total_ms"] = mesh_total_ms
@@ -297,20 +267,18 @@ static func _profile_pipeline(world_seed: int, region: Vector2i, entrance_id: St
 	metrics["sample_total"] = sample_total
 	metrics["cube_total"] = cube_total
 	metrics["worker_total_ms"] = mesh_total_ms + collision_prepare_total_ms
-	metrics["main_thread_realization_total_ms"] = (
-		mesh_realization_total_ms + collision_realization_total_ms
-	)
+	metrics["main_thread_realization_total_ms"] = mesh_realization_total_ms + collision_realization_total_ms
 
-	var deterministic_fingerprint := (
-		entrances.fingerprint
+	var deterministic_fingerprint: String = (
+		str(entrances.fingerprint)
 		+ ":"
-		+ geometry.fingerprint
+		+ str(geometry.fingerprint)
 		+ ":"
-		+ partition.data.fingerprint
+		+ str(partition.data.fingerprint)
 	)
 	return {
-		"success": failures.is_empty(),
-		"failures": failures,
+		"success": true,
+		"failures": [],
 		"metrics": metrics,
 		"deterministic_fingerprint": deterministic_fingerprint,
 	}
@@ -336,20 +304,20 @@ static func _profile_controller_route(controller, entrance_id: String) -> Dictio
 		"position": controller.last_bootstrap_surface_position + Vector3.UP * 3.0,
 	})
 
-	var observer_max_ms := 0.0
-	var peak_active_owner_count := 0
-	var peak_record_count := 0
+	var observer_max_ms: float = 0.0
+	var peak_active_owner_count: int = 0
+	var peak_record_count: int = 0
 	for entry in positions:
-		var started := Time.get_ticks_usec()
+		var started: int = Time.get_ticks_usec()
 		controller.update_player_position(entry["position"])
-		var elapsed_ms := _elapsed_ms(started)
+		var elapsed_ms: float = _elapsed_ms(started)
 		observer_max_ms = maxf(observer_max_ms, elapsed_ms)
-		var gate_open := controller.gate_is_open(entrance_id)
+		var gate_open: bool = bool(controller.gate_is_open(entrance_id))
 		if not gate_open:
 			failures.append("controller route closed entrance gate at " + str(entry["name"]))
-		var active_owner_count := controller.streamer.active_owner_count()
+		var active_owner_count: int = int(controller.streamer.active_owner_count())
 		peak_active_owner_count = maxi(peak_active_owner_count, active_owner_count)
-		peak_record_count = maxi(peak_record_count, controller.streamer.records.size())
+		peak_record_count = maxi(peak_record_count, int(controller.streamer.records.size()))
 		scenarios.append({
 			"family": "controller_route",
 			"name": entry["name"],
@@ -379,7 +347,7 @@ static func _profile_controller_route(controller, entrance_id: String) -> Dictio
 static func _profile_streaming_policy() -> Dictionary:
 	var failures: Array[String] = []
 	var scenarios: Array[Dictionary] = []
-	var streamer := Streamer.new("world:perf001", "manifest:perf001")
+	var streamer = Streamer.new("world:perf001", "manifest:perf001")
 	var route: Array[Dictionary] = [
 		{"name": "surface_approach", "position": Vector3(0.25, 0.25, 0.25)},
 		{"name": "entrance_transition", "position": Vector3(32.25, -0.25, 0.25)},
@@ -389,20 +357,20 @@ static func _profile_streaming_policy() -> Dictionary:
 		{"name": "negative_coordinate", "position": Vector3(-32.25, -64.25, -32.25)},
 		{"name": "surface_return", "position": Vector3(0.25, 0.25, 0.25)},
 	]
-	var observer_max_ms := 0.0
-	var peak_geometry := 0
-	var peak_render := 0
-	var peak_collision := 0
-	var peak_active := 0
-	var peak_records := 0
+	var observer_max_ms: float = 0.0
+	var peak_geometry: int = 0
+	var peak_render: int = 0
+	var peak_collision: int = 0
+	var peak_active: int = 0
+	var peak_records: int = 0
 
 	for entry in route:
-		var started := Time.get_ticks_usec()
+		var started: int = Time.get_ticks_usec()
 		streamer.update_observer(entry["position"], "perf-route")
-		var elapsed_ms := _elapsed_ms(started)
+		var elapsed_ms: float = _elapsed_ms(started)
 		observer_max_ms = maxf(observer_max_ms, elapsed_ms)
 		_release_unowned_cells(streamer)
-		var snapshot := _streamer_snapshot(streamer)
+		var snapshot: Dictionary = _streamer_snapshot(streamer)
 		peak_geometry = maxi(peak_geometry, int(snapshot["geometry_cells"]))
 		peak_render = maxi(peak_render, int(snapshot["render_cells"]))
 		peak_collision = maxi(peak_collision, int(snapshot["collision_cells"]))
@@ -436,11 +404,11 @@ static func _profile_streaming_policy() -> Dictionary:
 
 
 static func _streamer_snapshot(streamer) -> Dictionary:
-	var definition_cells := 0
-	var geometry_cells := 0
-	var render_cells := 0
-	var collision_cells := 0
-	var simulation_cells := 0
+	var definition_cells: int = 0
+	var geometry_cells: int = 0
+	var render_cells: int = 0
+	var collision_cells: int = 0
+	var simulation_cells: int = 0
 	for record in streamer.records.values():
 		if record.demand_count("definition") > 0:
 			definition_cells += 1
