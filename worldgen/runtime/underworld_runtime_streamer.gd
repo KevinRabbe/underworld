@@ -8,6 +8,8 @@ const Result := preload("res://worldgen/runtime/runtime_cell_result.gd")
 
 const TIERS: Array[String] = ["definition", "fragment_plan", "voxel_geometry", "render", "collision", "simulation"]
 
+signal tier_retired(address, tier: String)
+
 var cell_size: Vector3 = Vector3(32, 32, 32)
 var definition_activate_radius: int = 3
 var definition_release_radius: int = 4
@@ -77,6 +79,8 @@ func set_demand(address, source: String, tiers: Array, source_fingerprint: Strin
 		record.provenance_fingerprint = provenance_fingerprint
 	if record.state == "dormant":
 		record.state = "requested"
+	if not identity_changed:
+		_retire_undemanded_tiers(record)
 	_queue_if_needed(record)
 	return record
 
@@ -97,12 +101,13 @@ func release_demand(address, source: String, tiers: Array = []) -> bool:
 					lease.erase(tier_name)
 		if lease.is_empty():
 			record.demands.erase(source)
+	_retire_undemanded_tiers(record)
 	if record.demands.is_empty():
 		record.release_pending = true
-		record.generation += 1
 		record.state = "release_pending"
 		record.queued.clear()
 	else:
+		record.release_pending = false
 		_queue_if_needed(record)
 	return true
 
@@ -193,11 +198,14 @@ func release_cell(address) -> bool:
 	var record = _record(address)
 	if not record.demands.is_empty():
 		return false
+	if _record_is_fully_dormant(record):
+		return true
 	record.generation += 1
+	_emit_realized_tier_retirements(record, true)
 	record.release_pending = true
 	record.runtime_handle = null
 	record.collision_handle = null
-	record.readiness = {"definition": false, "fragment_plan": false, "voxel_geometry": false, "render": false, "collision": false, "simulation": false}
+	record.readiness = _empty_readiness()
 	record.queued.clear()
 	record.state = "dormant"
 	released_count += 1
@@ -209,10 +217,12 @@ func reconfigure(world_id_value: String, manifest_id_value: String) -> void:
 	generator_manifest_id = manifest_id_value
 	for record in records.values():
 		record.generation += 1
+		_emit_realized_tier_retirements(record, true)
 		record.runtime_handle = null
 		record.collision_handle = null
-		record.readiness = {"definition": false, "fragment_plan": false, "voxel_geometry": false, "render": false, "collision": false, "simulation": false}
+		record.readiness = _empty_readiness()
 		record.queued.clear()
+		record.release_pending = false
 		record.state = "requested" if not record.demands.is_empty() else "dormant"
 		_queue_if_needed(record)
 
@@ -238,12 +248,63 @@ func _record(address):
 
 func _invalidate_generation(record) -> void:
 	record.generation += 1
-	record.readiness = {"definition": false, "fragment_plan": false, "voxel_geometry": false, "render": false, "collision": false, "simulation": false}
+	_emit_realized_tier_retirements(record, false)
+	record.readiness = _empty_readiness()
 	record.queued.clear()
 	record.runtime_handle = null
 	record.collision_handle = null
 	record.release_pending = false
 	record.state = "requested"
+
+
+func _retire_undemanded_tiers(record) -> void:
+	var retired: Array[String] = []
+	for tier in TIERS:
+		if record.demand_count(tier) > 0:
+			continue
+		if bool(record.readiness.get(tier, false)) or bool(record.queued.get(tier, false)) or (tier == "render" and record.runtime_handle != null) or (tier == "collision" and record.collision_handle != null):
+			retired.append(tier)
+	if retired.is_empty():
+		return
+	# Generation is cell-scoped. Advancing it once invalidates every in-flight
+	# request from the old tier set, including a retired tier that is renewed
+	# before its prior async result returns. Any still-demanded unready tier is
+	# requeued below with the new generation.
+	record.generation += 1
+	record.queued.clear()
+	for tier in retired:
+		var was_realized: bool = bool(record.readiness.get(tier, false)) or (tier == "render" and record.runtime_handle != null) or (tier == "collision" and record.collision_handle != null)
+		record.readiness[tier] = false
+		if tier == "render":
+			record.runtime_handle = null
+		elif tier == "collision":
+			record.collision_handle = null
+		if was_realized and tier in ["render", "collision"]:
+			tier_retired.emit(record.cell_address, tier)
+	_update_state(record)
+	_queue_if_needed(record)
+
+
+func _emit_realized_tier_retirements(record, emit_even_if_not_ready: bool) -> void:
+	for tier in ["render", "collision"]:
+		var realized: bool = bool(record.readiness.get(tier, false)) or (tier == "render" and record.runtime_handle != null) or (tier == "collision" and record.collision_handle != null)
+		if realized or emit_even_if_not_ready:
+			tier_retired.emit(record.cell_address, tier)
+
+
+func _record_is_fully_dormant(record) -> bool:
+	if record.state != "dormant" or record.release_pending or not record.queued.is_empty():
+		return false
+	if record.runtime_handle != null or record.collision_handle != null:
+		return false
+	for tier in TIERS:
+		if bool(record.readiness.get(tier, false)):
+			return false
+	return true
+
+
+func _empty_readiness() -> Dictionary:
+	return {"definition": false, "fragment_plan": false, "voxel_geometry": false, "render": false, "collision": false, "simulation": false}
 
 
 func _queue_if_needed(record) -> void:
