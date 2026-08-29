@@ -89,7 +89,29 @@ static func run() -> Array[String]:
 	_expect(failures, "matching bound result accepted", bound_streamer.accept_result(bound_result))
 	var wrong_bound_result := Result.new(bound_address, bound_record.generation, "render", "source:wrong", "provenance:accepted", null, true, [], "world:bound", "manifest:bound")
 	_expect(failures, "wrong bound identity rejected", not bound_streamer.accept_result(wrong_bound_result))
+
+	var retirement_executor := ManualExecutor.new()
+	var retirement_streamer := Streamer.new("world:retire", "manifest:retire", retirement_executor)
+	var retirement_address := Address.new(Vector3i(7, 0, 0))
+	var retirement_record = retirement_streamer.set_demand(retirement_address, "route", ["definition", "render"], "source:retire", "provenance:retire")
+	var pre_retire_generation: int = retirement_record.generation
+	var initial_render_requests: int = _request_count(retirement_executor.requests, "render")
+	retirement_streamer.release_demand(retirement_address, "route", ["render"])
+	_expect(failures, "retiring queued render advances generation", retirement_record.generation > pre_retire_generation and retirement_record.demand_count("render") == 0)
+	var retired_generation: int = retirement_record.generation
+	retirement_streamer.demand_cell(retirement_address, "route", ["render"])
+	_expect(failures, "renewed render queues exactly once", _request_count(retirement_executor.requests, "render") == initial_render_requests + 1 and retirement_record.generation == retired_generation)
+	var stale_retired_render := Result.new(retirement_address, pre_retire_generation, "render", "source:retire", "provenance:retire", null, true, [], "world:retire", "manifest:retire")
+	_expect(failures, "retired generation cannot resurrect after renewal", not retirement_streamer.accept_result(stale_retired_render))
 	return failures
+
+
+static func _request_count(requests: Array, tier: String) -> int:
+	var count := 0
+	for entry in requests:
+		if str(entry.get("tier", "")) == tier:
+			count += 1
+	return count
 
 
 static func _expect(failures: Array[String], label: String, condition: bool) -> void:
