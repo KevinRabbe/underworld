@@ -45,6 +45,9 @@ jobs:
       - name: Show Godot version
         run: godot --version
 
+      - name: Import project resources
+        run: godot --headless --editor --path . --quit
+
       - name: Run numeric safety contracts
         run: |
           set -o pipefail
@@ -56,3 +59,15 @@ jobs:
             exit 1
           fi
           grep -Fq '[NUMERIC VALIDATION] PASS' "$validation_log"
+
+      - name: Run accepted app shell contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . \
+            --script res://tests/run_app_shell.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[APP SHELL VALIDATION] PASS' "$validation_log"
