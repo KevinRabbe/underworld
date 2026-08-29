@@ -35,6 +35,7 @@ static func run() -> Array[String]:
 	controller.free()
 
 	_test_tier_retirement_and_replacement(failures)
+	_test_full_controller_world_swap_clears_entrance_state(failures)
 	_test_bounded_observer_nodes(failures)
 	return failures
 
@@ -92,6 +93,50 @@ static func _test_tier_retirement_and_replacement(failures: Array[String]) -> vo
 	controller.free()
 
 
+static func _test_full_controller_world_swap_clears_entrance_state(failures: Array[String]) -> void:
+	var controller := Controller.new()
+	controller.configure("world:swap:old", "manifest:swap:old")
+	var old_entrance_id := "swap-old"
+	var old_source := "entrance:" + old_entrance_id
+	var old_address := Address.new(Vector3i(8, -1, 4))
+	var old_key: String = old_address.canonical_text()
+	var old_plan := PlanData.new()
+	old_plan.fingerprint = "surface-plan:swap:old"
+	old_plan.demand_handoffs = [Demand.new(old_entrance_id, [old_address], "prov:swap:old")]
+	old_plan.underground_cells = [old_address]
+	failures.append_array(controller.register_surface_plan(old_plan, "prov:swap:old"))
+	var old_record = controller.streamer.records.get(old_key)
+	_expect(failures, "old-world entrance plan and gate register", controller.entrance_plans.has(old_entrance_id) and controller.gates.has(old_entrance_id) and old_record != null)
+	_expect(failures, "old-world entrance render realizes", old_record != null and controller.accept_mesh_data(_mesh_data(old_address, "mesh:swap:old")))
+	_expect(failures, "old-world entrance collision realizes", old_record != null and controller.accept_collision_shape(old_address, _shape(), old_record.source_fingerprint, old_record.provenance_fingerprint))
+	_expect(failures, "old-world entrance opens and owns live nodes", controller.gate_is_open(old_entrance_id) and controller.render_nodes.has(old_key) and controller.collision_nodes.has(old_key) and controller.get_child_count() == 2)
+
+	controller.configure("world:swap:new", "manifest:swap:new")
+	_expect(failures, "full configure clears old-world entrance plans and gates", controller.entrance_plans.is_empty() and controller.gates.is_empty())
+	_expect(failures, "full configure clears old-world render collision tracking", controller.render_nodes.is_empty() and controller.collision_nodes.is_empty() and controller.get_child_count() == 0)
+	_expect(failures, "new streamer starts without old-world records", controller.streamer.records.is_empty())
+
+	var old_position := Vector3(old_address.coordinate) * controller.streamer.cell_size + controller.streamer.cell_size * 0.5
+	controller.update_player_position(old_position)
+	_expect(failures, "player update near old entrance cannot recreate old entrance demand", not _has_demand_source(controller.streamer.records, old_source))
+	var observer_record = controller.streamer.records.get(old_key)
+	_expect(failures, "old coordinate may only be ordinary observer state after swap", observer_record == null or not observer_record.demands.has(old_source))
+
+	var new_entrance_id := "swap-new"
+	var new_source := "entrance:" + new_entrance_id
+	var new_address := Address.new(Vector3i(20, -1, 4))
+	var new_plan := PlanData.new()
+	new_plan.fingerprint = "surface-plan:swap:new"
+	new_plan.demand_handoffs = [Demand.new(new_entrance_id, [new_address], "prov:swap:new")]
+	new_plan.underground_cells = [new_address]
+	failures.append_array(controller.register_surface_plan(new_plan, "prov:swap:new"))
+	var new_position := Vector3(new_address.coordinate) * controller.streamer.cell_size + controller.streamer.cell_size * 0.5
+	controller.update_player_position(new_position)
+	_expect(failures, "only new-world entrance state is registered after swap", controller.entrance_plans.size() == 1 and controller.entrance_plans.has(new_entrance_id) and controller.gates.size() == 1 and controller.gates.has(new_entrance_id))
+	_expect(failures, "new-world entrance participates while old entrance stays retired", _has_demand_source(controller.streamer.records, new_source) and not _has_demand_source(controller.streamer.records, old_source))
+	controller.free()
+
+
 static func _test_bounded_observer_nodes(failures: Array[String]) -> void:
 	var controller := Controller.new()
 	controller.configure("world:window", "manifest:window")
@@ -113,6 +158,13 @@ static func _test_bounded_observer_nodes(failures: Array[String]) -> void:
 		_expect(failures, "bounded observer render realizes step %d" % x, controller.accept_mesh_data(_mesh_data(address, "mesh:window:%d" % x)))
 		_expect(failures, "bounded observer live render count step %d" % x, controller.render_nodes.size() == 1 and controller.get_child_count() == 1)
 	controller.free()
+
+
+static func _has_demand_source(records: Dictionary, source: String) -> bool:
+	for record in records.values():
+		if record != null and record.demands.has(source):
+			return true
+	return false
 
 
 static func _mesh_data(address, input_fingerprint: String):
