@@ -6,6 +6,7 @@ const SemanticRoleSchemaRegistryTests := preload("res://tests/content/test_seman
 const ContentValidationPipelineTests := preload("res://tests/content/test_content_validation_pipeline.gd")
 const ArchetypeContractTests := preload("res://tests/content/test_archetype_contract.gd")
 const ArchetypeRealizationTests := preload("res://tests/content/test_archetype_realization.gd")
+const ItemContractTests := preload("res://tests/content/test_item_contract.gd")
 
 
 func _init() -> void:
@@ -16,9 +17,10 @@ func _init() -> void:
 	failures.append_array(ContentValidationPipelineTests.run())
 	failures.append_array(ArchetypeContractTests.run())
 	failures.append_array(ArchetypeRealizationTests.run())
+	failures.append_array(ItemContractTests.run())
 	if failures.is_empty():
 		print("[VALIDATION] PASS content")
-		print("  semantic content ids / deterministic registry / category-capability-role schemas / headless validation / archetype realization contracts passed")
+		print("  semantic content ids / deterministic registry / category-capability-role schemas / headless validation / archetype realization / item rulebook contracts passed")
 		quit(0)
 		return
 

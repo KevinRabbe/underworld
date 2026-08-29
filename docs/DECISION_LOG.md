@@ -421,6 +421,38 @@ nodes and connected primary edges with stable candidate identities.
 Entrances, secondary/cross-region connectivity, special content, geometry and
 runtime construction remain later stages and must not be folded into this cycle.
 
+## 2026-08-28 — Gameplay and presentation architecture checkpoint
+
+The detailed contracts below were explicitly approved and merged on 2026-08-28. This checkpoint records their locked ownership/identity decisions without replacing the authoritative documents.
+
+### Building system architecture — LOCKED
+
+- Player construction uses modular authored build-piece definitions plus persistent placed-instance state; it is a durable world-delta layer, not procedural world generation.
+- Placement follows request -> validation -> atomic commit, structural relationships use authored logical sockets/support graphs, and surface/Underworld construction share one architecture.
+- Semantic piece identity and persistent placed identity remain independent of meshes, materials, runtime Nodes, streaming cells and render batching.
+- Authoritative detail: [Building System Architecture](30_gameplay/BUILDING_SYSTEM.md).
+
+### Item, inventory and crafting architecture — LOCKED
+
+- Stable semantic item definitions, fungible stack state and individually persistent item instances are separate identity layers; ordinary fungible resources do not require one persistent ID per unit.
+- Inventory, equipment, storage and processing share a transactional container foundation, while recipes and stations use semantic definitions/capabilities rather than scene or file paths.
+- Item/gameplay identity remains independent of UI slots, meshes, scenes and runtime Nodes, and incompatible persisted definition/state changes require explicit migration/version handling.
+- Authoritative detail: [Item, Inventory and Crafting Architecture](30_gameplay/ITEM_INVENTORY_CRAFTING.md).
+
+### Replaceable presentation boundary — LOCKED
+
+- Presentation may represent authoritative state but must not become authoritative identity or game/world truth; the dependency direction is authoritative definition/state -> runtime realization -> replaceable presentation.
+- Meshes, materials, shaders, animation/audio/VFX resources, LODs and render batches may be replaced or rebuilt without redefining world seeds, procedural StableIds, semantic content IDs or durable state.
+- A visual change that alters topology, collision/traversal semantics, generated placement or gameplay state is not presentation-only and must route through the owning world/gameplay contract.
+- Authoritative detail: [Replaceable Presentation Boundary](10_architecture/PRESENTATION_BOUNDARY.md).
+
+### Visual direction — LOCKED FAMILY
+
+- The production target is stylized dark-fantasy 3D: economical/readable low-to-mid-poly environments, stylized PBR materials, atmospheric lighting/fog/VFX, and higher detail on the player, important creatures, weapons, armor and bosses.
+- Surface presentation stays comparatively grounded while underground regions may use stronger controlled visual identities; reusable modular asset families are preferred over one-off high-cost assets everywhere.
+- Prototype primitives remain valid while systems are changing, and final shader/renderer/budget details stay adjustable behind the locked presentation/identity boundary.
+- Authoritative detail: [Visual Direction](00_project/VISUAL_DIRECTION.md).
+
 ## Current intentionally open implementation/tuning decisions
 
 The following remain intentionally open and must not become accidental permanent rules during implementation:
