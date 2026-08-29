@@ -125,16 +125,16 @@ static func _select_definition(hook, eligible: Array, rulebook_revision: int):
 
 
 static func _assignment_fingerprint(hook, definition, rulebook_revision: int) -> String:
-	var categories: Array[String] = []
-	categories.append_array(definition.category_ids)
-	categories.sort()
-	var payload := "reserved-site-assignment-v%d|rules=%d|site=%s|content=%s|schema=%d|categories=%s" % [
+	var category_ids: Array[String] = []
+	category_ids.append_array(definition.category_ids)
+	category_ids.sort()
+	var payload := "reserved-site-assignment-v%d|rules=%d|site=%s|content=%s|schema=%d|category_ids=%s" % [
 		CONTRACT_REVISION,
 		rulebook_revision,
 		str(hook.get("stable_id")),
 		definition.content_id,
 		definition.schema_revision,
-		_join_strings(categories, ","),
+		_join_strings(category_ids, ","),
 	]
 	return "rsa1:" + payload.sha256_text()
 
