@@ -35,6 +35,7 @@ const RIG_PROFILE_ID := "rig_profile.humanoid.prototype"
 static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_burrower_authored_baseline(failures)
+	_test_noncombat_creature_stays_generic(failures)
 	_test_wrong_concrete_types_fail_closed(failures)
 	_test_invalid_semantic_bindings_fail(failures)
 	_test_two_creatures_reuse_same_boundary(failures)
@@ -80,6 +81,38 @@ static func _test_burrower_authored_baseline(failures: Array[String]) -> void:
 	_expect_equal(failures, "runtime stats damage", runtime_stats.get("attack_damage"), 10)
 	_expect_close(failures, "runtime stats cooldown", float(runtime_stats.get("attack_cooldown", 0.0)), 1.20)
 	_expect_close(failures, "runtime stats windup", float(runtime_stats.get("attack_windup", 0.0)), 0.42)
+
+
+static func _test_noncombat_creature_stays_generic(failures: Array[String]) -> void:
+	var passive = CreatureDefinition.new()
+	passive.configure_creature(
+		"creature.passive.contract_probe",
+		"Passive Contract Probe",
+		12,
+		0.0,
+		0.0,
+		0.0,
+		0,
+		0.0,
+		0.0,
+		1
+	)
+	passive.configure_schema_declarations([CREATURE_ROOT], [])
+	passive.configure_semantic_bindings("", ARCHETYPE_ID, "", "", [], [])
+	var definitions: Array = _shared_targets()
+	definitions.push_front(passive)
+	var result: Dictionary = _pipeline().validate_all(
+		definitions,
+		_categories(),
+		_capabilities(),
+		[_validator()]
+	)
+	if not bool(result.get("success", false)):
+		failures.append(
+			"generic non-combat/non-rigged creature was forced through enemy-only contracts: %s" % [
+				result.get("diagnostics", []),
+			]
+		)
 
 
 static func _test_wrong_concrete_types_fail_closed(failures: Array[String]) -> void:
@@ -168,18 +201,31 @@ static func _test_invalid_semantic_bindings_fail(failures: Array[String]) -> voi
 	if not _has_code_fragment(invalid_rig_result, "family_rule", "does not satisfy required role"):
 		failures.append("creature accepted a rig role not provided by selected rig profile")
 
-	var missing_capability = _creature("creature.enemy.missing_sensing")
-	missing_capability.configure_schema_declarations([ENEMY_CATEGORY], [MOVEMENT, DAMAGE_DEALER])
-	var missing_capability_definitions: Array = _shared_targets()
-	missing_capability_definitions.push_front(missing_capability)
-	var missing_capability_result: Dictionary = _pipeline().validate_all(
-		missing_capability_definitions,
+	var missing_sensing = _creature("creature.enemy.missing_sensing")
+	missing_sensing.configure_schema_declarations([ENEMY_CATEGORY], [MOVEMENT, DAMAGE_DEALER])
+	var missing_sensing_definitions: Array = _shared_targets()
+	missing_sensing_definitions.push_front(missing_sensing)
+	var missing_sensing_result: Dictionary = _pipeline().validate_all(
+		missing_sensing_definitions,
 		_categories(),
 		_capabilities(),
 		[_validator()]
 	)
-	if not _has_code_fragment(missing_capability_result, "family_rule", SENSING):
-		failures.append("enemy creature without sensing capability did not fail closed")
+	if not _has_code_fragment(missing_sensing_result, "family_rule", SENSING):
+		failures.append("creature with sensing tuning but no sensing capability did not fail closed")
+
+	var missing_damage_dealer = _creature("creature.enemy.missing_damage_dealer")
+	missing_damage_dealer.configure_schema_declarations([ENEMY_CATEGORY], [MOVEMENT, SENSING])
+	var missing_damage_definitions: Array = _shared_targets()
+	missing_damage_definitions.push_front(missing_damage_dealer)
+	var missing_damage_result: Dictionary = _pipeline().validate_all(
+		missing_damage_definitions,
+		_categories(),
+		_capabilities(),
+		[_validator()]
+	)
+	if not _has_code_fragment(missing_damage_result, "family_rule", DAMAGE_DEALER):
+		failures.append("creature with attack tuning/reference but no damage-dealer capability did not fail closed")
 
 
 static func _test_two_creatures_reuse_same_boundary(failures: Array[String]) -> void:
