@@ -42,7 +42,7 @@ static func realize(mesh_node, profile, context: Dictionary = {}) -> Dictionary:
 	var material = material_result.get("material")
 	mesh_node.material_override = material
 
-	var existing := mesh_node.get_node_or_null(ATTACHMENT_NAME)
+	var existing: Node = mesh_node.get_node_or_null(ATTACHMENT_NAME)
 	if existing != null:
 		mesh_node.remove_child(existing)
 		existing.free()
