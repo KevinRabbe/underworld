@@ -182,8 +182,8 @@ static func _profile_pipeline(world_seed: int, region: Vector2i, entrance_id: St
 		return _pipeline_fail("partition", partition.diagnostics)
 	metrics["surface_partition_ms"] = _elapsed_ms(partition_started)
 
-	var mesh_total_ms: float = 0.0
-	var mesh_max_ms: float = 0.0
+	var extraction_total_ms: float = 0.0
+	var extraction_max_ms: float = 0.0
 	var mesh_realization_total_ms: float = 0.0
 	var mesh_realization_max_ms: float = 0.0
 	var collision_prepare_total_ms: float = 0.0
@@ -207,8 +207,8 @@ static func _profile_pipeline(world_seed: int, region: Vector2i, entrance_id: St
 			return _pipeline_fail("mesh", mesh_stage.diagnostics)
 		var mesh_data = mesh_stage.data
 		var extraction_ms: float = float(mesh_data.metrics.get("extraction_ms", mesh_wall_ms))
-		mesh_total_ms += extraction_ms
-		mesh_max_ms = maxf(mesh_max_ms, extraction_ms)
+		extraction_total_ms += extraction_ms
+		extraction_max_ms = maxf(extraction_max_ms, extraction_ms)
 		var memory_bytes: int = int(mesh_data.metrics.get("memory_bytes", 0))
 		mesh_memory_total += memory_bytes
 		mesh_memory_max = maxi(mesh_memory_max, memory_bytes)
@@ -252,8 +252,8 @@ static func _profile_pipeline(world_seed: int, region: Vector2i, entrance_id: St
 		collision_realization_max_ms = maxf(collision_realization_max_ms, collision_realization_ms)
 
 	metrics["profiled_cell_count"] = partition.data.plans.size()
-	metrics["mesh_worker_total_ms"] = mesh_total_ms
-	metrics["mesh_worker_cell_max_ms"] = mesh_max_ms
+	metrics["mesh_extraction_total_ms"] = extraction_total_ms
+	metrics["mesh_extraction_cell_max_ms"] = extraction_max_ms
 	metrics["mesh_realization_total_ms"] = mesh_realization_total_ms
 	metrics["mesh_realization_cell_max_ms"] = mesh_realization_max_ms
 	metrics["collision_prepare_total_ms"] = collision_prepare_total_ms
@@ -266,7 +266,7 @@ static func _profile_pipeline(world_seed: int, region: Vector2i, entrance_id: St
 	metrics["triangle_total"] = triangle_total
 	metrics["sample_total"] = sample_total
 	metrics["cube_total"] = cube_total
-	metrics["worker_total_ms"] = mesh_total_ms + collision_prepare_total_ms
+	metrics["staged_processing_total_ms"] = extraction_total_ms + collision_prepare_total_ms
 	metrics["main_thread_realization_total_ms"] = mesh_realization_total_ms + collision_realization_total_ms
 
 	var deterministic_fingerprint: String = (
@@ -293,11 +293,12 @@ static func _profile_controller_route(controller, entrance_id: String) -> Dictio
 		"position": controller.last_bootstrap_surface_position + Vector3.UP * 3.0,
 	})
 	var required_cells: Array = controller.entrance_plans[entrance_id].cell_addresses
+	var cell_size: Vector3 = controller.streamer.cell_size
 	for index in range(required_cells.size()):
 		var address = required_cells[index]
 		positions.append({
 			"name": "cave_cell_%02d" % index,
-			"position": Vector3(address.coordinate) * 32.0 + Vector3(16, 16, 16),
+			"position": Vector3(address.coordinate) * cell_size + cell_size * 0.5,
 		})
 	positions.append({
 		"name": "surface_return",
@@ -319,7 +320,7 @@ static func _profile_controller_route(controller, entrance_id: String) -> Dictio
 		peak_active_owner_count = maxi(peak_active_owner_count, active_owner_count)
 		peak_record_count = maxi(peak_record_count, int(controller.streamer.records.size()))
 		scenarios.append({
-			"family": "controller_route",
+			"family": "controller_demand_route",
 			"name": entry["name"],
 			"position": entry["position"],
 			"observer_update_ms": elapsed_ms,
@@ -377,7 +378,7 @@ static func _profile_streaming_policy() -> Dictionary:
 		peak_active = maxi(peak_active, int(snapshot["active_owner_count"]))
 		peak_records = maxi(peak_records, int(snapshot["record_count"]))
 		scenarios.append({
-			"family": "streaming_policy",
+			"family": "streaming_policy_demand_only",
 			"name": entry["name"],
 			"position": entry["position"],
 			"observer_cell": streamer.observer_cell(entry["position"]),
