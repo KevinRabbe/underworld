@@ -6,7 +6,7 @@ This document explains **what each major validation surface protects, which doma
 
 This index does not create acceptance gates, duplicate workflow command tables, or define a permanent workflow count. Executable runners and workflow YAML remain authoritative for what actually runs.
 
-Current-main baseline used for this refresh: `29860a0ef8af1b823d929b665194be80b8477dc9`.
+Current-main baseline used for this refresh: `575724074406a7c3035ba171af1a28bbfb93b9e9`.
 
 ## Failure-routing vocabulary
 
@@ -25,7 +25,7 @@ Route a failure to the invariant owner. Do not weaken the reporting aggregate or
 | --- | --- | --- | --- |
 | **Character Validation** | Player / combat / character gameplay | Character-state, movement/combat integration, mannequin/rig/socket contracts and gameplay ownership boundaries | Character/combat implementation or shared-contract integration |
 | **Repository Layout Validation** | Repository architecture | Canonical roots, forbidden dependency directions, retired paths and explicit structural exceptions | Architecture/integration defect; validator debt only after an intentional architecture change |
-| **Inventory Validation** | Inventory / item-state transactions | Container invariants, transaction atomicity, accepted equipment/hotbar state and accepted surface-harvest inventory integration | Inventory/equipment transaction implementation or HARVEST integration |
+| **Inventory Validation** | Inventory / item-state transactions | Container invariants, transaction atomicity, accepted equipment/hotbar state, surface-harvest inventory integration and loot collection | Inventory/equipment transaction implementation or HARVEST/LOOT integration |
 | **Cave Presentation Validation** | Cave presentation | Presentation/material/realization contracts that sit above semantic world truth | Presentation implementation/integration; do not rewrite worldgen semantics to satisfy appearance-only assumptions |
 | **Deterministic Worldgen fast contracts** | World definition + runtime worldgen integration | Deterministic identity/RNG/provenance/topology/geometry/runtime contracts including MAP-014/MAP-015 ownership | Owning worldgen/runtime implementation or intentional-contract integration |
 | **Deterministic Worldgen shard campaign** | Deterministic worldgen | Reproduction over the committed ten-shard seed/region campaign | Nondeterminism or generation regression unless an intentional versioned contract change was not propagated |
@@ -72,9 +72,9 @@ If a candidate introduces a forbidden dependency, repair the dependency. Add or 
 Workflow: [`inventory-validation.yml`](../../.github/workflows/inventory-validation.yml)  
 Runner: [`tests/run_inventory.gd`](../../tests/run_inventory.gd)
 
-The accepted Inventory surface owns item-container invariants and atomic inventory transactions, and it grows with accepted inventory-adjacent state such as equipment/hotbar contracts. At this baseline it also executes HARVEST-001 surface-harvest inventory integration, proving that accepted harvesting consumes INV-002 rather than mutating container state directly.
+The accepted Inventory surface owns item-container invariants and atomic inventory transactions, and it grows with accepted inventory-adjacent state such as equipment/hotbar contracts. At this baseline it also executes HARVEST-001 surface-harvest inventory integration and LOOT-001 loot collection, proving that both accepted gameplay consumers compose through INV-002 rather than mutating container state directly.
 
-Transaction/container semantics remain Inventory-owned. HARVEST still owns its tool eligibility, hit/depletion sequencing and surface-world mutation integration. Diagnose whether a failed harvest path violated INV contracts or whether the accepted harvest integration itself is wrong; do not move transaction authority into the feature merely because the feature test exposed the failure.
+Transaction/container semantics remain Inventory-owned. HARVEST still owns tool eligibility, hit/depletion sequencing and surface-world mutation integration; LOOT owns reward occurrence, pending-reward/idempotence semantics and its collection intent. Diagnose whether a failed consumer violated INV contracts or whether the accepted feature integration itself is wrong; do not move transaction authority into the feature merely because its focused test exposed the failure.
 
 ### Cave Presentation Validation
 
@@ -116,7 +116,7 @@ It is a stable umbrella result. It deliberately does **not** answer which subsys
 Current job: `Content registry contracts` in [`foundation-validation.yml`](../../.github/workflows/foundation-validation.yml)  
 Runner: [`tests/run_content.gd`](../../tests/run_content.gd)
 
-The Content runner is a **growing aggregate**. At this baseline it includes registry, category/capability schema, semantic-role schema, validation-pipeline, archetype definition/realization, item, resource, creature, weapon, reserved-site assignment, underground placement and surface-harvest authored-content contracts. Those correspond to accepted boundaries including CONTENT-003/004/005, ARCHETYPE-001, ITEM-001, ANIM-001, RESOURCE-001, ENEMY-001, WEAPON-001, CONTENT-001, CONTENT-002 and HARVEST-001, but this list is illustrative rather than a forever-exhaustive child inventory.
+The Content runner is a **growing aggregate**. At this baseline it includes registry, category/capability schema, semantic-role schema, validation-pipeline, archetype definition/realization, item, resource, creature, weapon, reserved-site assignment, underground placement, surface-harvest and loot authored-content contracts. Those correspond to accepted boundaries including CONTENT-003/004/005, ARCHETYPE-001, ITEM-001, ANIM-001, RESOURCE-001, ENEMY-001, WEAPON-001, CONTENT-001, CONTENT-002, HARVEST-001 and LOOT-001, but this list is illustrative rather than a forever-exhaustive child inventory.
 
 Content ownership includes:
 
