@@ -7,12 +7,14 @@ This layer applies authored cave materials, local lighting, ambience metadata an
 ## 1. Ownership
 
 ```text
-accepted worldgen cell plan / cave mesh data
-                 ↓ read-only semantic context
+accepted worldgen cell plan
+        ↓ compact value snapshot
+runtime render semantic handoff + accepted cave mesh
+        ↓
 CavePresentationCatalog + profiles
-                 ↓
+        ↓
 CavePresentationController / Realizer
-                 ↓
+        ↓
 material + local light + ambience/fog metadata + dressing hooks
 ```
 
@@ -36,16 +38,35 @@ presentation.cave.*
 
 These are **presentation IDs**, not procedural StableIds or durable object IDs. Replacing `presentation.cave.chamber` with another color/material treatment changes appearance only.
 
-Profile selection context deliberately excludes source StableIds, source descriptor IDs and fragment IDs. It uses only presentation-safe semantic facts already supplied by accepted runtime descriptors:
-- volume kind (`chamber`, `tunnel`, `entrance`, `reserved_site`, `default`);
-- optional biome semantic token;
-- depth derived from accepted cell bounds;
+Profile selection context deliberately excludes source StableIds, source descriptor IDs, fragment IDs and source/provenance fingerprints. It uses only presentation-safe semantic values copied from accepted runtime descriptors:
+- source volume kinds (`chamber`, `tunnel`, `entrance`, `reserved_site`);
+- entrance/reserved-site presence flags;
+- optional biome semantic token supplied by the presentation composition layer;
+- depth derived from copied cell bounds;
 - semantic tags;
 - world bounds for positioning disposable presentation helpers.
 
 Changing the identity of the same semantic chamber must therefore not choose a different visual profile by accident.
 
-## 3. Authored profile resolution
+## 3. Compact runtime semantic handoff
+
+A realized render node must **not retain `GeometryCellPlan` or fragment objects**. Those objects own generation-plan graphs, fingerprints and metadata that presentation does not need and keeping them alive would work against streaming reclamation.
+
+Before render realization, `UnderworldCaveRuntimeController.build_cell_semantic_snapshot()` copies only the allowed value facts into a compact read-only `Dictionary`:
+
+```text
+source_kinds: Array[String]
+has_entrance: bool
+has_reserved_site: bool
+tags: Array[String]
+world_bounds: AABB
+```
+
+The arrays and outer dictionary are made read-only before handoff. The snapshot contains no `Object`, `RefCounted`, `Node`, `Resource`, RID, Callable, StableId, source fingerprint, provenance fingerprint or fragment reference. The render node stores this value snapshot as `cell_semantic_snapshot`.
+
+Presentation may retain or copy that compact value snapshot for its disposable lifetime. Dropping the original `GeometryCellPlan` must not prevent presentation from being rebuilt.
+
+## 4. Authored profile resolution
 
 `CavePresentationCatalog` resolves profiles by:
 1. highest authored priority;
@@ -63,7 +84,7 @@ The M3 prototype catalog provides:
 
 This is intentionally data-driven. Additional profiles extend the catalog without adding central `match cave_type` gameplay logic.
 
-## 4. Exterior and backside readability
+## 5. Exterior and backside readability
 
 MAP-016 intentionally realizes the navigable cave shell with interior-facing geometry. Exterior disappearance is therefore treated as a presentation problem unless a real topology/collision defect is reproduced.
 
@@ -71,7 +92,7 @@ The M3 cave material uses a double-sided `StandardMaterial3D` (`CULL_DISABLED`).
 
 Entrance profiles use a warmer/brighter material and small transient local light so the surface-to-underworld transition reads more clearly. These values are presentation tuning and may change freely.
 
-## 5. Lighting, ambience and dressing hooks
+## 6. Lighting, ambience and dressing hooks
 
 A profile may author:
 - local light color/energy/range;
@@ -86,9 +107,9 @@ The current realizer creates only disposable representation:
 
 Those hooks do not assert that a durable prop, resource or gameplay object exists. Future systems must resolve them through their own presentation/content boundaries rather than treating the marker as world truth.
 
-## 6. Streaming and rebuild
+## 7. Streaming and rebuild
 
-Presentation follows render-cell lifetime. When a cave render node is recreated after streaming, the controller reads the accepted source cell plan again, resolves an authored profile, and rebuilds material/light/ambience/dressing representation.
+Presentation follows render-cell lifetime. When a cave render node is recreated after streaming, the controller reads its compact `cell_semantic_snapshot`, resolves an authored profile, and rebuilds material/light/ambience/dressing representation. The authoritative generation plan does not need to remain referenced by the render node.
 
 No cave-presentation instance state needs to be saved. Removing an old `CavePresentationAttachment` and creating a new one must leave:
 - cave mesh output fingerprint unchanged;
@@ -97,25 +118,28 @@ No cave-presentation instance state needs to be saved. Removing an old `CavePres
 - collision/traversal unchanged;
 - durable world/player state unchanged.
 
-## 7. Runtime integration seam
+## 8. Runtime integration seam
 
 `UnderworldCaveRuntimeController` remains worldgen/runtime authority. It already exposes an optional material seam and a `cell_attached` render event.
 
-PRESENTATION-001 adds only one neutral handoff: the disposable render `MeshInstance3D` may carry the already-existing `GeometryCellPlan` object as transient metadata (`source_cell_plan`). Worldgen does not import presentation code and does not include that reference in any fingerprint. Presentation reads it after render attachment and never writes back into it.
+PRESENTATION-001 adds one neutral value handoff: worldgen copies presentation-safe semantic facts from the accepted cell plan into `cell_semantic_snapshot` before attaching the disposable render `MeshInstance3D`. Worldgen does not import presentation code, presentation never receives the original cell plan through this seam, and the snapshot is excluded from every deterministic fingerprint.
 
-## 8. Validation
+## 9. Validation
 
 Focused cave-presentation contracts prove:
 - authored catalog/profile validity;
 - chamber/tunnel/entrance/reserved/depth/biome resolution;
 - source StableId/descriptor identity does not select visual profiles;
+- the runtime semantic snapshot is read-only and contains no Object/RefCounted/Node/RID/Callable authority;
+- the actual render node carries the compact snapshot and no `source_cell_plan` reference;
+- dropping the original `GeometryCellPlan` does not prevent presentation rebuild;
 - the M3 material is double-sided;
 - changing/rebuilding presentation does not change `CaveMeshData.output_fingerprint` or replace the accepted mesh;
 - presentation attachments are transient and can be reconstructed after render-node disposal.
 
 Broad repository, Character and deterministic worldgen gates remain required because presentation integration must not regress accepted runtime behavior.
 
-## 9. Intentionally open
+## 10. Intentionally open
 
 PRESENTATION-001 does not lock:
 - final cave palette or textures;
