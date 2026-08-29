@@ -97,8 +97,9 @@ static func _source_sdf(point: Vector3, fragment) -> float:
 			return _chamber_sdf(point, metadata, fragment.clipped_source_bounds) + _roughness(point, fragment)
 		"tunnel":
 			var points: Array = metadata.get("control_points", []); var best := INF
-			var width := maxf(float(metadata.get("width", 2.0)) * 0.5, 0.1)
-			var height := maxf(float(metadata.get("height", 2.0)) * 0.5, 0.1)
+			var clearance := maxf(float(metadata.get("clearance_margin", 0.0)), 0.0)
+			var width := maxf(float(metadata.get("width", 2.0)) * 0.5 + clearance, 0.1)
+			var height := maxf(float(metadata.get("height", 2.0)) * 0.5 + clearance, 0.1)
 			for i in range(maxi(points.size() - 1, 0)):
 				best = minf(best, _elliptical_capsule_sdf(point, points[i], points[i + 1], width, height))
 			return best + _roughness(point, fragment) * clampf(float(metadata.get("roughness", 1.0)), 0.0, 2.0)
@@ -206,15 +207,6 @@ static func _append_triangle(a: Vector3, b: Vector3, c: Vector3, edge_keys: Arra
 
 static func _field_gradient(point: Vector3, fragments: Array, step: float) -> Vector3:
 	var e := maxf(step * 0.5, 0.001); return Vector3(_field(point + Vector3(e,0,0), fragments, 0.0) - _field(point - Vector3(e,0,0), fragments, 0.0), _field(point + Vector3(0,e,0), fragments, 0.0) - _field(point - Vector3(0,e,0), fragments, 0.0), _field(point + Vector3(0,0,e), fragments, 0.0) - _field(point - Vector3(0,0,e), fragments, 0.0))
-
-static func _append_box_shell(bounds: AABB, vertices: PackedVector3Array, indices: PackedInt32Array, normals: PackedVector3Array, uvs: PackedVector2Array) -> void:
-	var p := bounds.position; var q := p + bounds.size
-	var corners := [Vector3(p.x,p.y,p.z),Vector3(q.x,p.y,p.z),Vector3(q.x,q.y,p.z),Vector3(p.x,q.y,p.z),Vector3(p.x,p.y,q.z),Vector3(q.x,p.y,q.z),Vector3(q.x,q.y,q.z),Vector3(p.x,q.y,q.z)]
-	for face in [[0,3,2,1],[4,5,6,7],[0,1,5,4],[3,7,6,2],[0,4,7,3],[1,2,6,5]]:
-		var start := vertices.size()
-		for index in face:
-			var point: Vector3 = corners[index]; vertices.append(point); normals.append(Vector3.UP); uvs.append(Vector2(point.x + point.z, point.y) * 0.0625)
-		indices.append_array(PackedInt32Array([start,start+1,start+2,start,start+2,start+3]))
 
 static func _lattice_edge_key(cube: Vector3i, edge_index: int) -> String:
 	var endpoints: Array = CUBE_EDGES[edge_index]
