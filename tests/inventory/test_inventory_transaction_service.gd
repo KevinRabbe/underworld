@@ -14,6 +14,8 @@ static func run() -> Array[String]:
 	_test_destination_weight_failure_changes_nothing(failures)
 	_test_cross_container_stack_transfer_conserves_state(failures)
 	_test_instance_transfer_conserves_mutable_state(failures)
+	_test_late_commit_failure_restores_exact_checkpoint(failures)
+	_test_rollback_failure_is_hard_invariant(failures)
 	_test_authored_contract_mismatch_remains_fail_closed(failures)
 	_test_equivalent_plan_order_is_deterministic(failures)
 	return failures
@@ -171,6 +173,69 @@ static func _test_instance_transfer_conserves_mutable_state(failures: Array[Stri
 	var destination_state: Dictionary = destination.state_at(0).get("state", {}).get("per_copy_state", {})
 	_expect_equal(failures, "instance durability conserved", int(destination_state.get("durability", 0)), 81)
 	_expect_equal(failures, "instance modifier conserved", str(destination_state.get("modifier", "")), "plain")
+
+
+static func _test_late_commit_failure_restores_exact_checkpoint(failures: Array[String]) -> void:
+	var filler = _item("item.resource.tx_rollback_filler", 16, 0.25)
+	var sword = _item("item.weapon.tx_rollback_sword", 1, 3.0)
+	var source = ItemContainerState.new().configure(3, 10.0)
+	var destination = ItemContainerState.new().configure(2, 10.0)
+	source.add_stack(filler, 3, {"batch": 4})
+	var add_result: Dictionary = source.add_instance(
+		sword,
+		{"durability": 63, "modifier": "tempered"}
+	)
+	var sword_slot: int = int(add_result.get("slot", -1))
+	if sword_slot != 1:
+		failures.append("rollback proof expected sword in stable source slot 1")
+		return
+	var source_before: String = source.canonical_json()
+	var destination_before: String = destination.canonical_json()
+
+	var plan = InventoryTransactionPlan.new()
+	plan.bind_container("source", source)
+	plan.bind_container("destination", destination)
+	plan.transfer_instance("source", "destination", sword_slot, sword)
+	var service = InventoryTransactionService.new()
+	service._set_test_commit_failure_index(1)
+	var result: Dictionary = service.commit(plan)
+
+	if bool(result.get("success", false)):
+		failures.append("injected late commit failure unexpectedly succeeded")
+	elif not _has_fragment(result, "injected deterministic transaction commit failure"):
+		failures.append("late commit failure did not surface injected cause: %s" % [result.get("diagnostics", [])])
+	if not bool(result.get("rollback_restored", false)):
+		failures.append("late commit failure did not report clean checkpoint restoration")
+	if source.canonical_json() != source_before:
+		failures.append("late commit failure did not restore exact source slots/per-copy state")
+	if destination.canonical_json() != destination_before:
+		failures.append("late commit failure did not restore exact destination baseline")
+	var restored_state: Dictionary = source.state_at(1).get("state", {}).get("per_copy_state", {})
+	_expect_equal(failures, "rollback durability restored", int(restored_state.get("durability", 0)), 63)
+	_expect_equal(failures, "rollback modifier restored", str(restored_state.get("modifier", "")), "tempered")
+
+
+static func _test_rollback_failure_is_hard_invariant(failures: Array[String]) -> void:
+	var ore = _item("item.resource.tx_rollback_hard", 16, 0.5)
+	var source = ItemContainerState.new().configure(2, 10.0)
+	var destination = ItemContainerState.new().configure(2, 10.0)
+	source.add_stack(ore, 4)
+
+	var plan = InventoryTransactionPlan.new()
+	plan.bind_container("source", source)
+	plan.bind_container("destination", destination)
+	plan.transfer_stack("source", "destination", ore, 2)
+	var service = InventoryTransactionService.new()
+	service._set_test_commit_failure_index(1)
+	service._set_test_rollback_failure_container_key("source")
+	var result: Dictionary = service.commit(plan)
+
+	if bool(result.get("success", false)):
+		failures.append("rollback-failure injection unexpectedly succeeded")
+	if bool(result.get("rollback_restored", true)):
+		failures.append("rollback-failure injection was reported as clean restoration")
+	if not _has_fragment(result, "HARD TRANSACTION ROLLBACK INVARIANT FAILURE"):
+		failures.append("rollback failure was not surfaced as a hard invariant diagnostic")
 
 
 static func _test_authored_contract_mismatch_remains_fail_closed(failures: Array[String]) -> void:
