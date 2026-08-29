@@ -63,13 +63,17 @@ static func fingerprint(value: Variant) -> String:
 
 
 static func _encode_array(values: Array) -> String:
-	var payload: String = _frame("count", _int64_hex(values.size()))
+	# Build framed segments once, then join them in canonical order. Repeated
+	# String += here was quadratic for large mesh/collision buffers because each
+	# append copied the complete accumulated payload.
+	var segments: Array[String] = []
+	segments.append(_frame("count", _int64_hex(values.size())))
 	for value in values:
 		var encoded: String = encode(value)
 		if encoded.is_empty():
 			return ""
-		payload += _frame("item", encoded)
-	return _frame("a", payload)
+		segments.append(_frame("item", encoded))
+	return _frame("a", "".join(segments))
 
 
 static func _encode_dictionary(values: Dictionary) -> String:
