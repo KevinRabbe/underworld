@@ -1,0 +1,65 @@
+extends RefCounted
+class_name UnderworldRuntimePerformanceBudget
+
+## PERF-001 prototype warning budgets.
+##
+## These are observational thresholds, not deterministic generation inputs and
+## not hard correctness gates. PERF-002 may revise them only from measured
+## evidence. Timing thresholds intentionally remain outside fingerprints.
+const REVISION: int = 1
+const MIB: int = 1024 * 1024
+
+const DEFAULT_THRESHOLDS: Dictionary = {
+	"controller_bootstrap_ms": 2000.0,
+	"deterministic_generation_ms": 500.0,
+	"surface_partition_ms": 150.0,
+	"mesh_worker_total_ms": 1200.0,
+	"mesh_worker_cell_max_ms": 250.0,
+	"mesh_realization_cell_max_ms": 8.0,
+	"collision_prepare_cell_max_ms": 8.0,
+	"collision_realization_cell_max_ms": 8.0,
+	"observer_update_max_ms": 4.0,
+	"mesh_memory_total_bytes": 256 * MIB,
+	"mesh_memory_cell_max_bytes": 8 * MIB,
+	# Default streaming radii are geometry=2 and render/collision=1, so the
+	# natural activation envelopes are 5^3 and 3^3 cells respectively.
+	"resident_geometry_cells": 125,
+	"resident_render_cells": 27,
+	"resident_collision_cells": 27,
+}
+
+
+static func default_thresholds() -> Dictionary:
+	return DEFAULT_THRESHOLDS.duplicate(true)
+
+
+static func evaluate(metrics: Dictionary, thresholds: Dictionary = {}) -> Array[String]:
+	var limits := default_thresholds()
+	for key in thresholds.keys():
+		limits[key] = thresholds[key]
+	var warnings: Array[String] = []
+	for key in limits.keys():
+		if not metrics.has(key):
+			continue
+		var value = metrics[key]
+		var limit = limits[key]
+		if (value is int or value is float) and (limit is int or limit is float):
+			if float(value) > float(limit):
+				warnings.append(
+					"%s exceeded prototype warning budget: value=%s limit=%s" % [
+						str(key),
+						str(value),
+						str(limit),
+					]
+				)
+	warnings.sort()
+	return warnings
+
+
+static func descriptor() -> Dictionary:
+	return {
+		"revision": REVISION,
+		"policy": "warning_only",
+		"thresholds": default_thresholds(),
+		"timings_affect_determinism": false,
+	}
