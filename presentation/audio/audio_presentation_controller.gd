@@ -27,11 +27,15 @@ func configure(catalog_value, muted_value: bool = false) -> Array[String]:
 
 
 func set_muted(value: bool) -> void:
+	if muted == value:
+		return
 	muted = value
 	if muted:
 		for child in get_children():
 			if child is AudioStreamPlayer or child is AudioStreamPlayer3D:
 				child.stop()
+		return
+	_resume_selected_ambience()
 
 
 func dispatch(cue_id: String, payload: Dictionary = {}) -> Dictionary:
@@ -78,13 +82,12 @@ func set_ambience_role(role: String) -> Dictionary:
 	var diagnostics: Array[String] = catalog.validate_ambience_role(role)
 	if not diagnostics.is_empty():
 		return _record(_ambience_result(false, role, "", false, false, diagnostics))
-	if role == _ambience_role:
-		var already_playing := _ambience_player != null and is_instance_valid(_ambience_player) and _ambience_player.playing
-		return _record(_ambience_result(true, role, catalog.ambience_cue_id(role), false, already_playing, []))
 
-	_ambience_role = role
 	if role == CueCatalog.AMBIENCE_NONE:
+		if role == _ambience_role:
+			return _record(_ambience_result(true, role, "", false, false, []))
 		_stop_ambience()
+		_ambience_role = role
 		return _record(_ambience_result(true, role, "", true, false, []))
 
 	var cue_id: String = catalog.ambience_cue_id(role)
@@ -94,9 +97,16 @@ func set_ambience_role(role: String) -> Dictionary:
 	if not diagnostics.is_empty() or definition == null or not definition is CueDefinition:
 		if diagnostics.is_empty():
 			diagnostics.append("ambience cue did not resolve to AudioCueDefinition: %s" % cue_id)
-		return _record(_ambience_result(false, role, cue_id, true, false, diagnostics))
+		return _record(_ambience_result(false, role, cue_id, false, ambience_is_playing(), diagnostics))
 	if definition.playback_space != CueDefinition.PLAYBACK_AMBIENCE:
-		return _record(_ambience_result(false, role, cue_id, true, false, ["resolved ambience cue is not ambience playback: %s" % cue_id]))
+		return _record(_ambience_result(false, role, cue_id, false, ambience_is_playing(), ["resolved ambience cue is not ambience playback: %s" % cue_id]))
+
+	if role == _ambience_role:
+		if not muted and definition.stream != null and not ambience_is_playing():
+			_apply_ambience_definition(definition)
+		return _record(_ambience_result(true, role, cue_id, false, ambience_is_playing(), []))
+
+	_ambience_role = role
 	if muted:
 		_stop_ambience()
 		return _record(_ambience_result(true, role, cue_id, true, false, ["audio presentation is muted: %s" % cue_id]))
@@ -104,18 +114,18 @@ func set_ambience_role(role: String) -> Dictionary:
 		_stop_ambience()
 		return _record(_ambience_result(true, role, cue_id, true, false, ["audio cue has no presentation stream: %s" % cue_id]))
 
-	var player := _ensure_ambience_player()
-	player.stop()
-	player.stream = definition.stream
-	player.volume_db = definition.volume_db
+	_apply_ambience_definition(definition)
 	if not is_inside_tree():
 		return _record(_ambience_result(true, role, cue_id, true, false, ["audio controller is not inside SceneTree; playback skipped: %s" % cue_id]))
-	player.play()
-	return _record(_ambience_result(true, role, cue_id, true, true, []))
+	return _record(_ambience_result(true, role, cue_id, true, ambience_is_playing(), []))
 
 
 func ambience_role() -> String:
 	return _ambience_role
+
+
+func ambience_is_playing() -> bool:
+	return _ambience_player != null and is_instance_valid(_ambience_player) and _ambience_player.playing
 
 
 func ambience_player_count() -> int:
@@ -138,9 +148,36 @@ func presentation_state() -> Dictionary:
 	return {
 		"muted": muted,
 		"ambience_role": _ambience_role,
+		"ambience_cue_id": catalog.ambience_cue_id(_ambience_role) if catalog != null and catalog is CueCatalog else "",
 		"ambience_player_count": ambience_player_count(),
+		"ambience_playing": ambience_is_playing(),
+		"ambience_stream_configured": _ambience_player != null and is_instance_valid(_ambience_player) and _ambience_player.stream != null,
 		"one_shot_player_count": active_one_shot_count(),
 	}
+
+
+func _resume_selected_ambience() -> void:
+	if catalog == null or not catalog is CueCatalog or _ambience_role == CueCatalog.AMBIENCE_NONE:
+		return
+	var cue_id: String = catalog.ambience_cue_id(_ambience_role)
+	var resolved: Dictionary = catalog.resolve(cue_id)
+	if not resolved.get("diagnostics", []).is_empty():
+		return
+	var definition = resolved.get("definition", null)
+	if definition == null or not definition is CueDefinition:
+		return
+	if definition.playback_space != CueDefinition.PLAYBACK_AMBIENCE or definition.stream == null:
+		return
+	_apply_ambience_definition(definition)
+
+
+func _apply_ambience_definition(definition) -> void:
+	var player := _ensure_ambience_player()
+	player.stop()
+	player.stream = definition.stream
+	player.volume_db = definition.volume_db
+	if is_inside_tree():
+		player.play()
 
 
 func _ensure_ambience_player() -> AudioStreamPlayer:
