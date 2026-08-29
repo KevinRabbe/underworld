@@ -1,0 +1,14 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://gameplay/loot/definitions/loot_profile_definition.gd" id="1_loot"]
+
+[resource]
+script = ExtResource("1_loot")
+content_id = "loot_profile.creature.burrower.m3"
+definition_family = "loot_profile"
+schema_revision = 1
+category_ids = Array[String]([])
+capability_ids = Array[String]([])
+source_creature_id = "creature.enemy.burrower"
+reward_item_ids = Array[String](["item.resource.burrower_chitin"])
+reward_quantities = Array[int]([2])

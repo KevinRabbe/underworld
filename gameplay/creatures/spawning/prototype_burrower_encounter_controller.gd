@@ -1,9 +1,17 @@
 extends Node3D
 class_name UnderworldPrototypeBurrowerEncounterController
 
+signal loot_pending(occurrence_id: String, profile_id: String, world_position: Vector3)
+
 const EnemyScript := preload("res://gameplay/creatures/underworld/burrower/burrower.gd")
 const CreatureDefinition := preload("res://gameplay/creatures/definitions/creature_definition.gd")
+const ContentRegistry := preload("res://core/content/registry/content_registry.gd")
+const LootRewardService := preload("res://gameplay/loot/runtime/loot_reward_service.gd")
+const LootProfileDefinition := preload("res://gameplay/loot/definitions/loot_profile_definition.gd")
+const ItemDefinition := preload("res://gameplay/items/definitions/item_definition.gd")
 const BurrowerDefinition := preload("res://content/characters/creatures/prototype_burrower_definition.tres")
+const BurrowerRewardProfile := preload("res://content/loot/profiles/prototype_burrower_reward_profile.tres")
+const BurrowerChitinDefinition := preload("res://content/items/resources/burrower_chitin_definition.tres")
 
 const TARGET_ENEMY_COUNT := 4
 const SPAWN_MIN_DISTANCE := 18.0
@@ -18,6 +26,9 @@ var active_enemies: Dictionary = {}
 var spawn_timer: float = 0.0
 var spawn_serial: int = 0
 var creature_definition_ready: bool = false
+var loot_ready: bool = false
+var loot_reward_service = LootRewardService.new()
+var loot_registry = ContentRegistry.new()
 
 
 func configure(world_node, player_node, world_settings) -> void:
@@ -26,10 +37,13 @@ func configure(world_node, player_node, world_settings) -> void:
 	settings = world_settings
 	spawn_timer = 0.25
 	creature_definition_ready = _validate_burrower_definition()
+	loot_reward_service = LootRewardService.new()
+	loot_registry = ContentRegistry.new()
+	loot_ready = _configure_loot_registry()
 
 
 func _process(delta: float) -> void:
-	if world == null or player == null or settings == null or not creature_definition_ready:
+	if not _encounter_runtime_ready():
 		return
 
 	_release_distant_or_invalid_enemies()
@@ -39,12 +53,43 @@ func _process(delta: float) -> void:
 		_spawn_enemy_near_player()
 
 
+func _encounter_runtime_ready() -> bool:
+	return (
+		world != null
+		and player != null
+		and settings != null
+		and creature_definition_ready
+	)
+
+
 func get_active_enemy_count() -> int:
 	return active_enemies.size()
 
 
+func get_pending_loot_count() -> int:
+	return loot_reward_service.pending_count()
+
+
+func get_pending_loot_snapshot(occurrence_id: String) -> Dictionary:
+	return loot_reward_service.pending_snapshot(occurrence_id)
+
+
+func get_pending_loot_occurrence_ids() -> Array[String]:
+	return loot_reward_service.pending_occurrence_ids()
+
+
+func collect_pending_loot(occurrence_id: String, destination_container) -> Dictionary:
+	if not loot_ready:
+		return {"success": false, "diagnostics": ["Burrower loot content is not ready"], "events": []}
+	return loot_reward_service.collect_pending(
+		occurrence_id,
+		destination_container,
+		loot_registry
+	)
+
+
 func _spawn_enemy_near_player() -> void:
-	if player == null or world == null or not creature_definition_ready:
+	if not _encounter_runtime_ready():
 		return
 
 	var rng := RandomNumberGenerator.new()
@@ -92,6 +137,29 @@ func _validate_burrower_definition() -> bool:
 	return true
 
 
+func _configure_loot_registry() -> bool:
+	var reward_profile: Variant = BurrowerRewardProfile
+	if reward_profile == null or not reward_profile is LootProfileDefinition:
+		push_error("Burrower reward profile did not load as LootProfileDefinition")
+		return false
+	var reward_item: Variant = BurrowerChitinDefinition
+	if reward_item == null or not reward_item is ItemDefinition:
+		push_error("Burrower reward item did not load as ItemDefinition")
+		return false
+	var failures: Array[String] = loot_registry.index_definitions([
+		BurrowerDefinition,
+		reward_profile,
+		reward_item,
+	])
+	if not failures.is_empty():
+		push_error("Burrower loot registry is invalid: %s" % [failures])
+		return false
+	if str(reward_profile.source_creature_id) != str(BurrowerDefinition.content_id):
+		push_error("Burrower reward profile source creature does not match Burrower definition")
+		return false
+	return true
+
+
 func _release_distant_or_invalid_enemies() -> void:
 	for id_variant in active_enemies.keys():
 		var id: String = str(id_variant)
@@ -114,5 +182,28 @@ func _is_too_close_to_other_enemy(position: Vector3) -> bool:
 
 
 func _on_enemy_died(enemy_id: String) -> void:
+	var death_position: Vector3 = Vector3.ZERO
+	var enemy_node: Node3D = active_enemies.get(enemy_id, null) as Node3D
+	if enemy_node != null and is_instance_valid(enemy_node):
+		death_position = enemy_node.global_position
+
+	if loot_ready:
+		var reward_result: Dictionary = loot_reward_service.issue_for_creature(
+			enemy_id,
+			BurrowerDefinition,
+			BurrowerRewardProfile,
+			loot_registry
+		)
+		if not bool(reward_result.get("success", false)):
+			push_error("Burrower death reward issuance failed: %s" % [
+				reward_result.get("diagnostics", []),
+			])
+		elif not bool(reward_result.get("already_issued", false)):
+			loot_pending.emit(
+				enemy_id,
+				str(BurrowerRewardProfile.content_id),
+				death_position
+			)
+
 	active_enemies.erase(enemy_id)
 	spawn_timer = maxf(spawn_timer, 6.0)
