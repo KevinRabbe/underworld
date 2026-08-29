@@ -1,4 +1,4 @@
-extends "res://presentation/characters/player/prototype_mannequin/prototype_mannequin.gd"
+extends "res://presentation/characters/runtime/humanoid_character_presentation.gd"
 class_name UnderworldVoxelCharacterPresentation
 
 const CompilerScript := preload("res://presentation/characters/voxel/voxel_module_compiler.gd")
@@ -49,13 +49,12 @@ func build() -> void:
 	_build_animation_graph()
 
 
-func _build_materials() -> void:
-	# Palette materials are created per compiled surface. Parent fields remain
-	# initialized for inherited socket/tool helpers and regression compatibility.
-	super._build_materials()
+func _build_presentation_materials() -> void:
+	# Palette materials are created per compiled surface during realization.
+	pass
 
 
-func _build_body_boxes() -> void:
+func _build_presentation_visuals() -> void:
 	var character_fingerprint: String = character_definition.canonical_fingerprint()
 	var palette_fingerprint: String = character_definition.palette.canonical_fingerprint()
 	var totals := {"parts": 0, "cells": 0, "triangles": 0, "vertices": 0, "estimated_bytes": 0, "compilation_usec": 0, "resource_creation_usec": 0, "cache_hits": 0}
@@ -91,7 +90,7 @@ func _build_body_boxes() -> void:
 	mesh_metrics = totals
 
 
-func _build_face_details() -> void:
+func _build_presentation_face_details() -> void:
 	# Face cells are authored as part of the voxel head module.
 	pass
 
@@ -121,18 +120,20 @@ func _realize_part(part: Dictionary, mesh_data) -> void:
 	attachment.add_child(mesh_instance)
 
 
-func set_held_item(tool_id: String) -> void:
-	if tool_visual_root == null:
-		return
-	for child in tool_visual_root.get_children():
-		tool_visual_root.remove_child(child)
+func set_held_item(tool_id: String, attachment_root: Node3D = null) -> bool:
+	var resolved_root: Node3D = attachment_root if attachment_root != null else tool_visual_root
+	if resolved_root == null or resolved_root != tool_visual_root:
+		return false
+	for child in resolved_root.get_children():
+		resolved_root.remove_child(child)
 		child.queue_free()
 	if tool_id == "hands":
-		return
+		return true
 	var module = character_definition.module_for_slot(&"held_item")
 	if module == null:
-		return
+		return false
 	var module_fingerprint_value: String = module.canonical_fingerprint()
+	var realized_parts: int = 0
 	for part_value in module.resolved_parts():
 		var part: Dictionary = part_value
 		if str(part.get("variant_id", "")) != tool_id:
@@ -143,7 +144,10 @@ func set_held_item(tool_id: String) -> void:
 		var mesh_instance := MeshInstance3D.new()
 		mesh_instance.name = "VoxelHeld%s" % str(part.get("part_id", "")).to_pascal_case()
 		mesh_instance.mesh = _array_mesh_for_data(mesh_data)
-		tool_visual_root.add_child(mesh_instance)
+		mesh_instance.scale = Vector3.ONE * character_definition.presentation_scale
+		resolved_root.add_child(mesh_instance)
+		realized_parts += 1
+	return realized_parts > 0
 
 
 func _array_mesh_for_data(mesh_data) -> ArrayMesh:

@@ -3,6 +3,8 @@ extends RefCounted
 const BaselineFactory := preload("res://presentation/characters/voxel/baseline_survivor_factory.gd")
 const Compiler := preload("res://presentation/characters/voxel/voxel_module_compiler.gd")
 const VoxelPresentation := preload("res://presentation/characters/voxel/voxel_character_presentation.gd")
+const HumanoidPresentation := preload("res://presentation/characters/runtime/humanoid_character_presentation.gd")
+const PrototypeMannequin := preload("res://presentation/characters/player/prototype_mannequin/prototype_mannequin.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
 const VoxelProvider := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
 const MannequinProvider := preload("res://presentation/characters/player/prototype_mannequin/prototype_mannequin_presentation_provider.gd")
@@ -126,6 +128,10 @@ static func _test_compiler_contract(failures: Array[String]) -> void:
 static func _test_runtime_presentation(failures: Array[String]) -> void:
 	var character := VoxelPresentation.new()
 	character.build()
+	var mannequin := PrototypeMannequin.new()
+	mannequin.build()
+	_expect_true(failures, "voxel and mannequin are sibling humanoid presentations", character is HumanoidPresentation and mannequin is HumanoidPresentation and character.get_script().get_base_script() == HumanoidPresentation and mannequin.get_script().get_base_script() == HumanoidPresentation)
+	mannequin.free()
 	_expect_true(failures, "voxel presentation preserves semantic rig", character.has_required_rig())
 	character.skeleton.force_update_all_bone_transforms()
 	var pelvis_pose: Vector3 = character.skeleton.get_bone_global_pose(character.skeleton.find_bone("pelvis")).origin
@@ -231,6 +237,24 @@ static func _test_player_default(tree: SceneTree, failures: Array[String]) -> vo
 	_expect_equal(failures, "rapid axe replacement owns one head", tool_root.find_children("VoxelHeldAxeHead", "MeshInstance3D", true, false).size(), 1)
 	voxel_character.character_definition.palette.entries[0]["color"] = Color.MAGENTA
 	_expect_true(failures, "palette replacement cannot alter Player collision", is_equal_approx(collision.shape.radius, collision_radius) and is_equal_approx(collision.shape.height, collision_height))
+
+	var scaled_definition = BaselineFactory.build()
+	scaled_definition.presentation_scale = 1.25
+	var scaled_player: Node = PlayerScript.new()
+	var scaled_provider = VoxelProvider.new(scaled_definition)
+	scaled_player.set("character_presentation_provider", scaled_provider)
+	root.add_child(scaled_player)
+	var scaled_collision: CollisionShape3D = scaled_player.get_node_or_null("CollisionShape3D")
+	var scaled_character = scaled_player.get("character_presentation")
+	var scaled_root: Node3D = scaled_character.get_tool_visual_root()
+	var wrong_root := Node3D.new()
+	scaled_character.add_child(wrong_root)
+	_expect_true(failures, "voxel provider rejects a non-semantic attachment root", not scaled_provider.realize_held_item(scaled_character, wrong_root, "stone_axe") and wrong_root.get_child_count() == 0)
+	_expect_true(failures, "voxel provider realizes held items through the supplied semantic root", scaled_provider.realize_held_item(scaled_character, scaled_root, "stone_axe"))
+	var scaled_body: MeshInstance3D = scaled_character.find_child("VoxelHeadSkin", true, false)
+	var scaled_tool: MeshInstance3D = scaled_root.find_child("VoxelHeldAxeHandle", true, false)
+	_expect_true(failures, "body and held-item meshes apply the same presentation scale", scaled_body != null and scaled_tool != null and scaled_body.scale.is_equal_approx(Vector3.ONE * 1.25) and scaled_tool.scale.is_equal_approx(Vector3.ONE * 1.25))
+	_expect_true(failures, "non-default presentation scale cannot alter Player collision", scaled_collision != null and is_equal_approx(scaled_collision.shape.radius, collision_radius) and is_equal_approx(scaled_collision.shape.height, collision_height))
 
 	var mannequin_player: Node = PlayerScript.new()
 	mannequin_player.set("character_presentation_provider", MannequinProvider.new())
