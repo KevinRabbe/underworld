@@ -34,20 +34,23 @@ func _replace_scene(scene: PackedScene) -> bool:
 		return false
 	_transition_in_progress = true
 
-	if current_scene != null and is_instance_valid(current_scene):
-		if current_scene.get_parent() == scene_host:
-			scene_host.remove_child(current_scene)
-		current_scene.queue_free()
-		current_scene = null
-
+	# Prepare the replacement before mutating the active scene. A broken future
+	# route therefore fails closed and leaves the current application surface live.
 	var next_scene: Node = scene.instantiate()
 	if next_scene == null:
 		_transition_in_progress = false
 		push_error("Application scene router could not instantiate requested scene")
 		return false
 
+	var previous_scene: Node = current_scene
 	scene_host.add_child(next_scene)
 	current_scene = next_scene
+
+	if previous_scene != null and is_instance_valid(previous_scene):
+		if previous_scene.get_parent() == scene_host:
+			scene_host.remove_child(previous_scene)
+		previous_scene.queue_free()
+
 	_transition_in_progress = false
 	return true
 
