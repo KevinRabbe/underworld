@@ -1,9 +1,5 @@
 extends "res://gameplay/items/definitions/item_definition.gd"
 
-const ContentId := preload("res://core/content/identity/content_id.gd")
-const ContentReference := preload("res://core/content/references/content_reference.gd")
-const SchemaId := preload("res://core/content/schema/schema_id.gd")
-
 const ATTACK_PROFILE_FAMILY := "attack_profile"
 
 @export var light_attack_profile_id: String = ""
