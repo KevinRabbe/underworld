@@ -10,6 +10,7 @@ const ItemContractTests := preload("res://tests/content/test_item_contract.gd")
 const ResourceContractTests := preload("res://tests/content/test_resource_contract.gd")
 const CreatureContractTests := preload("res://tests/content/test_creature_contract.gd")
 const WeaponContractTests := preload("res://tests/content/test_weapon_contract.gd")
+const ReservedSiteAssignmentTests := preload("res://tests/content/test_reserved_site_assignment.gd")
 
 
 func _init() -> void:
@@ -24,9 +25,10 @@ func _init() -> void:
 	failures.append_array(ResourceContractTests.run())
 	failures.append_array(CreatureContractTests.run())
 	failures.append_array(WeaponContractTests.run())
+	failures.append_array(ReservedSiteAssignmentTests.run())
 	if failures.is_empty():
 		print("[VALIDATION] PASS content")
-		print("  semantic content ids / deterministic registry / category-capability-role schemas / headless validation / archetype realization / item / resource / creature / weapon rulebook contracts passed")
+		print("  semantic content ids / deterministic registry / category-capability-role schemas / headless validation / archetype realization / item / resource / creature / weapon / reserved-site assignment contracts passed")
 		quit(0)
 		return
 
