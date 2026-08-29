@@ -186,6 +186,7 @@ static func _test_semantic_hotbar_slot_four(tree: SceneTree, failures: Array[Str
 	var root := Node3D.new()
 	tree.root.add_child(root)
 	var player: Node = PlayerScript.new()
+	player.set("character_presentation_provider", VoxelProvider.new())
 	root.add_child(player)
 	for slot in range(1, 5):
 		_expect_true(failures, "hotbar slot %d is semantic InputMap action" % slot, InputMap.has_action(StringName("hotbar_slot_%d" % slot)))
@@ -196,6 +197,7 @@ static func _test_semantic_hotbar_slot_four(tree: SceneTree, failures: Array[Str
 	rebound.physical_keycode = KEY_T
 	InputMap.action_add_event(&"hotbar_slot_4", rebound)
 	var rebound_player: Node = PlayerScript.new()
+	rebound_player.set("character_presentation_provider", VoxelProvider.new())
 	root.add_child(rebound_player)
 	_expect_true(failures, "custom slot-4 binding survives player initialization", _has_key_binding(&"hotbar_slot_4", KEY_T))
 	_expect_true(failures, "player initialization does not restore physical 4 authority", not _has_key_binding(&"hotbar_slot_4", KEY_4))
@@ -233,6 +235,7 @@ static func _test_buffered_attack_intent_snapshot(tree: SceneTree, failures: Arr
 	var root := Node3D.new()
 	tree.root.add_child(root)
 	var player: Node = PlayerScript.new()
+	player.set("character_presentation_provider", VoxelProvider.new())
 	root.add_child(player)
 	var alpha: Dictionary = _weapon_fixture("buffer_alpha", 4.0, 13.0)
 	var beta: Dictionary = _weapon_fixture("buffer_beta", 6.0, 19.0)
