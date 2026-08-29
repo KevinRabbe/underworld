@@ -1,7 +1,5 @@
 extends "res://core/content/archetypes/archetype_realization_adapter.gd"
 
-const ArchetypeComposition := preload("res://core/content/archetypes/archetype_composition.gd")
-
 
 func _init() -> void:
 	configure("packed.scene")
