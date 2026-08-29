@@ -111,18 +111,21 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("attack_heavy"):
 		_request_attack(true)
 		return
+	if event.is_action_pressed("hotbar_slot_1"):
+		hotbar_slot_requested.emit(1)
+		return
+	if event.is_action_pressed("hotbar_slot_2"):
+		hotbar_slot_requested.emit(2)
+		return
+	if event.is_action_pressed("hotbar_slot_3"):
+		hotbar_slot_requested.emit(3)
+		return
+	if event.is_action_pressed("hotbar_slot_4"):
+		hotbar_slot_requested.emit(4)
+		return
 
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
-			KEY_1:
-				hotbar_slot_requested.emit(1)
-				return
-			KEY_2:
-				hotbar_slot_requested.emit(2)
-				return
-			KEY_3:
-				hotbar_slot_requested.emit(3)
-				return
 			KEY_C:
 				craft_requested.emit("stone_axe")
 				return
@@ -305,11 +308,7 @@ func _request_attack(heavy: bool = false) -> void:
 	if action_controller.is_free():
 		_start_attack_from_intent(intent)
 		return
-	_queue_buffered_action(
-		&"attack",
-		{"attack_kind": &"heavy" if heavy else &"light"},
-		0.16
-	)
+	_queue_buffered_action(&"attack", intent, 0.16)
 
 
 func _build_attack_intent(heavy: bool = false) -> Dictionary:
@@ -322,17 +321,27 @@ func _build_attack_intent(heavy: bool = false) -> Dictionary:
 	var direction: Vector3 = _get_combat_forward()
 	if direction.is_zero_approx():
 		return {}
+	var source_signature: String = _current_attack_source_signature()
+	if source_signature.is_empty():
+		return {}
 	return {
 		"tool_id": equipped_tool_visual,
 		"direction": direction,
 		"attack_kind": attack_kind,
+		"attack_definition": attack_definition,
+		"source_signature": source_signature,
 	}
 
 
-func _start_attack_from_intent(intent: Dictionary) -> bool:
+func _start_attack_from_intent(intent: Dictionary, require_current_source: bool = false) -> bool:
 	if not action_controller.is_free():
 		return false
-	var tool_id: String = str(intent.get("tool_id", "hands"))
+	var source_signature: String = str(intent.get("source_signature", ""))
+	if require_current_source and (
+		source_signature.is_empty()
+		or source_signature != _current_attack_source_signature()
+	):
+		return false
 	var direction: Vector3 = intent.get("direction", Vector3.ZERO)
 	var attack_kind: StringName = StringName(intent.get("attack_kind", &"light"))
 	direction.y = 0.0
@@ -340,7 +349,7 @@ func _start_attack_from_intent(intent: Dictionary) -> bool:
 		return false
 	direction = direction.normalized()
 
-	var attack_definition = _resolve_attack_definition(tool_id, attack_kind)
+	var attack_definition = intent.get("attack_definition", null)
 	if attack_definition == null or not bool(attack_definition.call("is_valid")):
 		return false
 	if not action_controller.try_start_attack_profile(
@@ -399,6 +408,22 @@ func _resolve_attack_definition(tool_id: String, attack_kind: StringName):
 	return AttackCatalogScript.for_tool(tool_id, attack_kind)
 
 
+func _current_attack_source_signature() -> String:
+	if (
+		equipped_weapon_definition != null
+		and equipped_weapon_attack_set != null
+		and equipped_weapon_attack_resolver != null
+	):
+		var weapon_id: String = str(equipped_weapon_definition.get("content_id"))
+		var attack_set_id: String = str(equipped_weapon_attack_set.get("content_id"))
+		if weapon_id.is_empty() or attack_set_id.is_empty():
+			return ""
+		return "weapon:%s|attack_set:%s" % [weapon_id, attack_set_id]
+	if equipped_tool_visual.is_empty():
+		return ""
+	return "tool:%s" % equipped_tool_visual
+
+
 func _queue_buffered_action(
 	action: StringName,
 	payload: Dictionary = {},
@@ -423,9 +448,7 @@ func _try_consume_buffered_action() -> void:
 	var payload: Dictionary = intent.get("payload", {})
 	match StringName(intent.get("action", &"")):
 		&"attack":
-			var live_attack_intent: Dictionary = _build_attack_intent(payload.get("attack_kind", &"light") == &"heavy")
-			if not live_attack_intent.is_empty():
-				_start_attack_from_intent(live_attack_intent)
+			_start_attack_from_intent(payload, true)
 		&"dodge":
 			_start_dodge(payload.get("direction", Vector3.ZERO))
 		&"parry":
@@ -834,6 +857,10 @@ func _ensure_default_input_actions() -> void:
 	_add_key_action("block", KEY_F)
 	_add_mouse_action("attack_light", MOUSE_BUTTON_RIGHT)
 	_add_remappable_key_action("attack_heavy", KEY_E)
+	_add_remappable_key_action("hotbar_slot_1", KEY_1)
+	_add_remappable_key_action("hotbar_slot_2", KEY_2)
+	_add_remappable_key_action("hotbar_slot_3", KEY_3)
+	_add_remappable_key_action("hotbar_slot_4", KEY_4)
 
 
 func _add_key_action(action_name: StringName, physical_key: Key) -> void:
