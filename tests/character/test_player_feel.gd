@@ -126,6 +126,7 @@ static func _test_semantic_attack_inputs_and_generic_sword(tree: SceneTree, fail
 	var root := Node3D.new()
 	tree.root.add_child(root)
 	var player: Node = PlayerScript.new()
+	player.set("character_presentation_provider", VoxelProvider.new())
 	root.add_child(player)
 	_expect_true(failures, "light attack is a semantic InputMap action", InputMap.has_action(&"attack_light"))
 	_expect_true(failures, "heavy attack is a semantic InputMap action", InputMap.has_action(&"attack_heavy"))
@@ -135,6 +136,7 @@ static func _test_semantic_attack_inputs_and_generic_sword(tree: SceneTree, fail
 	rebound.physical_keycode = KEY_R
 	InputMap.action_add_event(&"attack_heavy", rebound)
 	var second_player: Node = PlayerScript.new()
+	second_player.set("character_presentation_provider", VoxelProvider.new())
 	root.add_child(second_player)
 	_expect_true(failures, "custom heavy binding survives player initialization", _has_key_binding(&"attack_heavy", KEY_R))
 	_expect_true(failures, "player initialization does not restore physical E authority", not _has_key_binding(&"attack_heavy", KEY_E))

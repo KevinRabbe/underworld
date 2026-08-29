@@ -162,6 +162,7 @@ static func _test_live_priority_and_expiry(tree: SceneTree, failures: Array[Stri
 	var fixture_root := Node3D.new()
 	tree.root.add_child(fixture_root)
 	var player: Node = PlayerScript.new()
+	player.set("character_presentation_provider", VoxelProvider.new())
 	fixture_root.add_child(player)
 	var actions = player.get("action_controller")
 	var buffer = player.get("input_buffer")
