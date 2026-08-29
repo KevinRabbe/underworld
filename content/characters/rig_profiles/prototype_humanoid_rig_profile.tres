@@ -1,0 +1,39 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://presentation/characters/animation/rig_profile_definition.gd" id="1_rig"]
+
+[resource]
+script = ExtResource("1_rig")
+content_id = "rig_profile.humanoid.prototype"
+definition_family = "rig_profile"
+schema_revision = 1
+rig_family = "humanoid"
+scale_multiplier = 1.0
+role_bindings = {
+"rig_role.root": {"kind": "bone", "target": "root"},
+"rig_role.pelvis": {"kind": "bone", "target": "pelvis"},
+"rig_role.spine.lower": {"kind": "bone", "target": "spine_01"},
+"rig_role.spine.upper": {"kind": "bone", "target": "spine_02"},
+"rig_role.chest": {"kind": "bone", "target": "chest"},
+"rig_role.neck": {"kind": "bone", "target": "neck"},
+"rig_role.head": {"kind": "bone", "target": "head"},
+"rig_role.clavicle.left": {"kind": "bone", "target": "clavicle_l"},
+"rig_role.upper_arm.left": {"kind": "bone", "target": "upperarm_l"},
+"rig_role.forearm.left": {"kind": "bone", "target": "forearm_l"},
+"rig_role.hand.left": {"kind": "bone", "target": "hand_l"},
+"rig_role.clavicle.right": {"kind": "bone", "target": "clavicle_r"},
+"rig_role.upper_arm.right": {"kind": "bone", "target": "upperarm_r"},
+"rig_role.forearm.right": {"kind": "bone", "target": "forearm_r"},
+"rig_role.hand.right": {"kind": "bone", "target": "hand_r"},
+"rig_role.thigh.left": {"kind": "bone", "target": "thigh_l"},
+"rig_role.calf.left": {"kind": "bone", "target": "calf_l"},
+"rig_role.foot.left": {"kind": "bone", "target": "foot_l"},
+"rig_role.thigh.right": {"kind": "bone", "target": "thigh_r"},
+"rig_role.calf.right": {"kind": "bone", "target": "calf_r"},
+"rig_role.foot.right": {"kind": "bone", "target": "foot_r"},
+"rig_role.socket.hand.left": {"kind": "socket", "target": "hand_l"},
+"rig_role.socket.hand.right": {"kind": "socket", "target": "hand_r"},
+"rig_role.socket.back": {"kind": "socket", "target": "back"},
+"rig_role.socket.hip.left": {"kind": "socket", "target": "hip_l"},
+"rig_role.socket.hip.right": {"kind": "socket", "target": "hip_r"}
+}
