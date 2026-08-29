@@ -23,8 +23,6 @@ const ROLE_RIG_PROFILE := "presentation.rig_profile"
 @export var attack_damage: int = 1
 @export var attack_cooldown: float = 1.0
 @export var attack_windup: float = 0.1
-@export var hit_stagger_duration: float = 0.20
-@export var parry_stagger_duration: float = 0.85
 
 @export var attack_profile_id: String = ""
 @export var archetype_id: String = ""
@@ -44,8 +42,6 @@ func configure_creature(
 	p_attack_damage: int,
 	p_attack_cooldown: float,
 	p_attack_windup: float,
-	p_hit_stagger_duration: float = 0.20,
-	p_parry_stagger_duration: float = 0.85,
 	p_schema_revision: int = 1
 ) -> Resource:
 	configure(p_content_id, CREATURE_FAMILY, p_schema_revision)
@@ -57,8 +53,6 @@ func configure_creature(
 	attack_damage = p_attack_damage
 	attack_cooldown = p_attack_cooldown
 	attack_windup = p_attack_windup
-	hit_stagger_duration = p_hit_stagger_duration
-	parry_stagger_duration = p_parry_stagger_duration
 	return self
 
 
@@ -81,6 +75,18 @@ func configure_semantic_bindings(
 	for role_id in p_required_rig_roles:
 		required_rig_role_ids.append(str(role_id))
 	return self
+
+
+func runtime_stats() -> Dictionary:
+	return {
+		"health": max_health,
+		"move_speed": move_speed,
+		"detection_range": detection_range,
+		"attack_range": attack_range,
+		"attack_damage": attack_damage,
+		"attack_cooldown": attack_cooldown,
+		"attack_windup": attack_windup,
+	}
 
 
 func validation_references() -> Array:
@@ -138,10 +144,6 @@ func validate_definition() -> Array[String]:
 		failures.append("creature attack cooldown must be > 0 for %s" % content_id)
 	if attack_windup <= 0.0:
 		failures.append("creature attack windup must be > 0 for %s" % content_id)
-	if hit_stagger_duration < 0.0:
-		failures.append("creature hit stagger duration must be >= 0 for %s" % content_id)
-	if parry_stagger_duration < 0.0:
-		failures.append("creature parry stagger duration must be >= 0 for %s" % content_id)
 
 	for reference in validation_references():
 		if reference == null or not reference is ContentReference:
@@ -182,8 +184,6 @@ func canonical_descriptor() -> Dictionary:
 	descriptor["attack_damage"] = attack_damage
 	descriptor["attack_cooldown"] = attack_cooldown
 	descriptor["attack_windup"] = attack_windup
-	descriptor["hit_stagger_duration"] = hit_stagger_duration
-	descriptor["parry_stagger_duration"] = parry_stagger_duration
 	descriptor["attack_profile_id"] = attack_profile_id
 	descriptor["archetype_id"] = archetype_id
 	descriptor["animation_set_id"] = animation_set_id
