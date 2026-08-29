@@ -29,6 +29,8 @@ role_bindings = {
 "animation_role.reaction.hit.front": "prototype.hit.front"
 }
 fallback_roles = {
+"animation_role.action.attack.heavy_01": "animation_role.action.attack.light_01",
+"animation_role.action.tool_use": "animation_role.action.attack.light_01",
 "animation_role.reaction.death": "animation_role.reaction.hit.front"
 }
 required_role_ids = Array[String]([

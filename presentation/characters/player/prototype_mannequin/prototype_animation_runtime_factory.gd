@@ -13,7 +13,7 @@ const ANIMATION_SET_PATH := "res://content/characters/animation_sets/prototype_h
 const RIG_PROFILE_PATH := "res://content/characters/rig_profiles/prototype_humanoid_rig_profile.tres"
 
 
-static func build(mannequin) -> Dictionary:
+static func build(mannequin, supplied_adapter = null) -> Dictionary:
 	var failures: Array[String] = []
 	var content_registry = ContentRegistry.new()
 	for failure in content_registry.load_resource_paths([
@@ -47,7 +47,7 @@ static func build(mannequin) -> Dictionary:
 	for failure in role_registry.diagnostics():
 		failures.append("semantic role registry: %s" % failure)
 
-	var presentation_adapter = PrototypeMannequinPresentationAdapter.new(mannequin)
+	var presentation_adapter = supplied_adapter if supplied_adapter != null else PrototypeMannequinPresentationAdapter.new(mannequin)
 	var controller = CharacterAnimationController.new()
 	for failure in controller.configure(
 		content_registry,

@@ -161,6 +161,10 @@ The target is still stylized enough to be feasible for a small production pipeli
 
 The current box mannequin remains a valid rig/gameplay test representation until replacing it produces more value than continuing systems work.
 
+### Voxel character pipeline evaluation
+
+CHAR-PRESENT-001 evaluates a high-quality modular voxel player presentation while preserving the same semantic humanoid rig, equipment sockets, gameplay collision and animation-role contracts. The voxel survivor is a character-pipeline experiment, not an environment-wide renderer decision. Its internal module, palette and compiled-mesh boundaries are deliberately replaceable so an authored voxel source or a different compatible character presentation can later use the same gameplay contract.
+
 ## Creatures and bosses
 
 Common creatures can use mid-detail assets with strong silhouettes and readable attack poses.

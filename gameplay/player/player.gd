@@ -6,8 +6,8 @@ signal hotbar_slot_requested(slot: int)
 signal craft_requested(recipe_id: String)
 signal parry_succeeded(source_position: Vector3)
 
-const PrototypeMannequinScript := preload("res://presentation/characters/player/prototype_mannequin/prototype_mannequin.gd")
-const PrototypeAnimationRuntimeFactoryScript := preload("res://presentation/characters/player/prototype_mannequin/prototype_animation_runtime_factory.gd")
+const VoxelCharacterScript := preload("res://presentation/characters/voxel/voxel_character_presentation.gd")
+const VoxelAnimationRuntimeFactoryScript := preload("res://presentation/characters/voxel/voxel_animation_runtime_factory.gd")
 const StaminaComponentScript := preload("res://gameplay/player/components/stamina_component.gd")
 const PlayerActionControllerScript := preload("res://gameplay/player/actions/player_action_controller.gd")
 const PlayerInputBufferScript := preload("res://gameplay/player/input/player_input_buffer.gd")
@@ -468,7 +468,7 @@ func _begin_tool_action() -> bool:
 	tool_use_cooldown_timer = tool_use_cooldown_duration
 	tool_swing_timer = tool_use_cooldown_duration
 	if animation_controller != null:
-		animation_controller.present_attack(tool_use_cooldown_duration)
+		animation_controller.present_tool_use(tool_use_cooldown_duration)
 	return true
 
 
@@ -754,12 +754,12 @@ func _build_character_visual() -> void:
 	visual_root.name = "VisualRoot"
 	add_child(visual_root)
 
-	mannequin = PrototypeMannequinScript.new()
-	mannequin.name = "PrototypeMannequin"
+	mannequin = VoxelCharacterScript.new()
+	mannequin.name = "VoxelSurvivor"
 	visual_root.add_child(mannequin)
 	mannequin.build()
 
-	var animation_runtime: Dictionary = PrototypeAnimationRuntimeFactoryScript.build(mannequin)
+	var animation_runtime: Dictionary = VoxelAnimationRuntimeFactoryScript.build(mannequin)
 	if bool(animation_runtime.get("success", false)):
 		animation_controller = animation_runtime.get("controller")
 	else:
@@ -778,6 +778,9 @@ func _build_character_visual() -> void:
 
 func _rebuild_tool_visual() -> void:
 	if tool_visual_root == null:
+		return
+	if mannequin != null and mannequin.has_method("set_held_item"):
+		mannequin.set_held_item(equipped_tool_visual)
 		return
 	for child in tool_visual_root.get_children():
 		child.queue_free()

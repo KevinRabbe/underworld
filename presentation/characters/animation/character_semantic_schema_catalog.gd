@@ -14,6 +14,8 @@ const ANIMATION_ROLES: Array[String] = [
 	"animation_role.locomotion.fall",
 	"animation_role.locomotion.land",
 	"animation_role.action.attack.light_01",
+	"animation_role.action.attack.heavy_01",
+	"animation_role.action.tool_use",
 	"animation_role.action.dodge.forward",
 	"animation_role.action.dodge.backward",
 	"animation_role.action.dodge.left",

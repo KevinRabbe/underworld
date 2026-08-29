@@ -14,6 +14,8 @@ const ROLE_SPRINT := "animation_role.locomotion.sprint"
 const ROLE_JUMP_START := "animation_role.locomotion.jump_start"
 const ROLE_FALL := "animation_role.locomotion.fall"
 const ROLE_ATTACK_LIGHT := "animation_role.action.attack.light_01"
+const ROLE_ATTACK_HEAVY := "animation_role.action.attack.heavy_01"
+const ROLE_TOOL_USE := "animation_role.action.tool_use"
 const ROLE_DODGE_FORWARD := "animation_role.action.dodge.forward"
 const ROLE_DODGE_BACKWARD := "animation_role.action.dodge.backward"
 const ROLE_DODGE_LEFT := "animation_role.action.dodge.left"
@@ -221,10 +223,15 @@ func rig_binding_for_role(role_id: String) -> Dictionary:
 
 
 func present_attack(duration: float, attack_kind: StringName = &"light") -> bool:
-	return _play_role(ROLE_ATTACK_LIGHT, {
+	var role_id: String = ROLE_ATTACK_HEAVY if attack_kind == &"heavy" else ROLE_ATTACK_LIGHT
+	return _play_role(role_id, {
 		"duration": maxf(duration, 0.0),
 		"attack_kind": attack_kind,
 	})
+
+
+func present_tool_use(duration: float) -> bool:
+	return _play_role(ROLE_TOOL_USE, {"duration": maxf(duration, 0.0), "attack_kind": &"light", "presentation_action": "tool_use"})
 
 
 func present_parry() -> bool:
