@@ -5,6 +5,7 @@ const TITLE_PATH := "res://presentation/ui/screens/title/title_screen.tscn"
 const SECTION_HEADER_PATH := "res://presentation/ui/components/section_header/section_header.tscn"
 const FIXTURE_PATH := "res://tests/presentation/fixtures/ui_skin_reuse_fixture.tscn"
 const PROTOTYPE_SKIN_ROOT := "res://presentation/ui/assets/skin/prototype/"
+const COMPACT_VIEWPORT := Vector2(960, 540)
 
 
 static func run() -> Array[String]:
@@ -134,7 +135,24 @@ static func _test_title_consumes_contract(failures: Array[String]) -> void:
 		failures.append("accepted title screen must still load after skin extraction")
 		return
 	var title := (packed as PackedScene).instantiate()
+	if title == null or not title is Control:
+		failures.append("accepted title must remain a responsive Control composition")
+		return
+	var title_control := title as Control
+	var safe_margin := title.get_node_or_null("SafeMargin") as MarginContainer
+	var center := title.get_node_or_null("SafeMargin/Center") as CenterContainer
 	var panel := title.get_node_or_null("SafeMargin/Center/MenuPanel") as PanelContainer
 	if panel == null or panel.theme_type_variation != &"MenuPanel":
 		failures.append("accepted title must consume the reusable MenuPanel contract without routing changes")
+	if title_control.anchor_right != 1.0 or title_control.anchor_bottom != 1.0:
+		failures.append("accepted title must retain full-rect anchors for viewport growth")
+	if safe_margin == null or safe_margin.anchor_right != 1.0 or safe_margin.anchor_bottom != 1.0 or center == null:
+		failures.append("accepted title must retain full-rect safe margins and container-owned centering")
+	if panel != null and title_control.theme != null:
+		var theme := title_control.theme
+		var safe_width := float(theme.get_constant(&"margin_left", &"MenuSafeMargin") + theme.get_constant(&"margin_right", &"MenuSafeMargin"))
+		var safe_height := float(theme.get_constant(&"margin_top", &"MenuSafeMargin") + theme.get_constant(&"margin_bottom", &"MenuSafeMargin"))
+		var panel_minimum := panel.get_combined_minimum_size()
+		if panel_minimum.x + safe_width > COMPACT_VIEWPORT.x or panel_minimum.y + safe_height > COMPACT_VIEWPORT.y:
+			failures.append("accepted title minimum composition must fit the 960x540 compact responsive smoke viewport")
 	title.free()
