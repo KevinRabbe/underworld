@@ -32,6 +32,10 @@ static func generate(context, region_plan, connectivity_result):
 	failures.append_array(context.validate_provenance(
 		connectivity_result.provenance, "secondary_connectivity", region_plan.stable_id
 	))
+	if connectivity_result.provenance != null and region_plan.provenance != null:
+		failures.append_array(context.validate_required_sources(
+			connectivity_result.provenance, [region_plan.provenance.fingerprint]
+		))
 	if not failures.is_empty():
 		return StageResult.fail("special_location_hooks", failures)
 	var source = connectivity_result.bundle

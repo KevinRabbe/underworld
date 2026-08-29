@@ -13,6 +13,14 @@ func _init(coordinate_value: Vector3i = Vector3i.ZERO) -> void:
 	cell_coord = coordinate_value
 
 
+static func from_world_position(position: Vector3, configuration = null):
+	var Config = preload("res://worldgen/geometry/geometry_cell_partition_config.gd")
+	var policy = configuration if configuration != null else Config.new()
+	return load("res://worldgen/geometry/geometry_cell_address.gd").new(Vector3i(
+		floori(position.x / policy.cell_size.x), floori(position.y / policy.cell_size.y), floori(position.z / policy.cell_size.z)
+	))
+
+
 func canonical_text() -> String:
 	return "gcell1:r%d:x%d:y%d:z%d" % [
 		ADDRESS_REVISION, coordinate.x, coordinate.y, coordinate.z,

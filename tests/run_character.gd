@@ -1,6 +1,7 @@
 extends SceneTree
 
 const MannequinTests := preload("res://tests/character/test_prototype_mannequin.gd")
+const SemanticAnimationTests := preload("res://tests/character/test_semantic_animation_layer.gd")
 const CharacterActionTests := preload("res://tests/character/test_character_actions.gd")
 const PlayerIntegrationTests := preload("res://tests/character/test_player_integration.gd")
 const BurrowerDefenseTests := preload("res://tests/character/test_burrower_defense.gd")
@@ -19,6 +20,7 @@ func _init() -> void:
 func _run_tests() -> void:
 	var failures: Array[String] = []
 	failures.append_array(MannequinTests.run())
+	failures.append_array(SemanticAnimationTests.run())
 	failures.append_array(CharacterActionTests.run())
 	failures.append_array(PlayerIntegrationTests.run(self))
 	failures.append_array(BurrowerDefenseTests.run(self))
@@ -30,6 +32,7 @@ func _run_tests() -> void:
 	if failures.is_empty():
 		print("[CHARACTER VALIDATION] PASS")
 		print("  articulated mannequin rig / sockets / placeholder poses passed")
+		print("  semantic animation-set / rig-profile runtime binding contracts passed")
 		print("  stamina / dodge / parry / block action contracts passed")
 		print("  player defensive melee / frontal block / guard-break integration passed")
 		print("  Burrower parry stagger / dodge / block distinction passed")

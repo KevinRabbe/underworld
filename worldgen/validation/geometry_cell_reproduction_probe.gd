@@ -21,7 +21,7 @@ static func build(world_seed: int, region_coord: Vector2i) -> Dictionary:
 			"diagnostics": geometry.diagnostics,
 		}
 	var partition = Partitioner.partition(
-		geometry.data, inputs["finalized"], Config.new(), [], inputs["context"]
+		geometry.data, inputs["finalized"], Config.new(), [], inputs["context"], GeometryGenerator.expected_provenance_sources(inputs["macro"], inputs["finalized"], inputs["neighbor_views"])
 	)
 	if not partition.success:
 		return {
@@ -37,8 +37,22 @@ static func build(world_seed: int, region_coord: Vector2i) -> Dictionary:
 		"configuration_fingerprint": partition.data.configuration_fingerprint,
 		"provenance_chain": _provenance_chain(inputs, geometry.data, partition.data),
 		"metrics": partition.data.metrics,
+		"cell_plans": _cell_plan_summary(partition.data.plans),
 		"diagnostics": [],
 	}
+
+
+static func _cell_plan_summary(plans: Array) -> Array:
+	var result: Array = []
+	for plan in plans:
+		if plan == null or plan.cell_address == null:
+			continue
+		result.append({
+			"cell": plan.cell_address.canonical_text(),
+			"fragment_count": plan.fragments.size(),
+		})
+	result.sort_custom(func(a, b): return str(a.get("cell", "")) < str(b.get("cell", "")))
+	return result
 
 
 static func _provenance_chain(inputs: Dictionary, geometry_data, partition_data) -> Dictionary:

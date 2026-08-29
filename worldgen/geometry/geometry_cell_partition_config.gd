@@ -57,6 +57,9 @@ func validate() -> Array[String]:
 				or absf(float(cubes_per_axis) - (cell_size.y / voxel_pitch)) > 0.000001 \
 				or absf(float(cubes_per_axis) - (cell_size.z / voxel_pitch)) > 0.000001:
 			failures.append("Cell dimensions must match cubes_per_axis * voxel_pitch")
+	var expected_fingerprint := "gpartition-config1:" + CanonicalValue.fingerprint(canonical_data())
+	if not fingerprint.is_empty() and fingerprint != expected_fingerprint:
+		failures.append("GeometryCellPartitionConfig fingerprint is stale after policy mutation")
 	return failures
 
 
