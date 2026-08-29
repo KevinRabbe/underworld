@@ -48,7 +48,7 @@ static func run(tree: SceneTree) -> Array[String]:
 	var camera_forward: Vector3 = -camera_yaw.global_transform.basis.z
 	camera_forward.y = 0.0
 	camera_forward = camera_forward.normalized()
-	var combat_forward: Vector3 = visual_root.global_transform.basis.z
+	var combat_forward: Vector3 = -visual_root.global_transform.basis.z
 	combat_forward.y = 0.0
 	combat_forward = combat_forward.normalized()
 	_expect_true(
@@ -244,7 +244,7 @@ static func run(tree: SceneTree) -> Array[String]:
 	player.set("tool_use_cooldown_timer", 0.0)
 	visual_root.rotation.y = 0.0
 	_expect_true(failures, "live player tool action starts", bool(player.call("_begin_tool_action")))
-	var attack_forward: Vector3 = visual_root.global_transform.basis.z
+	var attack_forward: Vector3 = -visual_root.global_transform.basis.z
 	attack_forward.y = 0.0
 	attack_forward = attack_forward.normalized()
 	_expect_true(

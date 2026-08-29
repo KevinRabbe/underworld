@@ -271,7 +271,7 @@ func _is_source_in_front_arc(source_position: Vector3, minimum_dot: float) -> bo
 	to_source.y = 0.0
 	if to_source.is_zero_approx():
 		return true
-	var forward: Vector3 = visual_root.global_transform.basis.z
+	var forward: Vector3 = -visual_root.global_transform.basis.z
 	forward.y = 0.0
 	if forward.is_zero_approx():
 		return false
@@ -545,7 +545,10 @@ func _start_dodge(dodge_direction: Vector3) -> bool:
 	jump_buffer_timer = 0.0
 	if animation_controller != null and visual_root != null:
 		var local: Vector3 = visual_root.global_transform.basis.inverse() * horizontal
-		animation_controller.present_dodge(Vector2(local.x, local.z))
+		# Presentation dodge space uses +Y for authored forward, while Godot
+		# character forward is local -Z.  Negate local Z so Ctrl produces a
+		# forward roll instead of selecting the backward clip.
+		animation_controller.present_dodge(Vector2(local.x, -local.z))
 	return true
 
 
@@ -676,7 +679,11 @@ func _face_combat_direction(direction: Vector3) -> void:
 	if forward.is_zero_approx():
 		return
 	forward = forward.normalized()
-	visual_root.rotation.y = atan2(forward.x, forward.z)
+	# Godot's model-forward convention is -Z.  The previous atan2(forward.x,
+	# forward.z) mapping treated +Z as the character's face, so the survivor
+	# consistently looked away from movement/camera and a zero-input dodge ran
+	# behind the player.  Map the requested world-facing vector onto -Z.
+	visual_root.rotation.y = atan2(-forward.x, -forward.z)
 
 
 func _update_visual_facing(delta: float) -> void:
@@ -691,7 +698,8 @@ func _update_visual_facing(delta: float) -> void:
 	if horizontal_velocity.length_squared() < 0.04:
 		return
 
-	var target_yaw: float = atan2(velocity.x, velocity.z)
+	# Keep the authored face (negative local Z) aligned with travel direction.
+	var target_yaw: float = atan2(-velocity.x, -velocity.z)
 	visual_root.rotation.y = lerp_angle(
 		visual_root.rotation.y,
 		target_yaw,
