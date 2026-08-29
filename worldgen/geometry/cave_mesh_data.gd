@@ -83,6 +83,17 @@ func canonical_data() -> Dictionary:
 		"source_fragment_ids": source_fragment_ids,
 		"input_fingerprint": input_fingerprint,
 		"output_fingerprint": output_fingerprint,
-		"metrics": metrics,
+		# Wall-clock timings are observational diagnostics and must never alter
+		# deterministic mesh identity.
+		"metrics": _identity_metrics(),
 		"success": success,
 	}
+
+
+func _identity_metrics() -> Dictionary:
+	var result := metrics.duplicate(true)
+	for key in result.keys():
+		var name := str(key).to_lower()
+		if name.ends_with("_ms") or name.ends_with("_usec") or name in ["elapsed_ms", "duration_ms"]:
+			result.erase(key)
+	return result

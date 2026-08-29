@@ -8,7 +8,7 @@ static func realize_main_thread(collision_data, expected_mesh_fingerprint: Strin
 		return {"success": false, "diagnostics": ["CaveCollisionData is required"]}
 	if not expected_mesh_fingerprint.is_empty() and collision_data.source_mesh_fingerprint != expected_mesh_fingerprint:
 		return {"success": false, "diagnostics": ["Collision source mesh fingerprint is stale"]}
-	if collision_data.vertices.is_empty() or collision_data.vertices.size() % 3 != 0:
+	if collision_data.vertices.size() % 3 != 0:
 		return {"success": false, "diagnostics": ["Collision data has no complete faces"]}
 	var shape := ConcavePolygonShape3D.new()
 	shape.set_faces(collision_data.vertices)

@@ -40,6 +40,7 @@ func canonical_data() -> Dictionary:
 	var fragment_data: Array = []
 	for fragment in fragments:
 		fragment_data.append(fragment.canonical_data())
+	fragment_data.sort_custom(func(a, b): return str(a.get("fragment_id", "")) < str(b.get("fragment_id", "")))
 	var sorted_entrances := entrance_opening_metadata.duplicate(true)
 	sorted_entrances.sort_custom(func(a, b): return str(a.get("entrance_id", "")) < str(b.get("entrance_id", "")))
 	var sorted_sites := reserved_site_metadata.duplicate(true)
