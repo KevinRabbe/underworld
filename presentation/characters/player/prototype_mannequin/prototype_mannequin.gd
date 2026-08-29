@@ -194,6 +194,10 @@ func _add_bone(bone_name: String, parent_name: String, local_offset: Vector3) ->
 	if not parent_name.is_empty():
 		skeleton.set_bone_parent(index, int(bone_indices[parent_name]))
 	skeleton.set_bone_rest(index, Transform3D(Basis.IDENTITY, local_offset))
+	# This procedural skeleton has no imported bind-pose animation. Initialize the
+	# live pose translations explicitly so BoneAttachment3D nodes resolve to the
+	# authored humanoid rest layout instead of all collapsing at the origin.
+	skeleton.set_bone_pose_position(index, local_offset)
 
 
 func _build_body_boxes() -> void:
@@ -223,8 +227,9 @@ func _build_body_boxes() -> void:
 func _add_round_detail(bone_name: String, visual_name: String, radius: float, material: Material) -> void:
 	var attachment := BoneAttachment3D.new()
 	attachment.name = visual_name + "Attachment"
-	attachment.bone_name = bone_name
 	skeleton.add_child(attachment)
+	attachment.bone_idx = skeleton.find_bone(bone_name)
+	attachment.on_skeleton_update()
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = visual_name
 	var sphere := SphereMesh.new()
@@ -279,8 +284,9 @@ func _attach_box(
 ) -> void:
 	var attachment := BoneAttachment3D.new()
 	attachment.name = visual_name + "Attachment"
-	attachment.bone_name = bone_name
 	skeleton.add_child(attachment)
+	attachment.bone_idx = skeleton.find_bone(bone_name)
+	attachment.on_skeleton_update()
 
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = visual_name
@@ -324,9 +330,10 @@ func _build_sockets() -> void:
 func _make_socket(bone_name: String, socket_name: String, local_offset: Vector3) -> BoneAttachment3D:
 	var socket := BoneAttachment3D.new()
 	socket.name = socket_name
-	socket.bone_name = bone_name
-	socket.position = local_offset
 	skeleton.add_child(socket)
+	socket.bone_idx = skeleton.find_bone(bone_name)
+	socket.on_skeleton_update()
+	socket.position = local_offset
 	return socket
 
 

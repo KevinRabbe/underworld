@@ -94,8 +94,9 @@ func _realize_part(part: Dictionary, mesh_data) -> void:
 	if bone_name.is_empty(): return
 	var attachment := BoneAttachment3D.new()
 	attachment.name = "Voxel%sAttachment" % str(part.get("part_id", "")).to_pascal_case()
-	attachment.bone_name = bone_name
 	skeleton.add_child(attachment)
+	attachment.bone_idx = skeleton.find_bone(bone_name)
+	attachment.on_skeleton_update()
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = "Voxel%s" % str(part.get("part_id", "")).to_pascal_case()
 	var array_mesh := ArrayMesh.new()
@@ -345,3 +346,18 @@ func presentation_fingerprint() -> String:
 
 func get_animation_tree() -> AnimationTree:
 	return animation_tree
+
+
+func realized_visual_bounds() -> AABB:
+	var bounds := AABB()
+	var has_bounds := false
+	var presentation_inverse := global_transform.affine_inverse()
+	for child in find_children("Voxel*", "MeshInstance3D", true, false):
+		var mesh_instance: MeshInstance3D = child
+		if mesh_instance.name.begins_with("VoxelHeld") or mesh_instance.mesh == null:
+			continue
+		var local_transform: Transform3D = presentation_inverse * mesh_instance.global_transform
+		var transformed_bounds: AABB = local_transform * mesh_instance.mesh.get_aabb()
+		bounds = bounds.merge(transformed_bounds) if has_bounds else transformed_bounds
+		has_bounds = true
+	return bounds

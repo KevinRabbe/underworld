@@ -175,6 +175,9 @@ static func _test_player_default(tree: SceneTree, failures: Array[String]) -> vo
 	var collision_height: float = collision.shape.height
 	player.call("set_equipped_tool", "stone_axe")
 	var voxel_character = player.get("character_presentation")
+	var visual_bounds: AABB = voxel_character.realized_visual_bounds()
+	_expect_true(failures, "voxel feet align with Player ground origin (got %.3f)" % visual_bounds.position.y, visual_bounds.position.y >= -0.15 and visual_bounds.position.y <= 0.05)
+	_expect_true(failures, "voxel survivor fills the gameplay capsule height (got %.3f)" % visual_bounds.end.y, visual_bounds.end.y >= 1.65 and visual_bounds.end.y <= 1.95)
 	var tool_root: Node3D = voxel_character.get_tool_visual_root()
 	_expect_true(failures, "equipped tool uses semantic hand socket", tool_root != null and tool_root.get_parent() == voxel_character.get_socket(&"hand_r"))
 	_expect_true(failures, "equipped axe realizes voxel modules", tool_root != null and tool_root.find_children("VoxelHeld*", "MeshInstance3D", true, false).size() == 2)
