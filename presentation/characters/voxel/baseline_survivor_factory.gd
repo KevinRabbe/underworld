@@ -27,8 +27,8 @@ static func build() -> Resource:
 	var modules: Array[Resource] = [
 		_module("body", &"body_base", [
 			_part("pelvis", "rig_role.pelvis", _box(Vector3i(-2,-1,-1), Vector3i(1,1,1), CLOTH), Vector3i.ZERO),
-			_part("spine", "rig_role.spine.lower", _box(Vector3i(-2,0,-1), Vector3i(1,4,1), CLOTH), Vector3i(0,1,0)),
-			_part("chest", "rig_role.chest", _box(Vector3i(-3,-1,-1), Vector3i(2,2,1), CLOTH), Vector3i(0,0,0)),
+			_part("spine", "rig_role.spine.lower", _box(Vector3i(-2,-1,-1), Vector3i(1,6,1), CLOTH), Vector3i(0,1,0)),
+			_part("chest", "rig_role.chest", _box(Vector3i(-3,-1,-1), Vector3i(2,3,1), CLOTH), Vector3i(0,0,0)),
 		]),
 		_module("head", &"head_hair", [
 			_part("head_skin", "rig_role.head", _box(Vector3i(-2,0,-2), Vector3i(1,4,1), SKIN), Vector3i(0,1,0)),
@@ -36,6 +36,9 @@ static func build() -> Resource:
 			_part("face", "rig_role.head", _face_cells(), Vector3i(0,1,0)),
 		]),
 		_module("jacket", &"torso_outfit", [
+			_part("shoulder_l", "rig_role.clavicle.left", _box(Vector3i(-2,-1,-1), Vector3i(1,1,1), CLOTH), Vector3i.ZERO),
+			_part("shoulder_r", "rig_role.clavicle.right", _box(Vector3i(-1,-1,-1), Vector3i(2,1,1), CLOTH), Vector3i.ZERO),
+			_part("neck_connector", "rig_role.neck", _box(Vector3i(-1,-2,-1), Vector3i(0,0,1), CLOTH), Vector3i.ZERO),
 			_part("upperarm_l", "rig_role.upper_arm.left", _box(Vector3i(-5,-1,-1), Vector3i(0,1,1), CLOTH), Vector3i(-1,0,0)),
 			_part("forearm_l", "rig_role.forearm.left", _box(Vector3i(-5,-1,-1), Vector3i(0,0,1), LEATHER), Vector3i(-1,0,0)),
 			_part("upperarm_r", "rig_role.upper_arm.right", _box(Vector3i(0,-1,-1), Vector3i(5,1,1), CLOTH), Vector3i(1,0,0)),
