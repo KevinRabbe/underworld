@@ -135,21 +135,23 @@ func _validate_burrower_definition() -> bool:
 
 
 func _configure_loot_registry() -> bool:
-	if BurrowerRewardProfile == null or not BurrowerRewardProfile is LootProfileDefinition:
+	var reward_profile: Variant = BurrowerRewardProfile
+	if reward_profile == null or not reward_profile is LootProfileDefinition:
 		push_error("Burrower reward profile did not load as LootProfileDefinition")
 		return false
-	if BurrowerChitinDefinition == null or not BurrowerChitinDefinition is ItemDefinition:
+	var reward_item: Variant = BurrowerChitinDefinition
+	if reward_item == null or not reward_item is ItemDefinition:
 		push_error("Burrower reward item did not load as ItemDefinition")
 		return false
 	var failures: Array[String] = loot_registry.index_definitions([
 		BurrowerDefinition,
-		BurrowerRewardProfile,
-		BurrowerChitinDefinition,
+		reward_profile,
+		reward_item,
 	])
 	if not failures.is_empty():
 		push_error("Burrower loot registry is invalid: %s" % [failures])
 		return false
-	if str(BurrowerRewardProfile.source_creature_id) != str(BurrowerDefinition.content_id):
+	if str(reward_profile.source_creature_id) != str(BurrowerDefinition.content_id):
 		push_error("Burrower reward profile source creature does not match Burrower definition")
 		return false
 	return true
