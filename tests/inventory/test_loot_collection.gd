@@ -15,6 +15,7 @@ const CHITIN_ID := "item.resource.burrower_chitin"
 static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_burrower_death_to_exactly_once_collection(failures)
+	_test_loot_unready_does_not_gate_encounter_runtime(failures)
 	_test_capacity_failure_preserves_inventory_and_pending(failures)
 	_test_weight_failure_preserves_inventory_and_pending(failures)
 	_test_definition_contract_drift_fails_closed(failures)
@@ -65,6 +66,26 @@ static func _test_burrower_death_to_exactly_once_collection(failures: Array[Stri
 	if inventory.canonical_json() != inventory_after:
 		failures.append("second collection attempt mutated inventory after reward was consumed")
 	controller.free()
+
+
+static func _test_loot_unready_does_not_gate_encounter_runtime(failures: Array[String]) -> void:
+	var controller = EncounterController.new()
+	var world_probe = Node3D.new()
+	var player_probe = Node3D.new()
+	var settings_probe = RefCounted.new()
+	controller.world = world_probe
+	controller.player = player_probe
+	controller.settings = settings_probe
+	controller.creature_definition_ready = true
+	controller.loot_ready = false
+	if not controller._encounter_runtime_ready():
+		failures.append("loot-unready state incorrectly disabled normal Burrower encounter readiness")
+	controller.creature_definition_ready = false
+	if controller._encounter_runtime_ready():
+		failures.append("encounter readiness ignored the authoritative creature-definition gate")
+	controller.free()
+	world_probe.free()
+	player_probe.free()
 
 
 static func _test_capacity_failure_preserves_inventory_and_pending(failures: Array[String]) -> void:
