@@ -1,0 +1,5 @@
+[gd_scene format=3]
+
+[node name="PrototypeAlpha" type="Node" groups=["archetype_role:root"]]
+
+[node name="AlphaUsePoint" type="Node" parent="." groups=["archetype_role:interaction.primary"]]
