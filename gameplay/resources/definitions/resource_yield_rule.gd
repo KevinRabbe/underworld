@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ContentReference := preload("res://core/content/references/content_reference.gd")
+const FiniteNumber := preload("res://core/content/validation/finite_number.gd")
 
 const ITEM_FAMILY := "item"
 const YIELD_ROLE_PREFIX := "yield."
@@ -47,7 +48,9 @@ func validate_rule() -> Array[String]:
 					item_reference.expected_family,
 				]
 			)
-	if quantity_per_capacity_unit <= 0.0:
+	if not FiniteNumber.is_finite_number(quantity_per_capacity_unit):
+		failures.append("resource yield quantity_per_capacity_unit must be finite")
+	elif quantity_per_capacity_unit <= 0.0:
 		failures.append("resource yield quantity per capacity unit must be > 0")
 	failures.sort()
 	return failures

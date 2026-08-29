@@ -1,6 +1,7 @@
 extends "res://core/content/registry/content_definition.gd"
 
 const ContentReference := preload("res://core/content/references/content_reference.gd")
+const FiniteNumber := preload("res://core/content/validation/finite_number.gd")
 
 const ITEM_FAMILY := "item"
 
@@ -41,7 +42,9 @@ func validate_definition() -> Array[String]:
 		)
 	if stack_limit < 1:
 		failures.append("item stack limit must be >= 1 for %s" % content_id)
-	if unit_weight < 0.0:
+	if not FiniteNumber.is_finite_number(unit_weight):
+		failures.append("item unit_weight must be finite for %s" % content_id)
+	elif unit_weight < 0.0:
 		failures.append("item unit weight must be >= 0 for %s" % content_id)
 	failures.sort()
 	return failures
