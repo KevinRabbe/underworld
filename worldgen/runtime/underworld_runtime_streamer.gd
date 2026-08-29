@@ -202,7 +202,7 @@ func release_cell(address) -> bool:
 		return true
 	record.generation += 1
 	_emit_realized_tier_retirements(record, true)
-	record.release_pending = true
+	record.release_pending = false
 	record.runtime_handle = null
 	record.collision_handle = null
 	record.readiness = _empty_readiness()
