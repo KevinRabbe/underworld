@@ -101,6 +101,8 @@ Measurement source:
 - result: `[PERF-001] PASS`;
 - deterministic fingerprint: `entrances-sha256:8c11c563b2192f85a78d1760b4d8cb2a686d00e3662a8a9c7db2524d2094b5bc:geometry-sha256:d910dbc179903d8f26c92974f29641aad553c7bba56eb833ebcff6a583aef73a:gpartition-result1:sha256:2747883649716b5c0d3e6906f86308cbae7faa68e19cc4fc7801ff4e9a1183be`.
 
+The measurement was taken before the subsequent revision-2 **budget-only** correction from activation envelopes to release-hysteresis envelopes. That correction changes warning classification only; it does not change the profiler, runtime path, measured values, or deterministic fingerprint. A final current-head run is still required for REVIEW.
+
 ### Timing and work metrics
 
 | Metric | Measured |
