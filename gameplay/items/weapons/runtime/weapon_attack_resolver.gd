@@ -38,13 +38,6 @@ func is_valid() -> bool:
 
 
 func resolve_primary_attack(weapon, attack_set) -> Dictionary:
-	var technique_role: String = ""
-	if weapon != null and weapon is WeaponDefinitionScript:
-		technique_role = weapon.primary_technique_role
-	return resolve_attack(weapon, attack_set, technique_role)
-
-
-func resolve_attack(weapon, attack_set, technique_role: String) -> Dictionary:
 	var failures: Array[String] = []
 	if weapon == null or not weapon is WeaponDefinitionScript:
 		return {
@@ -57,11 +50,9 @@ func resolve_attack(weapon, attack_set, technique_role: String) -> Dictionary:
 		return {
 			"attack_definition": null,
 			"attack_id": "",
-			"technique_role": technique_role,
+			"technique_role": weapon.primary_technique_role,
 			"diagnostics": ["expected WeaponAttackSetDefinition"],
 		}
-	for failure in WeaponDefinitionScript.validate_technique_role(technique_role):
-		failures.append("technique role: %s" % failure)
 	if not is_valid():
 		failures.append_array(_diagnostics)
 	if str(weapon.attack_set_id) != str(attack_set.content_id):
@@ -70,9 +61,9 @@ func resolve_attack(weapon, attack_set, technique_role: String) -> Dictionary:
 			attack_set.content_id,
 		])
 
-	var attack_id: StringName = attack_set.attack_id_for(technique_role)
+	var attack_id: StringName = attack_set.attack_id_for(weapon.primary_technique_role)
 	if attack_id.is_empty():
-		failures.append("weapon attack set has no binding for technique role: %s" % technique_role)
+		failures.append("weapon attack set has no binding for technique role: %s" % weapon.primary_technique_role)
 	var attack_definition = _attack_definitions_by_id.get(str(attack_id), null)
 	if attack_definition == null and not attack_id.is_empty():
 		failures.append("gameplay-owned attack definition is not registered: %s" % str(attack_id))
@@ -81,6 +72,6 @@ func resolve_attack(weapon, attack_set, technique_role: String) -> Dictionary:
 	return {
 		"attack_definition": attack_definition if failures.is_empty() else null,
 		"attack_id": str(attack_id),
-		"technique_role": technique_role,
+		"technique_role": weapon.primary_technique_role,
 		"diagnostics": failures,
 	}

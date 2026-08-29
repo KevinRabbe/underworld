@@ -62,12 +62,24 @@ static func build(request) -> StageResult:
 	var minimum := Vector3i(maxi(floori(scan.position.x / pitch), cell_min.x), maxi(floori(scan.position.y / pitch), cell_min.y), maxi(floori(scan.position.z / pitch), cell_min.z))
 	var maximum := Vector3i(mini(ceili((scan.position.x + scan.size.x) / pitch), cell_max.x), mini(ceili((scan.position.y + scan.size.y) / pitch), cell_max.y), mini(ceili((scan.position.z + scan.size.z) / pitch), cell_max.z))
 	var samples := 0; var cubes := 0; var started := Time.get_ticks_usec()
+	var sample_size := Vector3i(maximum.x - minimum.x + 1, maximum.y - minimum.y + 1, maximum.z - minimum.z + 1)
+	var field_cache := PackedFloat64Array()
+	if maximum.x > minimum.x and maximum.y > minimum.y and maximum.z > minimum.z:
+		field_cache.resize(sample_size.x * sample_size.y * sample_size.z)
+		for local_x in range(sample_size.x):
+			for local_y in range(sample_size.y):
+				for local_z in range(sample_size.z):
+					var lattice := minimum + Vector3i(local_x, local_y, local_z)
+					field_cache[_sample_index(local_x, local_y, local_z, sample_size)] = _field(Vector3(lattice) * pitch, fragments, request.iso_level)
 	for x in range(minimum.x, maximum.x):
 		for y in range(minimum.y, maximum.y):
 			for z in range(minimum.z, maximum.z):
 				cubes += 1; var positions: Array[Vector3] = []; var values: Array[float] = []
 				for offset in CUBE_OFFSETS:
-					var point := Vector3(Vector3i(x + offset.x, y + offset.y, z + offset.z)) * pitch; positions.append(point); values.append(_field(point, fragments, request.iso_level)); samples += 1
+					var lattice := Vector3i(x + offset.x, y + offset.y, z + offset.z)
+					positions.append(Vector3(lattice) * pitch)
+					var local := lattice - minimum
+					values.append(field_cache[_sample_index(local.x, local.y, local.z, sample_size)]); samples += 1
 				var mask := 0
 				for i in range(8):
 					if values[i] < request.iso_level: mask |= 1 << i
@@ -82,6 +94,9 @@ static func build(request) -> StageResult:
 	return StageResult.ok("cave_mesh_preparation", data, data.fingerprint)
 
 static func prepare(request) -> StageResult: return build(request)
+
+static func _sample_index(x: int, y: int, z: int, size: Vector3i) -> int:
+	return (x * size.y + y) * size.z + z
 
 static func _field(point: Vector3, fragments: Array, iso: float) -> float:
 	var value := INF

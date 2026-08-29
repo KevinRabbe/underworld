@@ -1,0 +1,13 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://gameplay/items/definitions/item_definition.gd" id="1_definition"]
+
+[resource]
+script = ExtResource("1_definition")
+content_id = "item.tool.stone_axe"
+definition_family = "item"
+schema_revision = 1
+category_ids = Array[String](["category.item.equipment.tool.axe"])
+capability_ids = Array[String](["capability.equipable", "capability.harvest_tool"])
+stack_limit = 1
+unit_weight = 2.0
