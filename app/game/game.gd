@@ -3,6 +3,8 @@ extends Node3D
 const WorldSettingsScript := preload("res://world/runtime/config/world_settings.gd")
 const SurvivalSettingsScript := preload("res://gameplay/survival/prototype_survival_settings.gd")
 const WaterSettingsScript := preload("res://presentation/world/environment/prototype_water_settings.gd")
+const CavePresentationControllerScript := preload("res://presentation/world/caves/cave_presentation_controller.gd")
+const PrototypeCavePresentationCatalog := preload("res://content/presentation/caves/prototype_cave_presentation_catalog.tres")
 const SurfaceChunkStreamerScript := preload("res://world/runtime/streaming/surface_chunk_streamer.gd")
 const PrototypeSurvivalControllerScript := preload("res://gameplay/survival/prototype_survival_controller.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
@@ -25,6 +27,7 @@ var encounter_controller
 var debug_hud
 var water_surface: MeshInstance3D
 var underworld_runtime
+var cave_presentation
 var spawn_xz: Vector3 = Vector3.ZERO
 @export var enable_map015_fixture: bool = false
 
@@ -53,6 +56,17 @@ func _create_underworld_runtime() -> void:
 	var world_id: String = WorldIdScript.from_seed(world_settings.world_seed).value()
 	var manifest_id: String = GeneratorManifestScript.foundation_default().manifest_id()
 	underworld_runtime.configure(world_id, manifest_id, player)
+
+	cave_presentation = CavePresentationControllerScript.new()
+	cave_presentation.name = "CavePresentation"
+	add_child(cave_presentation)
+	var presentation_failures: Array[String] = cave_presentation.configure(
+		underworld_runtime,
+		PrototypeCavePresentationCatalog
+	)
+	if not presentation_failures.is_empty():
+		push_error("Cave presentation configuration failed: %s" % [presentation_failures])
+
 	if enable_map015_fixture:
 		var entrance_id: String = Map015FixtureScript.ENTRANCE_ID
 		var diagnostics: Array[String] = underworld_runtime.bootstrap_fixture(1, Map015FixtureScript.REGION, entrance_id)

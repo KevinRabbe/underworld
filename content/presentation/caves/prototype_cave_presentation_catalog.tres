@@ -1,0 +1,111 @@
+[gd_resource type="Resource" load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://presentation/world/caves/cave_presentation_profile.gd" id="1_profile"]
+[ext_resource type="Script" path="res://presentation/world/caves/cave_presentation_catalog.gd" id="2_catalog"]
+
+[sub_resource type="Resource" id="Profile_default"]
+script = ExtResource("1_profile")
+profile_id = "presentation.cave.default"
+volume_kind = "*"
+priority = -100
+albedo_color = Color(0.235, 0.215, 0.19, 1)
+roughness = 0.94
+ambience_id = "ambience.cave.default"
+fog_color = Color(0.11, 0.10, 0.09, 1)
+fog_density = 0.035
+dressing_hooks = ["dressing.cave.general"]
+
+[sub_resource type="Resource" id="Profile_chamber"]
+script = ExtResource("1_profile")
+profile_id = "presentation.cave.chamber"
+volume_kind = "chamber"
+priority = 20
+albedo_color = Color(0.29, 0.255, 0.215, 1)
+roughness = 0.92
+local_light_color = Color(0.72, 0.64, 0.52, 1)
+local_light_energy = 0.16
+local_light_range = 14.0
+ambience_id = "ambience.cave.chamber"
+fog_color = Color(0.12, 0.105, 0.09, 1)
+fog_density = 0.028
+dressing_hooks = ["dressing.cave.chamber.wall", "dressing.cave.chamber.floor"]
+
+[sub_resource type="Resource" id="Profile_tunnel"]
+script = ExtResource("1_profile")
+profile_id = "presentation.cave.tunnel"
+volume_kind = "tunnel"
+priority = 20
+albedo_color = Color(0.205, 0.19, 0.17, 1)
+roughness = 0.96
+ambience_id = "ambience.cave.tunnel"
+fog_color = Color(0.085, 0.08, 0.075, 1)
+fog_density = 0.045
+dressing_hooks = ["dressing.cave.tunnel.wall"]
+
+[sub_resource type="Resource" id="Profile_entrance"]
+script = ExtResource("1_profile")
+profile_id = "presentation.cave.entrance"
+volume_kind = "entrance"
+priority = 80
+albedo_color = Color(0.34, 0.295, 0.23, 1)
+roughness = 0.90
+emission_color = Color(0.15, 0.11, 0.065, 1)
+emission_energy = 0.12
+local_light_color = Color(0.95, 0.78, 0.52, 1)
+local_light_energy = 0.42
+local_light_range = 18.0
+ambience_id = "ambience.cave.entrance"
+fog_color = Color(0.16, 0.135, 0.10, 1)
+fog_density = 0.018
+dressing_hooks = ["dressing.cave.entrance.readability", "dressing.cave.entrance.threshold"]
+
+[sub_resource type="Resource" id="Profile_reserved"]
+script = ExtResource("1_profile")
+profile_id = "presentation.cave.reserved_site"
+volume_kind = "reserved_site"
+priority = 60
+albedo_color = Color(0.305, 0.245, 0.185, 1)
+roughness = 0.91
+local_light_color = Color(0.82, 0.62, 0.38, 1)
+local_light_energy = 0.24
+local_light_range = 15.0
+ambience_id = "ambience.cave.reserved_site"
+fog_color = Color(0.13, 0.105, 0.08, 1)
+fog_density = 0.03
+dressing_hooks = ["dressing.cave.reserved_site.anchor"]
+
+[sub_resource type="Resource" id="Profile_deep"]
+script = ExtResource("1_profile")
+profile_id = "presentation.cave.deep"
+volume_kind = "*"
+min_depth = 48.0
+priority = 40
+albedo_color = Color(0.155, 0.16, 0.17, 1)
+roughness = 0.97
+emission_color = Color(0.025, 0.035, 0.045, 1)
+emission_energy = 0.08
+ambience_id = "ambience.cave.deep"
+fog_color = Color(0.055, 0.065, 0.075, 1)
+fog_density = 0.06
+dressing_hooks = ["dressing.cave.deep.wall"]
+
+[sub_resource type="Resource" id="Profile_basalt"]
+script = ExtResource("1_profile")
+profile_id = "presentation.cave.biome.basalt"
+volume_kind = "*"
+biome_id = "basalt"
+priority = 50
+albedo_color = Color(0.12, 0.13, 0.145, 1)
+roughness = 0.88
+metallic = 0.03
+emission_color = Color(0.035, 0.045, 0.06, 1)
+emission_energy = 0.10
+ambience_id = "ambience.cave.basalt"
+fog_color = Color(0.05, 0.06, 0.075, 1)
+fog_density = 0.05
+dressing_hooks = ["dressing.cave.basalt.wall"]
+
+[resource]
+script = ExtResource("2_catalog")
+default_profile_id = "presentation.cave.default"
+profiles = [SubResource("Profile_default"), SubResource("Profile_chamber"), SubResource("Profile_tunnel"), SubResource("Profile_entrance"), SubResource("Profile_reserved"), SubResource("Profile_deep"), SubResource("Profile_basalt")]
