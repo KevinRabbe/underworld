@@ -103,7 +103,7 @@ static func _test_compiler_contract(failures: Array[String]) -> void:
 	_expect_true(failures, "two-cell voxel fixture compiles", mesh_data.success)
 	_expect_equal(failures, "hidden shared faces are removed", int(mesh_data.metrics.get("visible_faces", 0)), 10)
 	_expect_equal(failures, "coplanar faces greedily merge", int(mesh_data.metrics.get("merged_quads", 0)), 6)
-	_expect_equal(failures, "merged cuboid emits twelve triangles", int(mesh_data.metrics.get("triangles", 0)), 12)
+	_expect_equal(failures, "chamfered merged cuboid emits sixty triangles", int(mesh_data.metrics.get("triangles", 0)), 60)
 	_expect_true(failures, "compiled mesh owns finite positive bounds", mesh_data.bounds.position.is_finite() and mesh_data.bounds.size.is_finite() and mesh_data.bounds.get_volume() > 0.0)
 	_expect_equal(failures, "compiled mesh metric records material surfaces", int(mesh_data.metrics.get("surface_count", -1)), mesh_data.surfaces.size())
 	_expect_true(failures, "compiled mesh records compilation timing", int(mesh_data.metrics.get("compilation_usec", -1)) >= 0)

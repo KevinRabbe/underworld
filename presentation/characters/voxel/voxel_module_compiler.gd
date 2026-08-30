@@ -2,7 +2,8 @@ extends RefCounted
 class_name UnderworldVoxelModuleCompiler
 
 const MeshDataScript := preload("res://presentation/characters/voxel/voxel_module_mesh_data.gd")
-const COMPILER_REVISION: int = 2
+const COMPILER_REVISION: int = 3
+const CHAMFER_RATIO: float = 0.14
 
 const DIRECTIONS: Array[Vector3i] = [Vector3i.RIGHT, Vector3i.LEFT, Vector3i.UP, Vector3i.DOWN, Vector3i.BACK, Vector3i.FORWARD]
 
@@ -176,15 +177,28 @@ static func _emit_quad(builders: Dictionary, palette, palette_index: int, direct
 	var base_color: Color = palette_entry.get("color", Color.WHITE)
 	var shade: float = 1.0 if normal.y > 0.5 else (0.72 if normal.y < -0.5 else 0.90)
 	var ao_values := ao_signature.split(",")
-	for point_index in range(points.size()):
-		var point: Vector3 = points[point_index]
-		var ao_level: float = float(int(ao_values[point_index])) / 3.0 if point_index < ao_values.size() else 1.0
+	var center := (points[0] + points[1] + points[2] + points[3]) * 0.25
+	var inner_points: Array[Vector3] = []
+	var bevel_units := CHAMFER_RATIO
+	for point in points:
+		var toward_center := point.lerp(center, CHAMFER_RATIO)
+		inner_points.append(toward_center - normal * bevel_units)
+	var render_points: Array[Vector3] = points + inner_points
+	for point_index in range(render_points.size()):
+		var point: Vector3 = render_points[point_index]
+		var source_index := point_index % 4
+		var ao_level: float = float(int(ao_values[source_index])) / 3.0 if source_index < ao_values.size() else 1.0
 		var vertex_shade: float = shade * lerpf(0.76, 1.0, ao_level)
 		var shaded := Color(base_color.r * vertex_shade, base_color.g * vertex_shade, base_color.b * vertex_shade, base_color.a)
 		builder["vertices"].append((point - Vector3(pivot)) * voxel_size + offset)
 		builder["normals"].append(normal)
 		builder["colors"].append(shaded)
-	builder["indices"].append_array([base_index, base_index + 1, base_index + 2, base_index, base_index + 2, base_index + 3])
+	# Four deterministic bevel strips plus the inset face. The outer ring stays
+	# on the original lattice boundary, preserving inter-part seam positions.
+	for edge in range(4):
+		var next_edge := (edge + 1) % 4
+		builder["indices"].append_array([base_index + edge, base_index + next_edge, base_index + 4 + next_edge, base_index + edge, base_index + 4 + next_edge, base_index + 4 + edge])
+	builder["indices"].append_array([base_index + 4, base_index + 5, base_index + 6, base_index + 4, base_index + 6, base_index + 7])
 	builders[palette_index] = builder
 
 
