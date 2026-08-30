@@ -28,7 +28,10 @@ func _ready() -> void:
 	character.name = "FrontierExpeditionSurvivor"
 	character_root.add_child(character)
 	character.build()
-	character.set_held_item("stone_axe")
+	# The unarmored character-creation view is an anatomy check, so leave the
+	# hands empty. Gameplay previews retain the equipped tool by default.
+	if preview_variant != "unarmored":
+		character.set_held_item("stone_axe")
 	_set_locomotion(&"idle")
 	_apply_preview_state(preview_state)
 	if not preview_capture_path.is_empty():
