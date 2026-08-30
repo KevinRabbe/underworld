@@ -50,6 +50,12 @@ static func run() -> Array[String]:
 	game.underworld_runtime = FakeUnderworld.new()
 	for child in [game.player, game.survival, game.death_recovery_controller, game.encounter_controller, game.underworld_runtime]:
 		game.add_child(child)
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null or tree.root == null:
+		failures.append("gameplay audio fixture requires active SceneTree root")
+		game.free()
+		return failures
+	tree.root.add_child(game)
 	var binding := Binding.new()
 	game.add_child(binding)
 	var bind_failures: Array[String] = binding.bind_game(game)
