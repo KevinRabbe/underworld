@@ -3,7 +3,7 @@ class_name UnderworldFacetedBodyCompiler
 
 const MeshDataScript := preload("res://presentation/characters/faceted/faceted_skinned_mesh_data.gd")
 
-const COMPILER_REVISION := 5
+const COMPILER_REVISION := 6
 const SKIN := 0
 const CLOTH := 1
 const LEATHER := 2
@@ -155,37 +155,139 @@ static func _build_torso(builders: Dictionary, profile, outfit: Resource) -> voi
 
 static func _build_head(builders: Dictionary, profile) -> void:
 	var landmark: Dictionary = profile.anatomy_landmarks()
-	var head_height: float = float(landmark["crown_y"]) - float(landmark["shoulder_y"])
+	var shoulder_y: float = float(landmark["shoulder_y"])
+	var neck_y: float = float(landmark["neck_y"])
+	var jaw_y: float = float(landmark["jaw_y"])
+	var brow_y: float = float(landmark["brow_y"])
+	var crown_y: float = float(landmark["crown_y"])
+	var head_height: float = crown_y - shoulder_y
+	var face_span: float = brow_y - jaw_y
+	var skin := _weights(BONE.head)
+
+	# The skull is deliberately front/back asymmetric. The previous revision
+	# used concentric ellipses, which made every view read like a primitive egg.
+	# These rings keep a broad rear cranium while flattening and tapering the
+	# facial side so the profile can carry a jaw, brow and projected nose.
 	var head_rings: Array[Dictionary] = [
-		_ring_y(Vector3(0, float(landmark["shoulder_y"]) + 0.010, 0), 0.087, 0.078, _weights(BONE.neck)),
-		_ring_y(Vector3(0, float(landmark["neck_y"]) + 0.012, 0), 0.082, 0.075, _weights(BONE.neck)),
-		_ring_y(Vector3(0, float(landmark["jaw_y"]) - head_height * 0.08, -0.008), profile.head_width * 0.36, profile.head_depth * 0.36, _weights2(BONE.neck, BONE.head, 0.50)),
-		_ring_y(Vector3(0, float(landmark["jaw_y"]), -0.012), profile.head_width * 0.45, profile.head_depth * 0.41, _weights2(BONE.neck, BONE.head, 0.72)),
-		_ring_y(Vector3(0, lerpf(float(landmark["jaw_y"]), float(landmark["brow_y"]), 0.42), -0.014), profile.head_width * 0.49, profile.head_depth * 0.47, _weights(BONE.head)),
-		_ring_y(Vector3(0, lerpf(float(landmark["jaw_y"]), float(landmark["brow_y"]), 0.78), -0.010), profile.head_width * 0.51, profile.head_depth * 0.49, _weights(BONE.head)),
-		_ring_y(Vector3(0, lerpf(float(landmark["brow_y"]), float(landmark["crown_y"]), 0.48), 0), profile.head_width * 0.50, profile.head_depth * 0.50, _weights(BONE.head)),
-		_ring_y(Vector3(0, float(landmark["crown_y"]), 0.012), profile.head_width * 0.43, profile.head_depth * 0.46, _weights(BONE.head)),
+		_ring_y_asym(Vector3(0, shoulder_y + 0.010, 0.004), 0.087, 0.070, 0.077, _weights(BONE.neck)),
+		_ring_y_asym(Vector3(0, neck_y + 0.012, 0.004), 0.082, 0.068, 0.079, _weights(BONE.neck)),
+		_ring_y_asym(Vector3(0, jaw_y - 0.026, 0.002), profile.head_width * 0.31, profile.head_depth * 0.28, profile.head_depth * 0.34, _weights2(BONE.neck, BONE.head, 0.55)),
+		_ring_y_asym(Vector3(0, jaw_y, 0.003), profile.head_width * 0.40, profile.head_depth * 0.36, profile.head_depth * 0.41, _weights2(BONE.neck, BONE.head, 0.78)),
+		_ring_y_asym(Vector3(0, jaw_y + face_span * 0.30, 0.004), profile.head_width * 0.46, profile.head_depth * 0.40, profile.head_depth * 0.46, skin),
+		_ring_y_asym(Vector3(0, jaw_y + face_span * 0.53, 0.005), profile.head_width * 0.505, profile.head_depth * 0.44, profile.head_depth * 0.51, skin),
+		_ring_y_asym(Vector3(0, jaw_y + face_span * 0.80, 0.006), profile.head_width * 0.52, profile.head_depth * 0.455, profile.head_depth * 0.53, skin),
+		_ring_y_asym(Vector3(0, lerpf(brow_y, crown_y, 0.38), 0.008), profile.head_width * 0.51, profile.head_depth * 0.44, profile.head_depth * 0.55, skin),
+		_ring_y_asym(Vector3(0, crown_y - head_height * 0.11, 0.010), profile.head_width * 0.49, profile.head_depth * 0.42, profile.head_depth * 0.56, skin),
+		_ring_y_asym(Vector3(0, crown_y, 0.010), profile.head_width * 0.41, profile.head_depth * 0.36, profile.head_depth * 0.48, skin),
 	]
 	_add_y_loft(builders, SKIN, head_rings, 12, true, true)
-	var crown_y: float = float(landmark["crown_y"])
-	var brow_y: float = float(landmark["brow_y"])
+
+	var face_front: float = -float(profile.head_depth) * 0.47
+	var eye_y: float = jaw_y + face_span * 0.79
+	var cheek_y: float = jaw_y + face_span * 0.47
+	var mouth_y: float = jaw_y + face_span * 0.19
+
+	# Faceted ears are small vertical lofts integrated into the temporal plane,
+	# not rectangular side blocks. They contribute to the true-side silhouette.
+	for side in [-1.0, 1.0]:
+		var ear_x := side * float(profile.head_width) * 0.525
+		_add_y_loft(builders, SKIN, [
+			_ring_y(Vector3(ear_x, jaw_y + face_span * 0.24, 0.010), 0.010, 0.014, skin),
+			_ring_y(Vector3(ear_x, jaw_y + face_span * 0.49, 0.012), 0.015, 0.021, skin),
+			_ring_y(Vector3(ear_x, jaw_y + face_span * 0.71, 0.010), 0.011, 0.016, skin),
+		], 6, true, true)
+
+	# Raised brow wedges create the forehead/eye-socket break visible in the
+	# reference. Dark eye planes sit slightly behind them instead of reading as
+	# square decals stuck onto a spherical head.
+	for side in [-1.0, 1.0]:
+		var inner_x := side * 0.014
+		var outer_x := side * 0.049
+		var brow_outer_x := side * 0.058
+		_add_tri_prism_z(builders, SKIN,
+			Vector2(inner_x, eye_y + 0.006),
+			Vector2(outer_x, eye_y + 0.007),
+			Vector2(brow_outer_x, eye_y + 0.025),
+			face_front - 0.012, face_front - 0.002, skin)
+		var eye_inner := Vector3(inner_x, eye_y - 0.001, face_front - 0.014)
+		var eye_outer := Vector3(outer_x, eye_y - 0.003, face_front - 0.012)
+		var eye_outer_low := Vector3(outer_x * 0.96, eye_y - 0.014, face_front - 0.011)
+		var eye_inner_low := Vector3(inner_x * 1.10, eye_y - 0.012, face_front - 0.013)
+		_emit_triangle(builders, FACE, eye_inner, eye_outer, eye_outer_low, Vector3(0, 0, -1), skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2.ONE)
+		_emit_triangle(builders, FACE, eye_inner, eye_outer_low, eye_inner_low, Vector3(0, 0, -1), skin, skin, skin, Vector2.ZERO, Vector2.ONE, Vector2(0,1))
+
+	# Cheek planes bridge the socket, zygomatic mass and jaw. Their slight
+	# lateral normal is what makes the face read in 3/4 instead of only front-on.
+	for side in [-1.0, 1.0]:
+		var cheek_expected := Vector3(side * 0.28, 0.0, -1.0).normalized()
+		var socket_outer := Vector3(side * 0.052, eye_y - 0.016, face_front - 0.006)
+		var cheek_outer := Vector3(side * 0.086, cheek_y, face_front + 0.002)
+		var cheek_inner := Vector3(side * 0.031, cheek_y - 0.006, face_front - 0.010)
+		var jaw_outer := Vector3(side * 0.066, jaw_y + face_span * 0.10, face_front + 0.010)
+		_emit_triangle(builders, SKIN, socket_outer, cheek_outer, cheek_inner, cheek_expected, skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2.ONE)
+		_emit_triangle(builders, SKIN, cheek_outer, jaw_outer, cheek_inner, cheek_expected, skin, skin, skin, Vector2(1,0), Vector2(1,1), Vector2.ZERO)
+
+	# Projected multi-plane nose. The tip now changes the true-side silhouette;
+	# it is no longer a thin rectangular stripe on the face.
+	var nose_top_y := jaw_y + face_span * 0.73
+	var nose_mid_y := jaw_y + face_span * 0.56
+	var nose_tip_y := jaw_y + face_span * 0.40
+	var nose_base_y := jaw_y + face_span * 0.29
+	var nose_top_l := Vector3(-0.010, nose_top_y, face_front - 0.010)
+	var nose_top_r := Vector3(0.010, nose_top_y, face_front - 0.010)
+	var nose_mid_l := Vector3(-0.013, nose_mid_y, face_front - 0.027)
+	var nose_mid_r := Vector3(0.013, nose_mid_y, face_front - 0.027)
+	var nose_tip_l := Vector3(-0.019, nose_tip_y, face_front - 0.050)
+	var nose_tip_r := Vector3(0.019, nose_tip_y, face_front - 0.050)
+	var nose_base_l := Vector3(-0.023, nose_base_y, face_front - 0.024)
+	var nose_base_r := Vector3(0.023, nose_base_y, face_front - 0.024)
+	for quad in [
+		[nose_top_l, nose_top_r, nose_mid_r, nose_mid_l],
+		[nose_mid_l, nose_mid_r, nose_tip_r, nose_tip_l],
+		[nose_tip_l, nose_tip_r, nose_base_r, nose_base_l],
+	]:
+		_emit_triangle(builders, SKIN, quad[0], quad[1], quad[2], Vector3(0, 0, -1), skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2.ONE)
+		_emit_triangle(builders, SKIN, quad[0], quad[2], quad[3], Vector3(0, 0, -1), skin, skin, skin, Vector2.ZERO, Vector2.ONE, Vector2(0,1))
+	for side in [-1.0, 1.0]:
+		var side_expected := Vector3(side, 0.0, -0.35).normalized()
+		var top := nose_top_l if side < 0.0 else nose_top_r
+		var mid := nose_mid_l if side < 0.0 else nose_mid_r
+		var tip := nose_tip_l if side < 0.0 else nose_tip_r
+		var base := nose_base_l if side < 0.0 else nose_base_r
+		var bridge_anchor := Vector3(side * 0.030, nose_mid_y, face_front + 0.001)
+		var base_anchor := Vector3(side * 0.034, nose_base_y, face_front - 0.001)
+		_emit_triangle(builders, SKIN, top, mid, bridge_anchor, side_expected, skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2.ONE)
+		_emit_triangle(builders, SKIN, mid, tip, bridge_anchor, side_expected, skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2.ONE)
+		_emit_triangle(builders, SKIN, tip, base, base_anchor, side_expected, skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2.ONE)
+		_emit_triangle(builders, SKIN, bridge_anchor, tip, base_anchor, side_expected, skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2.ONE)
+
+	# Chin volume and a restrained mouth line complete the lower-face planes.
+	_add_tri_prism_z(builders, SKIN,
+		Vector2(-0.046, mouth_y - 0.006),
+		Vector2(0.046, mouth_y - 0.006),
+		Vector2(0.0, jaw_y - 0.020),
+		face_front - 0.013, face_front + 0.003, skin)
+	var mouth_left := Vector3(-0.030, mouth_y, face_front - 0.015)
+	var mouth_mid := Vector3(0.0, mouth_y - 0.002, face_front - 0.016)
+	var mouth_right := Vector3(0.030, mouth_y, face_front - 0.015)
+	var mouth_low := Vector3(0.0, mouth_y - 0.006, face_front - 0.014)
+	_emit_triangle(builders, FACE, mouth_left, mouth_mid, mouth_low, Vector3(0,0,-1), skin, skin, skin, Vector2.ZERO, Vector2(0.5,0), Vector2(0.5,1))
+	_emit_triangle(builders, FACE, mouth_mid, mouth_right, mouth_low, Vector3(0,0,-1), skin, skin, skin, Vector2(0.5,0), Vector2.ONE, Vector2(0.5,1))
+
+	# Hair remains the compatible revision-5 shell for this bounded head slice;
+	# only the underlying cranial surface changed. A later pass owns the full
+	# swept/undercut silhouette once facial acceptance is established.
 	_add_y_loft(builders, HAIR, [
-		_ring_y(Vector3(0, brow_y + head_height * 0.09, 0.000), profile.head_width * 0.515, profile.head_depth * 0.56, _weights(BONE.head)),
-		_ring_y(Vector3(0, crown_y - head_height * 0.10, 0.010), profile.head_width * 0.50, profile.head_depth * 0.545, _weights(BONE.head)),
-		_ring_y(Vector3(0, crown_y + 0.018, 0.006), profile.head_width * 0.46, profile.head_depth * 0.50, _weights(BONE.head)),
+		_ring_y(Vector3(0, brow_y + head_height * 0.09, 0.000), profile.head_width * 0.515, profile.head_depth * 0.56, skin),
+		_ring_y(Vector3(0, crown_y - head_height * 0.10, 0.010), profile.head_width * 0.50, profile.head_depth * 0.545, skin),
+		_ring_y(Vector3(0, crown_y + 0.018, 0.006), profile.head_width * 0.46, profile.head_depth * 0.50, skin),
 	], 12, false, true)
-	_add_box(builders, HAIR, Vector3(-profile.head_width * 0.50, brow_y - head_height * 0.08, profile.head_depth * 0.34), Vector3(-profile.head_width * 0.41, brow_y + head_height * 0.15, profile.head_depth * 0.54), _weights(BONE.head), 0.006)
-	_add_box(builders, HAIR, Vector3(profile.head_width * 0.41, brow_y - head_height * 0.08, profile.head_depth * 0.34), Vector3(profile.head_width * 0.50, brow_y + head_height * 0.15, profile.head_depth * 0.54), _weights(BONE.head), 0.006)
-	# Small side planes and a swept crown keep the head readable in profile
-	# without pushing the survivor toward a blocky voxel silhouette.
-	_add_box(builders, SKIN, Vector3(-profile.head_width * 0.57, brow_y - head_height * 0.19, -0.020), Vector3(-profile.head_width * 0.47, brow_y + head_height * 0.01, 0.035), _weights(BONE.head), 0.008)
-	_add_box(builders, SKIN, Vector3(profile.head_width * 0.47, brow_y - head_height * 0.19, -0.020), Vector3(profile.head_width * 0.57, brow_y + head_height * 0.01, 0.035), _weights(BONE.head), 0.008)
+	_add_box(builders, HAIR, Vector3(-profile.head_width * 0.50, brow_y - head_height * 0.08, profile.head_depth * 0.34), Vector3(-profile.head_width * 0.41, brow_y + head_height * 0.15, profile.head_depth * 0.54), skin, 0.006)
+	_add_box(builders, HAIR, Vector3(profile.head_width * 0.41, brow_y - head_height * 0.08, profile.head_depth * 0.34), Vector3(profile.head_width * 0.50, brow_y + head_height * 0.15, profile.head_depth * 0.54), skin, 0.006)
 	_add_y_loft(builders, HAIR, [
-		_ring_y(Vector3(-0.025, crown_y - 0.022, -profile.head_depth * 0.24), 0.060, 0.040, _weights(BONE.head)),
-		_ring_y(Vector3(0.040, crown_y + 0.016, -profile.head_depth * 0.20), 0.078, 0.036, _weights(BONE.head)),
+		_ring_y(Vector3(-0.025, crown_y - 0.022, -profile.head_depth * 0.24), 0.060, 0.040, skin),
+		_ring_y(Vector3(0.040, crown_y + 0.016, -profile.head_depth * 0.20), 0.078, 0.036, skin),
 	], 8, true, true)
-	# Three compact crown wedges give the undercut a deliberate swept profile.
-	# They remain low-poly lofts rather than voxel cubes or texture-dependent hair.
 	for tuft_data in [
 		[-0.070, -0.045, 0.052],
 		[-0.015, -0.055, 0.060],
@@ -195,17 +297,11 @@ static func _build_head(builders: Dictionary, profile) -> void:
 		var tuft_z: float = float(tuft_data[1])
 		var tuft_radius: float = float(tuft_data[2])
 		_add_y_loft(builders, HAIR, [
-			_ring_y(Vector3(tuft_x, crown_y - 0.052, tuft_z), tuft_radius, tuft_radius * 0.72, _weights(BONE.head)),
-			_ring_y(Vector3(tuft_x + 0.018, crown_y + 0.016, tuft_z - 0.010), tuft_radius * 0.28, tuft_radius * 0.24, _weights(BONE.head)),
+			_ring_y(Vector3(tuft_x, crown_y - 0.052, tuft_z), tuft_radius, tuft_radius * 0.72, skin),
+			_ring_y(Vector3(tuft_x + 0.018, crown_y + 0.016, tuft_z - 0.010), tuft_radius * 0.28, tuft_radius * 0.24, skin),
 		], 6, true, true)
-	_add_box(builders, HAIR, Vector3(-0.057, brow_y + 0.010, -profile.head_depth * 0.555), Vector3(-0.018, brow_y + 0.027, -profile.head_depth * 0.515), _weights(BONE.head), 0.003)
-	_add_box(builders, HAIR, Vector3(0.018, brow_y + 0.010, -profile.head_depth * 0.555), Vector3(0.057, brow_y + 0.027, -profile.head_depth * 0.515), _weights(BONE.head), 0.003)
-	_add_box(builders, FACE, Vector3(-0.046, brow_y - 0.005, -profile.head_depth * 0.53), Vector3(-0.026, brow_y + 0.008, -profile.head_depth * 0.49), _weights(BONE.head), 0.003)
-	_add_box(builders, FACE, Vector3(0.026, brow_y - 0.005, -profile.head_depth * 0.53), Vector3(0.046, brow_y + 0.008, -profile.head_depth * 0.49), _weights(BONE.head), 0.003)
-	# The nose is a skin plane; only eyes and the small mouth use the dark face
-	# palette.  This makes facing readable without a dark vertical nose stripe.
-	_add_box(builders, SKIN, Vector3(-0.014, brow_y - head_height * 0.21, -profile.head_depth * 0.59), Vector3(0.014, brow_y - head_height * 0.02, -profile.head_depth * 0.50), _weights(BONE.head), 0.004)
-	_add_box(builders, FACE, Vector3(-0.032, brow_y - head_height * 0.30, -profile.head_depth * 0.525), Vector3(0.032, brow_y - head_height * 0.275, -profile.head_depth * 0.505), _weights(BONE.head), 0.002)
+	_add_box(builders, HAIR, Vector3(-0.057, brow_y + 0.010, -profile.head_depth * 0.555), Vector3(-0.018, brow_y + 0.027, -profile.head_depth * 0.515), skin, 0.003)
+	_add_box(builders, HAIR, Vector3(0.018, brow_y + 0.010, -profile.head_depth * 0.555), Vector3(0.057, brow_y + 0.027, -profile.head_depth * 0.515), skin, 0.003)
 
 
 static func _build_arm(builders: Dictionary, profile, left: bool) -> void:
@@ -417,6 +513,17 @@ static func _ring_y(center: Vector3, rx: float, rz: float, skin_weights: Diction
 	return {"center": center, "rx": rx, "rz": rz, "skin": skin_weights}
 
 
+static func _ring_y_asym(center: Vector3, rx: float, front_rz: float, back_rz: float, skin_weights: Dictionary) -> Dictionary:
+	return {
+		"center": center,
+		"rx": rx,
+		"rz": maxf(front_rz, back_rz),
+		"front_rz": front_rz,
+		"back_rz": back_rz,
+		"skin": skin_weights,
+	}
+
+
 static func _ring_x(center: Vector3, ry: float, rz: float, skin_weights: Dictionary) -> Dictionary:
 	return {"center": center, "ry": ry, "rz": rz, "skin": skin_weights}
 
@@ -478,7 +585,13 @@ static func _add_x_loft(builders: Dictionary, palette_index: int, rings: Array[D
 static func _point_y(ring: Dictionary, side: int, sides: int) -> Vector3:
 	var angle := float(side) * TAU / float(sides)
 	var center: Vector3 = ring["center"]
-	return center + Vector3(cos(angle) * float(ring["rx"]), 0.0, sin(angle) * float(ring["rz"]))
+	var sin_angle := sin(angle)
+	var radius_z := float(ring["rz"])
+	if sin_angle < 0.0 and ring.has("front_rz"):
+		radius_z = float(ring["front_rz"])
+	elif sin_angle > 0.0 and ring.has("back_rz"):
+		radius_z = float(ring["back_rz"])
+	return center + Vector3(cos(angle) * float(ring["rx"]), 0.0, sin_angle * radius_z)
 
 
 static func _point_x(ring: Dictionary, side: int, sides: int) -> Vector3:
@@ -580,10 +693,10 @@ static func _emit_triangle(builders: Dictionary, palette_index: int, a: Vector3,
 		builder["normals"].append(normal)
 	for uv in [uv_a, uv_b, uv_c]:
 		builder["uvs"].append(uv)
-	for skin in [skin_a, skin_b, skin_c]:
-		for bone_index in skin["bones"]:
+	for skin_value in [skin_a, skin_b, skin_c]:
+		for bone_index in skin_value["bones"]:
 			builder["bones"].append(int(bone_index))
-		for weight in skin["weights"]:
+		for weight in skin_value["weights"]:
 			builder["weights"].append(float(weight))
 	builder["indices"].append_array([base_index, base_index + 1, base_index + 2])
 	builders[palette_index] = builder
