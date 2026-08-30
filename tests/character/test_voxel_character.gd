@@ -178,6 +178,7 @@ static func _test_faceted_compiler_contract(failures: Array[String]) -> void:
 	for joint_name in overlap_margins.keys():
 		_expect_true(failures, "faceted joint %s has no uncovered geometric gap" % joint_name, float(overlap_margins[joint_name]) >= 0.0)
 	_expect_true(failures, "faceted survivor bounds match grounded 1.8 m target", mesh_data.bounds.position.y >= -0.001 and mesh_data.bounds.end.y >= 1.79 and mesh_data.bounds.end.y <= 1.82)
+	var owns_facet_tone_variation := false
 	for surface in mesh_data.surfaces:
 		var vertices: PackedVector3Array = surface["vertices"]
 		var normals: PackedVector3Array = surface["normals"]
@@ -189,6 +190,11 @@ static func _test_faceted_compiler_contract(failures: Array[String]) -> void:
 		_expect_equal(failures, "faceted vertices, normals, colors, and UVs align", [normals.size(), colors.size(), uvs.size()], [vertices.size(), vertices.size(), vertices.size()])
 		_expect_equal(failures, "faceted mesh stores four bones per vertex", bones.size(), vertices.size() * 4)
 		_expect_equal(failures, "faceted mesh stores four weights per vertex", weights.size(), vertices.size() * 4)
+		if colors.size() > 1:
+			for color_index in range(1, colors.size()):
+				if colors[color_index] != colors[0]:
+					owns_facet_tone_variation = true
+					break
 		for vertex_index in range(vertices.size()):
 			_expect_true(failures, "faceted vertices are finite", vertices[vertex_index].is_finite())
 			_expect_true(failures, "faceted normals are finite and unit length", normals[vertex_index].is_finite() and is_equal_approx(normals[vertex_index].length(), 1.0))
@@ -208,9 +214,21 @@ static func _test_faceted_compiler_contract(failures: Array[String]) -> void:
 				var face_normal := (vertices[ib] - vertices[ia]).cross(vertices[ic] - vertices[ia])
 				_expect_true(failures, "faceted triangles are non-degenerate", face_normal.length_squared() > 0.00000001)
 				_expect_true(failures, "faceted winding matches outward flat normals", face_normal.normalized().dot(normals[ia]) > 0.99)
+	_expect_true(failures, "faceted palette owns restrained deterministic per-face tonal variation", owns_facet_tone_variation)
 	var repeated = FacetedCompiler.compile(character.faceted_body_profile, character.palette, character.faceted_outfit_definition)
 	_expect_equal(failures, "faceted compilation reproduces exact fingerprint", repeated.source_fingerprint, mesh_data.source_fingerprint)
 	_expect_equal(failures, "faceted compilation reproduces exact surface descriptor", repeated.canonical_surface_descriptor(), mesh_data.canonical_surface_descriptor())
+	for surface_index in range(mesh_data.surfaces.size()):
+		var original_surface: Dictionary = mesh_data.surfaces[surface_index]
+		var repeated_surface: Dictionary = repeated.surfaces[surface_index]
+		_expect_true(failures, "faceted compilation reproduces exact packed arrays for surface %d" % surface_index,
+			original_surface["vertices"] == repeated_surface["vertices"] and
+			original_surface["normals"] == repeated_surface["normals"] and
+			original_surface["colors"] == repeated_surface["colors"] and
+			original_surface["uvs"] == repeated_surface["uvs"] and
+			original_surface["bones"] == repeated_surface["bones"] and
+			original_surface["weights"] == repeated_surface["weights"] and
+			original_surface["indices"] == repeated_surface["indices"])
 	var malformed_profile = FacetedProfile.new().configure("fixture.invalid", {"shoulder_width": 0.30, "chest_width": 0.48, "ankle_width": 0.22})
 	var malformed = FacetedCompiler.compile(malformed_profile, character.palette, character.faceted_outfit_definition)
 	_expect_true(failures, "malformed anatomy fails deterministically", not malformed.success and malformed.diagnostics == FacetedCompiler.compile(malformed_profile, character.palette, character.faceted_outfit_definition).diagnostics)
