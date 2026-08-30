@@ -26,17 +26,17 @@ const DETAIL_SCALE := 1.555555556 # 36 authored voxels -> 56-voxel presentation
 
 static func build() -> Resource:
 	var palette = PaletteScript.new().configure("palette.character.earth_teal", [
-		_entry("skin", Color("c39570"), 0.78, 0.0),
-		_entry("cloth", Color("554f43"), 0.92, 0.0),
-		_entry("leather", Color("503a2b"), 0.76, 0.0),
+		_entry("skin", Color("a87454"), 0.80, 0.0),
+		_entry("cloth", Color("49453b"), 0.93, 0.0),
+		_entry("leather", Color("493225"), 0.78, 0.0),
 		_entry("metal", Color("858b8e"), 0.38, 0.62),
-		_entry("hair", Color("4a3326"), 0.88, 0.0),
-		_entry("accent", Color("235d68"), 0.82, 0.0),
-		_entry("face", Color("4a392d"), 0.72, 0.0),
-		_entry("canvas_light", Color("7f725b"), 0.94, 0.0),
-		_entry("trouser", Color("343835"), 0.90, 0.0),
-		_entry("canvas_dark", Color("5b5445"), 0.95, 0.0),
-		_entry("leather_light", Color("75543a"), 0.80, 0.0),
+		_entry("hair", Color("30221a"), 0.90, 0.0),
+		_entry("accent", Color("1d5360"), 0.84, 0.0),
+		_entry("face", Color("2e241e"), 0.74, 0.0),
+		_entry("canvas_light", Color("70654f"), 0.95, 0.0),
+		_entry("trouser", Color("292d2b"), 0.92, 0.0),
+		_entry("canvas_dark", Color("474239"), 0.96, 0.0),
+		_entry("leather_light", Color("68482f"), 0.82, 0.0),
 		_entry("sole", Color("252523"), 0.98, 0.0),
 	])
 	var modules: Array[Resource] = [
@@ -86,7 +86,7 @@ static func build() -> Resource:
 		]),
 		_module("tools", &"held_item", [
 			_tool_part("axe_handle", "stone_axe", _box(Vector3i(0,-9,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO),
-			_tool_part("axe_head", "stone_axe", _box(Vector3i(-3,3,0), Vector3i(3,6,1), METAL), Vector3i.ZERO),
+			_tool_part("axe_head", "stone_axe", _axe_head_cells(), Vector3i.ZERO),
 			_tool_part("pickaxe_handle", "stone_pickaxe", _box(Vector3i(0,-9,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO),
 			_tool_part("pickaxe_head", "stone_pickaxe", _pickaxe_head_cells(), Vector3i.ZERO),
 		]),
@@ -515,4 +515,17 @@ static func _pickaxe_head_cells() -> Array[Dictionary]:
 		var y: int = 4 - absi(x) / 3
 		cells.append({"position": Vector3i(x, y, 0), "palette_index": METAL})
 		cells.append({"position": Vector3i(x, y, 1), "palette_index": METAL})
+	return cells
+
+
+static func _axe_head_cells() -> Array[Dictionary]:
+	var cells: Array[Dictionary] = []
+	# A compact one-sided stone blade with a small rear poll.  The silhouette
+	# stays readable after greedy compilation without returning to a debug box.
+	for z in range(0, 2):
+		for y in range(3, 7):
+			var minimum_x: int = -2 if y in [4, 5] else -1
+			var maximum_x: int = 1 if y in [3, 4] else 0
+			for x in range(minimum_x, maximum_x + 1):
+				cells.append({"position": Vector3i(x, y, z), "palette_index": METAL})
 	return cells

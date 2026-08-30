@@ -89,7 +89,7 @@ func _build_skeleton() -> void:
 	var hip_y: float = float(landmark["hip_y"])
 	var knee_y: float = float(landmark["knee_y"])
 	var ankle_y: float = float(landmark["ankle_y"])
-	var hip_x: float = float(profile.pelvis_width) * 0.255
+	var hip_x: float = float(profile.pelvis_width) * 0.30
 	for side_data in [["l", -1.0], ["r", 1.0]]:
 		var suffix: String = side_data[0]
 		var direction: float = side_data[1]

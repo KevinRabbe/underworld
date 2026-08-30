@@ -3,7 +3,7 @@ class_name UnderworldFacetedBodyCompiler
 
 const MeshDataScript := preload("res://presentation/characters/faceted/faceted_skinned_mesh_data.gd")
 
-const COMPILER_REVISION := 2
+const COMPILER_REVISION := 3
 const SKIN := 0
 const CLOTH := 1
 const LEATHER := 2
@@ -175,8 +175,18 @@ static func _build_head(builders: Dictionary, profile) -> void:
 	], 12, false, true)
 	_add_box(builders, HAIR, Vector3(-profile.head_width * 0.50, brow_y - head_height * 0.08, profile.head_depth * 0.34), Vector3(-profile.head_width * 0.41, brow_y + head_height * 0.15, profile.head_depth * 0.54), _weights(BONE.head), 0.006)
 	_add_box(builders, HAIR, Vector3(profile.head_width * 0.41, brow_y - head_height * 0.08, profile.head_depth * 0.34), Vector3(profile.head_width * 0.50, brow_y + head_height * 0.15, profile.head_depth * 0.54), _weights(BONE.head), 0.006)
-	_add_box(builders, FACE, Vector3(-0.050, brow_y - 0.010, -profile.head_depth * 0.53), Vector3(-0.024, brow_y + 0.012, -profile.head_depth * 0.49), _weights(BONE.head), 0.003)
-	_add_box(builders, FACE, Vector3(0.024, brow_y - 0.010, -profile.head_depth * 0.53), Vector3(0.050, brow_y + 0.012, -profile.head_depth * 0.49), _weights(BONE.head), 0.003)
+	# Small side planes and a swept crown keep the head readable in profile
+	# without pushing the survivor toward a blocky voxel silhouette.
+	_add_box(builders, SKIN, Vector3(-profile.head_width * 0.57, brow_y - head_height * 0.19, -0.020), Vector3(-profile.head_width * 0.47, brow_y + head_height * 0.01, 0.035), _weights(BONE.head), 0.008)
+	_add_box(builders, SKIN, Vector3(profile.head_width * 0.47, brow_y - head_height * 0.19, -0.020), Vector3(profile.head_width * 0.57, brow_y + head_height * 0.01, 0.035), _weights(BONE.head), 0.008)
+	_add_y_loft(builders, HAIR, [
+		_ring_y(Vector3(-0.025, crown_y - 0.022, -profile.head_depth * 0.24), 0.060, 0.040, _weights(BONE.head)),
+		_ring_y(Vector3(0.040, crown_y + 0.016, -profile.head_depth * 0.20), 0.078, 0.036, _weights(BONE.head)),
+	], 8, true, true)
+	_add_box(builders, HAIR, Vector3(-0.057, brow_y + 0.010, -profile.head_depth * 0.555), Vector3(-0.018, brow_y + 0.027, -profile.head_depth * 0.515), _weights(BONE.head), 0.003)
+	_add_box(builders, HAIR, Vector3(0.018, brow_y + 0.010, -profile.head_depth * 0.555), Vector3(0.057, brow_y + 0.027, -profile.head_depth * 0.515), _weights(BONE.head), 0.003)
+	_add_box(builders, FACE, Vector3(-0.046, brow_y - 0.005, -profile.head_depth * 0.53), Vector3(-0.026, brow_y + 0.008, -profile.head_depth * 0.49), _weights(BONE.head), 0.003)
+	_add_box(builders, FACE, Vector3(0.026, brow_y - 0.005, -profile.head_depth * 0.53), Vector3(0.046, brow_y + 0.008, -profile.head_depth * 0.49), _weights(BONE.head), 0.003)
 	# The nose is a skin plane; only eyes and the small mouth use the dark face
 	# palette.  This makes facing readable without a dark vertical nose stripe.
 	_add_box(builders, SKIN, Vector3(-0.014, brow_y - head_height * 0.21, -profile.head_depth * 0.59), Vector3(0.014, brow_y - head_height * 0.02, -profile.head_depth * 0.50), _weights(BONE.head), 0.004)
@@ -231,7 +241,7 @@ static func _build_arm(builders: Dictionary, profile, left: bool) -> void:
 
 static func _build_leg(builders: Dictionary, profile, left: bool) -> void:
 	var landmark: Dictionary = profile.anatomy_landmarks()
-	var x: float = (-1.0 if left else 1.0) * float(profile.pelvis_width) * 0.255
+	var x: float = (-1.0 if left else 1.0) * float(profile.pelvis_width) * 0.30
 	var thigh_bone := int(BONE.thigh_l if left else BONE.thigh_r)
 	var calf_bone := int(BONE.calf_l if left else BONE.calf_r)
 	var foot_bone := int(BONE.foot_l if left else BONE.foot_r)
@@ -273,6 +283,15 @@ static func _build_outfit_details(builders: Dictionary, profile) -> void:
 	_add_ribbon_z(builders, LEATHER_LIGHT, Vector2(-0.012, shoulder_y - 0.06), Vector2(-0.012, pelvis_y + 0.035), front_z - 0.003, 0.007, _weights(BONE.chest), _weights(BONE.pelvis), -1.0)
 	_add_ribbon_z(builders, CANVAS_LIGHT, Vector2(-0.055, shoulder_y - 0.045), Vector2(-0.145, float(landmark["chest_y"]) - 0.02), front_z - 0.006, 0.025, _weights(BONE.chest), _weights(BONE.chest), -1.0)
 	_add_ribbon_z(builders, CANVAS_LIGHT, Vector2(0.055, shoulder_y - 0.045), Vector2(0.145, float(landmark["chest_y"]) - 0.02), front_z - 0.006, 0.025, _weights(BONE.chest), _weights(BONE.chest), -1.0)
+	# The scarf owns a visible V-shaped drape below the collar, matching the
+	# project reference while leaving the neck free for animation.
+	_add_ribbon_z(builders, ACCENT, Vector2(-0.080, shoulder_y - 0.032), Vector2(-0.010, float(landmark["chest_y"]) - 0.060), front_z - 0.018, 0.026, _weights(BONE.chest), _weights(BONE.chest), -1.0)
+	_add_ribbon_z(builders, ACCENT, Vector2(0.080, shoulder_y - 0.032), Vector2(0.010, float(landmark["chest_y"]) - 0.060), front_z - 0.018, 0.026, _weights(BONE.chest), _weights(BONE.chest), -1.0)
+	_add_ribbon_z(builders, ACCENT, Vector2(0.0, float(landmark["chest_y"]) - 0.055), Vector2(0.020, float(landmark["lower_chest_y"]) - 0.045), front_z - 0.020, 0.032, _weights(BONE.chest), _weights(BONE.spine_02), -1.0)
+	# Split jacket skirts add weight around the hips without becoming armor or
+	# changing the body profile used by the future character editor.
+	_add_ribbon_z(builders, CANVAS_DARK, Vector2(-0.112, pelvis_y + 0.025), Vector2(-0.135, float(landmark["hip_y"]) - 0.055), front_z - 0.010, 0.092, _weights(BONE.pelvis), _weights(BONE.pelvis), -1.0)
+	_add_ribbon_z(builders, CANVAS_DARK, Vector2(0.112, pelvis_y + 0.025), Vector2(0.135, float(landmark["hip_y"]) - 0.055), front_z - 0.010, 0.092, _weights(BONE.pelvis), _weights(BONE.pelvis), -1.0)
 	_add_box(builders, CANVAS_DARK, Vector3(-0.205, float(landmark["waist_y"]) + 0.02, front_z - 0.014), Vector3(-0.075, float(landmark["waist_y"]) + 0.105, front_z - 0.004), _weights2(BONE.spine_01, BONE.pelvis, 0.45), 0.004)
 	_add_box(builders, CANVAS_DARK, Vector3(0.075, float(landmark["waist_y"]) + 0.02, front_z - 0.014), Vector3(0.205, float(landmark["waist_y"]) + 0.105, front_z - 0.004), _weights2(BONE.spine_01, BONE.pelvis, 0.45), 0.004)
 	_add_y_loft(builders, ACCENT, [
@@ -294,12 +313,12 @@ static func _build_outfit_details(builders: Dictionary, profile) -> void:
 		_add_ribbon_z(builders, LEATHER, Vector2(strap_x, float(landmark["waist_y"]) + 0.02), Vector2(strap_x, shoulder_y - 0.02), 0.314, 0.018, _weights(BONE.chest), _weights(BONE.chest), 1.0)
 	_add_ribbon_z(builders, LEATHER_LIGHT, Vector2(-0.14, float(landmark["chest_y"]) - 0.02), Vector2(0.14, float(landmark["chest_y"]) - 0.02), 0.317, 0.012, _weights(BONE.chest), _weights(BONE.chest), 1.0)
 	_add_x_loft(builders, ACCENT, [
-		_ring_x(Vector3(-0.19, shoulder_y, 0.22), 0.075, 0.075, _weights(BONE.chest)),
-		_ring_x(Vector3(0.19, shoulder_y, 0.22), 0.075, 0.075, _weights(BONE.chest)),
+		_ring_x(Vector3(-0.18, shoulder_y, 0.275), 0.060, 0.060, _weights(BONE.chest)),
+		_ring_x(Vector3(0.18, shoulder_y, 0.275), 0.060, 0.060, _weights(BONE.chest)),
 	], 8, true, true, 1.0)
 	_add_box(builders, LEATHER, Vector3(profile.pelvis_width * 0.48, float(landmark["hip_y"]), -0.02), Vector3(profile.pelvis_width * 0.48 + 0.12, float(landmark["waist_y"]) - 0.03, 0.11), _weights(BONE.pelvis), 0.018)
 	for side_data in [[-1.0, int(BONE.calf_l)], [1.0, int(BONE.calf_r)]]:
-		var leg_x: float = float(side_data[0]) * float(profile.pelvis_width) * 0.255
+		var leg_x: float = float(side_data[0]) * float(profile.pelvis_width) * 0.30
 		var leg_bone: int = int(side_data[1])
 		_add_box(builders, CANVAS_DARK, Vector3(leg_x - profile.thigh_diameter * 0.36, float(landmark["knee_y"]) - 0.055, -profile.thigh_diameter * 0.47), Vector3(leg_x + profile.thigh_diameter * 0.36, float(landmark["knee_y"]) + 0.055, -profile.thigh_diameter * 0.42), _weights(leg_bone), 0.004)
 
