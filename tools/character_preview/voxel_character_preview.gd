@@ -1,6 +1,7 @@
 extends Node3D
 
 const VoxelPresentation := preload("res://presentation/characters/voxel/voxel_character_presentation.gd")
+const BaselineFactory := preload("res://presentation/characters/voxel/baseline_survivor_factory.gd")
 
 @onready var character_root: Node3D = $CharacterRoot
 @onready var status_label: Label = $Interface/Status
@@ -17,17 +18,18 @@ var preview_capture_angle_degrees := 0.0
 var preview_capture_delay_seconds := 0.25
 var preview_pose_time_normalized := 0.35
 var preview_state := "idle"
+var preview_variant := "default"
 
 
 func _ready() -> void:
+	_parse_preview_arguments()
 	preview_camera.look_at(Vector3(0.0, 0.9, 0.0), Vector3.UP)
-	character = VoxelPresentation.new()
+	character = VoxelPresentation.new(BaselineFactory.build_variant(preview_variant))
 	character.name = "FrontierExpeditionSurvivor"
 	character_root.add_child(character)
 	character.build()
 	character.set_held_item("stone_axe")
 	_set_locomotion(&"idle")
-	_parse_preview_arguments()
 	_apply_preview_state(preview_state)
 	if not preview_capture_path.is_empty():
 		_freeze_preview_pose()
@@ -164,6 +166,8 @@ func _parse_preview_arguments() -> void:
 			preview_capture_delay_seconds = maxf(float(argument.trim_prefix("--preview-delay=")), 0.0)
 		elif argument.begins_with("--preview-pose-time="):
 			preview_pose_time_normalized = clampf(float(argument.trim_prefix("--preview-pose-time=")), 0.0, 1.0)
+		elif argument.begins_with("--preview-variant="):
+			preview_variant = argument.trim_prefix("--preview-variant=")
 
 
 func _apply_preview_state(state: String) -> void:

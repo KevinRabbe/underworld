@@ -41,6 +41,9 @@ static func _test_definition_contract(failures: Array[String]) -> void:
 	_expect_true(failures, "baseline voxel survivor validates", character.validate_definition().is_empty())
 	_expect_true(failures, "baseline voxel size is high-detail presentation pitch", is_equal_approx(character.voxel_size, 0.032142857))
 	_expect_true(failures, "baseline survivor is 56 authored voxels tall at 1.8 m", is_equal_approx(character.presentation_bounds.size.y, 1.8))
+	var work_variant = BaselineFactory.build_variant("work")
+	var armor_variant = BaselineFactory.build_variant("light_armor")
+	_expect_true(failures, "preview variants change presentation fingerprints", work_variant.canonical_fingerprint() != character.canonical_fingerprint() and armor_variant.canonical_fingerprint() != character.canonical_fingerprint())
 	var palette_slots: Array[String] = []
 	for entry_value in character.palette.entries:
 		palette_slots.append(str(entry_value.get("slot", "")))

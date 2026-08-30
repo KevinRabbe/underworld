@@ -103,6 +103,18 @@ static func build() -> Resource:
 	return character
 
 
+static func build_variant(variant_id: String) -> Resource:
+	var character = build()
+	if variant_id == "work":
+		character.palette.entries[CLOTH]["color"] = Color("6b6252")
+		character.palette.entries[CANVAS_LIGHT]["color"] = Color("aa956f")
+	elif variant_id == "light_armor":
+		character.palette.entries[CLOTH]["color"] = Color("4f5960")
+		character.palette.entries[METAL]["color"] = Color("a7b1b3")
+		character.palette.entries[METAL]["roughness"] = 0.30
+	return character
+
+
 static func _baseline_slice_profile() -> Resource:
 	var rows: Array[Dictionary] = []
 	for y in range(56):
