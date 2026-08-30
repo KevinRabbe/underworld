@@ -1,6 +1,8 @@
 extends CharacterBody3D
 
 signal died(enemy_id: String)
+signal attack_started(enemy_id: String, world_position: Vector3)
+signal damage_committed(enemy_id: String, amount: int, remaining_health: int, world_position: Vector3)
 
 const GRAVITY := 24.0
 const TURN_SPEED := 8.0
@@ -122,11 +124,15 @@ func apply_damage(amount: int, source_position: Vector3) -> int:
 	if dead or amount <= 0:
 		return health
 
+	var previous_health: int = health
 	health = maxi(health - amount, 0)
+	var committed_damage: int = previous_health - health
 	stagger_timer = HIT_STAGGER_TIME
 	parry_stagger_timer = 0.0
 	hit_flash_timer = HIT_FLASH_TIME
 	_cancel_pending_attack()
+	if committed_damage > 0:
+		damage_committed.emit(enemy_id, committed_damage, health, global_position)
 
 	var away: Vector3 = global_position - source_position
 	away.y = 0.0
@@ -173,6 +179,7 @@ func _begin_attack() -> void:
 	attack_windup_timer = maxf(attack_windup_duration, 0.05)
 	attack_timer = attack_cooldown
 	_face_target(1.0)
+	attack_started.emit(enemy_id, global_position)
 
 
 func _resolve_pending_attack() -> void:

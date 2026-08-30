@@ -26,6 +26,7 @@ const SurfacePlan := preload("res://worldgen/surface/surface_entrance_chunk_plan
 
 signal traversal_gate_changed(entrance_id: String, open: bool)
 signal cell_attached(address, tier: String)
+signal cave_presence_changed(in_cave: bool)
 
 var streamer
 var world_id: String = ""
@@ -39,6 +40,7 @@ var _material: Material
 var last_bootstrap_fingerprint: String = ""
 var last_bootstrap_diagnostics: Array[String] = []
 var last_bootstrap_surface_position: Vector3 = Vector3.ZERO
+var _player_in_realized_cave: bool = false
 
 func configure(world_id_value: String, manifest_id_value: String, player_value: Node3D = null, executor = null) -> void:
 	_unbind_streamer()
@@ -48,6 +50,7 @@ func configure(world_id_value: String, manifest_id_value: String, player_value: 
 	world_id = world_id_value
 	generator_manifest_id = manifest_id_value
 	player = player_value
+	_player_in_realized_cave = false
 	streamer = Streamer.new(world_id, generator_manifest_id, executor)
 	_bind_streamer()
 
@@ -136,6 +139,7 @@ func update_player_position(position: Vector3) -> void:
 	if streamer == null:
 		return
 	streamer.update_observer(position, "player")
+	_update_cave_presence(position)
 	for entrance_id in gates.keys():
 		var handoff = entrance_plans[entrance_id]
 		var near := false
@@ -153,6 +157,42 @@ func update_player_position(position: Vector3) -> void:
 			else:
 				streamer.release_entrance(address, entrance_id)
 		_update_gates()
+
+func _update_cave_presence(position: Vector3) -> void:
+	if not _is_finite_vector3(position):
+		return
+	var in_cave := false
+	for candidate in render_nodes.values():
+		if candidate == null or not candidate is Node or not is_instance_valid(candidate):
+			continue
+		if not candidate.has_meta("cell_semantic_snapshot"):
+			continue
+		var snapshot_variant = candidate.get_meta("cell_semantic_snapshot")
+		if not snapshot_variant is Dictionary:
+			continue
+		var bounds_variant = snapshot_variant.get("world_bounds", null)
+		if bounds_variant is AABB:
+			var bounds: AABB = bounds_variant
+			if bounds.size.x > 0.0 and bounds.size.y > 0.0 and bounds.size.z > 0.0 and bounds.has_point(position):
+				in_cave = true
+				break
+	if in_cave == _player_in_realized_cave:
+		return
+	_player_in_realized_cave = in_cave
+	cave_presence_changed.emit(in_cave)
+
+
+func player_is_in_realized_cave() -> bool:
+	return _player_in_realized_cave
+
+
+static func _is_finite_vector3(value: Vector3) -> bool:
+	return (
+		not is_nan(value.x) and not is_inf(value.x)
+		and not is_nan(value.y) and not is_inf(value.y)
+		and not is_nan(value.z) and not is_inf(value.z)
+	)
+
 
 ## Builds the compact renderer-facing semantic snapshot consumed by replaceable
 ## presentation. It contains value types only and deliberately excludes StableIds,
