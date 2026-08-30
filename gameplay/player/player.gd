@@ -5,6 +5,7 @@ signal attack_requested(execution: Dictionary)
 signal hotbar_slot_requested(slot: int)
 signal craft_requested(recipe_id: String)
 signal parry_succeeded(source_position: Vector3)
+signal damage_committed(amount: int, remaining_health: int, source_position: Vector3)
 signal defeat_requested(reason: StringName)
 
 const PrototypeMannequinScript := preload("res://presentation/characters/player/prototype_mannequin/prototype_mannequin.gd")
@@ -294,7 +295,11 @@ func _apply_damage(amount: int, source_position: Vector3) -> void:
 	if defeated:
 		return
 	damage_invulnerability_timer = DAMAGE_INVULNERABILITY
+	var previous_health: int = health
 	health = maxi(health - amount, 0)
+	var committed_damage: int = previous_health - health
+	if committed_damage > 0:
+		damage_committed.emit(committed_damage, health, source_position)
 	if animation_controller != null:
 		animation_controller.present_hit()
 

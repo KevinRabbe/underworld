@@ -2,334 +2,180 @@ extends RefCounted
 
 const Binding := preload("res://presentation/audio/gameplay_audio_binding.gd")
 const CueCatalog := preload("res://presentation/audio/audio_cue_catalog.gd")
-const PrototypeCatalog := preload("res://content/presentation/audio/prototype_audio_cue_catalog.tres")
-
-const AUDIO_BINDING_PATH := "res://presentation/audio/gameplay_audio_binding.gd"
-const PROVISIONAL_STREAMS_PATH := "res://presentation/audio/provisional_audio_stream_library.gd"
-
-
-class FakeDefinition:
-	extends Resource
-	var content_id: String = ""
-
-	func _init(value: String = "") -> void:
-		content_id = value
-
-
-class FakeInventory:
-	extends RefCounted
-	var records: Array[Dictionary] = []
-
-	func slot_capacity() -> int:
-		return records.size()
-
-	func state_at(index: int) -> Dictionary:
-		return records[index].duplicate(true) if index >= 0 and index < records.size() else {}
-
-
-class FakeEquipment:
-	extends RefCounted
-	var hotbar: int = 1
-	var selected_id: String = ""
-	var owned_ids: Array[String] = []
-
-	func selected_hotbar() -> int:
-		return hotbar
-
-	func selected_definition():
-		return FakeDefinition.new(selected_id) if not selected_id.is_empty() else null
-
-	func canonical_snapshot() -> Dictionary:
-		var slots: Array = []
-		for item_id in owned_ids:
-			slots.append({
-				"container": {
-					"slots": [{"state": {"item_id": item_id}}],
-				},
-			})
-		return {"slots": slots}
-
 
 class FakePlayer:
 	extends Node3D
 	signal attack_requested(execution: Dictionary)
 	signal parry_succeeded(source_position: Vector3)
+	signal damage_committed(amount: int, remaining_health: int, source_position: Vector3)
 	signal defeat_requested(reason: StringName)
-	var health: int = 100
-
 
 class FakeSurvival:
-	extends Node3D
+	extends Node
 	signal harvest_result(event: Dictionary)
-	var object_hit_progress: Dictionary = {}
-	var inventory := FakeInventory.new()
-	var equipment := FakeEquipment.new()
-
-	func get_inventory_state():
-		return inventory
-
-	func get_equipment_state():
-		return equipment
-
+	signal equipped_tool_changed(tool_id: String)
+	signal craft_completed(recipe_id: String, item_id: String)
 
 class FakeRecovery:
 	extends Node
 	signal recovery_committed(reason: StringName, target: Vector3)
 
-
 class FakeEncounter:
 	extends Node3D
 	signal loot_pending(occurrence_id: String, profile_id: String, world_position: Vector3)
-	var active_enemies: Dictionary = {}
-	var pending_ids: Array[String] = []
-
-	func get_pending_loot_occurrence_ids() -> Array[String]:
-		return pending_ids.duplicate()
-
-
-class FakeEnemy:
-	extends Node3D
-	signal died(enemy_id: String)
-	var enemy_id: String = "burrower_1"
-	var health: int = 36
-	var attack_pending: bool = false
-
+	signal enemy_attack_started(enemy_id: String, world_position: Vector3)
+	signal enemy_damage_committed(enemy_id: String, amount: int, remaining_health: int, world_position: Vector3)
+	signal enemy_died(enemy_id: String, world_position: Vector3)
 
 class FakeUnderworld:
-	extends Node
-	var render_nodes: Dictionary = {}
-
-
-class FakeDeltaStore:
-	extends RefCounted
-	var data: Dictionary = {"object_state": {}}
-
-	func snapshot() -> Dictionary:
-		return data.duplicate(true)
-
+	extends Node3D
+	signal cave_presence_changed(in_cave: bool)
 
 class FakeGame:
 	extends Node3D
-	var player := FakePlayer.new()
-	var survival := FakeSurvival.new()
-	var death_recovery_controller := FakeRecovery.new()
-	var encounter_controller := FakeEncounter.new()
-	var underworld_runtime := FakeUnderworld.new()
-	var world_delta_store := FakeDeltaStore.new()
-
-	func _ready() -> void:
-		add_child(player)
-		add_child(survival)
-		add_child(death_recovery_controller)
-		add_child(encounter_controller)
-		add_child(underworld_runtime)
+	var player
+	var survival
+	var death_recovery_controller
+	var encounter_controller
+	var underworld_runtime
 
 
-static func run_runtime(tree: SceneTree) -> Array[String]:
+static func run() -> Array[String]:
 	var failures: Array[String] = []
 	var game := FakeGame.new()
-	tree.root.add_child(game)
-	var binding = Binding.new()
-	binding.name = "GameplayAudio"
+	game.player = FakePlayer.new()
+	game.survival = FakeSurvival.new()
+	game.death_recovery_controller = FakeRecovery.new()
+	game.encounter_controller = FakeEncounter.new()
+	game.underworld_runtime = FakeUnderworld.new()
+	for child in [game.player, game.survival, game.death_recovery_controller, game.encounter_controller, game.underworld_runtime]:
+		game.add_child(child)
+	var binding := Binding.new()
 	game.add_child(binding)
 	var bind_failures: Array[String] = binding.bind_game(game)
 	if not bind_failures.is_empty():
-		failures.append("gameplay audio fixture did not bind: %s" % [bind_failures])
-		_free_node(game)
+		failures.append("semantic audio binding rejected complete producer set: %s" % [bind_failures])
+		game.free()
 		return failures
 
-	_test_vocabulary_and_provisional_streams(binding, failures)
-	_test_presentation_scope(failures)
-	_test_player_combat_and_death(binding, game, failures)
-	_test_harvest_equipment_and_loot(binding, game, failures)
-	_test_enemy_resource_and_ambience(binding, game, failures)
-	_test_mute_is_presentation_only(binding, game, failures)
-
-	_free_node(game)
+	_test_existing_semantic_routes(game, binding, failures)
+	_test_committed_observation_routes(game, binding, failures)
+	_test_typed_result_routes(binding, failures)
+	_test_ambience_transition(game, binding, failures)
+	_test_muting_never_changes_semantic_routing(game, binding, failures)
+	_test_provisional_streams_are_audible(binding, failures)
+	_test_scope_has_no_polling_or_gameplay_authority(failures)
+	game.free()
 	return failures
 
 
-static func _test_vocabulary_and_provisional_streams(binding, failures: Array[String]) -> void:
-	if not CueCatalog.supported_cue_ids().has("audio_cue.player.respawn"):
-		failures.append("AUDIO-001 did not add semantic player respawn cue")
-	var original_respawn = PrototypeCatalog.cue_by_id("audio_cue.player.respawn")
-	if original_respawn == null:
-		failures.append("prototype catalog did not author respawn cue")
-	elif original_respawn.stream != null:
-		failures.append("prototype semantic catalog unexpectedly embeds provisional runtime stream")
-	var controller = binding.audio_controller()
-	if controller == null:
-		failures.append("gameplay audio binding did not compose AudioPresentationController")
-		return
-	for cue_id in CueCatalog.supported_cue_ids():
-		var definition = controller.catalog.cue_by_id(cue_id)
-		if definition == null or definition.stream == null:
-			failures.append("runtime provisional catalog is missing audible stream: %s" % cue_id)
-	var audible: Dictionary = controller.dispatch("audio_cue.player.respawn")
-	if not bool(audible.get("success", false)) or not bool(audible.get("played", false)):
-		failures.append("unmuted in-tree provisional respawn stream did not enter physical playback path: %s" % [audible])
-
-
-static func _test_presentation_scope(failures: Array[String]) -> void:
-	var forbidden_fragments: Array[String] = [
-		"res://app/",
-		"res://gameplay/",
-		"res://world/",
-		"res://worldgen/",
-		"get_instance_id(",
-	]
-	for path in [AUDIO_BINDING_PATH, PROVISIONAL_STREAMS_PATH]:
-		var source: String = FileAccess.get_file_as_string(path)
-		if source.is_empty():
-			failures.append("AUDIO-001 presentation source could not be read: %s" % path)
-			continue
-		for fragment in forbidden_fragments:
-			if source.contains(fragment):
-				failures.append("AUDIO-001 presentation source imports/retains gameplay authority marker %s in %s" % [fragment, path])
-
-
-static func _test_player_combat_and_death(binding, game, failures: Array[String]) -> void:
-	var player: FakePlayer = game.player
-	binding.clear_recent_cues()
-	player.attack_requested.emit({"attack_kind": &"light"})
-	player.attack_requested.emit({"attack_kind": &"heavy"})
-	player.parry_succeeded.emit(Vector3(2.0, 0.0, 2.0))
-	_expect_cue_once(binding, "audio_cue.player.attack.light", failures)
-	_expect_cue_once(binding, "audio_cue.player.attack.heavy", failures)
-	_expect_cue_once(binding, "audio_cue.player.parry.success", failures)
-
-	binding.clear_recent_cues()
-	player.health = 90
-	binding.poll_now()
-	_expect_cue_once(binding, "audio_cue.player.damage", failures)
-	binding.clear_recent_cues()
-	binding.poll_now()
-	_expect_no_cue(binding, "audio_cue.player.damage", failures)
-
-	player.defeat_requested.emit(&"damage")
-	game.death_recovery_controller.recovery_committed.emit(&"damage", Vector3(4.0, 8.0, 4.0))
-	_expect_cue_once(binding, "audio_cue.player.death", failures)
-	_expect_cue_once(binding, "audio_cue.player.respawn", failures)
-
-
-static func _test_harvest_equipment_and_loot(binding, game, failures: Array[String]) -> void:
-	var survival: FakeSurvival = game.survival
-	binding.clear_recent_cues()
-	survival.object_hit_progress["tree-1"] = 1
-	binding.poll_now()
-	_expect_cue_once(binding, "audio_cue.harvest.impact", failures)
-	binding.clear_recent_cues()
-	binding.poll_now()
-	_expect_no_cue(binding, "audio_cue.harvest.impact", failures)
-
-	survival.harvest_result.emit({"type": "harvest.completed"})
-	_expect_cue_once(binding, "audio_cue.harvest.complete", failures)
-	survival.harvest_result.emit({"type": "harvest.pickup_collected"})
-	_expect_cue_once(binding, "audio_cue.inventory.pickup", failures)
-
-	binding.clear_recent_cues()
-	survival.equipment.hotbar = 2
-	survival.equipment.selected_id = "item.tool.stone_axe"
-	survival.equipment.owned_ids = ["item.tool.stone_axe"]
-	binding.poll_now()
-	_expect_cue_once(binding, "audio_cue.equipment.changed", failures)
-	_expect_cue_once(binding, "audio_cue.craft.success", failures)
-	binding.clear_recent_cues()
-	binding.poll_now()
-	_expect_no_cue(binding, "audio_cue.craft.success", failures)
-
-	var encounter: FakeEncounter = game.encounter_controller
-	encounter.pending_ids = ["burrower_1"]
-	encounter.loot_pending.emit("burrower_1", "loot_profile.creature.burrower.m3", Vector3(1.0, 2.0, 3.0))
-	_expect_cue_once(binding, "audio_cue.loot.available", failures)
-	binding.poll_now()
-	binding.clear_recent_cues()
-	encounter.pending_ids.clear()
-	binding.poll_now()
-	_expect_cue_once(binding, "audio_cue.loot.collected", failures)
-	binding.clear_recent_cues()
-	binding.poll_now()
-	_expect_no_cue(binding, "audio_cue.loot.collected", failures)
-
-
-static func _test_enemy_resource_and_ambience(binding, game, failures: Array[String]) -> void:
-	var encounter: FakeEncounter = game.encounter_controller
-	var enemy := FakeEnemy.new()
-	enemy.position = Vector3(5.0, 3.0, 5.0)
-	encounter.add_child(enemy)
-	encounter.active_enemies[enemy.enemy_id] = enemy
-	binding.poll_now()
-	binding.clear_recent_cues()
-	enemy.attack_pending = true
-	binding.poll_now()
-	_expect_cue_once(binding, "audio_cue.enemy.burrower.attack", failures)
-	binding.clear_recent_cues()
-	enemy.health = 20
-	binding.poll_now()
-	_expect_cue_once(binding, "audio_cue.enemy.burrower.hit", failures)
-	binding.clear_recent_cues()
-	enemy.died.emit(enemy.enemy_id)
-	_expect_cue_once(binding, "audio_cue.enemy.burrower.death", failures)
-
-	binding.clear_recent_cues()
-	game.world_delta_store.data = {"object_state": {
-		"sid1:resource-test": {
-			"schema": "resource.runtime.depletion.v1",
-			"depletion": {"remaining_capacity_units": 3.0},
-		},
-	}}
-	binding.poll_now()
-	_expect_cue_once(binding, "audio_cue.resource.mine.impact", failures)
-	binding.clear_recent_cues()
-	binding.poll_now()
-	_expect_no_cue(binding, "audio_cue.resource.mine.impact", failures)
-	game.world_delta_store.data["object_state"]["sid1:resource-test"]["depletion"]["remaining_capacity_units"] = 0.0
-	binding.poll_now()
-	_expect_cue_once(binding, "audio_cue.resource.mine.impact", failures)
-	_expect_cue_once(binding, "audio_cue.resource.depleted", failures)
-
-	var cave_cell := Node3D.new()
-	cave_cell.set_meta("cell_semantic_snapshot", {
-		"world_bounds": AABB(Vector3(-2.0, -2.0, -2.0), Vector3(4.0, 4.0, 4.0)),
-	})
-	game.underworld_runtime.add_child(cave_cell)
-	game.underworld_runtime.render_nodes["cell"] = cave_cell
-	game.player.position = Vector3.ZERO
-	binding.poll_now()
-	if binding.audio_controller().ambience_role() != CueCatalog.AMBIENCE_CAVE:
-		failures.append("realized cave semantic bounds did not select cave ambience")
-	game.player.position = Vector3(20.0, 5.0, 20.0)
-	binding.poll_now()
-	if binding.audio_controller().ambience_role() != CueCatalog.AMBIENCE_SURFACE:
-		failures.append("leaving realized cave semantic bounds did not restore surface ambience")
-
-
-static func _test_mute_is_presentation_only(binding, game, failures: Array[String]) -> void:
-	var before_health: int = game.player.health
-	var before_pending: Array[String] = game.encounter_controller.pending_ids.duplicate()
-	binding.audio_controller().set_muted(true)
+static func _test_existing_semantic_routes(game, binding, failures: Array[String]) -> void:
 	binding.clear_recent_cues()
 	game.player.attack_requested.emit({"attack_kind": &"light"})
-	if game.player.health != before_health or game.encounter_controller.pending_ids != before_pending:
-		failures.append("muted presentation dispatch mutated gameplay fixture state")
-	_expect_cue_once(binding, "audio_cue.player.attack.light", failures)
-	binding.audio_controller().set_muted(false)
+	game.player.attack_requested.emit({"attack_kind": &"heavy"})
+	game.player.parry_succeeded.emit(Vector3.ZERO)
+	game.player.defeat_requested.emit(&"damage")
+	game.death_recovery_controller.recovery_committed.emit(&"damage", Vector3(2, 3, 4))
+	game.survival.harvest_result.emit({"type": "harvest.hit_registered", "world_position": Vector3(1, 2, 3)})
+	game.survival.harvest_result.emit({"type": "harvest.completed"})
+	game.survival.harvest_result.emit({"type": "harvest.pickup_collected"})
+	game.encounter_controller.loot_pending.emit("burrower_1", "loot.profile", Vector3(4, 5, 6))
+	_expect_sequence(binding.recent_cue_ids(), [
+		"audio_cue.player.attack.light",
+		"audio_cue.player.attack.heavy",
+		"audio_cue.player.parry.success",
+		"audio_cue.player.death",
+		"audio_cue.player.respawn",
+		"audio_cue.harvest.impact",
+		"audio_cue.harvest.complete",
+		"audio_cue.inventory.pickup",
+		"audio_cue.loot.available",
+	], "existing semantic producer routes", failures)
 
 
-static func _expect_cue_once(binding, cue_id: String, failures: Array[String]) -> void:
-	var count: int = binding.recent_cue_ids().count(cue_id)
-	if count != 1:
-		failures.append("expected exactly one %s cue, got %d in %s" % [cue_id, count, binding.recent_cue_ids()])
+static func _test_committed_observation_routes(game, binding, failures: Array[String]) -> void:
+	binding.clear_recent_cues()
+	game.player.damage_committed.emit(12, 88, Vector3.ZERO)
+	game.survival.equipped_tool_changed.emit("stone_axe")
+	game.survival.craft_completed.emit("stone_axe", "item.tool.stone_axe")
+	game.encounter_controller.enemy_attack_started.emit("burrower_1", Vector3(3, 0, 2))
+	game.encounter_controller.enemy_damage_committed.emit("burrower_1", 5, 31, Vector3(3, 0, 2))
+	game.encounter_controller.enemy_died.emit("burrower_1", Vector3(3, 0, 2))
+	_expect_sequence(binding.recent_cue_ids(), [
+		"audio_cue.player.damage",
+		"audio_cue.equipment.changed",
+		"audio_cue.craft.success",
+		"audio_cue.enemy.burrower.attack",
+		"audio_cue.enemy.burrower.hit",
+		"audio_cue.enemy.burrower.death",
+	], "committed observation routes", failures)
 
 
-static func _expect_no_cue(binding, cue_id: String, failures: Array[String]) -> void:
-	if binding.recent_cue_ids().has(cue_id):
-		failures.append("unexpected duplicate/rejected %s cue in %s" % [cue_id, binding.recent_cue_ids()])
+static func _test_typed_result_routes(binding, failures: Array[String]) -> void:
+	binding.clear_recent_cues()
+	binding.consume_loot_collection_result({"success": false, "events": []})
+	binding.consume_loot_collection_result({"success": true, "events": [{"event": "loot.collected"}]})
+	binding.consume_resource_mining_result({"success": true, "duplicate": true, "events": []}, Vector3.ONE)
+	binding.consume_resource_mining_result({
+		"success": true,
+		"duplicate": false,
+		"depleted": true,
+		"events": [{"type": "resource.mined"}],
+	}, Vector3(7, -3, 2))
+	_expect_sequence(binding.recent_cue_ids(), [
+		"audio_cue.loot.collected",
+		"audio_cue.resource.mine.impact",
+		"audio_cue.resource.depleted",
+	], "typed loot/resource results", failures)
 
 
-static func _free_node(node: Node) -> void:
-	if node == null or not is_instance_valid(node):
+static func _test_ambience_transition(game, binding, failures: Array[String]) -> void:
+	var audio = binding.audio_controller()
+	if audio == null or audio.ambience_role() != CueCatalog.AMBIENCE_SURFACE:
+		failures.append("binding did not seed surface ambience without a fake gameplay cue")
 		return
-	if node.get_parent() != null:
-		node.get_parent().remove_child(node)
-	node.free()
+	game.underworld_runtime.cave_presence_changed.emit(true)
+	if audio.ambience_role() != CueCatalog.AMBIENCE_CAVE:
+		failures.append("cave presence transition did not select cave ambience")
+	game.underworld_runtime.cave_presence_changed.emit(false)
+	if audio.ambience_role() != CueCatalog.AMBIENCE_SURFACE:
+		failures.append("surface return did not restore surface ambience")
+	if audio.ambience_player_count() != 1:
+		failures.append("semantic ambience transitions did not reuse one ambience player")
+
+
+static func _test_muting_never_changes_semantic_routing(game, binding, failures: Array[String]) -> void:
+	var audio = binding.audio_controller()
+	binding.clear_recent_cues()
+	audio.set_muted(true)
+	game.player.damage_committed.emit(1, 99, Vector3.ZERO)
+	if binding.recent_cue_ids() != ["audio_cue.player.damage"]:
+		failures.append("muting changed semantic audio routing")
+	if audio.active_one_shot_count() != 0:
+		failures.append("muted committed outcome created physical one-shot playback")
+	audio.set_muted(false)
+
+
+static func _test_provisional_streams_are_audible(binding, failures: Array[String]) -> void:
+	var audio = binding.audio_controller()
+	if audio == null:
+		failures.append("provisional playback proof has no audio controller")
+		return
+	if not audio.is_inside_tree():
+		failures.append("provisional playback proof requires mounted controller")
+		return
+	var result: Dictionary = audio.dispatch("audio_cue.player.respawn")
+	if not bool(result.get("success", false)) or not bool(result.get("played", false)):
+		failures.append("unmuted production binding did not start provisional respawn stream")
+
+
+static func _test_scope_has_no_polling_or_gameplay_authority(failures: Array[String]) -> void:
+	var source: String = FileAccess.get_file_as_string("res://presentation/audio/gameplay_audio_binding.gd")
+	for forbidden in ["func _process(", "poll_now(", "last_action_message", "object_hit_progress", "active_enemies", "render_nodes", "world_delta_store"]:
+		if source.contains(forbidden):
+			failures.append("gameplay audio binding contains forbidden polling/authority fragment: %s" % forbidden)
+
+
+static func _expect_sequence(actual: Array[String], expected: Array[String], label: String, failures: Array[String]) -> void:
+	if actual != expected:
+		failures.append("%s cue sequence mismatch: %s != %s" % [label, actual, expected])

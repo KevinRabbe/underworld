@@ -184,7 +184,10 @@ func _collect_nearby_pending_loot() -> void:
 	var inventory_state = survival.get_inventory_state()
 	if inventory_state == null:
 		return
-	encounter_controller.collect_nearby_pending_loot(inventory_state)
+	var collection_result: Dictionary = encounter_controller.collect_nearby_pending_loot(inventory_state)
+	var audio_binding := get_node_or_null("GameplayAudioBinding")
+	if audio_binding != null and audio_binding.has_method("consume_loot_collection_result"):
+		audio_binding.call("consume_loot_collection_result", collection_result)
 
 
 func _create_underworld_runtime() -> void:

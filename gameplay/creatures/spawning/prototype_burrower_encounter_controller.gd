@@ -2,6 +2,9 @@ extends Node3D
 class_name UnderworldPrototypeBurrowerEncounterController
 
 signal loot_pending(occurrence_id: String, profile_id: String, world_position: Vector3)
+signal enemy_attack_started(enemy_id: String, world_position: Vector3)
+signal enemy_damage_committed(enemy_id: String, amount: int, remaining_health: int, world_position: Vector3)
+signal enemy_died(enemy_id: String, world_position: Vector3)
 
 const EnemyScript := preload("res://gameplay/creatures/underworld/burrower/burrower.gd")
 const CreatureDefinition := preload("res://gameplay/creatures/definitions/creature_definition.gd")
@@ -216,6 +219,8 @@ func _spawn_enemy_near_player() -> void:
 			spawn_position,
 			BurrowerDefinition.runtime_stats()
 		)
+		enemy.attack_started.connect(_on_enemy_attack_started)
+		enemy.damage_committed.connect(_on_enemy_damage_committed)
 		enemy.died.connect(_on_enemy_died)
 		add_child(enemy)
 		active_enemies[id] = enemy
@@ -278,11 +283,28 @@ func _is_too_close_to_other_enemy(position: Vector3) -> bool:
 	return false
 
 
+func _on_enemy_attack_started(enemy_id: String, world_position: Vector3) -> void:
+	if _is_finite_vector3(world_position):
+		enemy_attack_started.emit(enemy_id, world_position)
+
+
+func _on_enemy_damage_committed(
+	enemy_id: String,
+	amount: int,
+	remaining_health: int,
+	world_position: Vector3
+) -> void:
+	if amount > 0 and remaining_health >= 0 and _is_finite_vector3(world_position):
+		enemy_damage_committed.emit(enemy_id, amount, remaining_health, world_position)
+
+
 func _on_enemy_died(enemy_id: String) -> void:
 	var death_position: Vector3 = Vector3.ZERO
 	var enemy_node: Node3D = active_enemies.get(enemy_id, null) as Node3D
 	if enemy_node != null and is_instance_valid(enemy_node):
 		death_position = enemy_node.global_position
+	if _is_finite_vector3(death_position):
+		enemy_died.emit(enemy_id, death_position)
 
 	if loot_ready:
 		var reward_result: Dictionary = loot_reward_service.issue_for_creature(

@@ -2,6 +2,7 @@ extends Node3D
 
 signal equipped_tool_changed(tool_id: String)
 signal harvest_result(event: Dictionary)
+signal craft_completed(recipe_id: String, item_id: String)
 
 const ItemDefinition := preload("res://gameplay/items/definitions/item_definition.gd")
 const ItemContainerState := preload("res://gameplay/items/inventory/item_container_state.gd")
@@ -152,19 +153,22 @@ func harvest_world_object(
 	if next_hits < required_hits:
 		object_hit_progress[object_id] = next_hits
 		last_action_message = "%s hit %d/%d" % [object_type.capitalize(), next_hits, required_hits]
+		var hit_event: Dictionary = {
+			"type": "harvest.hit_registered",
+			"object_id": object_id,
+			"object_type": object_type,
+			"hits": next_hits,
+			"required_hits": required_hits,
+			"world_position": player.global_position if player != null else Vector3.ZERO,
+		}
+		harvest_result.emit(hit_event)
 		return _harvest_success({
 			"object_id": object_id,
 			"object_type": object_type,
 			"hits": next_hits,
 			"required_hits": required_hits,
 			"completed": false,
-			"events": [{
-				"type": "harvest.hit_registered",
-				"object_id": object_id,
-				"object_type": object_type,
-				"hits": next_hits,
-				"required_hits": required_hits,
-			}],
+			"events": [hit_event],
 		})
 
 	var item_id: String = _harvest_inventory.item_id_for_world_object(object_type)
@@ -384,6 +388,7 @@ func request_craft(recipe_id: String) -> void:
 	_sync_legacy_mirrors()
 	last_action_message = "Crafted Stone Axe" if recipe_id == "stone_axe" else "Crafted Stone Pickaxe"
 	equipped_tool_changed.emit(equipped_tool)
+	craft_completed.emit(recipe_id, tool_id)
 
 
 func get_resource_counts() -> Vector2i:
