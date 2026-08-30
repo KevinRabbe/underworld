@@ -264,7 +264,6 @@ static func _test_locator_retry_and_nearby_collection(failures: Array[String]) -
 	if controller.has_pending_loot_locator("burrower_locator_contract"):
 		failures.append("successful nearby retry did not clear transient locator")
 	controller.free()
-	player_probe.free()
 
 
 static func _test_service_import_is_atomic_and_deep_owned(failures: Array[String]) -> void:
@@ -360,7 +359,6 @@ static func _test_restored_pending_is_collectible_without_reissuance(failures: A
 	if bool(duplicate.get("success", false)) or inventory.canonical_json() != after:
 		failures.append("restored pending reward was collectible more than once")
 	controller.free()
-	player_probe.free()
 
 
 static func _test_restored_import_rejects_bad_identity_and_nonfinite_anchor(failures: Array[String]) -> void:
