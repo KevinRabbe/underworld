@@ -5,6 +5,7 @@ signal attack_requested(execution: Dictionary)
 signal hotbar_slot_requested(slot: int)
 signal craft_requested(recipe_id: String)
 signal parry_succeeded(source_position: Vector3)
+signal defeat_requested(reason: StringName)
 
 const PrototypeMannequinScript := preload("res://presentation/characters/player/prototype_mannequin/prototype_mannequin.gd")
 const PrototypeAnimationRuntimeFactoryScript := preload("res://presentation/characters/player/prototype_mannequin/prototype_animation_runtime_factory.gd")
@@ -41,6 +42,9 @@ const SPRINT_FOV := 79.0
 const RESPAWN_FALL_HEIGHT := -100.0
 const MAX_HEALTH := 100
 const DAMAGE_INVULNERABILITY := 0.45
+const POST_RESPAWN_INVULNERABILITY := 1.0
+const DEFEAT_REASON_DAMAGE: StringName = &"damage"
+const DEFEAT_REASON_FALL: StringName = &"fall"
 const TOOL_HAND_RIG_ROLE := "rig_role.socket.hand.right"
 
 var look_sensitivity: float = 0.0025
@@ -57,6 +61,8 @@ var damage_invulnerability_timer: float = 0.0
 var health: int = MAX_HEALTH
 var equipped_tool_visual: String = "hands"
 var sprinting_this_frame: bool = false
+var defeated: bool = false
+var _defeat_reason: StringName = &""
 
 var stamina := StaminaComponentScript.new(100.0, 0.75, 20.0)
 var action_controller := PlayerActionControllerScript.new(stamina)
@@ -87,6 +93,8 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if defeated:
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		camera_yaw.rotate_y(-event.relative.x * look_sensitivity)
 		camera_pitch = clampf(
@@ -144,6 +152,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if defeated:
+		velocity = Vector3.ZERO
+		sprinting_this_frame = false
+		return
 	damage_invulnerability_timer = maxf(0.0, damage_invulnerability_timer - delta)
 	_handle_action_inputs()
 	_update_jump_timers(delta)
@@ -226,6 +238,14 @@ func is_blocking() -> bool:
 	return action_controller.is_blocking()
 
 
+func is_defeated() -> bool:
+	return defeated
+
+
+func get_defeat_reason() -> StringName:
+	return _defeat_reason
+
+
 func get_mannequin():
 	return mannequin
 
@@ -239,7 +259,7 @@ func receive_melee_attack(
 	source_position: Vector3,
 	parryable: bool = true
 ) -> StringName:
-	if amount <= 0:
+	if defeated or amount <= 0:
 		return &"ignored"
 	if action_controller.is_dodge_iframe_active():
 		return &"dodged"
@@ -278,6 +298,8 @@ func _is_source_in_front_arc(source_position: Vector3, minimum_dot: float) -> bo
 
 
 func _apply_damage(amount: int, source_position: Vector3) -> void:
+	if defeated:
+		return
 	damage_invulnerability_timer = DAMAGE_INVULNERABILITY
 	health = maxi(health - amount, 0)
 	if animation_controller != null:
@@ -291,17 +313,19 @@ func _apply_damage(amount: int, source_position: Vector3) -> void:
 		velocity.z += away.z * 4.5
 
 	if health <= 0:
-		_respawn_after_defeat()
+		_enter_defeated(DEFEAT_REASON_DAMAGE)
 
 
 func _request_harvest() -> void:
-	if not _begin_tool_action():
+	if defeated or not _begin_tool_action():
 		return
 	var ray: Dictionary = _get_camera_action_ray(harvest_range)
 	harvest_requested.emit(ray["origin"], ray["direction"], ray["distance"])
 
 
 func _request_attack(heavy: bool = false) -> void:
+	if defeated:
+		return
 	var intent: Dictionary = _build_attack_intent(heavy)
 	if intent.is_empty():
 		return
@@ -312,7 +336,7 @@ func _request_attack(heavy: bool = false) -> void:
 
 
 func _build_attack_intent(heavy: bool = false) -> Dictionary:
-	if camera == null:
+	if defeated or camera == null:
 		return {}
 	var attack_kind: StringName = &"heavy" if heavy else &"light"
 	var attack_definition = _resolve_attack_definition(equipped_tool_visual, attack_kind)
@@ -334,7 +358,7 @@ func _build_attack_intent(heavy: bool = false) -> Dictionary:
 
 
 func _start_attack_from_intent(intent: Dictionary, require_current_source: bool = false) -> bool:
-	if not action_controller.is_free():
+	if defeated or not action_controller.is_free():
 		return false
 	var source_signature: String = str(intent.get("source_signature", ""))
 	if require_current_source and (
@@ -372,7 +396,7 @@ func _start_attack_from_intent(intent: Dictionary, require_current_source: bool 
 
 
 func _resolve_pending_attack_activation() -> void:
-	if not action_controller.consume_attack_activation():
+	if defeated or not action_controller.consume_attack_activation():
 		return
 	var attack_definition = pending_attack_definition
 	var direction: Vector3 = pending_attack_direction
@@ -429,13 +453,13 @@ func _queue_buffered_action(
 	payload: Dictionary = {},
 	lifetime: float = PlayerInputBufferScript.DEFAULT_LIFETIME
 ) -> bool:
-	if not action_controller.can_replace_buffered_action(action, input_buffer.peek_action()):
+	if defeated or not action_controller.can_replace_buffered_action(action, input_buffer.peek_action()):
 		return false
 	return input_buffer.push(action, payload, lifetime)
 
 
 func _try_consume_buffered_action() -> void:
-	if not action_controller.is_free() or not input_buffer.has_pending():
+	if defeated or not action_controller.is_free() or not input_buffer.has_pending():
 		return
 	var buffered_action: StringName = input_buffer.peek_action()
 	if (
@@ -457,7 +481,8 @@ func _try_consume_buffered_action() -> void:
 
 func _begin_tool_action() -> bool:
 	if (
-		camera == null
+		defeated
+		or camera == null
 		or tool_use_cooldown_timer > 0.0
 		or not action_controller.is_free()
 	):
@@ -484,6 +509,8 @@ func _get_camera_action_ray(reach_from_player: float) -> Dictionary:
 
 
 func _handle_action_inputs() -> void:
+	if defeated:
+		return
 	if action_controller.is_blocking():
 		if not is_on_floor() or not Input.is_action_pressed("block"):
 			action_controller.stop_block()
@@ -511,7 +538,7 @@ func _handle_action_inputs() -> void:
 
 
 func _buffer_pressed_defensive_inputs() -> void:
-	if not is_on_floor():
+	if defeated or not is_on_floor():
 		return
 	if Input.is_action_just_pressed("dodge"):
 		var dodge_direction: Vector3 = _get_requested_dodge_direction()
@@ -535,6 +562,8 @@ func _get_requested_dodge_direction() -> Vector3:
 
 
 func _start_dodge(dodge_direction: Vector3) -> bool:
+	if defeated:
+		return false
 	var horizontal := Vector3(dodge_direction.x, 0.0, dodge_direction.z)
 	if horizontal.is_zero_approx():
 		return false
@@ -549,7 +578,7 @@ func _start_dodge(dodge_direction: Vector3) -> bool:
 
 
 func _start_parry() -> bool:
-	if not action_controller.try_start_parry():
+	if defeated or not action_controller.try_start_parry():
 		return false
 	jump_buffer_timer = 0.0
 	_face_combat_camera()
@@ -719,25 +748,55 @@ func _update_camera_fov(delta: float) -> void:
 
 
 func _check_fall_respawn() -> void:
-	if global_position.y >= RESPAWN_FALL_HEIGHT:
+	if defeated or global_position.y >= RESPAWN_FALL_HEIGHT:
 		return
-	_respawn_after_defeat()
+	_enter_defeated(DEFEAT_REASON_FALL)
 
 
-func _respawn_after_defeat() -> void:
-	global_position = respawn_position
+func _enter_defeated(reason: StringName) -> bool:
+	if defeated or (reason != DEFEAT_REASON_DAMAGE and reason != DEFEAT_REASON_FALL):
+		return false
+	defeated = true
+	_defeat_reason = reason
+	velocity = Vector3.ZERO
+	sprinting_this_frame = false
+	defeat_requested.emit(reason)
+	return true
+
+
+func commit_respawn(position: Vector3) -> bool:
+	if not defeated or not _is_finite_vector3(position):
+		return false
+	global_position = position
+	respawn_position = position
 	velocity = Vector3.ZERO
 	health = MAX_HEALTH
-	damage_invulnerability_timer = 1.0
+	damage_invulnerability_timer = POST_RESPAWN_INVULNERABILITY
 	stamina.reset()
 	action_controller.reset()
 	input_buffer.reset()
 	pending_attack_definition = null
 	pending_attack_direction = Vector3.ZERO
+	jump_buffer_timer = 0.0
+	coyote_timer = 0.0
+	tool_use_cooldown_timer = 0.0
+	tool_swing_timer = 0.0
+	sprinting_this_frame = false
+	defeated = false
+	_defeat_reason = &""
 	if animation_controller != null:
 		animation_controller.reset_presentation()
 	elif mannequin != null:
 		mannequin.reset_pose()
+	return true
+
+
+static func _is_finite_vector3(value: Vector3) -> bool:
+	return (
+		not is_nan(value.x) and not is_inf(value.x)
+		and not is_nan(value.y) and not is_inf(value.y)
+		and not is_nan(value.z) and not is_inf(value.z)
+	)
 
 
 func _build_character_visual() -> void:
