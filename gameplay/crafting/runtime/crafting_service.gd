@@ -2,6 +2,7 @@ extends RefCounted
 
 const ContentId := preload("res://core/content/identity/content_id.gd")
 const ContentRegistry := preload("res://core/content/registry/content_registry.gd")
+const ContentValidationPipeline := preload("res://core/content/validation/content_validation_pipeline.gd")
 const ItemDefinition := preload("res://gameplay/items/definitions/item_definition.gd")
 const ItemContainerState := preload("res://gameplay/items/inventory/item_container_state.gd")
 const InventoryTransactionPlan := preload("res://gameplay/items/inventory/inventory_transaction_plan.gd")
@@ -11,7 +12,6 @@ const CraftingContext := preload("res://gameplay/crafting/runtime/crafting_conte
 
 var _content_registry
 var _content_validation_result: Dictionary = {}
-var _validated_ids: Dictionary = {}
 var _transaction_service
 var _configuration_failures: Array[String] = []
 
@@ -23,7 +23,6 @@ func configure(
 ) -> RefCounted:
 	_content_registry = content_registry
 	_content_validation_result = content_validation_result.duplicate(true)
-	_validated_ids.clear()
 	_configuration_failures.clear()
 
 	if content_registry == null or not content_registry is ContentRegistry:
@@ -34,8 +33,12 @@ func configure(
 
 	if not bool(content_validation_result.get("success", false)):
 		_configuration_failures.append("crafting service requires successful CONTENT-005 validation evidence")
-	for raw_id in content_validation_result.get("validated_definition_ids", []):
-		_validated_ids[str(raw_id)] = true
+	elif content_registry != null and content_registry is ContentRegistry and content_registry.is_valid():
+		for failure in ContentValidationPipeline.evidence_failures(
+			content_validation_result,
+			content_registry
+		):
+			_configuration_failures.append("CONTENT-006 validation evidence: %s" % failure)
 
 	if transaction_service == null:
 		_transaction_service = InventoryTransactionService.new()
@@ -59,8 +62,13 @@ func build_plan(
 		failures.append("craft recipe id: %s" % failure)
 	if ContentId.is_valid(recipe_content_id) and ContentId.family_of(recipe_content_id) != "recipe":
 		failures.append("craft recipe id must use recipe.* family: %s" % recipe_content_id)
-	if not _validated_ids.has(recipe_content_id):
-		failures.append("recipe lacks successful CONTENT-005 validation evidence: %s" % recipe_content_id)
+	if _content_registry != null and _content_registry is ContentRegistry and _content_registry.is_valid():
+		for failure in ContentValidationPipeline.evidence_failures(
+			_content_validation_result,
+			_content_registry,
+			recipe_content_id
+		):
+			failures.append("CONTENT-006 validation evidence: %s" % failure)
 	if context == null or not context is CraftingContext:
 		failures.append("crafting requires CraftingContext")
 	else:
