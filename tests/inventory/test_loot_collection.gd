@@ -13,6 +13,11 @@ const CHITIN_PATH := "res://content/items/resources/burrower_chitin_definition.t
 const CHITIN_ID := "item.resource.burrower_chitin"
 
 
+class PlayerPositionProbe:
+	extends RefCounted
+	var global_position: Vector3 = Vector3.ZERO
+
+
 static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_burrower_death_to_exactly_once_collection(failures)
@@ -227,8 +232,8 @@ static func _test_reward_events_are_semantic(failures: Array[String]) -> void:
 static func _test_locator_retry_and_nearby_collection(failures: Array[String]) -> void:
 	var controller = EncounterController.new()
 	controller.configure(null, null, null)
-	var player_probe = Node3D.new()
-	player_probe.position = Vector3.ZERO
+	var player_probe = PlayerPositionProbe.new()
+	player_probe.global_position = Vector3.ZERO
 	controller.player = player_probe
 	controller._on_enemy_died("burrower_locator_contract")
 	if not controller.has_pending_loot_locator("burrower_locator_contract"):
@@ -341,8 +346,8 @@ static func _test_restored_pending_is_collectible_without_reissuance(failures: A
 	if controller.get_pending_loot_snapshot("burrower_12") != restored_snapshot:
 		failures.append("encounter restore retained alias to detached SAVE pending state")
 
-	var player_probe = Node3D.new()
-	player_probe.position = anchor
+	var player_probe = PlayerPositionProbe.new()
+	player_probe.global_position = anchor
 	controller.player = player_probe
 	var inventory = ItemContainerState.new().configure(2)
 	var collect: Dictionary = controller.collect_nearby_pending_loot(inventory)
