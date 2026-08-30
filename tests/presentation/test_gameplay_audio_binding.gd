@@ -4,6 +4,9 @@ const Binding := preload("res://presentation/audio/gameplay_audio_binding.gd")
 const CueCatalog := preload("res://presentation/audio/audio_cue_catalog.gd")
 const PrototypeCatalog := preload("res://content/presentation/audio/prototype_audio_cue_catalog.tres")
 
+const AUDIO_BINDING_PATH := "res://presentation/audio/gameplay_audio_binding.gd"
+const PROVISIONAL_STREAMS_PATH := "res://presentation/audio/provisional_audio_stream_library.gd"
+
 
 class FakeDefinition:
 	extends Resource
@@ -87,6 +90,7 @@ class FakeEncounter:
 class FakeEnemy:
 	extends Node3D
 	signal died(enemy_id: String)
+	var enemy_id: String = "burrower_1"
 	var health: int = 36
 	var attack_pending: bool = false
 
@@ -135,6 +139,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		return failures
 
 	_test_vocabulary_and_provisional_streams(binding, failures)
+	_test_presentation_scope(failures)
 	_test_player_combat_and_death(binding, game, failures)
 	_test_harvest_equipment_and_loot(binding, game, failures)
 	_test_enemy_resource_and_ambience(binding, game, failures)
@@ -160,6 +165,27 @@ static func _test_vocabulary_and_provisional_streams(binding, failures: Array[St
 		var definition = controller.catalog.cue_by_id(cue_id)
 		if definition == null or definition.stream == null:
 			failures.append("runtime provisional catalog is missing audible stream: %s" % cue_id)
+	var audible: Dictionary = controller.dispatch("audio_cue.player.respawn")
+	if not bool(audible.get("success", false)) or not bool(audible.get("played", false)):
+		failures.append("unmuted in-tree provisional respawn stream did not enter physical playback path: %s" % [audible])
+
+
+static func _test_presentation_scope(failures: Array[String]) -> void:
+	var forbidden_fragments: Array[String] = [
+		"res://app/",
+		"res://gameplay/",
+		"res://world/",
+		"res://worldgen/",
+		"get_instance_id(",
+	]
+	for path in [AUDIO_BINDING_PATH, PROVISIONAL_STREAMS_PATH]:
+		var source: String = FileAccess.get_file_as_string(path)
+		if source.is_empty():
+			failures.append("AUDIO-001 presentation source could not be read: %s" % path)
+			continue
+		for fragment in forbidden_fragments:
+			if source.contains(fragment):
+				failures.append("AUDIO-001 presentation source imports/retains gameplay authority marker %s in %s" % [fragment, path])
 
 
 static func _test_player_combat_and_death(binding, game, failures: Array[String]) -> void:
@@ -231,7 +257,7 @@ static func _test_enemy_resource_and_ambience(binding, game, failures: Array[Str
 	var enemy := FakeEnemy.new()
 	enemy.position = Vector3(5.0, 3.0, 5.0)
 	encounter.add_child(enemy)
-	encounter.active_enemies["burrower_1"] = enemy
+	encounter.active_enemies[enemy.enemy_id] = enemy
 	binding.poll_now()
 	binding.clear_recent_cues()
 	enemy.attack_pending = true
@@ -242,7 +268,7 @@ static func _test_enemy_resource_and_ambience(binding, game, failures: Array[Str
 	binding.poll_now()
 	_expect_cue_once(binding, "audio_cue.enemy.burrower.hit", failures)
 	binding.clear_recent_cues()
-	enemy.died.emit("burrower_1")
+	enemy.died.emit(enemy.enemy_id)
 	_expect_cue_once(binding, "audio_cue.enemy.burrower.death", failures)
 
 	binding.clear_recent_cues()
