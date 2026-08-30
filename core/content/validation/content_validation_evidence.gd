@@ -150,7 +150,10 @@ func verification_failures(
 static func definition_descriptors(definitions: Array) -> Array:
 	var descriptors: Array = []
 	for candidate in definitions:
-		if candidate == null or not candidate.has_method("canonical_descriptor"):
+		if candidate == null or typeof(candidate) != TYPE_OBJECT:
+			descriptors.append({"invalid_definition": true})
+			continue
+		if not candidate.has_method("canonical_descriptor"):
 			descriptors.append({"invalid_definition": true})
 			continue
 		descriptors.append(candidate.canonical_descriptor().duplicate(true))
@@ -178,12 +181,14 @@ static func family_validator_descriptors(validators: Array) -> Array:
 static func semantic_context_descriptor(context) -> Variant:
 	if context == null:
 		return null
+	if context is Dictionary or context is Array:
+		return _canonical_variant(context)
+	if typeof(context) != TYPE_OBJECT:
+		return {"unsupported_semantic_context_type": str(typeof(context))}
 	if context.has_method("canonical_manifest"):
 		return context.canonical_manifest().duplicate(true)
 	if context.has_method("canonical_descriptor"):
 		return context.canonical_descriptor().duplicate(true)
-	if context is Dictionary or context is Array:
-		return _canonical_variant(context)
 	return {"unsupported_semantic_context_type": str(typeof(context))}
 
 
