@@ -16,6 +16,7 @@ const ItemContainerStateScript := preload("res://gameplay/items/inventory/item_c
 const EquipmentHotbarStateScript := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
 const PendingLootStateScript := preload("res://gameplay/loot/runtime/pending_loot_state.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
+const PlayerDeathRecoveryControllerScript := preload("res://gameplay/player/lifecycle/player_death_recovery_controller.gd")
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
 const GameplayHudScript := preload("res://presentation/ui/hud/gameplay_hud.gd")
@@ -36,6 +37,7 @@ var world
 var world_delta_store
 var survival
 var player
+var death_recovery_controller
 var combat_resolver
 var encounter_controller
 var gameplay_hud
@@ -151,6 +153,7 @@ func _ready() -> void:
 	_setup_environment()
 	_create_world()
 	_create_player()
+	_create_death_recovery()
 	_create_underworld_runtime()
 	_create_combat()
 	_create_gameplay_hud()
@@ -170,6 +173,8 @@ func _process(delta: float) -> void:
 
 
 func _collect_nearby_pending_loot() -> void:
+	if player != null and player.has_method("is_defeated") and bool(player.is_defeated()):
+		return
 	if encounter_controller == null or survival == null:
 		return
 	if encounter_controller.get_pending_loot_count() <= 0:
@@ -206,7 +211,6 @@ func _create_underworld_runtime() -> void:
 			world.generate_initial(spawn_xz)
 			var surface_height: float = world.get_height_at_world(spawn_xz.x, spawn_xz.z)
 			player.global_position = Vector3(spawn_xz.x, surface_height + 3.0, spawn_xz.z)
-			player.set_respawn_position(player.global_position)
 			if water_surface != null:
 				water_surface.position.x = spawn_xz.x
 				water_surface.position.z = spawn_xz.z
@@ -308,7 +312,6 @@ func _create_player() -> void:
 		var spawn_height: float = world.get_height_at_world(spawn_xz.x, spawn_xz.z)
 		spawn_position = Vector3(spawn_xz.x, spawn_height + 3.0, spawn_xz.z)
 	player.global_position = spawn_position
-	player.set_respawn_position(spawn_position)
 	player.set_harvest_range(survival_settings.harvest_range)
 	player.set_tool_use_cooldown(survival_settings.tool_use_cooldown)
 	player.harvest_requested.connect(survival.try_harvest)
@@ -318,6 +321,21 @@ func _create_player() -> void:
 	world.set_player(player)
 	survival.set_player(player)
 	player.set_equipped_tool(survival.get_equipped_tool())
+
+
+func _create_death_recovery() -> void:
+	death_recovery_controller = PlayerDeathRecoveryControllerScript.new()
+	death_recovery_controller.name = "DeathRecovery"
+	add_child(death_recovery_controller)
+	var failures: Array[String] = death_recovery_controller.configure(
+		player,
+		world,
+		world_settings
+	)
+	if not failures.is_empty():
+		push_error("Death recovery configuration failed: %s" % [failures])
+		return
+	player.defeat_requested.connect(death_recovery_controller.request_recovery)
 
 
 func _create_combat() -> void:
