@@ -7,6 +7,7 @@ on:
       - 'gameplay/resources/definitions/authored_harvestable_resource_definition.gd'
       - 'content/resources/**'
       - 'content/items/resources/iron_chunk_definition.tres'
+      - 'content/items/resources/stone_definition.tres'
       - 'content/items/tools/stone_pickaxe_definition.tres'
       - 'presentation/world/resources/**'
       - 'gameplay/items/definitions/item_definition.gd'
