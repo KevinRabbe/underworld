@@ -1,5 +1,7 @@
 extends Node
 
+signal route_changed(route_id)
+
 const GameSaveSlotService := preload("res://gameplay/persistence/game_save_slot_service.gd")
 
 const ROUTE_NONE: StringName = &""
@@ -10,6 +12,8 @@ const GAME_SCENE: PackedScene = preload("res://app/game/game.tscn")
 const TITLE_SCREEN_SCENE: PackedScene = preload("res://presentation/ui/screens/title/title_screen.tscn")
 
 @onready var scene_host: Node = $SceneHost
+@onready var game_flow_controller: Node = $GameFlowController
+@onready var pause_menu: Control = $PauseLayer/PauseMenu
 
 var current_scene: Node = null
 var _current_route: StringName = ROUTE_NONE
@@ -47,6 +51,8 @@ func configure_save_slot_path(slot_path: String) -> bool:
 
 
 func _ready() -> void:
+	if not bool(game_flow_controller.call("configure", self, pause_menu)):
+		push_error("Application game-flow controller failed semantic composition")
 	show_title()
 
 
@@ -117,6 +123,10 @@ func continue_game() -> bool:
 	return _replace_game_scene(true, candidate_variant)
 
 
+func quit_application() -> void:
+	get_tree().quit()
+
+
 func _replace_game_scene(is_continue: bool, candidate: Dictionary) -> bool:
 	if _transition_in_progress or _game_scene == null:
 		return false
@@ -178,6 +188,7 @@ func _commit_prepared_scene(next_scene: Node, route_id: StringName) -> bool:
 	scene_host.add_child(next_scene)
 	current_scene = next_scene
 	_current_route = route_id
+	route_changed.emit(_current_route)
 	if previous_scene != null and is_instance_valid(previous_scene):
 		previous_scene.queue_free()
 	_transition_in_progress = false
@@ -193,7 +204,7 @@ func _on_continue_requested() -> void:
 
 
 func _on_quit_requested() -> void:
-	get_tree().quit()
+	quit_application()
 
 
 static func _failure(messages: Array) -> Dictionary:
