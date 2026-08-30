@@ -1,0 +1,112 @@
+name: Character Rev11 Compact Gear Push
+
+on:
+  push:
+    branches:
+      - codex/char-present-001
+    paths:
+      - ".github/workflows/character-rev11-push.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch_validate_capture:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout character branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: codex/char-present-001
+          fetch-depth: 0
+
+      - name: Apply bounded compact-gear correction
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 .github/character_rev11_patch_once.py
+          git diff --check
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Validate character contracts
+        shell: bash
+        run: |
+          set -o pipefail
+          log="$(mktemp)"
+          godot --headless --path . --quit-after 1 --script res://tests/run_character.gd 2>&1 | tee "$log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"; then
+            exit 1
+          fi
+          grep -Fq '[CHARACTER VALIDATION] PASS' "$log"
+
+      - name: Commit production correction and retire temporary executors
+        id: production
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name "underworld-character-worker"
+          git config user.email "underworld-character-worker@users.noreply.github.com"
+          git add presentation/characters/faceted/faceted_body_compiler.gd presentation/characters/voxel/baseline_survivor_factory.gd
+          git rm .github/character_rev11_patch_once.py .github/workflows/character-rev11-push.yml .github/workflows/character-rev10-evidence-push.yml
+          git commit -m "CHAR-PRESENT-001: compact boots and stone axe"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Capture real Godot rev11 evidence
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p character-preview
+          capture() {
+            local scene="$1"
+            local name="$2"
+            local angle="$3"
+            local state="$4"
+            local pose="$5"
+            xvfb-run -a godot --path . --rendering-method gl_compatibility \
+              "$scene" -- \
+              --preview-capture="$PWD/character-preview/${name}.png" \
+              --preview-angle="$angle" \
+              --preview-state="$state" \
+              --preview-pose-time="$pose" \
+              --preview-delay=0.15
+          }
+          capture res://tools/character_preview/voxel_character_preview.tscn front 0 idle 0.35
+          capture res://tools/character_preview/voxel_character_preview.tscn three_quarter -35 idle 0.35
+          capture res://tools/character_preview/voxel_character_preview.tscn side -90 idle 0.35
+          capture res://tools/character_preview/voxel_character_preview.tscn back 180 idle 0.35
+          capture res://tools/character_preview/voxel_character_preview.tscn heavy_three_quarter -35 attack_heavy 0.38
+
+          cp tools/character_preview/voxel_character_preview.tscn tools/character_preview/.rev11_gameplay_distance.tscn
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tools/character_preview/.rev11_gameplay_distance.tscn')
+          s = p.read_text()
+          s = s.replace('2.7, 1.35, -4.2)', '4.4, 2.05, -6.85)')
+          s = s.replace('fov = 34.0', 'fov = 42.0')
+          p.write_text(s)
+          PY
+          capture res://tools/character_preview/.rev11_gameplay_distance.tscn gameplay_distance -20 idle 0.35
+          rm tools/character_preview/.rev11_gameplay_distance.tscn
+          git diff --check
+          test -z "$(git status --porcelain)"
+          ls -lh character-preview
+
+      - name: Push validated production head
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git push origin HEAD:codex/char-present-001
+
+      - name: Upload rev11 runtime captures
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: character-rev11-evidence-${{ steps.production.outputs.sha }}
+          path: character-preview/*.png
+          if-no-files-found: error
+          retention-days: 3
