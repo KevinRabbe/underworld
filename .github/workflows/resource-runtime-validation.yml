@@ -4,7 +4,13 @@ on:
   pull_request:
     paths:
       - 'gameplay/resources/runtime/**'
+      - 'worldgen/identity/stable_id.gd'
+      - 'content/placement/underground_placement_record.gd'
+      - 'gameplay/resources/definitions/resource_definition.gd'
+      - 'gameplay/resources/definitions/resource_yield_rule.gd'
       - 'gameplay/resources/definitions/authored_harvestable_resource_definition.gd'
+      - 'gameplay/resources/state/resource_depletion_state.gd'
+      - 'worldgen/persistence/world_delta_store.gd'
       - 'content/resources/**'
       - 'content/items/resources/iron_chunk_definition.tres'
       - 'content/items/resources/stone_definition.tres'
