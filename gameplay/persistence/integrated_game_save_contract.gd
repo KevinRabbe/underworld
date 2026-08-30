@@ -12,7 +12,7 @@ const ROOT_KEYS: Array[String] = [
 	"equipment_json",
 	"inventory_json",
 	"map_json",
-	"pending_loot_json",
+	"pending_loot_jsons",
 	"player_resume",
 	"save_schema_version",
 	"schema",
@@ -25,7 +25,7 @@ static func encode(
 	delta_store,
 	inventory_state,
 	equipment_state,
-	pending_loot_state,
+	pending_loot_states: Array,
 	resume_position: Vector3
 ) -> Dictionary:
 	var failures: Array[String] = GameplaySaveCatalog.validate_catalog()
@@ -42,10 +42,7 @@ static func encode(
 	if not bool(map_result.get("success", false)):
 		return _prefixed_failure("map", map_result.get("diagnostics", []))
 
-	var inventory_result: Dictionary = GameplayStateCodec.encode_inventory(
-		inventory_state,
-		registry
-	)
+	var inventory_result: Dictionary = GameplayStateCodec.encode_inventory(inventory_state, registry)
 	if not bool(inventory_result.get("success", false)):
 		return _prefixed_failure("inventory", inventory_result.get("diagnostics", []))
 	var inventory_wire: Dictionary = TypedJsonWire.encode(
@@ -55,10 +52,7 @@ static func encode(
 	if not bool(inventory_wire.get("success", false)):
 		return _prefixed_failure("inventory wire", inventory_wire.get("diagnostics", []))
 
-	var equipment_result: Dictionary = GameplayStateCodec.encode_equipment(
-		equipment_state,
-		registry
-	)
+	var equipment_result: Dictionary = GameplayStateCodec.encode_equipment(equipment_state, registry)
 	if not bool(equipment_result.get("success", false)):
 		return _prefixed_failure("equipment", equipment_result.get("diagnostics", []))
 	var equipment_wire: Dictionary = TypedJsonWire.encode(
@@ -68,21 +62,39 @@ static func encode(
 	if not bool(equipment_wire.get("success", false)):
 		return _prefixed_failure("equipment wire", equipment_wire.get("diagnostics", []))
 
-	var pending_loot_json: Variant = null
-	if pending_loot_state != null:
-		var pending_result: Dictionary = GameplayStateCodec.encode_pending_loot(
-			pending_loot_state,
-			registry
-		)
+	var pending_records: Array[Dictionary] = []
+	var seen_occurrences: Dictionary = {}
+	for index in range(pending_loot_states.size()):
+		var pending = pending_loot_states[index]
+		var pending_result: Dictionary = GameplayStateCodec.encode_pending_loot(pending, registry)
 		if not bool(pending_result.get("success", false)):
-			return _prefixed_failure("pending loot", pending_result.get("diagnostics", []))
-		var pending_wire: Dictionary = TypedJsonWire.encode(
-			pending_result.get("snapshot", {}),
-			"pending loot"
-		)
+			for diagnostic in pending_result.get("diagnostics", []):
+				failures.append("pending loot %d: %s" % [index, diagnostic])
+			continue
+		if not pending.has_method("is_pending") or not bool(pending.call("is_pending")):
+			failures.append("pending loot durable set requires unresolved state at index %d" % index)
+			continue
+		var snapshot: Dictionary = pending_result.get("snapshot", {})
+		var occurrence_id: String = str(snapshot.get("occurrence_id", ""))
+		if seen_occurrences.has(occurrence_id):
+			failures.append("integrated save contains duplicate pending loot occurrence: %s" % occurrence_id)
+			continue
+		seen_occurrences[occurrence_id] = true
+		var pending_wire: Dictionary = TypedJsonWire.encode(snapshot, "pending loot %s" % occurrence_id)
 		if not bool(pending_wire.get("success", false)):
-			return _prefixed_failure("pending loot wire", pending_wire.get("diagnostics", []))
-		pending_loot_json = str(pending_wire.get("json", ""))
+			for diagnostic in pending_wire.get("diagnostics", []):
+				failures.append("pending loot wire %s: %s" % [occurrence_id, diagnostic])
+			continue
+		pending_records.append({
+			"occurrence_id": occurrence_id,
+			"json": str(pending_wire.get("json", "")),
+		})
+	if not failures.is_empty():
+		return _failure(failures)
+	pending_records.sort_custom(func(a, b): return str(a["occurrence_id"]) < str(b["occurrence_id"]))
+	var pending_loot_jsons: Array[String] = []
+	for record in pending_records:
+		pending_loot_jsons.append(str(record["json"]))
 
 	var envelope: Dictionary = {
 		"schema": SCHEMA_NAME,
@@ -90,7 +102,7 @@ static func encode(
 		"map_json": str(map_result.get("json", "")),
 		"inventory_json": str(inventory_wire.get("json", "")),
 		"equipment_json": str(equipment_wire.get("json", "")),
-		"pending_loot_json": pending_loot_json,
+		"pending_loot_jsons": pending_loot_jsons,
 		"player_resume": {
 			"x": resume_position.x,
 			"y": resume_position.y,
@@ -154,13 +166,9 @@ static func decode(json_text: String) -> Dictionary:
 	if not failures.is_empty():
 		return _failure(failures)
 
-	var inventory_result: Dictionary = GameplayStateCodec.decode_inventory(
-		inventory_snapshot,
-		registry
-	)
+	var inventory_result: Dictionary = GameplayStateCodec.decode_inventory(inventory_snapshot, registry)
 	if not bool(inventory_result.get("success", false)):
 		return _prefixed_failure("inventory", inventory_result.get("diagnostics", []))
-
 	var equipment_result: Dictionary = GameplayStateCodec.decode_equipment(
 		equipment_snapshot,
 		registry,
@@ -170,22 +178,28 @@ static func decode(json_text: String) -> Dictionary:
 	if not bool(equipment_result.get("success", false)):
 		return _prefixed_failure("equipment", equipment_result.get("diagnostics", []))
 
-	var pending_loot_state = null
-	if envelope["pending_loot_json"] != null:
+	var pending_loot_states: Array = []
+	var seen_occurrences: Dictionary = {}
+	for index in range(envelope["pending_loot_jsons"].size()):
 		var pending_snapshot: Dictionary = _decode_component_snapshot(
-			str(envelope["pending_loot_json"]),
-			"pending loot",
+			str(envelope["pending_loot_jsons"][index]),
+			"pending loot %d" % index,
 			failures
 		)
 		if not failures.is_empty():
 			return _failure(failures)
-		var pending_result: Dictionary = GameplayStateCodec.decode_pending_loot(
-			pending_snapshot,
-			registry
-		)
+		var pending_result: Dictionary = GameplayStateCodec.decode_pending_loot(pending_snapshot, registry)
 		if not bool(pending_result.get("success", false)):
-			return _prefixed_failure("pending loot", pending_result.get("diagnostics", []))
-		pending_loot_state = pending_result.get("state", null)
+			return _prefixed_failure("pending loot %d" % index, pending_result.get("diagnostics", []))
+		var pending = pending_result.get("state", null)
+		if pending == null or not pending.has_method("is_pending") or not bool(pending.call("is_pending")):
+			return _failure(["integrated save pending loot must be unresolved at index %d" % index])
+		var occurrence_id: String = str(pending.get("occurrence_id"))
+		if seen_occurrences.has(occurrence_id):
+			return _failure(["integrated save contains duplicate pending loot occurrence: %s" % occurrence_id])
+		seen_occurrences[occurrence_id] = true
+		pending_loot_states.append(pending)
+	pending_loot_states.sort_custom(func(a, b): return str(a.occurrence_id) < str(b.occurrence_id))
 
 	var resume_result: Dictionary = _resume_from_envelope(envelope["player_resume"])
 	if not bool(resume_result.get("success", false)):
@@ -202,7 +216,7 @@ static func decode(json_text: String) -> Dictionary:
 			"delta_store": loaded_map.get("delta_store", null),
 			"inventory_state": inventory_result.get("state", null),
 			"equipment_state": equipment_result.get("state", null),
-			"pending_loot_state": pending_loot_state,
+			"pending_loot_states": pending_loot_states,
 			"resume_position": resume_result.get("position", Vector3.ZERO),
 		},
 		"diagnostics": [],
@@ -210,24 +224,18 @@ static func decode(json_text: String) -> Dictionary:
 
 
 static func clone_candidate(candidate: Dictionary) -> Dictionary:
-	# Crossing the AppRoot -> Game boundary is an ownership transfer, not a shared
-	# reference handoff. Reusing the strict encode/decode pipeline gives Game a
-	# fully revalidated, deep-owned WorldDelta/gameplay candidate without inventing
-	# a second clone format or mutable-state copier.
-	var context = candidate.get("world_context", null)
-	var delta_store = candidate.get("delta_store", null)
-	var inventory_state = candidate.get("inventory_state", null)
-	var equipment_state = candidate.get("equipment_state", null)
-	var pending_loot_state = candidate.get("pending_loot_state", null)
 	var resume_variant: Variant = candidate.get("resume_position", null)
 	if not resume_variant is Vector3:
 		return _failure(["integrated save candidate resume_position must be Vector3"])
+	var pending_variant: Variant = candidate.get("pending_loot_states", null)
+	if not pending_variant is Array:
+		return _failure(["integrated save candidate pending_loot_states must be Array"])
 	var encoded: Dictionary = encode(
-		context,
-		delta_store,
-		inventory_state,
-		equipment_state,
-		pending_loot_state,
+		candidate.get("world_context", null),
+		candidate.get("delta_store", null),
+		candidate.get("inventory_state", null),
+		candidate.get("equipment_state", null),
+		pending_variant,
 		resume_variant
 	)
 	if not bool(encoded.get("success", false)):
@@ -256,9 +264,13 @@ static func validate_envelope(envelope: Dictionary) -> Array[String]:
 		var value: Variant = envelope.get(field, null)
 		if typeof(value) != TYPE_STRING or str(value).is_empty():
 			failures.append("integrated save %s must be non-empty String" % field)
-	var raw_pending: Variant = envelope.get("pending_loot_json", null)
-	if raw_pending != null and (typeof(raw_pending) != TYPE_STRING or str(raw_pending).is_empty()):
-		failures.append("integrated save pending_loot_json must be null or non-empty String")
+	var raw_pending: Variant = envelope.get("pending_loot_jsons", null)
+	if not raw_pending is Array:
+		failures.append("integrated save pending_loot_jsons must be Array")
+	else:
+		for index in range(raw_pending.size()):
+			if typeof(raw_pending[index]) != TYPE_STRING or str(raw_pending[index]).is_empty():
+				failures.append("integrated save pending_loot_jsons[%d] must be non-empty String" % index)
 	var raw_resume: Variant = envelope.get("player_resume", null)
 	if not raw_resume is Dictionary:
 		failures.append("integrated save player_resume must be Dictionary")
@@ -287,11 +299,7 @@ static func _validate_current_world_compatibility(world_header: Dictionary) -> A
 	return failures
 
 
-static func _decode_component_snapshot(
-	json_text: String,
-	label: String,
-	failures: Array[String]
-) -> Dictionary:
+static func _decode_component_snapshot(json_text: String, label: String, failures: Array[String]) -> Dictionary:
 	var decoded: Dictionary = TypedJsonWire.decode(json_text, label)
 	if not bool(decoded.get("success", false)):
 		for diagnostic in decoded.get("diagnostics", []):
@@ -323,18 +331,13 @@ static func _resume_from_envelope(raw_resume: Variant) -> Dictionary:
 
 
 static func _validate_resume_position(position: Vector3) -> Array[String]:
-	var failures: Array[String] = []
 	for axis in [position.x, position.y, position.z]:
 		if is_nan(float(axis)) or is_inf(float(axis)):
-			failures.append("player resume position must contain only finite coordinates")
-			break
-	return failures
+			return ["player resume position must contain only finite coordinates"]
+	return []
 
 
-static func _validate_resume_dictionary(
-	resume: Dictionary,
-	failures: Array[String]
-) -> void:
+static func _validate_resume_dictionary(resume: Dictionary, failures: Array[String]) -> void:
 	_validate_exact_keys(resume, RESUME_KEYS, "player_resume", failures)
 	for axis in RESUME_KEYS:
 		var value: Variant = resume.get(axis, null)
