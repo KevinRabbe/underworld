@@ -171,6 +171,7 @@ static func _test_faceted_compiler_contract(failures: Array[String]) -> void:
 	_expect_true(failures, "faceted broad-neutral survivor compiles", mesh_data.success and mesh_data.diagnostics.is_empty())
 	_expect_true(failures, "faceted compiler emits one multi-surface skinned payload", mesh_data.surfaces.size() >= 8)
 	_expect_true(failures, "faceted survivor owns substantial indexed geometry", int(mesh_data.metrics.get("vertices", 0)) > 500 and int(mesh_data.metrics.get("triangles", 0)) > 150)
+	_expect_true(failures, "faceted art pass retains compact game-ready geometry", int(mesh_data.metrics.get("vertices", 0)) < 10000 and int(mesh_data.metrics.get("triangles", 0)) < 4000)
 	_expect_equal(failures, "covered body zones are omitted beneath outfit shells", int(mesh_data.metrics.get("omitted_covered_body_zones", 0)), character.faceted_outfit_definition.coverage_zones.size())
 	var overlap_margins: Dictionary = mesh_data.metrics.get("joint_overlap_margins", {})
 	_expect_equal(failures, "faceted compiler records every articulated joint boundary", overlap_margins.size(), 12)

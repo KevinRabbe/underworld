@@ -77,7 +77,7 @@ func _build_skeleton() -> void:
 	_set_profile_bone_rest("neck", Vector3(0.0, shoulder_y - chest_y, 0.0))
 	_set_profile_bone_rest("head", Vector3(0.0, jaw_y - shoulder_y, 0.0))
 	var clavicle_x: float = float(profile.shoulder_width) * 0.31
-	var upperarm_x: float = float(profile.shoulder_width) * 0.12
+	var upperarm_x: float = float(profile.shoulder_width) * 0.095
 	var arm_length: float = float(landmark["arm_length"])
 	for side_data in [["l", -1.0], ["r", 1.0]]:
 		var suffix: String = side_data[0]

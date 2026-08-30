@@ -3,7 +3,7 @@ class_name UnderworldFacetedBodyCompiler
 
 const MeshDataScript := preload("res://presentation/characters/faceted/faceted_skinned_mesh_data.gd")
 
-const COMPILER_REVISION := 1
+const COMPILER_REVISION := 2
 const SKIN := 0
 const CLOTH := 1
 const LEATHER := 2
@@ -117,13 +117,28 @@ static func compile(profile: Resource, palette: Resource, outfit: Resource = nul
 static func _build_torso(builders: Dictionary, profile, outfit: Resource) -> void:
 	var shell := float(outfit.shell_offset(&"torso", profile.outfit_shell_offset)) if outfit != null else float(profile.outfit_shell_offset)
 	var landmark: Dictionary = profile.anatomy_landmarks()
+	var hip_y: float = float(landmark["hip_y"])
+	var pelvis_y: float = float(landmark["pelvis_y"])
+	var waist_y: float = float(landmark["waist_y"])
+	var lower_chest_y: float = float(landmark["lower_chest_y"])
+	var chest_y: float = float(landmark["chest_y"])
+	var shoulder_y: float = float(landmark["shoulder_y"])
+	var neck_y: float = float(landmark["neck_y"])
 	var torso_rings: Array[Dictionary] = [
-		_ring_y(Vector3(0, float(landmark["hip_y"]) - 0.08, 0), profile.pelvis_width * 0.46, profile.chest_depth * 0.43, _weights(BONE.pelvis)),
-		_ring_y(Vector3(0, float(landmark["pelvis_y"]), 0), profile.pelvis_width * 0.50, profile.chest_depth * 0.52, _weights(BONE.pelvis)),
-		_ring_y(Vector3(0, float(landmark["waist_y"]), 0), profile.waist_width * 0.50, profile.chest_depth * 0.43, _weights2(BONE.pelvis, BONE.spine_01, 0.35)),
-		_ring_y(Vector3(0, float(landmark["lower_chest_y"]), 0), profile.chest_width * 0.47, profile.chest_depth * 0.48, _weights(BONE.spine_02)),
-		_ring_y(Vector3(0, float(landmark["chest_y"]), 0), profile.chest_width * 0.50, profile.chest_depth * 0.50, _weights2(BONE.spine_02, BONE.chest, 0.65)),
-		_ring_y(Vector3(0, float(landmark["shoulder_y"]), 0), profile.shoulder_width * 0.50, profile.chest_depth * 0.52, _weights(BONE.chest)),
+		_ring_y(Vector3(0, hip_y - 0.08, 0), profile.pelvis_width * 0.46, profile.chest_depth * 0.43, _weights(BONE.pelvis)),
+		_ring_y(Vector3(0, lerpf(hip_y - 0.08, pelvis_y, 0.52), 0), profile.pelvis_width * 0.49, profile.chest_depth * 0.50, _weights(BONE.pelvis)),
+		_ring_y(Vector3(0, pelvis_y, 0), profile.pelvis_width * 0.50, profile.chest_depth * 0.52, _weights(BONE.pelvis)),
+		_ring_y(Vector3(0, lerpf(pelvis_y, waist_y, 0.50), 0), lerpf(profile.pelvis_width, profile.waist_width, 0.50) * 0.50, profile.chest_depth * 0.47, _weights2(BONE.pelvis, BONE.spine_01, 0.20)),
+		_ring_y(Vector3(0, waist_y, 0), profile.waist_width * 0.50, profile.chest_depth * 0.43, _weights2(BONE.pelvis, BONE.spine_01, 0.35)),
+		_ring_y(Vector3(0, lerpf(waist_y, lower_chest_y, 0.50), 0), lerpf(profile.waist_width, profile.chest_width * 0.94, 0.50) * 0.50, profile.chest_depth * 0.455, _weights2(BONE.spine_01, BONE.spine_02, 0.55)),
+		_ring_y(Vector3(0, lower_chest_y, 0), profile.chest_width * 0.47, profile.chest_depth * 0.48, _weights(BONE.spine_02)),
+		_ring_y(Vector3(0, lerpf(lower_chest_y, chest_y, 0.50), 0), profile.chest_width * 0.49, profile.chest_depth * 0.495, _weights2(BONE.spine_02, BONE.chest, 0.40)),
+		_ring_y(Vector3(0, chest_y, 0), profile.chest_width * 0.50, profile.chest_depth * 0.50, _weights2(BONE.spine_02, BONE.chest, 0.65)),
+		_ring_y(Vector3(0, lerpf(chest_y, shoulder_y, 0.55), 0), lerpf(profile.chest_width, profile.shoulder_width, 0.52) * 0.50, profile.chest_depth * 0.51, _weights(BONE.chest)),
+		_ring_y(Vector3(0, shoulder_y - 0.022, 0), profile.shoulder_width * 0.47, profile.chest_depth * 0.50, _weights(BONE.chest)),
+		# The collar transition replaces the old full-width shoulder cap.  It
+		# keeps the broad shoulder mass but avoids a pointed coat-hanger profile.
+		_ring_y(Vector3(0, neck_y + 0.008, -0.002), 0.112, 0.092, _weights2(BONE.chest, BONE.neck, 0.55)),
 	]
 	_add_y_loft(builders, CANVAS_LIGHT, torso_rings, 12, true, true)
 	var vest_rings: Array[Dictionary] = []
@@ -141,9 +156,12 @@ static func _build_head(builders: Dictionary, profile) -> void:
 	var landmark: Dictionary = profile.anatomy_landmarks()
 	var head_height: float = float(landmark["crown_y"]) - float(landmark["shoulder_y"])
 	var head_rings: Array[Dictionary] = [
-		_ring_y(Vector3(0, float(landmark["neck_y"]), 0), 0.075, 0.070, _weights(BONE.neck)),
-		_ring_y(Vector3(0, float(landmark["jaw_y"]), -0.004), profile.head_width * 0.39, profile.head_depth * 0.39, _weights2(BONE.neck, BONE.head, 0.65)),
-		_ring_y(Vector3(0, lerpf(float(landmark["jaw_y"]), float(landmark["brow_y"]), 0.58), -0.010), profile.head_width * 0.48, profile.head_depth * 0.46, _weights(BONE.head)),
+		_ring_y(Vector3(0, float(landmark["shoulder_y"]) + 0.010, 0), 0.087, 0.078, _weights(BONE.neck)),
+		_ring_y(Vector3(0, float(landmark["neck_y"]) + 0.012, 0), 0.082, 0.075, _weights(BONE.neck)),
+		_ring_y(Vector3(0, float(landmark["jaw_y"]) - head_height * 0.08, -0.008), profile.head_width * 0.36, profile.head_depth * 0.36, _weights2(BONE.neck, BONE.head, 0.50)),
+		_ring_y(Vector3(0, float(landmark["jaw_y"]), -0.012), profile.head_width * 0.45, profile.head_depth * 0.41, _weights2(BONE.neck, BONE.head, 0.72)),
+		_ring_y(Vector3(0, lerpf(float(landmark["jaw_y"]), float(landmark["brow_y"]), 0.42), -0.014), profile.head_width * 0.49, profile.head_depth * 0.47, _weights(BONE.head)),
+		_ring_y(Vector3(0, lerpf(float(landmark["jaw_y"]), float(landmark["brow_y"]), 0.78), -0.010), profile.head_width * 0.51, profile.head_depth * 0.49, _weights(BONE.head)),
 		_ring_y(Vector3(0, lerpf(float(landmark["brow_y"]), float(landmark["crown_y"]), 0.48), 0), profile.head_width * 0.50, profile.head_depth * 0.50, _weights(BONE.head)),
 		_ring_y(Vector3(0, float(landmark["crown_y"]), 0.012), profile.head_width * 0.43, profile.head_depth * 0.46, _weights(BONE.head)),
 	]
@@ -151,15 +169,18 @@ static func _build_head(builders: Dictionary, profile) -> void:
 	var crown_y: float = float(landmark["crown_y"])
 	var brow_y: float = float(landmark["brow_y"])
 	_add_y_loft(builders, HAIR, [
-		_ring_y(Vector3(0, brow_y + head_height * 0.08, 0.018), profile.head_width * 0.505, profile.head_depth * 0.515, _weights(BONE.head)),
-		_ring_y(Vector3(0, crown_y - head_height * 0.10, 0.024), profile.head_width * 0.49, profile.head_depth * 0.51, _weights(BONE.head)),
-		_ring_y(Vector3(0, crown_y + 0.012, 0.016), profile.head_width * 0.36, profile.head_depth * 0.40, _weights(BONE.head)),
+		_ring_y(Vector3(0, brow_y + head_height * 0.09, 0.000), profile.head_width * 0.515, profile.head_depth * 0.56, _weights(BONE.head)),
+		_ring_y(Vector3(0, crown_y - head_height * 0.10, 0.010), profile.head_width * 0.50, profile.head_depth * 0.545, _weights(BONE.head)),
+		_ring_y(Vector3(0, crown_y + 0.018, 0.006), profile.head_width * 0.46, profile.head_depth * 0.50, _weights(BONE.head)),
 	], 12, false, true)
 	_add_box(builders, HAIR, Vector3(-profile.head_width * 0.50, brow_y - head_height * 0.08, profile.head_depth * 0.34), Vector3(-profile.head_width * 0.41, brow_y + head_height * 0.15, profile.head_depth * 0.54), _weights(BONE.head), 0.006)
 	_add_box(builders, HAIR, Vector3(profile.head_width * 0.41, brow_y - head_height * 0.08, profile.head_depth * 0.34), Vector3(profile.head_width * 0.50, brow_y + head_height * 0.15, profile.head_depth * 0.54), _weights(BONE.head), 0.006)
 	_add_box(builders, FACE, Vector3(-0.050, brow_y - 0.010, -profile.head_depth * 0.53), Vector3(-0.024, brow_y + 0.012, -profile.head_depth * 0.49), _weights(BONE.head), 0.003)
 	_add_box(builders, FACE, Vector3(0.024, brow_y - 0.010, -profile.head_depth * 0.53), Vector3(0.050, brow_y + 0.012, -profile.head_depth * 0.49), _weights(BONE.head), 0.003)
-	_add_box(builders, FACE, Vector3(-0.010, brow_y - head_height * 0.19, -profile.head_depth * 0.56), Vector3(0.010, brow_y - head_height * 0.14, -profile.head_depth * 0.51), _weights(BONE.head), 0.002)
+	# The nose is a skin plane; only eyes and the small mouth use the dark face
+	# palette.  This makes facing readable without a dark vertical nose stripe.
+	_add_box(builders, SKIN, Vector3(-0.014, brow_y - head_height * 0.21, -profile.head_depth * 0.59), Vector3(0.014, brow_y - head_height * 0.02, -profile.head_depth * 0.50), _weights(BONE.head), 0.004)
+	_add_box(builders, FACE, Vector3(-0.032, brow_y - head_height * 0.30, -profile.head_depth * 0.525), Vector3(0.032, brow_y - head_height * 0.275, -profile.head_depth * 0.505), _weights(BONE.head), 0.002)
 
 
 static func _build_arm(builders: Dictionary, profile, left: bool) -> void:
@@ -168,7 +189,7 @@ static func _build_arm(builders: Dictionary, profile, left: bool) -> void:
 	var upper_bone := int(BONE.upperarm_l if left else BONE.upperarm_r)
 	var forearm_bone := int(BONE.forearm_l if left else BONE.forearm_r)
 	var hand_bone := int(BONE.hand_l if left else BONE.hand_r)
-	var shoulder_x: float = direction * float(profile.shoulder_width) * 0.43
+	var shoulder_x: float = direction * float(profile.shoulder_width) * 0.405
 	var arm_length: float = float(landmark["arm_length"])
 	var elbow_x: float = shoulder_x + direction * arm_length * 0.42
 	var wrist_x: float = shoulder_x + direction * arm_length * 0.80
@@ -177,13 +198,21 @@ static func _build_arm(builders: Dictionary, profile, left: bool) -> void:
 	var mass := float(profile.arm_mass)
 	var upper_rings: Array[Dictionary] = [
 		_ring_x(Vector3(shoulder_x, shoulder_y, 0), 0.105 * mass, 0.095 * mass, _weights(upper_bone)),
-		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.48), shoulder_y, 0), 0.088 * mass, 0.080 * mass, _weights(upper_bone)),
+		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.22), shoulder_y - 0.002, 0), 0.101 * mass, 0.091 * mass, _weights(upper_bone)),
+		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.48), shoulder_y, 0), 0.089 * mass, 0.081 * mass, _weights(upper_bone)),
+		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.74), shoulder_y + 0.002, -0.002), 0.080 * mass, 0.074 * mass, _weights2(upper_bone, forearm_bone, 0.16)),
 		_ring_x(Vector3(elbow_x, shoulder_y, 0), 0.073 * mass, 0.070 * mass, _weights2(upper_bone, forearm_bone, 0.50)),
 	]
 	_add_x_loft(builders, CANVAS_LIGHT, upper_rings, 8, true, true, direction)
+	_add_x_loft(builders, CANVAS_DARK, [
+		_ring_x(Vector3(shoulder_x, shoulder_y, 0), 0.111 * mass, 0.101 * mass, _weights(upper_bone)),
+		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.20), shoulder_y - 0.002, 0), 0.106 * mass, 0.096 * mass, _weights(upper_bone)),
+	], 8, true, true, direction)
 	var forearm_rings: Array[Dictionary] = [
 		_ring_x(Vector3(elbow_x, shoulder_y, 0), 0.073 * mass, 0.070 * mass, _weights2(upper_bone, forearm_bone, 0.50)),
+		_ring_x(Vector3(lerpf(elbow_x, wrist_x, 0.27), shoulder_y - 0.003, -0.004), 0.072 * mass, 0.066 * mass, _weights(forearm_bone)),
 		_ring_x(Vector3(lerpf(elbow_x, wrist_x, 0.55), shoulder_y, -0.006), 0.069 * mass, 0.061 * mass, _weights(forearm_bone)),
+		_ring_x(Vector3(lerpf(elbow_x, wrist_x, 0.80), shoulder_y + 0.002, -0.003), 0.059 * mass, 0.054 * mass, _weights2(forearm_bone, hand_bone, 0.20)),
 		_ring_x(Vector3(wrist_x, shoulder_y, 0), 0.052 * mass, 0.048 * mass, _weights2(forearm_bone, hand_bone, 0.65)),
 	]
 	_add_x_loft(builders, CANVAS_LIGHT, forearm_rings, 8, true, true, direction)
@@ -234,7 +263,12 @@ static func _build_outfit_details(builders: Dictionary, profile) -> void:
 		_ring_y(Vector3(0, pelvis_y + 0.025, 0), profile.pelvis_width * 0.52, profile.chest_depth * 0.54, _weights(BONE.pelvis)),
 	], 12, true, true)
 	_add_box(builders, METAL, Vector3(-0.035, pelvis_y - 0.025, -profile.chest_depth * 0.58), Vector3(0.035, pelvis_y + 0.020, -profile.chest_depth * 0.52), _weights(BONE.pelvis), 0.006)
-	var front_z: float = -float(profile.chest_depth) * 0.55 - float(profile.outfit_shell_offset) - 0.004
+	var front_z: float = -float(profile.chest_depth) * 0.50 - float(profile.outfit_shell_offset) - 0.004
+	# Project-owned front panels break up the large torso facets and make the
+	# undershirt/jacket layering readable at the normal gameplay camera.
+	_add_ribbon_z(builders, CANVAS_LIGHT, Vector2(0.0, pelvis_y + 0.040), Vector2(0.0, float(landmark["chest_y"]) + 0.025), front_z - 0.006, 0.082, _weights(BONE.pelvis), _weights(BONE.chest), -1.0)
+	_add_ribbon_z(builders, CANVAS_DARK, Vector2(-0.135, pelvis_y + 0.025), Vector2(-0.155, shoulder_y - 0.090), front_z - 0.010, 0.067, _weights(BONE.pelvis), _weights(BONE.chest), -1.0)
+	_add_ribbon_z(builders, CANVAS_DARK, Vector2(0.135, pelvis_y + 0.025), Vector2(0.155, shoulder_y - 0.090), front_z - 0.010, 0.067, _weights(BONE.pelvis), _weights(BONE.chest), -1.0)
 	_add_ribbon_z(builders, LEATHER, Vector2(-float(profile.shoulder_width) * 0.30, shoulder_y - 0.045), Vector2(float(profile.pelvis_width) * 0.30, pelvis_y - 0.015), front_z, 0.030, _weights(BONE.chest), _weights(BONE.pelvis), -1.0)
 	_add_ribbon_z(builders, LEATHER_LIGHT, Vector2(-0.012, shoulder_y - 0.06), Vector2(-0.012, pelvis_y + 0.035), front_z - 0.003, 0.007, _weights(BONE.chest), _weights(BONE.pelvis), -1.0)
 	_add_ribbon_z(builders, CANVAS_LIGHT, Vector2(-0.055, shoulder_y - 0.045), Vector2(-0.145, float(landmark["chest_y"]) - 0.02), front_z - 0.006, 0.025, _weights(BONE.chest), _weights(BONE.chest), -1.0)
@@ -246,8 +280,15 @@ static func _build_outfit_details(builders: Dictionary, profile) -> void:
 		_ring_y(Vector3(0, float(landmark["neck_y"]) + 0.015, -0.002), 0.112, 0.097, _weights2(BONE.chest, BONE.neck, 0.60)),
 	], 12, true, true)
 	# Compact pack, bedroll, and side pouch stay bone-bound but share the same
-	# skinned payload, so the normal player owns one coherent body mesh.
-	_add_box(builders, CANVAS_DARK, Vector3(-0.18, float(landmark["waist_y"]), 0.13), Vector3(0.18, shoulder_y - 0.05, 0.31), _weights(BONE.chest), 0.025)
+	# skinned payload, so the normal player owns one coherent body mesh.  The
+	# pack uses a tapered faceted shell instead of a rectangular debug box.
+	_add_y_loft(builders, CANVAS_DARK, [
+		_ring_y(Vector3(0, float(landmark["waist_y"]), 0.205), 0.135, 0.075, _weights(BONE.chest)),
+		_ring_y(Vector3(0, lerpf(float(landmark["waist_y"]), float(landmark["lower_chest_y"]), 0.55), 0.220), 0.175, 0.100, _weights(BONE.chest)),
+		_ring_y(Vector3(0, float(landmark["chest_y"]) - 0.030, 0.225), 0.185, 0.105, _weights(BONE.chest)),
+		_ring_y(Vector3(0, shoulder_y - 0.125, 0.215), 0.168, 0.095, _weights(BONE.chest)),
+		_ring_y(Vector3(0, shoulder_y - 0.050, 0.195), 0.135, 0.070, _weights(BONE.chest)),
+	], 8, true, true)
 	_add_box(builders, CANVAS_LIGHT, Vector3(-0.155, float(landmark["chest_y"]) - 0.105, 0.306), Vector3(0.155, float(landmark["chest_y"]) + 0.045, 0.326), _weights(BONE.chest), 0.008)
 	for strap_x in [-0.115, 0.115]:
 		_add_ribbon_z(builders, LEATHER, Vector2(strap_x, float(landmark["waist_y"]) + 0.02), Vector2(strap_x, shoulder_y - 0.02), 0.314, 0.018, _weights(BONE.chest), _weights(BONE.chest), 1.0)
@@ -408,7 +449,9 @@ static func _emit_triangle(builders: Dictionary, palette_index: int, a: Vector3,
 	var edge_a := b - a
 	var edge_b := c - a
 	var normal := edge_a.cross(edge_b)
-	if normal.length_squared() <= 0.000000001:
+	# Reject numerically tiny faces at the same threshold enforced by the
+	# public mesh contract.  Tight collar/face rings must never leak slivers.
+	if normal.length_squared() <= 0.00000001:
 		return
 	if normal.dot(expected_normal) < 0.0:
 		var swap_point := b
