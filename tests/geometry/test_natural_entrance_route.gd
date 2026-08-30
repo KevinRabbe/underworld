@@ -18,6 +18,8 @@ const START_ANCHOR := Vector3(64.0, 0.0, 64.0)
 static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_game_scene_composition(failures)
+	_test_viable_candidate_policy(failures)
+	_test_generic_bootstrap_authority(failures)
 	_test_selection(12345, failures)
 	_test_selection(1, failures)
 	_test_generated_runtime_route(12345, failures)
@@ -33,13 +35,67 @@ static func _test_game_scene_composition(failures: Array[String]) -> void:
 	_expect(failures, "production Game scene instantiates", game != null)
 	if game == null:
 		return
-	var route_controller := game.get_node_or_null("NaturalEntranceRoute")
-	_expect(failures, "production Game mounts natural entrance route coordinator", route_controller != null)
-	if route_controller != null:
-		_expect(failures, "route coordinator exposes semantic readiness", route_controller.has_method("route_is_ready"))
-		_expect(failures, "route coordinator exposes value-copy route snapshot", route_controller.has_method("route_snapshot"))
-		_expect(failures, "off-tree route coordinator has no fabricated route", not bool(route_controller.call("route_is_ready")))
+	_expect(failures, "production Game exposes natural route readiness", game.has_method("natural_entrance_route_ready"))
+	_expect(failures, "production Game exposes value-copy selected route", game.has_method("selected_entrance_route_snapshot"))
+	_expect(failures, "production Game exposes initial surface bootstrap count", game.has_method("initial_surface_bootstrap_count"))
+	_expect(failures, "production Game has no post-ready route initializer child", game.get_node_or_null("NaturalEntranceRoute") == null)
 	game.free()
+
+
+static func _test_viable_candidate_policy(failures: Array[String]) -> void:
+	var selected: Dictionary = Selector._select_viable_candidate([
+		{
+			"entrance_id": "near_nonviable",
+			"distance_squared": 1.0,
+		},
+		{
+			"entrance_id": "far_viable",
+			"distance_squared": 9.0,
+			"spawn_xz": Vector3(9.0, 0.0, 0.0),
+		},
+	])
+	_expect(
+		failures,
+		"selector skips nearest non-viable entrance for farther viable entrance",
+		str(selected.get("entrance_id", "")) == "far_viable"
+	)
+	var tie_selected: Dictionary = Selector._select_viable_candidate([
+		{
+			"entrance_id": "entrance_z",
+			"distance_squared": 4.0,
+			"spawn_xz": Vector3(4.0, 0.0, 0.0),
+		},
+		{
+			"entrance_id": "entrance_a",
+			"distance_squared": 4.0,
+			"spawn_xz": Vector3(4.0, 0.0, 1.0),
+		},
+	])
+	_expect(
+		failures,
+		"selector uses stable semantic id tie-break among viable entrances",
+		str(tie_selected.get("entrance_id", "")) == "entrance_a"
+	)
+
+
+static func _test_generic_bootstrap_authority(failures: Array[String]) -> void:
+	var adapter_source := FileAccess.get_file_as_string("res://worldgen/runtime/generated_entrance_bootstrap_adapter.gd")
+	var runtime_source := FileAccess.get_file_as_string("res://worldgen/runtime/underworld_cave_runtime_controller.gd")
+	_expect(
+		failures,
+		"production adapter calls generic generated entrance bootstrap",
+		adapter_source.contains("bootstrap_generated_entrance") and not adapter_source.contains("call(\"bootstrap_fixture\"")
+	)
+	_expect(
+		failures,
+		"cave runtime exposes generic generated entrance core",
+		runtime_source.contains("func bootstrap_generated_entrance(")
+	)
+	_expect(
+		failures,
+		"legacy fixture bootstrap delegates to generated core",
+		runtime_source.contains("return bootstrap_generated_entrance(world_seed, region, entrance_id)")
+	)
 
 
 static func _test_selection(world_seed: int, failures: Array[String]) -> void:
@@ -162,7 +218,7 @@ static func _test_generated_runtime_route(world_seed: int, failures: Array[Strin
 		region,
 		entrance_id
 	)
-	_expect(failures, "ordinary generated entrance bootstraps without fixture constants", diagnostics.is_empty())
+	_expect(failures, "ordinary generated entrance bootstraps through generic runtime authority", diagnostics.is_empty())
 	if diagnostics.is_empty():
 		var required_cells: Array = []
 		if controller.entrance_plans.has(entrance_id):
