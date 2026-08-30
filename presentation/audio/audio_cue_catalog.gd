@@ -27,6 +27,7 @@ const CUE_IDS: Array[String] = [
 	"audio_cue.player.damage",
 	"audio_cue.player.death",
 	"audio_cue.player.parry.success",
+	"audio_cue.player.respawn",
 	"audio_cue.resource.depleted",
 	"audio_cue.resource.mine.impact",
 ]
