@@ -49,7 +49,7 @@ static func _test_valid_save_probe_and_load(failures: Array[String]) -> void:
 		fixture["delta_store"],
 		fixture["inventory"],
 		fixture["equipment"],
-		null,
+		[],
 		fixture["resume_position"],
 		TEST_SLOT
 	)
@@ -82,11 +82,12 @@ static func _test_valid_save_probe_and_load(failures: Array[String]) -> void:
 	var restored_equipment = candidate.get("equipment_state", null)
 	if restored_equipment == null or restored_equipment.canonical_snapshot() != fixture["equipment"].canonical_snapshot():
 		failures.append("SAVE slot load changed equipment state")
+	var pending_variant: Variant = candidate.get("pending_loot_states", null)
+	if not pending_variant is Array or not pending_variant.is_empty():
+		failures.append("SAVE slot load invented pending-loot state for empty durable set")
 
 
-static func _test_invalid_candidate_preserves_previous_slot(
-	failures: Array[String]
-) -> void:
+static func _test_invalid_candidate_preserves_previous_slot(failures: Array[String]) -> void:
 	if not FileAccess.file_exists(TEST_SLOT):
 		failures.append("prior-slot preservation regression requires valid existing slot")
 		return
@@ -144,10 +145,8 @@ static func _fixture(failures: Array[String]) -> Dictionary:
 	if wood == null or axe == null:
 		failures.append("slot fixture could not resolve production item definitions")
 		return {}
-
 	var inventory = ItemContainerState.new().configure(8, 100.0)
-	var wood_add: Dictionary = inventory.add_stack(wood, 5, {"batch": 5, "quality": 1.0})
-	if not _require_success(wood_add, "slot fixture wood add", failures):
+	if not _require_success(inventory.add_stack(wood, 5, {"batch": 5, "quality": 1.0}), "slot fixture wood add", failures):
 		return {}
 	var axe_add: Dictionary = inventory.add_instance(axe, {"durability": 72})
 	if not _require_success(axe_add, "slot fixture axe add", failures):
@@ -156,19 +155,20 @@ static func _fixture(failures: Array[String]) -> Dictionary:
 		GameplaySaveCatalog.equipment_rules(),
 		GameplaySaveCatalog.hotbar_bindings()
 	)
-	var equipped: Dictionary = EquipmentService.new().equip_from_inventory(
-		equipment,
-		inventory,
-		int(axe_add.get("slot", -1)),
-		axe,
-		GameplaySaveCatalog.SLOT_AXE
-	)
-	if not _require_success(equipped, "slot fixture axe equip", failures):
+	if not _require_success(
+		EquipmentService.new().equip_from_inventory(
+			equipment,
+			inventory,
+			int(axe_add.get("slot", -1)),
+			axe,
+			GameplaySaveCatalog.SLOT_AXE
+		),
+		"slot fixture axe equip",
+		failures
+	):
 		return {}
-	var selected: Dictionary = equipment.select_hotbar(2)
-	if not _require_success(selected, "slot fixture hotbar selection", failures):
+	if not _require_success(equipment.select_hotbar(2), "slot fixture hotbar selection", failures):
 		return {}
-
 	return {
 		"context": WorldGenerationContext.new(217217),
 		"delta_store": WorldDeltaStore.new(),
@@ -197,11 +197,7 @@ static func _cleanup() -> void:
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
-static func _require_success(
-	result: Dictionary,
-	label: String,
-	failures: Array[String]
-) -> bool:
+static func _require_success(result: Dictionary, label: String, failures: Array[String]) -> bool:
 	if bool(result.get("success", false)):
 		return true
 	failures.append("%s failed diagnostics=%s" % [label, result.get("diagnostics", [])])
