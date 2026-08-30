@@ -3,7 +3,7 @@ class_name UnderworldFacetedBodyCompiler
 
 const MeshDataScript := preload("res://presentation/characters/faceted/faceted_skinned_mesh_data.gd")
 
-const COMPILER_REVISION := 6
+const COMPILER_REVISION := 7
 const SKIN := 0
 const CLOTH := 1
 const LEATHER := 2
@@ -124,22 +124,25 @@ static func _build_torso(builders: Dictionary, profile, outfit: Resource) -> voi
 	var chest_y: float = float(landmark["chest_y"])
 	var shoulder_y: float = float(landmark["shoulder_y"])
 	var neck_y: float = float(landmark["neck_y"])
+
+	# Front/back-asymmetric rings turn the torso from a stack of elliptical
+	# cylinders into an authored ribcage/pelvis silhouette. The broad shoulder
+	# ring sits lower than the collar so the outer shoulder falls naturally
+	# instead of producing the old pointed coat-hanger profile.
 	var torso_rings: Array[Dictionary] = [
-		_ring_y(Vector3(0, hip_y - 0.08, 0), profile.pelvis_width * 0.46, profile.chest_depth * 0.43, _weights(BONE.pelvis)),
-		_ring_y(Vector3(0, lerpf(hip_y - 0.08, pelvis_y, 0.52), 0), profile.pelvis_width * 0.49, profile.chest_depth * 0.50, _weights(BONE.pelvis)),
-		_ring_y(Vector3(0, pelvis_y, 0), profile.pelvis_width * 0.50, profile.chest_depth * 0.52, _weights(BONE.pelvis)),
-		_ring_y(Vector3(0, lerpf(pelvis_y, waist_y, 0.50), 0), lerpf(profile.pelvis_width, profile.waist_width, 0.50) * 0.50, profile.chest_depth * 0.47, _weights2(BONE.pelvis, BONE.spine_01, 0.20)),
-		_ring_y(Vector3(0, waist_y, 0), profile.waist_width * 0.50, profile.chest_depth * 0.43, _weights2(BONE.pelvis, BONE.spine_01, 0.35)),
-		_ring_y(Vector3(0, lerpf(waist_y, lower_chest_y, 0.50), 0), lerpf(profile.waist_width, profile.chest_width * 0.94, 0.50) * 0.50, profile.chest_depth * 0.455, _weights2(BONE.spine_01, BONE.spine_02, 0.55)),
-		_ring_y(Vector3(0, lower_chest_y, 0), profile.chest_width * 0.47, profile.chest_depth * 0.48, _weights(BONE.spine_02)),
-		_ring_y(Vector3(0, lerpf(lower_chest_y, chest_y, 0.50), 0), profile.chest_width * 0.49, profile.chest_depth * 0.495, _weights2(BONE.spine_02, BONE.chest, 0.40)),
-		_ring_y(Vector3(0, chest_y, 0), profile.chest_width * 0.50, profile.chest_depth * 0.50, _weights2(BONE.spine_02, BONE.chest, 0.65)),
-		_ring_y(Vector3(0, lerpf(chest_y, shoulder_y, 0.55), 0), lerpf(profile.chest_width, profile.shoulder_width, 0.52) * 0.50, profile.chest_depth * 0.51, _weights(BONE.chest)),
-		_ring_y(Vector3(0, shoulder_y - 0.022, 0), profile.shoulder_width * 0.47, profile.chest_depth * 0.50, _weights(BONE.chest)),
-		_ring_y(Vector3(0, shoulder_y + 0.012, -0.001), profile.shoulder_width * 0.37, profile.chest_depth * 0.43, _weights(BONE.chest)),
-		# The collar transition replaces the old full-width shoulder cap.  It
-		# keeps the broad shoulder mass but avoids a pointed coat-hanger profile.
-		_ring_y(Vector3(0, neck_y + 0.008, -0.002), 0.112, 0.092, _weights2(BONE.chest, BONE.neck, 0.55)),
+		_ring_y_asym(Vector3(0, hip_y - 0.080, 0.010), profile.pelvis_width * 0.44, profile.chest_depth * 0.40, profile.chest_depth * 0.48, _weights(BONE.pelvis)),
+		_ring_y_asym(Vector3(0, lerpf(hip_y - 0.080, pelvis_y, 0.52), 0.012), profile.pelvis_width * 0.49, profile.chest_depth * 0.44, profile.chest_depth * 0.53, _weights(BONE.pelvis)),
+		_ring_y_asym(Vector3(0, pelvis_y, 0.010), profile.pelvis_width * 0.50, profile.chest_depth * 0.45, profile.chest_depth * 0.54, _weights(BONE.pelvis)),
+		_ring_y_asym(Vector3(0, lerpf(pelvis_y, waist_y, 0.48), 0.004), lerpf(profile.pelvis_width, profile.waist_width, 0.52) * 0.50, profile.chest_depth * 0.43, profile.chest_depth * 0.48, _weights2(BONE.pelvis, BONE.spine_01, 0.20)),
+		_ring_y_asym(Vector3(0, waist_y, 0.000), profile.waist_width * 0.50, profile.chest_depth * 0.405, profile.chest_depth * 0.445, _weights2(BONE.pelvis, BONE.spine_01, 0.35)),
+		_ring_y_asym(Vector3(0, lerpf(waist_y, lower_chest_y, 0.48), -0.004), lerpf(profile.waist_width, profile.chest_width * 0.94, 0.52) * 0.50, profile.chest_depth * 0.47, profile.chest_depth * 0.455, _weights2(BONE.spine_01, BONE.spine_02, 0.55)),
+		_ring_y_asym(Vector3(0, lower_chest_y, -0.006), profile.chest_width * 0.47, profile.chest_depth * 0.505, profile.chest_depth * 0.465, _weights(BONE.spine_02)),
+		_ring_y_asym(Vector3(0, lerpf(lower_chest_y, chest_y, 0.50), -0.007), profile.chest_width * 0.49, profile.chest_depth * 0.525, profile.chest_depth * 0.475, _weights2(BONE.spine_02, BONE.chest, 0.40)),
+		_ring_y_asym(Vector3(0, chest_y, -0.006), profile.chest_width * 0.50, profile.chest_depth * 0.535, profile.chest_depth * 0.480, _weights2(BONE.spine_02, BONE.chest, 0.65)),
+		_ring_y_asym(Vector3(0, lerpf(chest_y, shoulder_y, 0.45), -0.004), lerpf(profile.chest_width, profile.shoulder_width, 0.46) * 0.50, profile.chest_depth * 0.525, profile.chest_depth * 0.475, _weights(BONE.chest)),
+		_ring_y_asym(Vector3(0, shoulder_y - 0.065, -0.002), profile.shoulder_width * 0.485, profile.chest_depth * 0.505, profile.chest_depth * 0.465, _weights(BONE.chest)),
+		_ring_y_asym(Vector3(0, shoulder_y - 0.022, -0.002), profile.shoulder_width * 0.405, profile.chest_depth * 0.465, profile.chest_depth * 0.435, _weights(BONE.chest)),
+		_ring_y_asym(Vector3(0, neck_y + 0.008, -0.002), 0.112, 0.092, 0.096, _weights2(BONE.chest, BONE.neck, 0.55)),
 	]
 	_add_y_loft(builders, CANVAS_LIGHT, torso_rings, 12, true, true)
 	var vest_rings: Array[Dictionary] = []
@@ -149,6 +152,10 @@ static func _build_torso(builders: Dictionary, profile, outfit: Resource) -> voi
 		var vest := ring.duplicate(true)
 		vest["rx"] = float(ring["rx"]) + shell
 		vest["rz"] = float(ring["rz"]) + shell
+		if vest.has("front_rz"):
+			vest["front_rz"] = float(ring["front_rz"]) + shell
+		if vest.has("back_rz"):
+			vest["back_rz"] = float(ring["back_rz"]) + shell
 		vest_rings.append(vest)
 	_add_y_loft(builders, CLOTH, vest_rings, 12, true, true)
 
@@ -320,46 +327,59 @@ static func _build_arm(builders: Dictionary, profile, left: bool) -> void:
 	var elbow_x: float = shoulder_x + direction * arm_length * 0.42
 	var wrist_x: float = shoulder_x + direction * arm_length * 0.80
 	var hand_x: float = shoulder_x + direction * arm_length
-	var shoulder_y: float = float(landmark["shoulder_y"]) - 0.01
+	var shoulder_y: float = float(landmark["shoulder_y"]) - 0.018
 	var mass := float(profile.arm_mass)
+
+	# The upper arm now carries a deltoid peak, a distinct biceps/triceps mass,
+	# and an intentional elbow pinch. Extra rings are spent only where they
+	# change silhouette or articulation instead of uniformly increasing density.
 	var upper_rings: Array[Dictionary] = [
-		_ring_x(Vector3(shoulder_x - direction * 0.018, shoulder_y - 0.005, 0), 0.096 * mass, 0.088 * mass, _weights2(BONE.chest, upper_bone, 0.35)),
-		_ring_x(Vector3(shoulder_x, shoulder_y, 0), 0.105 * mass, 0.095 * mass, _weights(upper_bone)),
-		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.22), shoulder_y - 0.002, 0), 0.101 * mass, 0.091 * mass, _weights(upper_bone)),
-		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.48), shoulder_y, 0), 0.089 * mass, 0.081 * mass, _weights(upper_bone)),
-		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.74), shoulder_y + 0.002, -0.002), 0.080 * mass, 0.074 * mass, _weights2(upper_bone, forearm_bone, 0.16)),
-		_ring_x(Vector3(elbow_x, shoulder_y, 0), 0.073 * mass, 0.070 * mass, _weights2(upper_bone, forearm_bone, 0.50)),
+		_ring_x(Vector3(shoulder_x - direction * 0.024, shoulder_y - 0.010, 0), 0.090 * mass, 0.084 * mass, _weights2(BONE.chest, upper_bone, 0.30)),
+		_ring_x(Vector3(shoulder_x, shoulder_y, 0), 0.108 * mass, 0.098 * mass, _weights(upper_bone)),
+		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.18), shoulder_y - 0.004, -0.002), 0.104 * mass, 0.094 * mass, _weights(upper_bone)),
+		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.38), shoulder_y + 0.001, -0.004), 0.095 * mass, 0.086 * mass, _weights(upper_bone)),
+		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.60), shoulder_y + 0.003, -0.002), 0.086 * mass, 0.079 * mass, _weights(upper_bone)),
+		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.82), shoulder_y + 0.001, 0.001), 0.075 * mass, 0.071 * mass, _weights2(upper_bone, forearm_bone, 0.18)),
+		_ring_x(Vector3(elbow_x, shoulder_y, 0), 0.068 * mass, 0.066 * mass, _weights2(upper_bone, forearm_bone, 0.50)),
 	]
 	_add_x_loft(builders, CANVAS_LIGHT, upper_rings, 8, true, true, direction)
+
+	# Keep the vest shoulder seam compact so the beige sleeve remains the main
+	# arm read, matching the reference instead of forming a dark shoulder block.
 	_add_x_loft(builders, CANVAS_DARK, [
-		_ring_x(Vector3(shoulder_x - direction * 0.020, shoulder_y - 0.006, 0), 0.100 * mass, 0.092 * mass, _weights2(BONE.chest, upper_bone, 0.30)),
-		_ring_x(Vector3(shoulder_x, shoulder_y, 0), 0.111 * mass, 0.101 * mass, _weights(upper_bone)),
-		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.20), shoulder_y - 0.002, 0), 0.106 * mass, 0.096 * mass, _weights(upper_bone)),
+		_ring_x(Vector3(shoulder_x - direction * 0.024, shoulder_y - 0.011, 0), 0.094 * mass, 0.087 * mass, _weights2(BONE.chest, upper_bone, 0.28)),
+		_ring_x(Vector3(shoulder_x, shoulder_y, 0), 0.112 * mass, 0.102 * mass, _weights(upper_bone)),
+		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.12), shoulder_y - 0.004, 0), 0.108 * mass, 0.098 * mass, _weights(upper_bone)),
 	], 8, true, true, direction)
+
+	# The forearm is widest shortly below the elbow, then tapers decisively into
+	# the wrist. This removes the straight tube silhouette visible in side view.
 	var forearm_rings: Array[Dictionary] = [
-		_ring_x(Vector3(elbow_x, shoulder_y, 0), 0.073 * mass, 0.070 * mass, _weights2(upper_bone, forearm_bone, 0.50)),
-		_ring_x(Vector3(lerpf(elbow_x, wrist_x, 0.27), shoulder_y - 0.003, -0.004), 0.072 * mass, 0.066 * mass, _weights(forearm_bone)),
-		_ring_x(Vector3(lerpf(elbow_x, wrist_x, 0.55), shoulder_y, -0.006), 0.069 * mass, 0.061 * mass, _weights(forearm_bone)),
-		_ring_x(Vector3(lerpf(elbow_x, wrist_x, 0.80), shoulder_y + 0.002, -0.003), 0.059 * mass, 0.054 * mass, _weights2(forearm_bone, hand_bone, 0.20)),
-		_ring_x(Vector3(wrist_x, shoulder_y, 0), 0.052 * mass, 0.048 * mass, _weights2(forearm_bone, hand_bone, 0.65)),
+		_ring_x(Vector3(elbow_x, shoulder_y, 0), 0.069 * mass, 0.067 * mass, _weights2(upper_bone, forearm_bone, 0.50)),
+		_ring_x(Vector3(lerpf(elbow_x, wrist_x, 0.22), shoulder_y - 0.004, -0.005), 0.075 * mass, 0.068 * mass, _weights(forearm_bone)),
+		_ring_x(Vector3(lerpf(elbow_x, wrist_x, 0.48), shoulder_y - 0.001, -0.007), 0.071 * mass, 0.063 * mass, _weights(forearm_bone)),
+		_ring_x(Vector3(lerpf(elbow_x, wrist_x, 0.72), shoulder_y + 0.002, -0.005), 0.064 * mass, 0.057 * mass, _weights(forearm_bone)),
+		_ring_x(Vector3(lerpf(elbow_x, wrist_x, 0.88), shoulder_y + 0.001, -0.002), 0.057 * mass, 0.051 * mass, _weights2(forearm_bone, hand_bone, 0.25)),
+		_ring_x(Vector3(wrist_x, shoulder_y, 0), 0.049 * mass, 0.045 * mass, _weights2(forearm_bone, hand_bone, 0.65)),
 	]
 	_add_x_loft(builders, CANVAS_LIGHT, forearm_rings, 8, true, true, direction)
+
 	var hand_rings: Array[Dictionary] = [
-		_ring_x(Vector3(wrist_x, shoulder_y, 0), 0.055, 0.047, _weights2(forearm_bone, hand_bone, 0.75)),
-		_ring_x(Vector3(hand_x, shoulder_y, -0.012), 0.064, 0.043, _weights(hand_bone)),
+		_ring_x(Vector3(wrist_x, shoulder_y, 0), 0.052, 0.045, _weights2(forearm_bone, hand_bone, 0.75)),
+		_ring_x(Vector3(hand_x, shoulder_y, -0.012), 0.061, 0.041, _weights(hand_bone)),
 	]
 	_add_x_loft(builders, SKIN, hand_rings, 8, true, true, direction)
 	var thumb_x_a: float = hand_x - direction * 0.025
 	var thumb_x_b: float = hand_x + direction * 0.050
 	_add_box(builders, SKIN,
-		Vector3(minf(thumb_x_a, thumb_x_b), shoulder_y - 0.058, -0.052),
-		Vector3(maxf(thumb_x_a, thumb_x_b), shoulder_y - 0.018, -0.005),
+		Vector3(minf(thumb_x_a, thumb_x_b), shoulder_y - 0.055, -0.049),
+		Vector3(maxf(thumb_x_a, thumb_x_b), shoulder_y - 0.018, -0.006),
 		_weights(hand_bone), 0.010)
 	var cuff_x_a := lerpf(elbow_x, wrist_x, 0.78)
 	var cuff_x_b := lerpf(elbow_x, wrist_x, 0.94)
 	_add_x_loft(builders, LEATHER, [
-		_ring_x(Vector3(cuff_x_a, shoulder_y, 0), 0.058, 0.053, _weights(forearm_bone)),
-		_ring_x(Vector3(cuff_x_b, shoulder_y, 0), 0.057, 0.052, _weights2(forearm_bone, hand_bone, 0.35)),
+		_ring_x(Vector3(cuff_x_a, shoulder_y, 0), 0.056, 0.051, _weights(forearm_bone)),
+		_ring_x(Vector3(cuff_x_b, shoulder_y, 0), 0.054, 0.049, _weights2(forearm_bone, hand_bone, 0.35)),
 	], 8, true, true, direction)
 
 
@@ -369,20 +389,32 @@ static func _build_leg(builders: Dictionary, profile, left: bool) -> void:
 	var thigh_bone := int(BONE.thigh_l if left else BONE.thigh_r)
 	var calf_bone := int(BONE.calf_l if left else BONE.calf_r)
 	var foot_bone := int(BONE.foot_l if left else BONE.foot_r)
+	var hip_y: float = float(landmark["hip_y"])
+	var thigh_mass_y: float = float(landmark["thigh_mass_y"])
+	var knee_y: float = float(landmark["knee_y"])
+	var calf_mass_y: float = float(landmark["calf_mass_y"])
+	var calf_low_y: float = float(landmark["calf_low_y"])
+	var ankle_y: float = float(landmark["ankle_y"])
+
+	# Asymmetric front/back depth gives the thigh and calf a human side profile:
+	# restrained knee, fuller rear thigh, and the characteristic rear calf bulge.
 	var trouser_rings: Array[Dictionary] = [
-		_ring_y(Vector3(x, float(landmark["hip_y"]), 0), profile.thigh_diameter * 0.68, profile.thigh_diameter * 0.67, _weights(thigh_bone)),
-		_ring_y(Vector3(x, lerpf(float(landmark["hip_y"]), float(landmark["thigh_mass_y"]), 0.48), -0.004), profile.thigh_diameter * 0.69, profile.thigh_diameter * 0.66, _weights(thigh_bone)),
-		_ring_y(Vector3(x, float(landmark["thigh_mass_y"]), 0), profile.thigh_diameter * 0.65, profile.thigh_diameter * 0.63, _weights(thigh_bone)),
-		_ring_y(Vector3(x, lerpf(float(landmark["thigh_mass_y"]), float(landmark["knee_y"]), 0.62), 0.002), profile.thigh_diameter * 0.56, profile.thigh_diameter * 0.54, _weights2(thigh_bone, calf_bone, 0.20)),
-		_ring_y(Vector3(x, float(landmark["knee_y"]), 0), profile.thigh_diameter * 0.52, profile.thigh_diameter * 0.51, _weights2(thigh_bone, calf_bone, 0.50)),
-		_ring_y(Vector3(x, float(landmark["calf_mass_y"]), 0.010), profile.calf_diameter * 0.75, profile.calf_diameter * 0.72, _weights(calf_bone)),
-		_ring_y(Vector3(x, float(landmark["calf_low_y"]), 0), profile.calf_diameter * 0.59, profile.calf_diameter * 0.60, _weights(calf_bone)),
+		_ring_y_asym(Vector3(x, hip_y, 0.006), profile.thigh_diameter * 0.67, profile.thigh_diameter * 0.60, profile.thigh_diameter * 0.70, _weights(thigh_bone)),
+		_ring_y_asym(Vector3(x, lerpf(hip_y, thigh_mass_y, 0.42), 0.004), profile.thigh_diameter * 0.70, profile.thigh_diameter * 0.62, profile.thigh_diameter * 0.72, _weights(thigh_bone)),
+		_ring_y_asym(Vector3(x, thigh_mass_y, 0.002), profile.thigh_diameter * 0.65, profile.thigh_diameter * 0.59, profile.thigh_diameter * 0.67, _weights(thigh_bone)),
+		_ring_y_asym(Vector3(x, lerpf(thigh_mass_y, knee_y, 0.58), 0.001), profile.thigh_diameter * 0.55, profile.thigh_diameter * 0.51, profile.thigh_diameter * 0.57, _weights2(thigh_bone, calf_bone, 0.18)),
+		_ring_y_asym(Vector3(x, knee_y, -0.002), profile.thigh_diameter * 0.485, profile.thigh_diameter * 0.46, profile.thigh_diameter * 0.50, _weights2(thigh_bone, calf_bone, 0.50)),
+		_ring_y_asym(Vector3(x, lerpf(knee_y, calf_mass_y, 0.38), 0.004), profile.calf_diameter * 0.68, profile.calf_diameter * 0.61, profile.calf_diameter * 0.74, _weights(calf_bone)),
+		_ring_y_asym(Vector3(x, calf_mass_y, 0.010), profile.calf_diameter * 0.75, profile.calf_diameter * 0.64, profile.calf_diameter * 0.82, _weights(calf_bone)),
+		_ring_y_asym(Vector3(x, calf_low_y, 0.003), profile.calf_diameter * 0.59, profile.calf_diameter * 0.55, profile.calf_diameter * 0.64, _weights(calf_bone)),
+		_ring_y_asym(Vector3(x, lerpf(calf_low_y, ankle_y, 0.65), 0.000), profile.ankle_width * 0.62, profile.ankle_width * 0.60, profile.ankle_width * 0.65, _weights2(calf_bone, foot_bone, 0.18)),
 	]
 	_add_y_loft(builders, TROUSER, trouser_rings, 8, true, true)
+
 	var boot_rings: Array[Dictionary] = [
-		_ring_y(Vector3(x, float(landmark["calf_mass_y"]) - 0.01, 0.008), profile.calf_diameter * 0.70, profile.calf_diameter * 0.70, _weights(calf_bone)),
-		_ring_y(Vector3(x, float(landmark["calf_low_y"]) - 0.02, 0), profile.ankle_width * 0.62, profile.ankle_width * 0.66, _weights(calf_bone)),
-		_ring_y(Vector3(x, float(landmark["ankle_y"]), -0.005), profile.ankle_width * 0.56, profile.ankle_width * 0.60, _weights2(calf_bone, foot_bone, 0.65)),
+		_ring_y_asym(Vector3(x, calf_mass_y - 0.010, 0.008), profile.calf_diameter * 0.70, profile.calf_diameter * 0.65, profile.calf_diameter * 0.73, _weights(calf_bone)),
+		_ring_y_asym(Vector3(x, calf_low_y - 0.020, 0.000), profile.ankle_width * 0.62, profile.ankle_width * 0.62, profile.ankle_width * 0.68, _weights(calf_bone)),
+		_ring_y_asym(Vector3(x, ankle_y, -0.005), profile.ankle_width * 0.56, profile.ankle_width * 0.59, profile.ankle_width * 0.62, _weights2(calf_bone, foot_bone, 0.65)),
 	]
 	_add_y_loft(builders, LEATHER, boot_rings, 8, true, true)
 	var half_width: float = float(profile.foot_width) * 0.50 + 0.010
