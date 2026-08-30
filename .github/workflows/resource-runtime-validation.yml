@@ -1,0 +1,100 @@
+name: Resource Runtime Validation
+
+on:
+  pull_request:
+    paths:
+      - 'gameplay/resources/runtime/**'
+      - 'gameplay/resources/definitions/authored_harvestable_resource_definition.gd'
+      - 'content/resources/**'
+      - 'content/items/resources/iron_chunk_definition.tres'
+      - 'presentation/world/resources/**'
+      - 'tests/resources/test_underground_resource_runtime.gd'
+      - 'tests/run_resource_runtime.gd'
+      - '.github/workflows/resource-runtime-validation.yml'
+  push:
+    branches:
+      - main
+      - 'gameplay/resource-runtime-*'
+
+permissions:
+  contents: read
+
+jobs:
+  resource-runtime-contracts:
+    name: Godot resource runtime contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Show Godot version
+        run: godot --version
+
+      - name: Run resource runtime contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tests/run_resource_runtime.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[RESOURCE RUNTIME VALIDATION] PASS' "$validation_log"
+
+      - name: Run accepted numeric contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tests/run_numeric_validation.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[NUMERIC VALIDATION] PASS' "$validation_log"
+
+      - name: Run accepted persistence-state contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tests/run_persistence_state.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[PERSISTENCE STATE VALIDATION] PASS' "$validation_log"
+
+      - name: Run content contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tests/run_content.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[VALIDATION] PASS content' "$validation_log"
+
+      - name: Run inventory contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tests/run_inventory.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[INVENTORY VALIDATION] PASS' "$validation_log"
