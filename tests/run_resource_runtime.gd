@@ -4,7 +4,13 @@ const ItemContainerState := preload("res://gameplay/items/inventory/item_contain
 const RuntimeService := preload("res://gameplay/resources/runtime/underground_resource_runtime_service.gd")
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
 const RuntimeTests := preload("res://tests/resources/test_underground_resource_runtime.gd")
-const REQUIRED_ITEM_DEPENDENCY_PATHS: Array[String] = [
+const REQUIRED_RESOURCE_RUNTIME_DEPENDENCY_PATHS: Array[String] = [
+	"worldgen/identity/stable_id.gd",
+	"content/placement/underground_placement_record.gd",
+	"gameplay/resources/definitions/resource_definition.gd",
+	"gameplay/resources/definitions/resource_yield_rule.gd",
+	"gameplay/resources/state/resource_depletion_state.gd",
+	"worldgen/persistence/world_delta_store.gd",
 	"content/items/resources/stone_definition.tres",
 	"content/items/tools/stone_pickaxe_definition.tres",
 	"gameplay/items/definitions/item_definition.gd",
@@ -39,6 +45,7 @@ class CommitFailingInventory extends ItemContainerState:
 func _init() -> void:
 	var failures: Array[String] = RuntimeTests.run()
 	_test_workflow_dependency_triggers(failures)
+	_test_pull_request_path_parser_false_positives(failures)
 	_test_commit_phase_failure_restores_world_delta(failures)
 	if failures.is_empty():
 		print("[RESOURCE RUNTIME VALIDATION] PASS")
@@ -69,11 +76,51 @@ func _test_workflow_dependency_triggers(failures: Array[String]) -> void:
 		failures.append(
 			"Resource Runtime dependency trigger must remain precise; broad gameplay/items/** is not allowed"
 		)
-	for dependency_path in REQUIRED_ITEM_DEPENDENCY_PATHS:
+	for dependency_path in REQUIRED_RESOURCE_RUNTIME_DEPENDENCY_PATHS:
 		if not pull_request_paths.has(dependency_path):
 			failures.append(
-				"Resource Runtime pull_request.paths is missing item dependency trigger: %s" % dependency_path
+				"Resource Runtime pull_request.paths is missing direct runtime/fixture dependency trigger: %s" % dependency_path
 			)
+
+
+func _test_pull_request_path_parser_false_positives(failures: Array[String]) -> void:
+	const WORLD_DELTA_PATH := "worldgen/persistence/world_delta_store.gd"
+	const STABLE_ID_PATH := "worldgen/identity/stable_id.gd"
+	const CONTROL_PATH := "tests/run_resource_runtime.gd"
+
+	# A dependency that appears only as a comment and under a later sibling trigger
+	# must never be reported as a pull_request path.
+	var negative_yaml := "on:\n  pull_request:\n    paths:\n      - 'tests/run_resource_runtime.gd'\n      # 'worldgen/persistence/world_delta_store.gd'\n  push:\n    paths:\n      - 'worldgen/persistence/world_delta_store.gd'\n"
+	var negative_failures: Array[String] = []
+	var negative_paths: Array[String] = _pull_request_path_filters(negative_yaml, negative_failures)
+	for parser_failure in negative_failures:
+		failures.append("synthetic negative pull_request.paths parser fixture failed: %s" % parser_failure)
+	if not negative_paths.has(CONTROL_PATH):
+		failures.append("synthetic negative parser fixture did not retain the real pull_request path")
+	if negative_paths.has(WORLD_DELTA_PATH):
+		failures.append("pull_request.paths parser leaked dependency text from a comment or sibling push trigger")
+
+	# The same dependency must be returned when it is genuinely inside the exact
+	# pull_request.paths sequence.
+	var positive_yaml := "on:\n  pull_request:\n    paths:\n      - 'worldgen/persistence/world_delta_store.gd'\n  push:\n    branches:\n      - main\n"
+	var positive_failures: Array[String] = []
+	var positive_paths: Array[String] = _pull_request_path_filters(positive_yaml, positive_failures)
+	for parser_failure in positive_failures:
+		failures.append("synthetic positive pull_request.paths parser fixture failed: %s" % parser_failure)
+	if not positive_paths.has(WORLD_DELTA_PATH):
+		failures.append("pull_request.paths parser failed to include dependency under exact pull_request.paths")
+
+	# A sibling key inside pull_request ends the paths sequence. A later list entry
+	# under that sibling must not leak into the extracted path set.
+	var sibling_yaml := "on:\n  pull_request:\n    paths:\n      - 'tests/run_resource_runtime.gd'\n    types:\n      - 'worldgen/identity/stable_id.gd'\n  push:\n    branches:\n      - main\n"
+	var sibling_failures: Array[String] = []
+	var sibling_paths: Array[String] = _pull_request_path_filters(sibling_yaml, sibling_failures)
+	for parser_failure in sibling_failures:
+		failures.append("synthetic sibling-termination parser fixture failed: %s" % parser_failure)
+	if not sibling_paths.has(CONTROL_PATH):
+		failures.append("synthetic sibling parser fixture did not retain the pre-sibling pull_request path")
+	if sibling_paths.has(STABLE_ID_PATH):
+		failures.append("pull_request.paths parser leaked an entry from a later sibling mapping")
 
 
 func _pull_request_path_filters(
