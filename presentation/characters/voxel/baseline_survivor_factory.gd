@@ -38,11 +38,7 @@ static func build() -> Resource:
 		_entry("sole", Color("252523"), 0.98, 0.0),
 	])
 	var modules: Array[Resource] = [
-		_module("body", &"body_base", [
-			_part("pelvis", "rig_role.pelvis", _box(Vector3i(-2,-1,-1), Vector3i(2,1,1), TROUSER), Vector3i.ZERO),
-			_part("spine", "rig_role.spine.lower", _box(Vector3i(-2,-1,-1), Vector3i(2,6,1), CANVAS_LIGHT), Vector3i(0,1,0)),
-			_part("chest", "rig_role.chest", _box(Vector3i(-3,-1,-1), Vector3i(3,3,1), CANVAS_LIGHT), Vector3i(0,0,0)),
-		]),
+		_module("body", &"body_base", _slice_body_parts()),
 		_module("head", &"head_hair", [
 			_part("head_skin", "rig_role.head", _head_cells(), Vector3i(0,1,0)),
 			_part("hair", "rig_role.head", _hair_cells(), Vector3i(0,1,0)),
@@ -121,6 +117,37 @@ static func _baseline_slice_profile() -> Resource:
 			lines.append("#".repeat(width))
 		rows.append({"y": y, "layers": [{"layer_id": "body", "priority": 0, "palette_index": _slice_palette(y), "semantic": _slice_semantic(y), "mask": lines}]})
 	return SliceProfileScript.new().configure("character.voxel.grounded_survivor.slices", rows, PRESENTATION_VOXEL_SIZE)
+
+
+static func _slice_body_parts() -> Array[Dictionary]:
+	var profile = _baseline_slice_profile()
+	var all_cells: Array[Dictionary] = profile.resolved_cells()
+	var parts: Array[Dictionary] = []
+	# Bands are expressed in one global 56-row profile, then converted to the
+	# local coordinates of the existing pelvis/spine/chest bones. This keeps the
+	# authored rows contiguous while preserving the semantic animation rig.
+	parts.append(_slice_part("pelvis", "rig_role.pelvis", all_cells, 22, 31, 28))
+	parts.append(_slice_part("spine", "rig_role.spine.lower", all_cells, 29, 39, 33))
+	parts.append(_slice_part("chest", "rig_role.chest", all_cells, 37, 47, 42))
+	return parts
+
+
+static func _slice_part(id_value: String, rig_role: String, all_cells: Array[Dictionary], minimum_y: int, maximum_y: int, anchor_y: int) -> Dictionary:
+	var cells: Array[Dictionary] = []
+	for cell_value in all_cells:
+		var source: Dictionary = cell_value
+		var position: Vector3i = source["position"]
+		if position.y < minimum_y or position.y > maximum_y:
+			continue
+		var row_width := _slice_width(position.y)
+		var row_depth := _slice_depth(position.y)
+		var local_position := Vector3i(position.x - floori(float(row_width) * 0.5), position.y - anchor_y, position.z - floori(float(row_depth) * 0.5))
+		cells.append({"position": local_position, "palette_index": int(source.get("palette_index", CANVAS_LIGHT))})
+	return _raw_part(id_value, rig_role, cells, Vector3i.ZERO)
+
+
+static func _raw_part(id_value: String, rig_role: String, cells: Array[Dictionary], pivot: Vector3i) -> Dictionary:
+	return {"part_id": id_value, "rig_role": rig_role, "pivot": pivot, "attachment_offset": Vector3.ZERO, "cells": cells}
 
 
 static func _slice_width(y: int) -> int:
