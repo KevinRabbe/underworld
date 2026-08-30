@@ -48,3 +48,37 @@ static func for_tool(tool_id: String, attack_kind: StringName = &"light") -> Ref
 				&"heavy" if heavy else &"light",
 				12.0 if heavy else 0.0
 			)
+
+
+static func for_attack_id(attack_id: StringName):
+	match attack_id:
+		&"sword_light_01":
+			return AttackDefinitionScript.new(
+				&"sword_light_01",
+				0.18,
+				0.11,
+				0.27,
+				22,
+				2.9,
+				1.7,
+				1.05,
+				0.10,
+				&"light",
+				0.0
+			)
+		&"sword_heavy_01":
+			return AttackDefinitionScript.new(
+				&"sword_heavy_01",
+				0.32,
+				0.14,
+				0.42,
+				38,
+				3.1,
+				1.8,
+				1.20,
+				0.05,
+				&"heavy",
+				16.0
+			)
+		_:
+			return null

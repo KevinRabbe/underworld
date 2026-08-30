@@ -15,6 +15,7 @@ const DURABLE_CONTENT_PATHS: Array[String] = [
 	"res://content/items/resources/wood_definition.tres",
 	"res://content/items/tools/stone_axe_definition.tres",
 	"res://content/items/tools/stone_pickaxe_definition.tres",
+	"res://content/items/weapons/iron_sword_definition.tres",
 	"res://content/loot/profiles/prototype_burrower_reward_profile.tres",
 ]
 
