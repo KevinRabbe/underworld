@@ -5,6 +5,9 @@ const TITLE_PATH := "res://presentation/ui/screens/title/title_screen.tscn"
 const SECTION_HEADER_PATH := "res://presentation/ui/components/section_header/section_header.tscn"
 const FIXTURE_PATH := "res://tests/presentation/fixtures/ui_skin_reuse_fixture.tscn"
 const PROTOTYPE_SKIN_ROOT := "res://presentation/ui/assets/skin/prototype/"
+const BUTTON_PROTOTYPE_SIZE := Vector2(96, 48)
+const BUTTON_ORNAMENT_SAFE_HORIZONTAL := 20.0
+const BUTTON_ORNAMENT_SAFE_VERTICAL := 14.0
 const COMPACT_VIEWPORT := Vector2(960, 540)
 
 
@@ -49,6 +52,7 @@ static func _test_button_skin_contract(theme: Theme, failures: Array[String]) ->
 		if style == null or not style is StyleBoxTexture:
 			continue
 		var texture_style := style as StyleBoxTexture
+		_expect_button_ornament_safe_boundary(texture_style, state, failures)
 		var metrics := _patch_metrics(texture_style)
 		if reference_metrics.is_empty():
 			reference_metrics = metrics
@@ -57,6 +61,32 @@ static func _test_button_skin_contract(theme: Theme, failures: Array[String]) ->
 		state_paths[state] = texture_style.texture.resource_path if texture_style.texture != null else ""
 	if state_paths.get(&"hover", "") == state_paths.get(&"focus", ""):
 		failures.append("keyboard/controller focus art must remain independently replaceable from hover art")
+
+
+static func _expect_button_ornament_safe_boundary(
+	style: StyleBoxTexture,
+	state: StringName,
+	failures: Array[String]
+) -> void:
+	if style.texture == null:
+		return
+	var size := style.texture.get_size()
+	if size != BUTTON_PROTOTYPE_SIZE:
+		failures.append(
+			"Prototype Button/%s source dimensions changed; re-verify the authored ornament-safe 9-slice boundary" % state
+		)
+	var left := float(style.get("texture_margin_left"))
+	var top := float(style.get("texture_margin_top"))
+	var right := float(style.get("texture_margin_right"))
+	var bottom := float(style.get("texture_margin_bottom"))
+	if left < BUTTON_ORNAMENT_SAFE_HORIZONTAL or right < BUTTON_ORNAMENT_SAFE_HORIZONTAL:
+		failures.append(
+			"Button/%s horizontal patch margins must protect the current 2px-stroked corner ornament envelope" % state
+		)
+	if top < BUTTON_ORNAMENT_SAFE_VERTICAL or bottom < BUTTON_ORNAMENT_SAFE_VERTICAL:
+		failures.append(
+			"Button/%s vertical patch margins must protect the current 2px-stroked corner ornament envelope" % state
+		)
 
 
 static func _expect_texture_style(style: StyleBox, label: String, failures: Array[String]) -> void:

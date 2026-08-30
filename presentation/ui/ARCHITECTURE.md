@@ -15,11 +15,13 @@ TileMap is not part of normal menu composition.
 
 ## 9-slice contract
 
-The prototype panel source is 96x96 with 24 px protected edges. The prototype button sources are 96x48 with 12 px protected edges. Patch margins live in the corresponding `StyleBoxTexture` resources, not in screens.
+The prototype panel source is 96x96 with 24 px protected edges. The prototype button sources are 96x48 with **20 px protected left/right edges and 14 px protected top/bottom edges**. Patch margins live in the corresponding `StyleBoxTexture` resources, not in screens.
+
+Those button values are the authored safe envelope for the current 2 px-stroked corner ornaments: the left ornament reaches x=19 after stroke expansion, the right begins at x=77, the top reaches y=13, and the bottom begins at y=35. The resulting stretchable center is x=20..76 and y=14..34, so no corner-ornament pixel is stretched when buttons grow.
 
 All Button states use identical patch and content geometry. Hover, focus, pressed, disabled, and normal may use different art, but switching state must not move content. Keyboard/controller focus is independently authored from mouse hover.
 
-When final art arrives, artists may change source dimensions. Update the patch margins in `theme/styles/*.tres` to match the new protected corners/edges. No screen scene should require structural changes.
+When final art arrives, artists may change source dimensions. Update the patch margins in `theme/styles/*.tres` **and the authored safe-envelope regression** to match the new protected corners/edges. No screen scene should require structural changes.
 
 ## Asset rules
 
@@ -38,6 +40,7 @@ Theme roles are preferred for purely visual reuse. Create a reusable scene compo
 
 - panel and button skin roles resolve through `StyleBoxTexture` resources;
 - patch margins leave a stretchable center;
+- the current prototype button source dimensions and 20x14 protected envelope keep authored corner ornamentation outside the stretch region;
 - button states keep identical geometry and focus is independently replaceable from hover;
 - tall and wide compositions reuse the same panel skin contract;
 - the accepted title screen consumes the reusable Theme without routing changes;
