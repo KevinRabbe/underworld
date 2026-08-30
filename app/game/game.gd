@@ -7,7 +7,11 @@ const CavePresentationControllerScript := preload("res://presentation/world/cave
 const PrototypeCavePresentationCatalog := preload("res://content/presentation/caves/prototype_cave_presentation_catalog.tres")
 const SurfaceChunkStreamerScript := preload("res://world/runtime/streaming/surface_chunk_streamer.gd")
 const WorldDeltaStoreScript := preload("res://worldgen/persistence/world_delta_store.gd")
-const PrototypeSurvivalControllerScript := preload("res://gameplay/survival/prototype_survival_controller.gd")
+const IntegratedGameSaveContractScript := preload("res://gameplay/persistence/integrated_game_save_contract.gd")
+const IntegratedSurvivalControllerScript := preload("res://gameplay/survival/integrated_survival_controller.gd")
+const ItemContainerStateScript := preload("res://gameplay/items/inventory/item_container_state.gd")
+const EquipmentHotbarStateScript := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
+const PendingLootStateScript := preload("res://gameplay/loot/runtime/pending_loot_state.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
@@ -18,6 +22,8 @@ const WorldIdScript := preload("res://worldgen/identity/world_id.gd")
 const GeneratorManifestScript := preload("res://worldgen/versioning/generator_manifest.gd")
 const Map015FixtureScript := preload("res://worldgen/validation/map015_fixture.gd")
 
+const STARTUP_NEW: StringName = &"new"
+const STARTUP_CONTINUE: StringName = &"continue"
 const LOOT_COLLECTION_POLL_INTERVAL := 0.1
 
 var world_settings
@@ -39,8 +45,74 @@ var loot_collection_poll_timer: float = 0.0
 @export var enable_map015_fixture: bool = false
 @export var enable_debug_hud: bool = true
 
+var _startup_prepared: bool = false
+var _startup_mode: StringName = STARTUP_NEW
+var _startup_candidate: Dictionary = {}
+var _restored_pending_loot_state = null
+
+
+func prepare_new_game() -> bool:
+	if is_inside_tree():
+		push_error("Game startup must be prepared before entering the SceneTree")
+		return false
+	_startup_mode = STARTUP_NEW
+	_startup_candidate.clear()
+	_restored_pending_loot_state = null
+	_startup_prepared = true
+	return true
+
+
+func prepare_continue(candidate: Dictionary) -> bool:
+	if is_inside_tree():
+		push_error("Continue startup must be prepared before Game enters the SceneTree")
+		return false
+	if enable_map015_fixture:
+		push_error("MAP-015 developer fixture cannot be combined with durable Continue state")
+		return false
+
+	# AppRoot supplies a detached decoded candidate, but Game is a second durable
+	# ownership boundary. Clone through the strict SAVE contract before retaining
+	# anything so caller mutation after preparation cannot alias live runtime.
+	var clone_result: Dictionary = IntegratedGameSaveContractScript.clone_candidate(candidate)
+	if not bool(clone_result.get("success", false)):
+		for diagnostic in clone_result.get("diagnostics", []):
+			push_error("Continue preparation clone rejected: %s" % diagnostic)
+		return false
+	var owned_candidate_variant: Variant = clone_result.get("candidate", null)
+	if not owned_candidate_variant is Dictionary:
+		push_error("Continue preparation clone did not return a candidate Dictionary")
+		return false
+	var owned_candidate: Dictionary = owned_candidate_variant
+	var failures: Array[String] = _validate_continue_candidate(owned_candidate)
+	failures.append_array(_preflight_pending_loot_restore(owned_candidate))
+	if not failures.is_empty():
+		for failure in failures:
+			push_error("Continue preparation rejected: %s" % failure)
+		return false
+	_startup_mode = STARTUP_CONTINUE
+	_startup_candidate = owned_candidate
+	_restored_pending_loot_state = _startup_candidate.get("pending_loot_state", null)
+	_startup_prepared = true
+	return true
+
+
+func startup_mode() -> StringName:
+	return _startup_mode
+
+
+func restored_pending_loot_state():
+	return _restored_pending_loot_state
+
 
 func _ready() -> void:
+	# Direct developer/test loading of game.tscn retains clean NEW semantics. The
+	# production AppRoot path always calls prepare_new_game()/prepare_continue()
+	# while Game is detached, before this method can execute.
+	if not _startup_prepared:
+		_startup_mode = STARTUP_NEW
+		_startup_candidate.clear()
+		_restored_pending_loot_state = null
+		_startup_prepared = true
 	_setup_environment()
 	_create_world()
 	_create_player()
@@ -128,12 +200,21 @@ func _setup_environment() -> void:
 
 func _create_world() -> void:
 	world_settings = WorldSettingsScript.new()
-	if enable_map015_fixture:
+	if _startup_mode == STARTUP_CONTINUE:
+		world_settings.world_seed = int(_startup_candidate.get("world_seed", 0))
+	elif enable_map015_fixture:
 		world_settings.world_seed = 1
 	survival_settings = SurvivalSettingsScript.new()
 	water_settings = WaterSettingsScript.new()
 
-	world_delta_store = WorldDeltaStoreScript.new()
+	if _startup_mode == STARTUP_CONTINUE:
+		world_delta_store = _startup_candidate.get("delta_store", null)
+	else:
+		world_delta_store = WorldDeltaStoreScript.new()
+	if world_delta_store == null or not world_delta_store is WorldDeltaStoreScript:
+		push_error("Game startup is missing valid WorldDeltaStore authority")
+		world_delta_store = WorldDeltaStoreScript.new()
+
 	world = SurfaceChunkStreamerScript.new()
 	world.name = "SurfaceWorld"
 	if not world.bind_world_delta_store(world_delta_store):
@@ -141,19 +222,30 @@ func _create_world() -> void:
 	world.configure(world_settings)
 	add_child(world)
 
-	# Prototype survival keeps version-2 file orchestration, while the streamer
-	# delegates generated-world destruction authority to WorldDeltaStore.
-	survival = PrototypeSurvivalControllerScript.new()
+	# Gameplay uses the integrated adapter only for detached restore activation;
+	# the inherited prototype gameplay controller itself has no file authority.
+	survival = IntegratedSurvivalControllerScript.new()
 	survival.name = "PrototypeSurvival"
 	add_child(survival)
-	survival.configure(world, survival_settings, world_settings.world_seed)
+	survival.configure_integrated(world, survival_settings, world_settings.world_seed)
+	if _startup_mode == STARTUP_CONTINUE:
+		var restore_failures: Array[String] = survival.activate_restored_state(
+			_startup_candidate.get("inventory_state", null),
+			_startup_candidate.get("equipment_state", null)
+		)
+		if not restore_failures.is_empty():
+			push_error("Detached Continue state failed during activation: %s" % [restore_failures])
 
-	var preferred_spawn: Vector3 = Vector3(
-		world_settings.chunk_size * 0.5,
-		0.0,
-		world_settings.chunk_size * 0.5
-	)
-	spawn_xz = world.find_spawn_xz(preferred_spawn)
+	if _startup_mode == STARTUP_CONTINUE:
+		var resume_position: Vector3 = _startup_candidate.get("resume_position", Vector3.ZERO)
+		spawn_xz = Vector3(resume_position.x, 0.0, resume_position.z)
+	else:
+		var preferred_spawn: Vector3 = Vector3(
+			world_settings.chunk_size * 0.5,
+			0.0,
+			world_settings.chunk_size * 0.5
+		)
+		spawn_xz = world.find_spawn_xz(preferred_spawn)
 	world.generate_initial(spawn_xz)
 	_create_water_surface()
 
@@ -185,8 +277,12 @@ func _create_player() -> void:
 	player.name = "Player"
 	add_child(player)
 
-	var spawn_height: float = world.get_height_at_world(spawn_xz.x, spawn_xz.z)
-	var spawn_position: Vector3 = Vector3(spawn_xz.x, spawn_height + 3.0, spawn_xz.z)
+	var spawn_position: Vector3
+	if _startup_mode == STARTUP_CONTINUE:
+		spawn_position = _startup_candidate.get("resume_position", Vector3.ZERO)
+	else:
+		var spawn_height: float = world.get_height_at_world(spawn_xz.x, spawn_xz.z)
+		spawn_position = Vector3(spawn_xz.x, spawn_height + 3.0, spawn_xz.z)
 	player.global_position = spawn_position
 	player.set_respawn_position(spawn_position)
 	player.set_harvest_range(survival_settings.harvest_range)
@@ -211,6 +307,15 @@ func _create_combat() -> void:
 	encounter_controller.name = "BurrowerEncounters"
 	add_child(encounter_controller)
 	encounter_controller.configure(world, player, world_settings)
+	if _startup_mode == STARTUP_CONTINUE and _restored_pending_loot_state != null:
+		var import_result: Dictionary = encounter_controller.import_pending_loot_states(
+			[_restored_pending_loot_state],
+			_startup_candidate.get("resume_position", Vector3.ZERO)
+		)
+		if not bool(import_result.get("success", false)):
+			push_error("SAVE hard invariant: preflighted pending loot failed live import: %s" % [
+				import_result.get("diagnostics", []),
+			])
 
 
 func _create_gameplay_hud() -> void:
@@ -249,3 +354,81 @@ func _create_debug_hud() -> void:
 		underworld_runtime
 	)
 	add_child(debug_hud)
+
+
+func _preflight_pending_loot_restore(candidate: Dictionary) -> Array[String]:
+	var pending_loot_state = candidate.get("pending_loot_state", null)
+	if pending_loot_state == null:
+		return []
+	var recovery_anchor_variant: Variant = candidate.get("resume_position", null)
+	if not recovery_anchor_variant is Vector3:
+		return ["pending loot restore requires Vector3 recovery anchor"]
+
+	# Run the accepted #272 import semantics on a detached temporary controller.
+	# This validates canonical Burrower occurrence identity, finite recovery anchor,
+	# authored loot registry compatibility and deep-owned import before AppRoot is
+	# allowed to detach Title and attach the real Game scene.
+	var preflight_settings = WorldSettingsScript.new()
+	preflight_settings.world_seed = int(candidate.get("world_seed", 0))
+	var preflight_controller = BurrowerEncounterControllerScript.new()
+	preflight_controller.configure(null, null, preflight_settings)
+	var result: Dictionary = preflight_controller.import_pending_loot_states(
+		[pending_loot_state],
+		recovery_anchor_variant
+	)
+	preflight_controller.free()
+	if bool(result.get("success", false)):
+		return []
+	var failures: Array[String] = []
+	for diagnostic in result.get("diagnostics", []):
+		failures.append("pending loot restore: %s" % diagnostic)
+	failures.sort()
+	return failures
+
+
+func _validate_continue_candidate(candidate: Dictionary) -> Array[String]:
+	var failures: Array[String] = []
+	var world_context = candidate.get("world_context", null)
+	var world_seed_variant: Variant = candidate.get("world_seed", null)
+	var world_id: String = str(candidate.get("world_id", ""))
+	var delta_store = candidate.get("delta_store", null)
+	var inventory_state = candidate.get("inventory_state", null)
+	var equipment_state = candidate.get("equipment_state", null)
+	var pending_loot_state = candidate.get("pending_loot_state", null)
+	var resume_variant: Variant = candidate.get("resume_position", null)
+
+	if world_context == null or not world_context.has_method("validate"):
+		failures.append("candidate world context is missing")
+	elif not world_context.validate().is_empty():
+		failures.append("candidate world context is invalid")
+	if typeof(world_seed_variant) != TYPE_INT:
+		failures.append("candidate world seed must be exact int")
+	elif world_context != null and int(world_seed_variant) != int(world_context.world_seed):
+		failures.append("candidate world seed does not match world context")
+	if world_id.is_empty() or WorldIdScript.parse(world_id) == null:
+		failures.append("candidate WorldId is invalid")
+	elif typeof(world_seed_variant) == TYPE_INT and WorldIdScript.from_seed(int(world_seed_variant)).value() != world_id:
+		failures.append("candidate WorldId does not match world seed")
+	if delta_store == null or not delta_store is WorldDeltaStoreScript:
+		failures.append("candidate WorldDeltaStore is invalid")
+	if inventory_state == null or not inventory_state is ItemContainerStateScript:
+		failures.append("candidate inventory state is invalid")
+	elif not inventory_state.validate_container().is_empty():
+		failures.append("candidate inventory state failed validation")
+	if equipment_state == null or not equipment_state is EquipmentHotbarStateScript:
+		failures.append("candidate equipment state is invalid")
+	elif not equipment_state.validate_state().is_empty():
+		failures.append("candidate equipment state failed validation")
+	if pending_loot_state != null:
+		if not pending_loot_state is PendingLootStateScript:
+			failures.append("candidate pending loot state has wrong type")
+		elif not pending_loot_state.validate_state().is_empty():
+			failures.append("candidate pending loot state failed validation")
+	if not resume_variant is Vector3:
+		failures.append("candidate resume position must be Vector3")
+	else:
+		var resume: Vector3 = resume_variant
+		if is_nan(resume.x) or is_inf(resume.x) or is_nan(resume.y) or is_inf(resume.y) or is_nan(resume.z) or is_inf(resume.z):
+			failures.append("candidate resume position must be finite")
+	failures.sort()
+	return failures

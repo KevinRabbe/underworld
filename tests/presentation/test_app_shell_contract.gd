@@ -4,6 +4,7 @@ const APP_ROOT_PATH := "res://app/app_root.tscn"
 const GAME_SCENE_PATH := "res://app/game/game.tscn"
 const TITLE_SCREEN_PATH := "res://presentation/ui/screens/title/title_screen.tscn"
 const THEME_PATH := "res://presentation/ui/theme/underworld_theme.tres"
+const GAME_FIXTURE_SCRIPT_PATH := "res://tests/fixtures/app_shell_game_fixture.gd"
 
 
 static func run() -> Array[String]:
@@ -21,14 +22,16 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var app_packed = ResourceLoader.load(APP_ROOT_PATH)
 	var title_packed = ResourceLoader.load(TITLE_SCREEN_PATH)
 	var game_fixture: PackedScene = _make_fixture_scene("RuntimeGameFixture")
+	var reject_new_fixture: PackedScene = _make_fixture_scene("RejectNewFixture", true, false)
+	var reject_continue_fixture: PackedScene = _make_fixture_scene("RejectContinueFixture", false, true)
 	if app_packed == null or not app_packed is PackedScene:
 		failures.append("runtime app-shell proof could not load AppRoot PackedScene")
 		return failures
 	if title_packed == null or not title_packed is PackedScene:
 		failures.append("runtime app-shell proof could not load title PackedScene")
 		return failures
-	if game_fixture == null:
-		failures.append("runtime app-shell proof could not build lightweight game fixture")
+	if game_fixture == null or reject_new_fixture == null or reject_continue_fixture == null:
+		failures.append("runtime app-shell proof could not build prepared-game fixtures")
 		return failures
 
 	var app: Node = app_packed.instantiate()
@@ -59,9 +62,13 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		failures.append("AppRoot must expose title as the current semantic route after entry")
 
 	if title != null:
+		var continue_button := title.get_node_or_null("SafeMargin/Center/MenuPanel/Menu/ContinueButton") as Button
+		if continue_button == null or not continue_button.disabled:
+			failures.append("missing SAVE slot must leave Continue disabled on the live title route")
+
 		title.emit_signal("continue_requested")
 		if app.get("current_scene") != title or scene_host.get_child_count() != 1:
-			failures.append("Continue must remain fail-closed and non-routing before persistence integration")
+			failures.append("missing SAVE slot Continue must remain fail-closed and non-routing")
 
 		# An unusable target route must fail before the current title route is
 		# detached. PackedScene.can_instantiate() keeps this proof free of expected
@@ -73,14 +80,26 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			failures.append("uninstantiable replacement must leave the current title route intact")
 		if str(app.call("current_route_id")) != "title":
 			failures.append("failed replacement must not commit a new semantic route id")
-		app.set("_game_scene", game_fixture)
 
+		# A valid scene whose off-tree preparation rejects startup is also a failed
+		# replacement. Title must remain live because route mutation happens only
+		# after prepare_new_game() succeeds.
+		app.set("_game_scene", reject_new_fixture)
+		title.emit_signal("new_game_requested")
+		if app.get("current_scene") != title or scene_host.get_child_count() != 1:
+			failures.append("rejected NEW preparation must leave title route untouched")
+		if str(app.call("current_route_id")) != "title":
+			failures.append("rejected NEW preparation must not commit game route identity")
+
+		app.set("_game_scene", game_fixture)
 		title.emit_signal("new_game_requested")
 		var first_game: Node = app.get("current_scene") as Node
 		if first_game == null or first_game == title:
 			failures.append("New Game semantic intent did not replace title with the game route")
 		elif first_game.get_parent() != scene_host or first_game.name != "RuntimeGameFixture":
 			failures.append("New Game did not realize the injected game route under SceneHost")
+		elif str(first_game.get("prepared_mode")) != "new":
+			failures.append("New Game route was not prepared with NEW semantics before commit")
 		if scene_host.get_child_count() != 1:
 			failures.append("SceneHost retained overlapping title/game route children")
 		if title.get_parent() != null or not title.is_queued_for_deletion():
@@ -108,12 +127,78 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 
 	app.queue_free()
 	await tree.process_frame
+
+	# CONTINUE routing is tested separately from the persistence codec itself. The
+	# fixture accepts any detached candidate, allowing this contract to prove the
+	# critical ordering invariant: prepare_continue() runs while Game is still
+	# off-tree, and rejection cannot detach the current title route.
+	var continue_app: Node = app_packed.instantiate()
+	if continue_app == null:
+		failures.append("runtime Continue proof could not instantiate AppRoot")
+		return failures
+	if not bool(continue_app.call("configure_route_scenes", title_packed, game_fixture)):
+		failures.append("runtime Continue proof could not configure route fixtures")
+		continue_app.free()
+		return failures
+	tree.root.add_child(continue_app)
+	await tree.process_frame
+
+	var continue_host: Node = continue_app.get_node_or_null("SceneHost")
+	var continue_title: Node = continue_app.get("current_scene") as Node
+	if continue_host == null or continue_title == null:
+		failures.append("runtime Continue proof did not start on a live title route")
+	else:
+		var fixture_candidate: Dictionary = {
+			"fixture_token": "detached-before-route-commit",
+			"nested": {"value": 7},
+		}
+		continue_app.set("_game_scene", reject_continue_fixture)
+		var rejected_continue: bool = bool(
+			continue_app.call("_replace_game_scene", true, fixture_candidate)
+		)
+		if rejected_continue:
+			failures.append("rejected CONTINUE preparation unexpectedly reported success")
+		if continue_app.get("current_scene") != continue_title or continue_host.get_child_count() != 1:
+			failures.append("rejected CONTINUE preparation must leave title route untouched")
+		if str(continue_app.call("current_route_id")) != "title":
+			failures.append("rejected CONTINUE preparation must not commit game route identity")
+
+		continue_app.set("_game_scene", game_fixture)
+		var continued: bool = bool(continue_app.call("_replace_game_scene", true, fixture_candidate))
+		var continued_game: Node = continue_app.get("current_scene") as Node
+		if not continued or continued_game == null or continued_game == continue_title:
+			failures.append("prepared CONTINUE route did not replace title")
+		elif continued_game.get_parent() != continue_host:
+			failures.append("prepared CONTINUE route is not the live SceneHost child")
+		else:
+			if str(continued_game.get("prepared_mode")) != "continue":
+				failures.append("CONTINUE fixture did not receive detached preparation before route commit")
+			var prepared_candidate: Variant = continued_game.get("prepared_candidate")
+			if not prepared_candidate is Dictionary or prepared_candidate != fixture_candidate:
+				failures.append("CONTINUE preparation did not receive the exact detached candidate")
+		if str(continue_app.call("current_route_id")) != "game":
+			failures.append("successful CONTINUE did not commit semantic game route identity")
+		if continue_host.get_child_count() != 1:
+			failures.append("successful CONTINUE retained overlapping title/game route children")
+
+	continue_app.queue_free()
+	await tree.process_frame
 	return failures
 
 
-static func _make_fixture_scene(root_name: String) -> PackedScene:
+static func _make_fixture_scene(
+	root_name: String,
+	reject_new: bool = false,
+	reject_continue: bool = false
+) -> PackedScene:
+	var fixture_script = ResourceLoader.load(GAME_FIXTURE_SCRIPT_PATH)
+	if fixture_script == null or not fixture_script is Script:
+		return null
 	var fixture_root := Node.new()
 	fixture_root.name = root_name
+	fixture_root.set_script(fixture_script)
+	fixture_root.set("reject_new_preparation", reject_new)
+	fixture_root.set("reject_continue_preparation", reject_continue)
 	var packed := PackedScene.new()
 	var pack_result: Error = packed.pack(fixture_root)
 	fixture_root.free()
@@ -139,10 +224,12 @@ static func _test_app_root_contract(failures: Array[String]) -> void:
 		return
 	if not root.has_node("SceneHost"):
 		failures.append("application root is missing replaceable SceneHost")
-	if not root.has_method("show_title") or not root.has_method("start_new_game"):
-		failures.append("application root must expose explicit title/game routing operations")
+	if not root.has_method("show_title") or not root.has_method("start_new_game") or not root.has_method("continue_game"):
+		failures.append("application root must expose explicit title/NEW/CONTINUE routing operations")
 	if not root.has_method("configure_route_scenes") or not root.has_method("current_route_id"):
 		failures.append("application root must expose pre-tree route composition and semantic route inspection")
+	if not root.has_method("configure_save_slot_path"):
+		failures.append("application root must expose pre-tree SAVE slot-path composition")
 	root.free()
 
 
@@ -159,6 +246,8 @@ static func _test_title_screen_contract(failures: Array[String]) -> void:
 	for signal_name in ["new_game_requested", "continue_requested", "quit_requested"]:
 		if not title.has_signal(signal_name):
 			failures.append("title screen is missing semantic intent signal: %s" % signal_name)
+	if not title.has_method("set_continue_available"):
+		failures.append("title screen must expose persistence-driven Continue availability")
 
 	var menu_path := "SafeMargin/Center/MenuPanel/Menu/"
 	var new_game := title.get_node_or_null(menu_path + "NewGameButton") as Button
@@ -171,7 +260,7 @@ static func _test_title_screen_contract(failures: Array[String]) -> void:
 	if continue_button == null:
 		failures.append("title screen is missing Continue action")
 	elif not continue_button.disabled or continue_button.focus_mode != Control.FOCUS_NONE:
-		failures.append("Continue must fail closed and leave focus navigation until persistence integration")
+		failures.append("Continue must default fail-closed until AppRoot proves a valid SAVE slot")
 	if quit_button == null or quit_button.text != "QUIT":
 		failures.append("title screen is missing Quit action")
 	elif quit_button.focus_mode != Control.FOCUS_ALL:
