@@ -46,14 +46,14 @@ static func build() -> Resource:
 			_slice_overlay_part("jacket_lower", "rig_role.spine.lower", 28, 38, 33, CANVAS_LIGHT, -1),
 			_raw_part("shoulder_l", "rig_role.clavicle.left", _arm_cells(true, 3, CLOTH), Vector3i.ZERO),
 			_raw_part("shoulder_r", "rig_role.clavicle.right", _arm_cells(false, 3, CLOTH), Vector3i.ZERO),
-			_part("neck_connector", "rig_role.neck", _box(Vector3i(-1,-2,-1), Vector3i(0,0,1), CLOTH), Vector3i.ZERO),
+			_slice_overlay_part("neck_connector", "rig_role.neck", 42, 46, 44, CLOTH, -1),
 			_raw_part("upperarm_l", "rig_role.upper_arm.left", _arm_cells(true, 6, CLOTH), Vector3i.ZERO),
 			_raw_part("forearm_l", "rig_role.forearm.left", _arm_cells(true, 6, LEATHER), Vector3i.ZERO),
 			_raw_part("upperarm_r", "rig_role.upper_arm.right", _arm_cells(false, 6, CLOTH), Vector3i.ZERO),
 			_raw_part("forearm_r", "rig_role.forearm.right", _arm_cells(false, 6, LEATHER), Vector3i.ZERO),
-			_part("scarf", "rig_role.neck", _box(Vector3i(-2,-1,-2), Vector3i(1,1,1), ACCENT), Vector3i(0,0,0)),
-			_part("belt", "rig_role.pelvis", _box(Vector3i(-3,1,-2), Vector3i(2,2,1), LEATHER), Vector3i(0,0,0)),
-			_part("belt_buckle", "rig_role.pelvis", _box(Vector3i(0,1,-3), Vector3i(1,2,-3), METAL), Vector3i.ZERO),
+			_slice_overlay_part("scarf", "rig_role.neck", 39, 44, 42, ACCENT, -2),
+			_slice_overlay_part("belt", "rig_role.pelvis", 25, 29, 28, LEATHER, -2),
+			_raw_part("belt_buckle", "rig_role.pelvis", _box(Vector3i(0,1,-3), Vector3i(2,3,-3), METAL), Vector3i.ZERO),
 			_part("pack_straps", "rig_role.chest", _pack_strap_cells(), Vector3i.ZERO),
 		]),
 		_module("trousers", &"leg_outfit", [
@@ -67,7 +67,7 @@ static func build() -> Resource:
 			_part("boot_shaft_r", "rig_role.calf.right", _box(Vector3i(-1,-7,-1), Vector3i(1,-3,1), LEATHER), Vector3i(0,-1,0)),
 		]),
 		_module("gloves", &"hands", [
-			_part("hand_l", "rig_role.hand.left", _box(Vector3i(-2,-1,-1), Vector3i(0,1,1), LEATHER), Vector3i(-1,0,0)),
+			_raw_part("hand_l", "rig_role.hand.left", _hand_slice_cells(true), Vector3i.ZERO),
 			_mirrored_part("hand_r", "rig_role.hand.right", "hand_l", Vector3i(1,0,0)),
 		]),
 		_module("boots", &"feet", [
@@ -233,6 +233,16 @@ static func _arm_cells(left: bool, length: int, palette_index: int) -> Array[Dic
 		for y in range(-radius, radius + 1):
 			for z in range(-1, 2):
 				cells.append({"position": Vector3i(x, y, z), "palette_index": palette_index})
+	return cells
+
+
+static func _hand_slice_cells(left: bool) -> Array[Dictionary]:
+	var cells: Array[Dictionary] = []
+	for i in range(3):
+		var x := -i - 1 if left else i
+		for y in range(-1, 2):
+			for z in range(-1, 2):
+				cells.append({"position": Vector3i(x, y, z), "palette_index": LEATHER})
 	return cells
 
 
