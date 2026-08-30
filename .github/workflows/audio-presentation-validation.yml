@@ -63,7 +63,37 @@ jobs:
             capture { sub(/^          /, ""); print }
           ' .github/workflows/audio-001-semantic-patch.yml > /tmp/audio001_patch.py
           test -s /tmp/audio001_patch.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('gameplay/creatures/underworld/burrower/burrower.gd')
+          text = p.read_text()
+          seam = '\t_cancel_pending_attack()\n\n\tvar away: Vector3 = global_position - source_position\n'
+          positions = []
+          start = 0
+          while True:
+              index = text.find(seam, start)
+              if index < 0:
+                  break
+              positions.append(index)
+              start = index + 1
+          if len(positions) != 2:
+              raise SystemExit(f'Burrower disambiguation expected 2 seams, found {len(positions)}')
+          second = positions[1]
+          marker = '\t_cancel_pending_attack()\n\t# AUDIO001_TRANSIENT_DISAMBIGUATION\n\n\tvar away: Vector3 = global_position - source_position\n'
+          text = text[:second] + marker + text[second + len(seam):]
+          p.write_text(text)
+          PY
           python3 /tmp/audio001_patch.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('gameplay/creatures/underworld/burrower/burrower.gd')
+          text = p.read_text()
+          marker = '\t_cancel_pending_attack()\n\t# AUDIO001_TRANSIENT_DISAMBIGUATION\n\n\tvar away: Vector3 = global_position - source_position\n'
+          original = '\t_cancel_pending_attack()\n\n\tvar away: Vector3 = global_position - source_position\n'
+          if text.count(marker) != 1:
+              raise SystemExit('Burrower transient marker did not survive exactly once')
+          p.write_text(text.replace(marker, original, 1))
+          PY
 
       - name: Commit exact semantic repair
         shell: bash
