@@ -25,12 +25,11 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import textwrap
 
           workflow = Path(".github/workflows/character-geometry-patch.yml").read_text()
           marker = "python3 - <<'PY'\n"
           payload = workflow.split(marker, 1)[1].split("\n          PY", 1)[0]
-          exec(compile(textwrap.dedent(payload), "character-geometry-payload", "exec"))
+          exec(compile("if True:\n" + payload, "character-geometry-payload", "exec"))
           PY
           git diff --check
 
