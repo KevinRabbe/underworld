@@ -39,11 +39,7 @@ static func build() -> Resource:
 	])
 	var modules: Array[Resource] = [
 		_module("body", &"body_base", _slice_body_parts()),
-		_module("head", &"head_hair", [
-			_part("head_skin", "rig_role.head", _head_cells(), Vector3i(0,1,0)),
-			_part("hair", "rig_role.head", _hair_cells(), Vector3i(0,1,0)),
-			_part("face", "rig_role.head", _face_cells(), Vector3i(0,1,0)),
-		]),
+		_module("head", &"head_hair", _slice_head_parts()),
 		_module("jacket", &"torso_outfit", [
 			_part("jacket_front", "rig_role.chest", _jacket_front_cells(), Vector3i.ZERO),
 			_part("jacket_trim", "rig_role.chest", _jacket_trim_cells(), Vector3i.ZERO),
@@ -129,6 +125,33 @@ static func _slice_body_parts() -> Array[Dictionary]:
 	parts.append(_slice_part("pelvis", "rig_role.pelvis", all_cells, 22, 31, 28))
 	parts.append(_slice_part("spine", "rig_role.spine.lower", all_cells, 29, 39, 33))
 	parts.append(_slice_part("chest", "rig_role.chest", all_cells, 37, 47, 42))
+	return parts
+
+
+static func _slice_head_parts() -> Array[Dictionary]:
+	var profile = _baseline_slice_profile()
+	var all_cells: Array[Dictionary] = profile.resolved_cells()
+	var parts: Array[Dictionary] = []
+	parts.append(_slice_part("head_skin", "rig_role.head", all_cells, 43, 55, 49))
+	# Front-facing features are a thin explicit overlay one grid unit beyond the
+	# skin surface. Hair is kept on the crown and rear, so it cannot z-fight with
+	# the face when rows are replaced.
+	var face_cells: Array[Dictionary] = []
+	for cell in [Vector3i(-2, 3, -5), Vector3i(2, 3, -5), Vector3i(0, 0, -5)]:
+		face_cells.append({"position": cell, "palette_index": FACE})
+	var hair_cells: Array[Dictionary] = []
+	for z in range(-4, 4):
+		for y in range(5, 8):
+			for x in range(-4, 5):
+				if y == 7 and abs(x) > 2:
+					continue
+				hair_cells.append({"position": Vector3i(x, y, z), "palette_index": HAIR})
+	for z in range(2, 5):
+		for y in range(0, 5):
+			for x in range(-4, 5):
+				hair_cells.append({"position": Vector3i(x, y, z), "palette_index": HAIR})
+	parts.append(_raw_part("face", "rig_role.head", face_cells, Vector3i.ZERO))
+	parts.append(_raw_part("hair", "rig_role.head", hair_cells, Vector3i.ZERO))
 	return parts
 
 
