@@ -53,11 +53,16 @@ func _test_workflow_dependency_triggers(failures: Array[String]) -> void:
 		failures.append("Resource Runtime workflow could not be opened for dependency-trigger validation")
 		return
 	var workflow_text: String = workflow_file.get_as_text()
+	var push_trigger_offset: int = workflow_text.find("\n  push:")
+	if push_trigger_offset < 0:
+		failures.append("Resource Runtime workflow is missing its push trigger boundary")
+		return
+	var pull_request_trigger_block: String = workflow_text.substr(0, push_trigger_offset)
 	for dependency_path in REQUIRED_INVENTORY_DEPENDENCY_PATHS:
 		var expected_path_filter := "- '%s'" % dependency_path
-		if workflow_text.find(expected_path_filter) < 0:
+		if pull_request_trigger_block.find(expected_path_filter) < 0:
 			failures.append(
-				"Resource Runtime workflow is missing inventory dependency trigger: %s" % dependency_path
+				"Resource Runtime pull_request.paths is missing inventory dependency trigger: %s" % dependency_path
 			)
 
 
