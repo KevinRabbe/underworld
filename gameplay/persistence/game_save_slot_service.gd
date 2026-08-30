@@ -6,6 +6,15 @@ const DEFAULT_SLOT_PATH := "user://underworld_m3_slot.json"
 const CANDIDATE_SUFFIX := ".candidate"
 const BACKUP_SUFFIX := ".previous"
 
+var _rename_operation: Callable = Callable()
+
+
+func configure_rename_operation(operation: Callable) -> RefCounted:
+	# Narrow test seam only. Production callers leave this unset and use the
+	# filesystem rename operation directly.
+	_rename_operation = operation
+	return self
+
 
 func save_slot(
 	context,
@@ -65,20 +74,20 @@ func persist_candidate_json(
 	var had_previous: bool = FileAccess.file_exists(slot_path)
 	_remove_file_if_present(backup_path)
 	if had_previous:
-		var backup_error: Error = _rename_file(slot_path, backup_path)
+		var backup_error: int = _rename_file(slot_path, backup_path)
 		if backup_error != OK:
 			_remove_file_if_present(candidate_path)
 			return _failure([
 				"SAVE could not preserve previous slot before promotion: %s" % error_string(backup_error),
 			])
 
-	var promote_error: Error = _rename_file(candidate_path, slot_path)
+	var promote_error: int = _rename_file(candidate_path, slot_path)
 	if promote_error != OK:
 		var failures: Array[String] = [
 			"SAVE candidate promotion failed: %s" % error_string(promote_error),
 		]
 		if had_previous and FileAccess.file_exists(backup_path):
-			var restore_error: Error = _rename_file(backup_path, slot_path)
+			var restore_error: int = _rename_file(backup_path, slot_path)
 			if restore_error != OK:
 				failures.append(
 					"SAVE previous slot restoration failed: %s" % error_string(restore_error)
@@ -163,11 +172,16 @@ static func _slot_path_failure(slot_path: String) -> String:
 	return ""
 
 
-static func _rename_file(from_path: String, to_path: String) -> Error:
-	return DirAccess.rename_absolute(
+func _rename_file(from_path: String, to_path: String) -> int:
+	if _rename_operation.is_valid():
+		var result: Variant = _rename_operation.call(from_path, to_path)
+		if typeof(result) != TYPE_INT:
+			return ERR_INVALID_DATA
+		return int(result)
+	return int(DirAccess.rename_absolute(
 		ProjectSettings.globalize_path(from_path),
 		ProjectSettings.globalize_path(to_path)
-	)
+	))
 
 
 static func _remove_file_if_present(path: String) -> void:
