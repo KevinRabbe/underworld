@@ -102,6 +102,52 @@ func issue_for_creature(
 	})
 
 
+func import_pending_states(states: Array) -> Dictionary:
+	var failures: Array[String] = []
+	var staged: Dictionary = {}
+	for index in range(states.size()):
+		var candidate = states[index]
+		if candidate == null or not candidate is PendingLootState:
+			failures.append("pending loot import entry %d must be PendingLootState" % index)
+			continue
+		for failure in candidate.validate_state():
+			failures.append("pending loot import %s: %s" % [candidate.occurrence_id, failure])
+		if not candidate.is_pending():
+			failures.append("pending loot import requires unresolved state: %s" % candidate.occurrence_id)
+		var occurrence_id: String = candidate.occurrence_id
+		if staged.has(occurrence_id):
+			failures.append("pending loot import contains duplicate occurrence: %s" % occurrence_id)
+		if _issued_occurrences.has(occurrence_id):
+			failures.append("pending loot import conflicts with issued occurrence: %s" % occurrence_id)
+		if not failures.is_empty():
+			continue
+		var owned = PendingLootState.new().configure(
+			occurrence_id,
+			candidate.profile_id,
+			candidate.rewards
+		)
+		var owned_failures: Array[String] = owned.validate_state()
+		for failure in owned_failures:
+			failures.append("pending loot import owned state %s: %s" % [occurrence_id, failure])
+		if owned_failures.is_empty():
+			staged[occurrence_id] = owned
+
+	if not failures.is_empty():
+		return _failure(failures)
+
+	var imported_ids: Array[String] = []
+	for raw_id in staged.keys():
+		imported_ids.append(str(raw_id))
+	imported_ids.sort()
+	for occurrence_id in imported_ids:
+		_issued_occurrences[occurrence_id] = true
+		_pending_by_occurrence[occurrence_id] = staged[occurrence_id]
+	return _success({
+		"imported_occurrence_ids": imported_ids,
+		"events": [],
+	})
+
+
 func collect_pending(
 	occurrence_id: String,
 	destination_container,
