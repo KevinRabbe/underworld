@@ -19,6 +19,8 @@ const WorldIdScript := preload("res://worldgen/identity/world_id.gd")
 const GeneratorManifestScript := preload("res://worldgen/versioning/generator_manifest.gd")
 const Map015FixtureScript := preload("res://worldgen/validation/map015_fixture.gd")
 
+const LOOT_COLLECTION_POLL_INTERVAL := 0.1
+
 var world_settings
 var survival_settings
 var water_settings
@@ -34,6 +36,7 @@ var water_surface: MeshInstance3D
 var underworld_runtime
 var cave_presentation
 var spawn_xz: Vector3 = Vector3.ZERO
+var loot_collection_poll_timer: float = 0.0
 @export var enable_map015_fixture: bool = false
 @export var enable_debug_hud: bool = true
 
@@ -48,12 +51,27 @@ func _ready() -> void:
 	_create_debug_hud()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if water_surface != null and player != null:
 		water_surface.global_position.x = player.global_position.x
 		water_surface.global_position.z = player.global_position.z
 	if underworld_runtime != null and player != null:
 		underworld_runtime.update_player_position(player.global_position)
+	loot_collection_poll_timer = maxf(0.0, loot_collection_poll_timer - delta)
+	if loot_collection_poll_timer <= 0.0:
+		loot_collection_poll_timer = LOOT_COLLECTION_POLL_INTERVAL
+		_collect_nearby_pending_loot()
+
+
+func _collect_nearby_pending_loot() -> void:
+	if encounter_controller == null or survival == null:
+		return
+	if encounter_controller.get_pending_loot_count() <= 0:
+		return
+	var inventory_state = survival.get_inventory_state()
+	if inventory_state == null:
+		return
+	encounter_controller.collect_nearby_pending_loot(inventory_state)
 
 
 func _create_underworld_runtime() -> void:
