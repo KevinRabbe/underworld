@@ -84,4 +84,12 @@ static func _copy_map(source_variant, target: Dictionary) -> void:
 		return
 	var source: Dictionary = source_variant
 	for key in source.keys():
-		target[key] = source[key]
+		target[key] = _deep_owned_value(source[key])
+
+
+static func _deep_owned_value(value):
+	if value is Dictionary:
+		return value.duplicate(true)
+	if value is Array:
+		return value.duplicate(true)
+	return value
