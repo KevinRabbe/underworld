@@ -23,13 +23,13 @@ const ROW_COUNT := 56
 @export var ankle_width: float = 0.095
 @export var foot_length: float = 0.275
 @export var foot_width: float = 0.115
-@export var head_width: float = 0.195
-@export var head_depth: float = 0.205
+@export var head_width: float = 0.205
+@export var head_depth: float = 0.215
 @export var head_height: float = 0.250
 @export var torso_length: float = 0.650
 @export var leg_length: float = 0.900
 @export var arm_length: float = 0.715
-@export var arm_mass: float = 0.94
+@export var arm_mass: float = 1.00
 @export var outfit_shell_offset: float = 0.018
 
 
