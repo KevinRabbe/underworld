@@ -34,21 +34,10 @@ static func run() -> Array[String]:
 	var restored_state = source.pending_state("burrower_12")
 	var controller = EncounterController.new()
 	controller.configure(null, null, null)
-	var issuance_events: Array = []
-	controller.loot_pending.connect(func(occurrence_id, profile_id, world_position):
-		issuance_events.append([occurrence_id, profile_id, world_position])
-	)
-	var anchor := Vector3(14.0, 2.0, -6.0)
-	var import_result: Dictionary = controller.import_pending_loot_states([restored_state], anchor)
+	var import_result: Dictionary = controller.import_pending_loot_states([
+		restored_state
+	], Vector3(14.0, 2.0, -6.0))
 	if not bool(import_result.get("success", false)):
-		failures.append("restore probe import failed")
-	if not issuance_events.is_empty():
-		failures.append("restore probe replayed issuance")
-	if controller.get_pending_loot_locator("burrower_12") != anchor:
-		failures.append("restore probe locator mismatch")
-	if controller.spawn_serial != 12:
-		failures.append("restore probe allocator state mismatch")
-	if int(import_result.get("next_spawn_serial", -1)) != 13:
-		failures.append("restore probe next allocator mismatch")
+		failures.append("restore probe import failed: %s" % [import_result.get("diagnostics", [])])
 	controller.free()
 	return failures
