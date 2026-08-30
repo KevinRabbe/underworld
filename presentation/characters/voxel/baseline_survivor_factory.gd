@@ -246,10 +246,12 @@ static func _upper_arm_cells(left: bool) -> Array[Dictionary]:
 
 static func _boot_cells() -> Array[Dictionary]:
 	var cells: Array[Dictionary] = []
-	for z in range(-1, 5):
+	# Character forward is -Z. Keep the toe box and sole pointed toward the
+	# authored face instead of extending behind the heel.
+	for z in range(-4, 2):
 		for y in range(-1, 2):
 			for x in range(-1, 2):
-				var palette_index: int = SOLE if y == -1 else (LEATHER_LIGHT if z >= 2 else LEATHER)
+				var palette_index: int = SOLE if y == -1 else (LEATHER_LIGHT if z <= -2 else LEATHER)
 				cells.append({"position": Vector3i(x,y,z), "palette_index": palette_index})
 	return cells
 
