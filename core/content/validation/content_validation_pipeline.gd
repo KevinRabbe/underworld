@@ -306,7 +306,10 @@ func _validate(
 	)
 	return {
 		"success": validation_success,
-		"validated_definition_ids": authority_ids,
+		# Compatibility projection: keep reporting the selected IDs even on
+		# failure. CONTENT-006 runtime authority lives only in typed evidence,
+		# whose validated IDs are deliberately empty when validation fails.
+		"validated_definition_ids": selected_id_list,
 		"diagnostic_count": canonical_diagnostics.size(),
 		"diagnostics": canonical_diagnostics,
 		"evidence": evidence,
