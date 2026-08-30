@@ -3,7 +3,7 @@ class_name UnderworldFacetedBodyCompiler
 
 const MeshDataScript := preload("res://presentation/characters/faceted/faceted_skinned_mesh_data.gd")
 
-const COMPILER_REVISION := 10
+const COMPILER_REVISION := 11
 const SKIN := 0
 const CLOTH := 1
 const LEATHER := 2
@@ -408,31 +408,36 @@ static func _build_leg(builders: Dictionary, profile, left: bool) -> void:
 		_ring_y_asym(Vector3(x, ankle_y, -0.005), profile.ankle_width * 0.56, profile.ankle_width * 0.59, profile.ankle_width * 0.62, _weights2(calf_bone, foot_bone, 0.65)),
 	]
 	_add_y_loft(builders, LEATHER, boot_rings, 8, true, true)
-	# The shoe is a true heel-to-toe faceted volume.  Ring widths and vertical
-	# mass describe heel, instep, ball and tapered toe instead of ending the leg
-	# in the former rectangular leather/sole slabs.
+	# Compact rugged boot last.  Rev10 removed the rectangular slab, but its
+	# terminal ring sat too far forward and too low, producing a slipper-like
+	# point in true-side view.  These five stations keep the faceted construction
+	# while describing heel, instep, ball, blunt toe base and a short toe cap.
 	var sole_y: float = float(landmark["sole_y"])
 	var foot_top_y: float = float(landmark["foot_top_y"])
 	var foot_skin: Dictionary = _weights(foot_bone)
-	var heel_z: float = float(profile.foot_length) * 0.27
-	var instep_z: float = float(profile.foot_length) * 0.06
-	var ball_z: float = -float(profile.foot_length) * 0.39
-	var toe_z: float = -float(profile.foot_length) * 0.73
+	var heel_z: float = float(profile.foot_length) * 0.26
+	var instep_z: float = float(profile.foot_length) * 0.07
+	var ball_z: float = -float(profile.foot_length) * 0.31
+	var toe_base_z: float = -float(profile.foot_length) * 0.53
+	var toe_z: float = -float(profile.foot_length) * 0.64
 	var foot_rings: Array[Dictionary] = [
 		_ring_z(Vector3(x, sole_y + 0.067, heel_z), profile.foot_width * 0.47, 0.047, foot_skin),
-		_ring_z(Vector3(x, sole_y + 0.079, instep_z), profile.foot_width * 0.53, minf(0.064, foot_top_y - sole_y - 0.020), foot_skin),
-		_ring_z(Vector3(x, sole_y + 0.066, ball_z), profile.foot_width * 0.59, 0.052, foot_skin),
-		_ring_z(Vector3(x, sole_y + 0.052, toe_z), profile.foot_width * 0.43, 0.036, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.081, instep_z), profile.foot_width * 0.53, minf(0.066, foot_top_y - sole_y - 0.018), foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.069, ball_z), profile.foot_width * 0.60, 0.055, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.062, toe_base_z), profile.foot_width * 0.56, 0.047, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.058, toe_z), profile.foot_width * 0.48, 0.040, foot_skin),
 	]
 	_add_z_loft(builders, LEATHER, foot_rings, 8, true, true, -1.0)
 
-	# Separate low sole follows the same taper so the planted silhouette stays
-	# rugged without becoming a dark rectangular platform.
+	# The sole follows the same short, broad last instead of extending into a
+	# pointed platform.  A wide ball and toe-base keep the planted read at
+	# gameplay distance while the final cap remains visibly faceted.
 	var sole_rings: Array[Dictionary] = [
-		_ring_z(Vector3(x, sole_y + 0.018, heel_z + 0.006), profile.foot_width * 0.52, 0.018, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.018, heel_z + 0.005), profile.foot_width * 0.52, 0.018, foot_skin),
 		_ring_z(Vector3(x, sole_y + 0.018, instep_z), profile.foot_width * 0.58, 0.018, foot_skin),
-		_ring_z(Vector3(x, sole_y + 0.018, ball_z - 0.004), profile.foot_width * 0.64, 0.018, foot_skin),
-		_ring_z(Vector3(x, sole_y + 0.017, toe_z - 0.008), profile.foot_width * 0.47, 0.017, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.018, ball_z - 0.003), profile.foot_width * 0.64, 0.018, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.018, toe_base_z - 0.004), profile.foot_width * 0.60, 0.018, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.018, toe_z - 0.005), profile.foot_width * 0.52, 0.018, foot_skin),
 	]
 	_add_z_loft(builders, SOLE, sole_rings, 8, true, true, -1.0)
 

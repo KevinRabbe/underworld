@@ -520,21 +520,23 @@ static func _pickaxe_head_cells() -> Array[Dictionary]:
 
 static func _axe_head_cells() -> Array[Dictionary]:
 	var cells: Array[Dictionary] = []
-	# Broad asymmetric stone blade: the cutting edge fans to the left while a
-	# short rear poll and leather lash keep the haft relationship obvious.
+	# Compact asymmetric field axe.  The haft stays on x=0; the blade owns the
+	# negative-X side while only a one-cell rear poll survives on +X.  This keeps
+	# the tool subordinate to the character silhouette and matches the locked
+	# turnaround much more closely than rev10's oversized two-lobed head.
 	var rows := {
-		3: [-1, 1],
-		4: [-3, 2],
-		5: [-4, 1],
-		6: [-4, 0],
-		7: [-3, -1],
+		2: [-1, 1],
+		3: [-2, 1],
+		4: [-3, 1],
+		5: [-3, 0],
+		6: [-2, -1],
 	}
 	for z in range(0, 2):
 		for y_value in rows.keys():
 			var y: int = int(y_value)
 			var span: Array = rows[y_value]
 			for x in range(int(span[0]), int(span[1]) + 1):
-				var is_lash: bool = x in [0, 1] and y in [3, 4]
+				var is_lash: bool = x == 0 and y in [2, 3]
 				var palette_index: int = LEATHER_LIGHT if is_lash else METAL
 				cells.append({"position": Vector3i(x, y, z), "palette_index": palette_index})
 	return cells
