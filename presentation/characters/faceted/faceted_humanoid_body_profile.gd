@@ -10,23 +10,27 @@ const ROW_COUNT := 56
 @export var profile_id: String = ""
 @export var revision: int = CONTRACT_REVISION
 @export var height: float = 1.80
-@export var shoulder_width: float = 0.58
-@export var chest_width: float = 0.48
-@export var chest_depth: float = 0.30
-@export var waist_width: float = 0.38
-@export var pelvis_width: float = 0.42
-@export var thigh_diameter: float = 0.20
-@export var calf_diameter: float = 0.16
-@export var ankle_width: float = 0.10
-@export var foot_length: float = 0.28
-@export var foot_width: float = 0.12
-@export var head_width: float = 0.21
-@export var head_depth: float = 0.22
-@export var head_height: float = 0.30
-@export var torso_length: float = 0.68
-@export var leg_length: float = 0.82
-@export var arm_length: float = 0.69
-@export var arm_mass: float = 1.0
+# The baseline intentionally follows the locked turnaround rather than a
+# generic broad mannequin: roughly 7.2 heads tall, longer legs, a compact
+# torso, and enough shoulder width for the expedition layers without the
+# previous blocky superhero taper.
+@export var shoulder_width: float = 0.555
+@export var chest_width: float = 0.455
+@export var chest_depth: float = 0.285
+@export var waist_width: float = 0.355
+@export var pelvis_width: float = 0.395
+@export var thigh_diameter: float = 0.185
+@export var calf_diameter: float = 0.145
+@export var ankle_width: float = 0.095
+@export var foot_length: float = 0.275
+@export var foot_width: float = 0.115
+@export var head_width: float = 0.195
+@export var head_depth: float = 0.205
+@export var head_height: float = 0.250
+@export var torso_length: float = 0.650
+@export var leg_length: float = 0.900
+@export var arm_length: float = 0.715
+@export var arm_mass: float = 0.94
 @export var outfit_shell_offset: float = 0.018
 
 
@@ -107,21 +111,21 @@ func anatomy_landmarks() -> Dictionary:
 	var shoulder_y := leg + torso
 	return {
 		"sole_y": 0.0,
-		"foot_top_y": leg * 0.165,
+		"foot_top_y": leg * 0.155,
 		"ankle_y": leg * 0.105,
 		"calf_low_y": leg * 0.22,
-		"calf_mass_y": leg * 0.38,
+		"calf_mass_y": leg * 0.37,
 		"knee_y": leg * 0.55,
-		"thigh_mass_y": leg * 0.78,
+		"thigh_mass_y": leg * 0.79,
 		"hip_y": leg,
-		"pelvis_y": leg + torso * 0.16,
-		"waist_y": leg + torso * 0.34,
-		"lower_chest_y": leg + torso * 0.56,
-		"chest_y": leg + torso * 0.81,
+		"pelvis_y": leg + torso * 0.15,
+		"waist_y": leg + torso * 0.32,
+		"lower_chest_y": leg + torso * 0.55,
+		"chest_y": leg + torso * 0.78,
 		"shoulder_y": shoulder_y,
-		"neck_y": shoulder_y + head * 0.08,
-		"jaw_y": shoulder_y + head * 0.40,
-		"brow_y": shoulder_y + head * 0.67,
+		"neck_y": shoulder_y + head * 0.06,
+		"jaw_y": shoulder_y + head * 0.34,
+		"brow_y": shoulder_y + head * 0.71,
 		"crown_y": height,
 		"arm_length": arm_length * scale_factor,
 	}
@@ -147,33 +151,50 @@ func canonical_fingerprint() -> String:
 
 
 func _sample_half_width(t: float) -> float:
-	if t < 0.08:
+	var landmark := anatomy_landmarks()
+	var height_m := clampf(t, 0.0, 1.0) * height
+	var foot_top := float(landmark["foot_top_y"])
+	var calf_mass := float(landmark["calf_mass_y"])
+	var knee := float(landmark["knee_y"])
+	var hip := float(landmark["hip_y"])
+	var waist := float(landmark["waist_y"])
+	var shoulder := float(landmark["shoulder_y"])
+	if height_m < foot_top:
 		return foot_width * 0.5
-	if t < 0.24:
-		return lerpf(ankle_width * 0.5, calf_diameter * 0.5, inverse_lerp(0.08, 0.24, t))
-	if t < 0.45:
-		return lerpf(calf_diameter * 0.5, thigh_diameter * 0.5, inverse_lerp(0.24, 0.45, t))
-	if t < 0.57:
-		return lerpf(pelvis_width * 0.5, waist_width * 0.5, inverse_lerp(0.45, 0.57, t))
-	if t < 0.80:
-		return lerpf(waist_width * 0.5, shoulder_width * 0.5, inverse_lerp(0.57, 0.80, t))
+	if height_m < calf_mass:
+		return lerpf(ankle_width * 0.5, calf_diameter * 0.5, inverse_lerp(foot_top, calf_mass, height_m))
+	if height_m < knee:
+		return lerpf(calf_diameter * 0.5, thigh_diameter * 0.48, inverse_lerp(calf_mass, knee, height_m))
+	if height_m < hip:
+		return lerpf(thigh_diameter * 0.48, pelvis_width * 0.5, inverse_lerp(knee, hip, height_m))
+	if height_m < waist:
+		return lerpf(pelvis_width * 0.5, waist_width * 0.5, inverse_lerp(hip, waist, height_m))
+	if height_m < shoulder:
+		return lerpf(waist_width * 0.5, shoulder_width * 0.5, inverse_lerp(waist, shoulder, height_m))
 	return head_width * 0.5
 
 
 func _sample_half_depth(t: float) -> float:
-	if t < 0.08:
+	var landmark := anatomy_landmarks()
+	var height_m := clampf(t, 0.0, 1.0) * height
+	var foot_top := float(landmark["foot_top_y"])
+	var hip := float(landmark["hip_y"])
+	var shoulder := float(landmark["shoulder_y"])
+	if height_m < foot_top:
 		return foot_length * 0.5
-	if t < 0.45:
-		return lerpf(ankle_width * 0.55, thigh_diameter * 0.55, inverse_lerp(0.08, 0.45, t))
-	if t < 0.80:
+	if height_m < hip:
+		return lerpf(ankle_width * 0.55, thigh_diameter * 0.55, inverse_lerp(foot_top, hip, height_m))
+	if height_m < shoulder:
 		return chest_depth * 0.5
 	return head_depth * 0.5
 
 
 func _semantic_for_height(t: float) -> String:
-	if t < 0.08: return "feet"
-	if t < 0.45: return "legs"
-	if t < 0.80: return "torso"
+	var landmark := anatomy_landmarks()
+	var height_m := clampf(t, 0.0, 1.0) * height
+	if height_m < float(landmark["foot_top_y"]): return "feet"
+	if height_m < float(landmark["hip_y"]): return "legs"
+	if height_m < float(landmark["shoulder_y"]): return "torso"
 	return "head"
 
 
