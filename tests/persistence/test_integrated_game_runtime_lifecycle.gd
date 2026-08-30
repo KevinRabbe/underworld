@@ -147,6 +147,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 
 	var survival = resumed.get("survival")
 	var encounter = resumed.get("encounter_controller")
+	if encounter != null and int(encounter.get("spawn_serial")) != 42:
+		failures.append("resumed Game Continue activation did not retain restored burrower_42 allocator advancement")
 	if survival != null and encounter != null:
 		var live_inventory = survival.get_inventory_state()
 		var before_chitin: int = live_inventory.quantity_of(CHITIN_ID)
