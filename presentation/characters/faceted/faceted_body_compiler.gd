@@ -146,6 +146,18 @@ static func _build_torso(builders: Dictionary, profile, outfit: Resource) -> voi
 	]
 	_add_y_loft(builders, SKIN if outfit == null else CANVAS_LIGHT, torso_rings, 12, true, true)
 	if outfit == null:
+		# Subtle pectoral and clavicle planes give the editor body readable
+		# anatomy without adding a dense sculpt or changing collision.
+		var skin_front_z: float = -float(profile.chest_depth) * 0.515
+		_add_tri_prism_z(builders, SKIN,
+			Vector2(-0.19, chest_y - 0.010), Vector2(-0.018, chest_y - 0.010),
+			Vector2(-0.085, lower_chest_y - 0.115), skin_front_z - 0.010, skin_front_z + 0.004, _weights(BONE.chest))
+		_add_tri_prism_z(builders, SKIN,
+			Vector2(0.018, chest_y - 0.010), Vector2(0.19, chest_y - 0.010),
+			Vector2(0.085, lower_chest_y - 0.115), skin_front_z - 0.010, skin_front_z + 0.004, _weights(BONE.chest))
+		_add_ribbon_z(builders, SKIN,
+			Vector2(-0.16, shoulder_y - 0.028), Vector2(0.16, shoulder_y - 0.028),
+			skin_front_z - 0.008, 0.012, _weights(BONE.chest), _weights(BONE.chest), -1.0)
 		return
 
 	# The vest wraps only the back and lateral torso. The forward arc is absent
