@@ -93,8 +93,8 @@ static func _test_failure_has_no_authority(failures: Array[String]) -> void:
 		failures.append("failed validation evidence exposed success authority")
 	if not evidence.validated_definition_ids().is_empty():
 		failures.append("failed validation evidence exposed validated-ID authority")
-	if not result.get("validated_definition_ids", []).is_empty():
-		failures.append("failed compatibility result exposed validated-ID authority")
+	if result.get("validated_definition_ids", []) != [definition.content_id]:
+		failures.append("failed compatibility projection no longer reports the selected ContentId")
 	var registry = _registry([definition], failures)
 	if registry != null and evidence.verification_failures(registry, definition.content_id).is_empty():
 		failures.append("failed validation evidence verified as usable runtime authority")
