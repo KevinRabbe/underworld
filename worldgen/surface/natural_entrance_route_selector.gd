@@ -33,6 +33,7 @@ static func select(
 		floori(preferred_surface_position.z / MacroGenerator.REGION_SIZE)
 	)
 	var candidates: Array[Dictionary] = []
+	var rejected_approaches: Array[String] = []
 	for region_z in range(center_region.y - radius, center_region.y + radius + 1):
 		for region_x in range(center_region.x - radius, center_region.x + radius + 1):
 			var region := Vector2i(region_x, region_z)
@@ -46,26 +47,34 @@ static func select(
 			if not entrances.success:
 				return _prefixed_failure("Natural entrance generation", entrances.diagnostics)
 			for descriptor in entrances.data.surface_integration_descriptors:
+				var spawn_result: Dictionary = _recommended_spawn(descriptor, sampler)
+				if not bool(spawn_result.get("success", false)):
+					rejected_approaches.append(str(descriptor.entrance_id))
+					continue
 				var delta := Vector2(
 					descriptor.surface_world_position.x - preferred_surface_position.x,
 					descriptor.surface_world_position.z - preferred_surface_position.z
 				)
 				candidates.append({
 					"descriptor": descriptor,
+					"entrance_id": str(descriptor.entrance_id),
 					"region_coord": region,
 					"entrance_fingerprint": str(entrances.fingerprint),
 					"distance_squared": delta.length_squared(),
+					"spawn_xz": spawn_result["spawn_xz"],
 				})
 	if candidates.is_empty():
+		var detail := ""
+		if not rejected_approaches.is_empty():
+			rejected_approaches.sort()
+			detail = "; rejected non-viable approaches: %s" % [rejected_approaches]
 		return _failure([
-			"Natural entrance selection found no generated entrances within region radius %d" % radius,
+			"Natural entrance selection found no viable generated entrances within region radius %d%s" % [radius, detail],
 		])
-	candidates.sort_custom(_candidate_less)
-	var selected: Dictionary = candidates[0]
+	var selected: Dictionary = _select_viable_candidate(candidates)
+	if selected.is_empty():
+		return _failure(["Natural entrance selection failed to choose a viable candidate"])
 	var descriptor = selected["descriptor"]
-	var spawn_result: Dictionary = _recommended_spawn(descriptor, sampler)
-	if not bool(spawn_result.get("success", false)):
-		return spawn_result
 	var route: Dictionary = {
 		"world_seed": world_seed,
 		"region_coord": selected["region_coord"],
@@ -78,7 +87,7 @@ static func select(
 		"underground_anchor": descriptor.underground_anchor,
 		"descent_profile": str(descriptor.descent_profile),
 		"source_entrance_fingerprint": str(selected["entrance_fingerprint"]),
-		"recommended_spawn_xz": spawn_result["spawn_xz"],
+		"recommended_spawn_xz": selected["spawn_xz"],
 	}
 	var route_fingerprint: String = "entrance-route-" + CanonicalValue.fingerprint(route)
 	if route_fingerprint == "entrance-route-":
@@ -90,6 +99,14 @@ static func select(
 		"route": route,
 		"diagnostics": [],
 	}
+
+
+static func _select_viable_candidate(candidates: Array[Dictionary]) -> Dictionary:
+	if candidates.is_empty():
+		return {}
+	var ordered: Array[Dictionary] = candidates.duplicate(true)
+	ordered.sort_custom(_candidate_less)
+	return ordered[0]
 
 
 static func _recommended_spawn(descriptor, sampler) -> Dictionary:
@@ -151,9 +168,7 @@ static func _candidate_less(a: Dictionary, b: Dictionary) -> bool:
 	var right_distance: float = float(b["distance_squared"])
 	if not is_equal_approx(left_distance, right_distance):
 		return left_distance < right_distance
-	var left = a["descriptor"]
-	var right = b["descriptor"]
-	return str(left.entrance_id) < str(right.entrance_id)
+	return str(a.get("entrance_id", "")) < str(b.get("entrance_id", ""))
 
 
 static func _contains_xz(bounds: AABB, point: Vector3) -> bool:
