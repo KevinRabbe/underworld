@@ -190,48 +190,53 @@ func _prime_enemies() -> void:
 func _observe_enemies() -> void:
 	var active_ids: Dictionary = {}
 	for enemy in _active_enemy_nodes():
-		var instance_id: int = enemy.get_instance_id()
-		active_ids[instance_id] = true
-		if not _enemy_state.has(instance_id):
+		var enemy_id: String = str(enemy.get("enemy_id"))
+		if enemy_id.is_empty():
+			continue
+		active_ids[enemy_id] = true
+		if not _enemy_state.has(enemy_id):
 			_track_enemy(enemy)
 			continue
-		var previous: Dictionary = _enemy_state[instance_id]
+		var previous: Dictionary = _enemy_state[enemy_id]
 		var current_health: int = int(enemy.get("health"))
 		var current_attack: bool = bool(enemy.get("attack_pending"))
 		if current_health < int(previous.get("health", current_health)):
 			_dispatch("audio_cue.enemy.burrower.hit", _spatial_payload(enemy.global_position))
 		if current_attack and not bool(previous.get("attack_pending", false)):
 			_dispatch("audio_cue.enemy.burrower.attack", _spatial_payload(enemy.global_position))
-		_enemy_state[instance_id] = {
+		_enemy_state[enemy_id] = {
 			"health": current_health,
 			"attack_pending": current_attack,
+			"position": enemy.global_position,
 		}
-	for instance_id in _enemy_state.keys().duplicate():
-		if not active_ids.has(instance_id):
-			_enemy_state.erase(instance_id)
+	for enemy_id in _enemy_state.keys().duplicate():
+		if not active_ids.has(enemy_id):
+			_enemy_state.erase(enemy_id)
 
 
 func _track_enemy(enemy: Node) -> void:
 	if enemy == null or not is_instance_valid(enemy):
 		return
-	var instance_id: int = enemy.get_instance_id()
-	_enemy_state[instance_id] = {
+	var enemy_id: String = str(enemy.get("enemy_id"))
+	if enemy_id.is_empty():
+		return
+	_enemy_state[enemy_id] = {
 		"health": int(enemy.get("health")),
 		"attack_pending": bool(enemy.get("attack_pending")),
+		"position": enemy.global_position if enemy is Node3D else _player_position(),
 	}
 	if enemy.has_signal("died"):
-		var callback := Callable(self, "_on_enemy_died").bind(enemy)
+		var callback := Callable(self, "_on_enemy_died")
 		if not enemy.is_connected("died", callback):
 			enemy.connect("died", callback)
 
 
-func _on_enemy_died(_enemy_id: String, enemy: Node) -> void:
-	var position := _player_position()
-	if enemy != null and is_instance_valid(enemy) and enemy is Node3D:
-		position = (enemy as Node3D).global_position
+func _on_enemy_died(enemy_id: String) -> void:
+	var state: Dictionary = _enemy_state.get(enemy_id, {})
+	var position_variant = state.get("position", _player_position())
+	var position: Vector3 = position_variant if position_variant is Vector3 else _player_position()
 	_dispatch("audio_cue.enemy.burrower.death", _spatial_payload(position))
-	if enemy != null and is_instance_valid(enemy):
-		_enemy_state.erase(enemy.get_instance_id())
+	_enemy_state.erase(enemy_id)
 
 
 func _active_enemy_nodes() -> Array[Node]:
@@ -325,8 +330,10 @@ func _is_player_in_realized_cave() -> bool:
 		if not snapshot_variant is Dictionary:
 			continue
 		var bounds_variant = snapshot_variant.get("world_bounds", null)
-		if bounds_variant is AABB and (bounds_variant as AABB).grow(0.25).has_point(position):
-			return true
+		if bounds_variant is AABB:
+			var bounds: AABB = bounds_variant
+			if bounds.grow(0.25).has_point(position):
+				return true
 	return false
 
 
