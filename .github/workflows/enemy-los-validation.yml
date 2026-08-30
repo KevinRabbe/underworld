@@ -1,0 +1,67 @@
+name: Enemy LOS Validation
+
+on:
+  pull_request:
+    paths:
+      - 'gameplay/creatures/underworld/burrower/burrower.gd'
+      - 'tests/character/test_burrower_defense.gd'
+      - 'tests/character/fixtures/test_burrower_los_double.gd'
+      - '.github/workflows/enemy-los-validation.yml'
+  push:
+    branches:
+      - 'gameplay/enemy-los-*'
+    paths:
+      - 'gameplay/creatures/underworld/burrower/burrower.gd'
+      - 'tests/character/test_burrower_defense.gd'
+      - 'tests/character/fixtures/test_burrower_los_double.gd'
+      - '.github/workflows/enemy-los-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  enemy-los-contracts:
+    name: Godot Burrower LOS contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Show Godot version
+        run: godot --version
+
+      - name: Import project resources
+        run: godot --headless --editor --path . --quit
+
+      - name: Run character and Burrower contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tests/run_character.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[CHARACTER VALIDATION] PASS' "$validation_log"
+
+      - name: Run accepted app shell contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . \
+            --script res://tests/run_app_shell.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[APP SHELL VALIDATION] PASS' "$validation_log"
