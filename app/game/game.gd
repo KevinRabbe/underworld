@@ -112,6 +112,8 @@ func build_save_request() -> Dictionary:
 		failures.append("SAVE runtime snapshot requires Survival")
 	if player == null or not is_instance_valid(player):
 		failures.append("SAVE runtime snapshot requires live Player")
+	elif player.has_method("is_defeated") and bool(player.call("is_defeated")):
+		failures.append("SAVE runtime snapshot rejects defeated Player")
 	if not failures.is_empty():
 		return _failure(failures)
 

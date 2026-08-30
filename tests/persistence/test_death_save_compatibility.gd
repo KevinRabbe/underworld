@@ -105,6 +105,33 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		failures
 	)
 
+	# A defeated Player is not a recoverable SAVE resume anchor because defeated,
+	# health and action state are intentionally not durable. Reject the request
+	# before recovery commits and prove the read-only failure mutates no durable
+	# inventory/equipment/world/loot authority.
+	var defeated_request_variant: Variant = game.call("build_save_request")
+	if not defeated_request_variant is Dictionary:
+		failures.append("defeated Game SAVE request did not return Dictionary failure")
+	elif bool(defeated_request_variant.get("success", false)):
+		failures.append("defeated Game unexpectedly produced a successful SAVE request")
+	else:
+		var defeated_diagnostics: Array = defeated_request_variant.get("diagnostics", [])
+		if not defeated_diagnostics.has("SAVE runtime snapshot rejects defeated Player"):
+			failures.append("defeated Game SAVE rejection omitted deterministic diagnostic")
+	_assert_durable_unchanged(
+		inventory,
+		equipment,
+		store,
+		encounter,
+		inventory_before,
+		equipment_before,
+		world_delta_before,
+		pending_before,
+		pending_count_before,
+		"after rejected defeated SAVE request",
+		failures
+	)
+
 	var recovered: Dictionary = recovery.call("try_commit_recovery")
 	if not _require_success(recovered, "real Game death recovery", failures):
 		_free_attached(game)
