@@ -162,13 +162,25 @@ func mine(
 	if not bool(preflight.get("success", false)):
 		return _failure(preflight.get("diagnostics", []))
 
-	var previous_envelope: Dictionary = delta_store.get_object_state(placement.placement_stable_id)
+	var previous_delta_snapshot: Dictionary = delta_store.snapshot()
 	var next_envelope: Dictionary = _snapshot_envelope(placement, next_state)
 	if not delta_store.set_object_state(placement.placement_stable_id, next_envelope):
 		return _failure(["WorldDeltaStore rejected validated placement StableId"])
 	var committed: Dictionary = transaction_service.commit(plan)
 	if not bool(committed.get("success", false)):
-		delta_store.set_object_state(placement.placement_stable_id, previous_envelope)
+		var rollback_failures: Array[String] = delta_store.load_modern_delta_payload(previous_delta_snapshot)
+		var restored_snapshot: Dictionary = delta_store.snapshot()
+		if not rollback_failures.is_empty() or restored_snapshot != previous_delta_snapshot:
+			var diagnostics: Array[String] = []
+			for diagnostic in committed.get("diagnostics", []):
+				diagnostics.append(str(diagnostic))
+			for failure in rollback_failures:
+				diagnostics.append("WorldDelta rollback: %s" % failure)
+			if restored_snapshot != previous_delta_snapshot:
+				diagnostics.append(
+					"HARD RESOURCE ROLLBACK INVARIANT FAILURE — WorldDelta snapshot did not restore exactly"
+				)
+			return _failure(diagnostics)
 		return committed
 
 	var events: Array = committed.get("events", []).duplicate(true)
