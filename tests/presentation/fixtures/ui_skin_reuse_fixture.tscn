@@ -1,0 +1,46 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Theme" path="res://presentation/ui/theme/underworld_theme.tres" id="1_theme"]
+[ext_resource type="PackedScene" path="res://presentation/ui/components/section_header/section_header.tscn" id="2_header"]
+
+[node name="UISkinReuseFixture" type="Control"]
+custom_minimum_size = Vector2(900, 620)
+theme = ExtResource("1_theme")
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 0
+offset_right = 900.0
+offset_bottom = 620.0
+
+[node name="TallMenu" type="PanelContainer" parent="Layout"]
+custom_minimum_size = Vector2(320, 360)
+layout_mode = 2
+theme_type_variation = &"MenuPanel"
+
+[node name="Content" type="VBoxContainer" parent="Layout/TallMenu"]
+layout_mode = 2
+theme_type_variation = &"MenuStack"
+
+[node name="Label" type="Label" parent="Layout/TallMenu/Content"]
+layout_mode = 2
+text = "TALL MENU COMPOSITION"
+
+[node name="Action" type="Button" parent="Layout/TallMenu/Content"]
+layout_mode = 2
+text = "ACTION"
+
+[node name="WideContent" type="PanelContainer" parent="Layout"]
+custom_minimum_size = Vector2(720, 180)
+layout_mode = 2
+theme_type_variation = &"ContentPanel"
+
+[node name="Content" type="VBoxContainer" parent="Layout/WideContent"]
+layout_mode = 2
+
+[node name="Header" parent="Layout/WideContent/Content" instance=ExtResource("2_header")]
+layout_mode = 2
+title = "WIDE CONTENT COMPOSITION"
+
+[node name="Body" type="Label" parent="Layout/WideContent/Content"]
+layout_mode = 2
+text = "The same panel skin contract serves a different shape without screen-specific art."
