@@ -8,6 +8,7 @@ const CapabilitySchemaRegistry := preload("res://core/content/schema/capability_
 const ContentValidationPipeline := preload("res://core/content/validation/content_validation_pipeline.gd")
 const ArchetypeComposition := preload("res://core/content/archetypes/archetype_composition.gd")
 const ArchetypeDefinition := preload("res://core/content/archetypes/archetype_definition.gd")
+const ArchetypeFamilyValidator := preload("res://core/content/archetypes/archetype_family_validator.gd")
 const ArchetypeRealizer := preload("res://core/content/archetypes/archetype_realizer.gd")
 const PackedSceneArchetypeAdapter := preload("res://core/content/archetypes/packed_scene_archetype_adapter.gd")
 const ItemDefinition := preload("res://gameplay/items/definitions/item_definition.gd")
@@ -302,7 +303,11 @@ static func _validate(definitions: Array) -> Dictionary:
 		definitions,
 		_categories(),
 		_capabilities(),
-		[_item_validator(), RecipeFamilyValidator.new().configure_recipe_rules()]
+		[
+			_item_validator(),
+			ArchetypeFamilyValidator.new().configure("archetype"),
+			RecipeFamilyValidator.new().configure_recipe_rules(),
+		]
 	)
 
 
