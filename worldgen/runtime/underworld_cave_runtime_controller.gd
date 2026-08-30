@@ -57,10 +57,15 @@ func configure(world_id_value: String, manifest_id_value: String, player_value: 
 func set_cave_material(material: Material) -> void:
 	_material = material
 
-## Builds the deterministic data pipeline for one region and realizes the selected
-## entrance cells. Call this during a loading phase; all scene/resource creation
-## remains inside the main-thread realization methods below.
+## Compatibility/developer entry point retained for MAP-015 and historical tests.
+## The generated-entrance operation below is the production authority.
 func bootstrap_fixture(world_seed: int, region: Vector2i, entrance_id: String) -> Array[String]:
+	return bootstrap_generated_entrance(world_seed, region, entrance_id)
+
+## Builds the deterministic data pipeline for one generated entrance and realizes
+## its selected cells. Call this during a loading phase; all scene/resource
+## creation remains inside the main-thread realization methods below.
+func bootstrap_generated_entrance(world_seed: int, region: Vector2i, entrance_id: String) -> Array[String]:
 	last_bootstrap_diagnostics.clear()
 	var context := WorldContext.new(world_seed)
 	var sampler := SurfaceSampler.new(world_seed)
@@ -73,7 +78,7 @@ func bootstrap_fixture(world_seed: int, region: Vector2i, entrance_id: String) -
 	var selected = null
 	for descriptor in entrances.data.surface_integration_descriptors:
 		if str(descriptor.entrance_id) == entrance_id: selected = descriptor; break
-	if selected == null: return _bootstrap_fail(["Fixture entrance was not found: " + entrance_id])
+	if selected == null: return _bootstrap_fail(["Generated entrance was not found: " + entrance_id])
 	last_bootstrap_surface_position = selected.surface_world_position
 	var neighbor_views: Array = []
 	for offset in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
