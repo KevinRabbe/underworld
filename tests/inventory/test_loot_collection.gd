@@ -228,7 +228,7 @@ static func _test_locator_retry_and_nearby_collection(failures: Array[String]) -
 	var controller = EncounterController.new()
 	controller.configure(null, null, null)
 	var player_probe = Node3D.new()
-	player_probe.global_position = Vector3.ZERO
+	player_probe.position = Vector3.ZERO
 	controller.player = player_probe
 	controller._on_enemy_died("burrower_locator_contract")
 	if not controller.has_pending_loot_locator("burrower_locator_contract"):
@@ -342,7 +342,7 @@ static func _test_restored_pending_is_collectible_without_reissuance(failures: A
 		failures.append("encounter restore retained alias to detached SAVE pending state")
 
 	var player_probe = Node3D.new()
-	player_probe.global_position = anchor
+	player_probe.position = anchor
 	controller.player = player_probe
 	var inventory = ItemContainerState.new().configure(2)
 	var collect: Dictionary = controller.collect_nearby_pending_loot(inventory)
