@@ -1,0 +1,13 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://gameplay/items/weapons/definitions/weapon_attack_set_definition.gd" id="1_attack_set"]
+
+[resource]
+script = ExtResource("1_attack_set")
+content_id = "attack_set.weapon.sword.basic"
+definition_family = "attack_set"
+schema_revision = 1
+technique_attack_ids = {
+"weapon_technique.heavy.primary": "sword_heavy_01",
+"weapon_technique.light.primary": "sword_light_01"
+}
