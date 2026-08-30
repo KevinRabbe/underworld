@@ -1,5 +1,6 @@
 extends RefCounted
 
+const GAME_SCENE_PATH := "res://app/game/game.tscn"
 const Selector := preload("res://worldgen/surface/natural_entrance_route_selector.gd")
 const GeneratedBootstrap := preload("res://worldgen/runtime/generated_entrance_bootstrap_adapter.gd")
 const Controller := preload("res://worldgen/runtime/underworld_cave_runtime_controller.gd")
@@ -16,10 +17,29 @@ const START_ANCHOR := Vector3(64.0, 0.0, 64.0)
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
+	_test_game_scene_composition(failures)
 	_test_selection(12345, failures)
 	_test_selection(1, failures)
 	_test_generated_runtime_route(12345, failures)
 	return failures
+
+
+static func _test_game_scene_composition(failures: Array[String]) -> void:
+	var packed = ResourceLoader.load(GAME_SCENE_PATH)
+	_expect(failures, "production Game scene loads", packed != null and packed is PackedScene)
+	if packed == null or not packed is PackedScene:
+		return
+	var game: Node = packed.instantiate()
+	_expect(failures, "production Game scene instantiates", game != null)
+	if game == null:
+		return
+	var route_controller := game.get_node_or_null("NaturalEntranceRoute")
+	_expect(failures, "production Game mounts natural entrance route coordinator", route_controller != null)
+	if route_controller != null:
+		_expect(failures, "route coordinator exposes semantic readiness", route_controller.has_method("route_is_ready"))
+		_expect(failures, "route coordinator exposes value-copy route snapshot", route_controller.has_method("route_snapshot"))
+		_expect(failures, "off-tree route coordinator has no fabricated route", not bool(route_controller.call("route_is_ready")))
+	game.free()
 
 
 static func _test_selection(world_seed: int, failures: Array[String]) -> void:
@@ -56,7 +76,7 @@ static func _test_selection(world_seed: int, failures: Array[String]) -> void:
 		_expect(
 			failures,
 			"natural route spawn stays near visible entrance seed %d" % world_seed,
-			distance >= 24.0 and distance <= 120.0
+			distance >= 24.0 and distance <= 64.0
 		)
 		_expect(
 			failures,
@@ -129,6 +149,7 @@ static func _test_generated_runtime_route(world_seed: int, failures: Array[Strin
 	if not region_variant is Vector2i:
 		failures.append("generated runtime route selected malformed region")
 		return
+	var region: Vector2i = region_variant
 	var entrance_id: String = str(route.get("entrance_id", ""))
 	var controller := Controller.new()
 	controller.configure(
@@ -138,31 +159,38 @@ static func _test_generated_runtime_route(world_seed: int, failures: Array[Strin
 	var diagnostics: Array[String] = GeneratedBootstrap.bootstrap(
 		controller,
 		world_seed,
-		region_variant,
+		region,
 		entrance_id
 	)
 	_expect(failures, "ordinary generated entrance bootstraps without fixture constants", diagnostics.is_empty())
 	if diagnostics.is_empty():
-		_expect(failures, "ordinary generated entrance realizes render cells", controller.render_nodes.size() >= 4)
-		_expect(failures, "ordinary generated entrance realizes collision cells", controller.collision_nodes.size() >= 4)
+		var required_cells: Array = []
+		if controller.entrance_plans.has(entrance_id):
+			required_cells = controller.entrance_plans[entrance_id].cell_addresses
+		_expect(failures, "ordinary generated entrance has required runtime cells", not required_cells.is_empty())
+		_expect(failures, "ordinary generated entrance realizes required render cells", controller.render_nodes.size() >= required_cells.size())
+		_expect(failures, "ordinary generated entrance realizes required collision cells", controller.collision_nodes.size() >= required_cells.size())
 		_expect(failures, "ordinary generated entrance opens traversal gate", controller.gate_is_open(entrance_id))
 		_expect(
 			failures,
 			"ordinary generated bootstrap preserves selected surface position",
 			controller.last_bootstrap_surface_position == route.get("surface_world_position", Vector3.INF)
 		)
-		if controller.entrance_plans.has(entrance_id):
+		if not required_cells.is_empty():
 			var surface: Vector3 = route.get("surface_world_position", Vector3.ZERO)
-			var positions: Array[Vector3] = [surface + Vector3.UP * 3.0]
-			var required_cells: Array = controller.entrance_plans[entrance_id].cell_addresses
+			var forward_cells: Array[Vector3] = []
 			for address in required_cells:
-				positions.append(Vector3(address.coordinate) * 32.0 + Vector3(16.0, 16.0, 16.0))
-			positions.reverse()
+				forward_cells.append(Vector3(address.coordinate) * 32.0 + Vector3(16.0, 16.0, 16.0))
+			var backtrack_cells: Array[Vector3] = forward_cells.duplicate()
+			backtrack_cells.reverse()
+			var positions: Array[Vector3] = [surface + Vector3.UP * 3.0]
+			positions.append_array(forward_cells)
+			positions.append_array(backtrack_cells)
 			positions.append(surface + Vector3.UP * 3.0)
 			for position in positions:
 				controller.update_player_position(position)
 				if not controller.gate_is_open(entrance_id):
-					failures.append("ordinary generated route lost gate readiness during backtrack")
+					failures.append("ordinary generated route lost gate readiness during surface-to-cave backtrack")
 					break
 			_expect(failures, "ordinary generated backtrack has no stale resurrection", controller.streamer.stale_result_count == 0)
 	controller.free()
