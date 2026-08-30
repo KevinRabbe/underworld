@@ -1,5 +1,8 @@
 extends RefCounted
 
+const StableAddressScript := preload("res://worldgen/identity/stable_address.gd")
+const StableIdScript := preload("res://worldgen/identity/stable_id.gd")
+
 const COLOR_DRY_GRASS := Color(0.37, 0.48, 0.20)
 const COLOR_LUSH_GRASS := Color(0.19, 0.42, 0.16)
 const COLOR_ROCK := Color(0.39, 0.40, 0.37)
@@ -288,7 +291,9 @@ func generate_chunk_data(chunk_coord: Vector2i) -> Dictionary:
 		"rockiness": rockiness_values,
 		"buildability": buildability_values,
 		"tree_transforms": decoration["tree_transforms"],
+		"tree_stable_ids": decoration["tree_stable_ids"],
 		"rock_transforms": decoration["rock_transforms"],
+		"rock_stable_ids": decoration["rock_stable_ids"],
 		"resolution": resolution,
 		"spacing": spacing,
 	}
@@ -386,7 +391,9 @@ func _generate_decorations(
 	build_values: PackedFloat32Array
 ) -> Dictionary:
 	var tree_transforms: Array[Transform3D] = []
+	var tree_stable_ids: Array[String] = []
 	var rock_transforms: Array[Transform3D] = []
+	var rock_stable_ids: Array[String] = []
 	var step: int = maxi(settings.decoration_vertex_step, 2)
 
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -426,6 +433,9 @@ func _generate_decorations(
 					local_z
 				)
 				tree_transforms.append(Transform3D(tree_basis, tree_origin))
+				tree_stable_ids.append(_candidate_stable_id(
+					"tree", chunk_coord, resolution, base_x, base_z
+				))
 
 			var rock_chance: float = smoothstep(
 				settings.rock_threshold,
@@ -449,11 +459,35 @@ func _generate_decorations(
 					local_z
 				)
 				rock_transforms.append(Transform3D(rock_basis, rock_origin))
+				rock_stable_ids.append(_candidate_stable_id(
+					"rock", chunk_coord, resolution, base_x, base_z
+				))
 
 	return {
 		"tree_transforms": tree_transforms,
+		"tree_stable_ids": tree_stable_ids,
 		"rock_transforms": rock_transforms,
+		"rock_stable_ids": rock_stable_ids,
 	}
+
+
+func _candidate_stable_id(
+	domain: String,
+	chunk_coord: Vector2i,
+	resolution: int,
+	base_x: int,
+	base_z: int
+) -> String:
+	var candidate_span: int = resolution - 1
+	var global_cell_x: int = chunk_coord.x * candidate_span + base_x
+	var global_cell_z: int = chunk_coord.y * candidate_span + base_z
+	var address = StableAddressScript.surface_candidate(
+		domain,
+		global_cell_x,
+		global_cell_z,
+		"0"
+	)
+	return StableIdScript.from_address(address).value()
 
 
 func _sample_grid(

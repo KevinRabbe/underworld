@@ -3,6 +3,8 @@ extends Node3D
 const TerrainGeneratorScript := preload("res://worldgen/surface/terrain_generator.gd")
 const TerrainChunkScript := preload("res://world/terrain_chunk.gd")
 const PickupGeneratorScript := preload("res://worldgen/surface/pickup_generator.gd")
+const StableIdScript := preload("res://worldgen/identity/stable_id.gd")
+const WorldDeltaStoreScript := preload("res://worldgen/persistence/world_delta_store.gd")
 
 var settings
 var main_generator
@@ -25,9 +27,10 @@ var max_chunk_build_ms: float = 0.0
 var total_chunks_generated: int = 0
 var world_object_update_timer: float = 0.0
 
-# Durable generated-world instance deltas remain world state. Gameplay systems may
-# request mutations and persistence snapshots, but do not become their authority.
+# WorldDeltaStore is the durable authority. This dictionary is only a derived
+# surface-domain lookup cache used while realizing/reloading chunks.
 var destroyed_object_ids: Dictionary = {}
+var _world_delta_store = WorldDeltaStoreScript.new()
 
 # Terrain + pickup transform data is generated on one background worker.
 # Scene-tree, meshes, and physics remain main-thread only.
@@ -40,6 +43,20 @@ var worker_result_ms: float = 0.0
 
 var terrain_material: StandardMaterial3D = StandardMaterial3D.new()
 var decoration_assets: Dictionary = {}
+
+
+func bind_world_delta_store(store) -> bool:
+	if (
+		store == null
+		or not store.has_method("replace_destroyed_object_ids")
+		or not store.has_method("mark_generated_object_destroyed")
+		or not store.has_method("is_generated_object_destroyed")
+		or not store.has_method("snapshot")
+	):
+		return false
+	_world_delta_store = store
+	_refresh_destroyed_cache()
+	return true
 
 
 func configure(world_settings) -> void:
@@ -140,23 +157,32 @@ func _exit_tree() -> void:
 
 
 func load_destroyed_object_ids(object_ids: Array) -> void:
-	destroyed_object_ids.clear()
+	if _world_delta_store == null:
+		return
+	var canonical_surface_ids: Array = []
 	for object_id_variant in object_ids:
-		destroyed_object_ids[str(object_id_variant)] = true
+		var object_id: String = str(object_id_variant)
+		if _is_valid_surface_object_id(object_id):
+			canonical_surface_ids.append(object_id)
+	_world_delta_store.replace_destroyed_object_ids(canonical_surface_ids)
+	_refresh_destroyed_cache()
 
 
 func get_destroyed_object_ids() -> Array:
+	_refresh_destroyed_cache()
 	var result: Array = destroyed_object_ids.keys()
 	result.sort()
 	return result
 
 
 func get_destroyed_object_count() -> int:
-	return destroyed_object_ids.size()
+	return get_destroyed_object_ids().size()
 
 
 func is_world_object_destroyed(object_id: String) -> bool:
-	return destroyed_object_ids.has(object_id)
+	if not _is_valid_surface_object_id(object_id) or _world_delta_store == null:
+		return false
+	return _world_delta_store.is_generated_object_destroyed(object_id)
 
 
 func destroy_world_object(
@@ -165,12 +191,31 @@ func destroy_world_object(
 	object_index: int,
 	object_chunk: Vector2i
 ) -> bool:
-	if object_id.is_empty() or destroyed_object_ids.has(object_id):
+	if (
+		_world_delta_store == null
+		or not _is_valid_surface_object_id(object_id, object_type)
+		or _world_delta_store.is_generated_object_destroyed(object_id)
+	):
 		return false
 
-	destroyed_object_ids[object_id] = true
-	if chunks.has(object_chunk):
-		chunks[object_chunk].destroy_world_object(object_type, object_index)
+	var loaded_chunk = chunks.get(object_chunk, null)
+	if loaded_chunk != null:
+		if not loaded_chunk.has_method("_make_object_id"):
+			return false
+		if str(loaded_chunk._make_object_id(object_type, object_index)) != object_id:
+			return false
+
+	# Durable state is committed before any local realization mutation. HARVEST
+	# callers already compensate inventory if this authority rejects the request.
+	if not _world_delta_store.mark_generated_object_destroyed(object_id):
+		return false
+	_refresh_destroyed_cache()
+
+	if loaded_chunk != null:
+		# The StableId/index match was established before the durable commit. If the
+		# realization is unexpectedly stale now, the durable state still wins and
+		# the next rebuild/reload will suppress the candidate.
+		loaded_chunk.destroy_world_object(object_type, object_index)
 	return true
 
 
@@ -189,7 +234,11 @@ func find_nearby_pickups(player_world_position: Vector3, radius: float) -> Array
 		for pickup_variant in chunk_pickups:
 			var pickup: Dictionary = pickup_variant.duplicate(true)
 			var object_id: String = str(pickup.get("object_id", ""))
-			if object_id.is_empty() or destroyed_object_ids.has(object_id):
+			var object_type: String = str(pickup.get("object_type", ""))
+			if (
+				not _is_valid_surface_object_id(object_id, object_type)
+				or is_world_object_destroyed(object_id)
+			):
 				continue
 			pickup["object_chunk"] = chunk_coord
 			found.append(pickup)
@@ -199,14 +248,16 @@ func find_nearby_pickups(player_world_position: Vector3, radius: float) -> Array
 
 func collect_nearby_pickups(player_world_position: Vector3, radius: float) -> Array:
 	var collected: Array = []
-	for chunk in chunks.values():
-		var chunk_pickups: Array = chunk.collect_nearby_pickups(player_world_position, radius)
-		for pickup_variant in chunk_pickups:
-			var pickup: Dictionary = pickup_variant
-			var object_id: String = str(pickup.get("object_id", ""))
-			if object_id.is_empty() or destroyed_object_ids.has(object_id):
-				continue
-			destroyed_object_ids[object_id] = true
+	var candidates: Array = find_nearby_pickups(player_world_position, radius)
+	for pickup_variant in candidates:
+		if not pickup_variant is Dictionary:
+			continue
+		var pickup: Dictionary = pickup_variant
+		var object_id: String = str(pickup.get("object_id", ""))
+		var object_type: String = str(pickup.get("object_type", ""))
+		var object_index: int = int(pickup.get("index", -1))
+		var object_chunk: Vector2i = pickup.get("object_chunk", Vector2i.ZERO) as Vector2i
+		if destroy_world_object(object_id, object_type, object_index, object_chunk):
 			collected.append(pickup)
 	return collected
 
@@ -469,7 +520,7 @@ func _build_chunk_from_data(coord: Vector2i, data: Dictionary, data_ms: float) -
 		terrain_material,
 		decoration_assets,
 		settings,
-		destroyed_object_ids,
+		_destroyed_object_lookup(),
 		needs_collision
 	)
 	add_child(chunk)
@@ -512,3 +563,58 @@ func _is_within_collision_radius(coord: Vector2i, center: Vector2i, radius: int 
 func _is_within_square_radius(coord: Vector2i, center: Vector2i, radius: int) -> bool:
 	var delta: Vector2i = coord - center
 	return abs(delta.x) <= radius and abs(delta.y) <= radius
+
+
+func _refresh_destroyed_cache() -> void:
+	destroyed_object_ids.clear()
+	if _world_delta_store == null:
+		return
+	var snapshot_variant = _world_delta_store.snapshot()
+	if not snapshot_variant is Dictionary:
+		return
+	var snapshot: Dictionary = snapshot_variant
+	var destroyed: Array = snapshot.get("destroyed_objects", [])
+	for id_variant in destroyed:
+		var object_id: String = str(id_variant)
+		if _is_valid_surface_object_id(object_id):
+			destroyed_object_ids[object_id] = true
+
+
+func _destroyed_object_lookup() -> Dictionary:
+	_refresh_destroyed_cache()
+	return destroyed_object_ids.duplicate()
+
+
+func _is_valid_surface_object_id(object_id: String, object_type: String = "") -> bool:
+	var stable_id = StableIdScript.parse(object_id)
+	if stable_id == null:
+		return false
+	var segments: Array[String] = stable_id.address().segments()
+	if segments.size() != 8:
+		return false
+	if segments[0] != "surface" or segments[1] != "candidate":
+		return false
+	if segments[3] != "cell" or segments[6] != "slot":
+		return false
+	if not _is_canonical_signed_int(segments[4]) or not _is_canonical_signed_int(segments[5]):
+		return false
+
+	var domain: String = segments[2]
+	var expected_domain: String = _surface_domain_for_object_type(object_type)
+	if not object_type.is_empty():
+		return not expected_domain.is_empty() and domain == expected_domain
+	return domain in ["tree", "rock", "branch", "loose-stone"]
+
+
+func _surface_domain_for_object_type(object_type: String) -> String:
+	match object_type:
+		"tree", "rock", "branch":
+			return object_type
+		"loose_stone":
+			return "loose-stone"
+		_:
+			return ""
+
+
+func _is_canonical_signed_int(value: String) -> bool:
+	return value.is_valid_int() and str(int(value)) == value

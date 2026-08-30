@@ -1,6 +1,7 @@
 extends "res://core/content/registry/content_definition.gd"
 
 const ContentReference := preload("res://core/content/references/content_reference.gd")
+const FiniteNumber := preload("res://core/content/validation/finite_number.gd")
 const ResourceYieldRule := preload("res://gameplay/resources/definitions/resource_yield_rule.gd")
 
 const RESOURCE_FAMILY := "resource"
@@ -57,7 +58,9 @@ func validate_definition() -> Array[String]:
 				definition_family,
 			]
 		)
-	if capacity_units <= 0.0:
+	if not FiniteNumber.is_finite_number(capacity_units):
+		failures.append("resource capacity_units must be finite for %s" % content_id)
+	elif capacity_units <= 0.0:
 		failures.append("resource capacity units must be > 0 for %s" % content_id)
 	if _yield_rules.is_empty():
 		failures.append("resource must declare at least one typed item yield: %s" % content_id)
