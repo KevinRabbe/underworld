@@ -17,8 +17,7 @@ func _run() -> void:
 	failures.append_array(IntegratedGameSaveContractTests.run())
 	failures.append_array(GameSaveSlotServiceTests.run())
 	failures.append_array(IntegratedSurvivalPersistenceBoundaryTests.run())
-	var runtime_failures: Array[String] = await IntegratedGameRuntimeLifecycleTests.run_runtime(self)
-	failures.append_array(runtime_failures)
+	failures.append_array(IntegratedGameRuntimeLifecycleTests.run_runtime(self))
 	if failures.is_empty():
 		print("[PERSISTENCE STATE VALIDATION] PASS")
 		print("  gameplay codecs / integrated detached save schema / typed wire / atomic slot lifecycle / source-level legacy retirement / real Game Continue activation passed")
