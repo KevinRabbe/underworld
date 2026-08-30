@@ -1,0 +1,24 @@
+from pathlib import Path
+
+compiler_path = Path("presentation/characters/faceted/faceted_body_compiler.gd")
+factory_path = Path("presentation/characters/voxel/baseline_survivor_factory.gd")
+compiler = compiler_path.read_text()
+factory = factory_path.read_text()
+
+if "const COMPILER_REVISION := 10" not in compiler:
+    raise SystemExit("expected compiler revision 10")
+compiler = compiler.replace("const COMPILER_REVISION := 10", "const COMPILER_REVISION := 11", 1)
+
+start = compiler.index("\t# The shoe is a true heel-to-toe faceted volume.")
+end = compiler.index("\n\n\nstatic func _build_outfit_details", start)
+new_foot = '''\t# Compact rugged boot last.  Rev10 removed the rectangular slab, but its\n\t# terminal ring sat too far forward and too low, producing a slipper-like\n\t# point in true-side view.  These five stations keep the faceted construction\n\t# while describing heel, instep, ball, blunt toe base and a short toe cap.\n\tvar sole_y: float = float(landmark["sole_y"])\n\tvar foot_top_y: float = float(landmark["foot_top_y"])\n\tvar foot_skin: Dictionary = _weights(foot_bone)\n\tvar heel_z: float = float(profile.foot_length) * 0.26\n\tvar instep_z: float = float(profile.foot_length) * 0.07\n\tvar ball_z: float = -float(profile.foot_length) * 0.31\n\tvar toe_base_z: float = -float(profile.foot_length) * 0.53\n\tvar toe_z: float = -float(profile.foot_length) * 0.64\n\tvar foot_rings: Array[Dictionary] = [\n\t\t_ring_z(Vector3(x, sole_y + 0.067, heel_z), profile.foot_width * 0.47, 0.047, foot_skin),\n\t\t_ring_z(Vector3(x, sole_y + 0.081, instep_z), profile.foot_width * 0.53, minf(0.066, foot_top_y - sole_y - 0.018), foot_skin),\n\t\t_ring_z(Vector3(x, sole_y + 0.069, ball_z), profile.foot_width * 0.60, 0.055, foot_skin),\n\t\t_ring_z(Vector3(x, sole_y + 0.062, toe_base_z), profile.foot_width * 0.56, 0.047, foot_skin),\n\t\t_ring_z(Vector3(x, sole_y + 0.058, toe_z), profile.foot_width * 0.48, 0.040, foot_skin),\n\t]\n\t_add_z_loft(builders, LEATHER, foot_rings, 8, true, true, -1.0)\n\n\t# The sole follows the same short, broad last instead of extending into a\n\t# pointed platform.  A wide ball and toe-base keep the planted read at\n\t# gameplay distance while the final cap remains visibly faceted.\n\tvar sole_rings: Array[Dictionary] = [\n\t\t_ring_z(Vector3(x, sole_y + 0.018, heel_z + 0.005), profile.foot_width * 0.52, 0.018, foot_skin),\n\t\t_ring_z(Vector3(x, sole_y + 0.018, instep_z), profile.foot_width * 0.58, 0.018, foot_skin),\n\t\t_ring_z(Vector3(x, sole_y + 0.018, ball_z - 0.003), profile.foot_width * 0.64, 0.018, foot_skin),\n\t\t_ring_z(Vector3(x, sole_y + 0.018, toe_base_z - 0.004), profile.foot_width * 0.60, 0.018, foot_skin),\n\t\t_ring_z(Vector3(x, sole_y + 0.018, toe_z - 0.005), profile.foot_width * 0.52, 0.018, foot_skin),\n\t]\n\t_add_z_loft(builders, SOLE, sole_rings, 8, true, true, -1.0)'''
+compiler = compiler[:start] + new_foot + compiler[end:]
+
+old_axe = '''static func _axe_head_cells() -> Array[Dictionary]:\n\tvar cells: Array[Dictionary] = []\n\t# Broad asymmetric stone blade: the cutting edge fans to the left while a\n\t# short rear poll and leather lash keep the haft relationship obvious.\n\tvar rows := {\n\t\t3: [-1, 1],\n\t\t4: [-3, 2],\n\t\t5: [-4, 1],\n\t\t6: [-4, 0],\n\t\t7: [-3, -1],\n\t}\n\tfor z in range(0, 2):\n\t\tfor y_value in rows.keys():\n\t\t\tvar y: int = int(y_value)\n\t\t\tvar span: Array = rows[y_value]\n\t\t\tfor x in range(int(span[0]), int(span[1]) + 1):\n\t\t\t\tvar is_lash: bool = x in [0, 1] and y in [3, 4]\n\t\t\t\tvar palette_index: int = LEATHER_LIGHT if is_lash else METAL\n\t\t\t\tcells.append({"position": Vector3i(x, y, z), "palette_index": palette_index})\n\treturn cells'''
+new_axe = '''static func _axe_head_cells() -> Array[Dictionary]:\n\tvar cells: Array[Dictionary] = []\n\t# Compact asymmetric field axe.  The haft stays on x=0; the blade owns the\n\t# negative-X side while only a one-cell rear poll survives on +X.  This keeps\n\t# the tool subordinate to the character silhouette and matches the locked\n\t# turnaround much more closely than rev10's oversized two-lobed head.\n\tvar rows := {\n\t\t2: [-1, 1],\n\t\t3: [-2, 1],\n\t\t4: [-3, 1],\n\t\t5: [-3, 0],\n\t\t6: [-2, -1],\n\t}\n\tfor z in range(0, 2):\n\t\tfor y_value in rows.keys():\n\t\t\tvar y: int = int(y_value)\n\t\t\tvar span: Array = rows[y_value]\n\t\t\tfor x in range(int(span[0]), int(span[1]) + 1):\n\t\t\t\tvar is_lash: bool = x == 0 and y in [2, 3]\n\t\t\t\tvar palette_index: int = LEATHER_LIGHT if is_lash else METAL\n\t\t\t\tcells.append({"position": Vector3i(x, y, z), "palette_index": palette_index})\n\treturn cells'''
+if old_axe not in factory:
+    raise SystemExit("expected rev10 axe head block")
+factory = factory.replace(old_axe, new_axe, 1)
+
+compiler_path.write_text(compiler)
+factory_path.write_text(factory)
