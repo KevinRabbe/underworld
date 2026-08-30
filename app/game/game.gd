@@ -42,6 +42,7 @@ var combat_resolver
 var encounter_controller
 var gameplay_hud
 var debug_hud
+var gameplay_audio_binding
 var water_surface: MeshInstance3D
 var underworld_runtime
 var cave_presentation
@@ -158,6 +159,7 @@ func _ready() -> void:
 	_create_death_recovery()
 	_create_underworld_runtime()
 	_create_combat()
+	_bind_gameplay_audio()
 	_create_gameplay_hud()
 	_create_debug_hud()
 
@@ -185,9 +187,17 @@ func _collect_nearby_pending_loot() -> void:
 	if inventory_state == null:
 		return
 	var collection_result: Dictionary = encounter_controller.collect_nearby_pending_loot(inventory_state)
-	var audio_binding := get_node_or_null("GameplayAudioBinding")
-	if audio_binding != null and audio_binding.has_method("consume_loot_collection_result"):
-		audio_binding.call("consume_loot_collection_result", collection_result)
+	if gameplay_audio_binding != null and gameplay_audio_binding.has_method("consume_loot_collection_result"):
+		gameplay_audio_binding.consume_loot_collection_result(collection_result)
+
+
+func _bind_gameplay_audio() -> void:
+	gameplay_audio_binding = get_node_or_null("GameplayAudio")
+	if gameplay_audio_binding == null or not gameplay_audio_binding.has_method("bind_game"):
+		return
+	var failures: Array[String] = gameplay_audio_binding.bind_game(self)
+	if not failures.is_empty():
+		push_error("Gameplay audio binding failed: %s" % [failures])
 
 
 func _create_underworld_runtime() -> void:
