@@ -8,7 +8,7 @@ on:
       - 'presentation/audio-*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   audio-presentation-contracts:
@@ -41,74 +41,3 @@ jobs:
             exit 1
           fi
           grep -Fq '[AUDIO PRESENTATION VALIDATION] PASS' "$validation_log"
-
-  audio-001-semantic-repair:
-    name: AUDIO-001 bounded semantic repair
-    if: github.event_name == 'pull_request' && github.head_ref == 'presentation/audio-001-m3-binding' && github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout worker branch
-        uses: actions/checkout@v6
-        with:
-          ref: presentation/audio-001-m3-binding
-          fetch-depth: 0
-
-      - name: Extract and run asserted semantic patch
-        shell: bash
-        run: |
-          awk '
-            /python3 - <<.PY./ { capture=1; next }
-            capture && /^          PY$/ { capture=0; exit }
-            capture { sub(/^          /, ""); print }
-          ' .github/workflows/audio-001-semantic-patch.yml > /tmp/audio001_patch.py
-          test -s /tmp/audio001_patch.py
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('gameplay/creatures/underworld/burrower/burrower.gd')
-          text = p.read_text()
-          seam = '\t_cancel_pending_attack()\n\n\tvar away: Vector3 = global_position - source_position\n'
-          positions = []
-          start = 0
-          while True:
-              index = text.find(seam, start)
-              if index < 0:
-                  break
-              positions.append(index)
-              start = index + 1
-          if len(positions) != 2:
-              raise SystemExit(f'Burrower disambiguation expected 2 seams, found {len(positions)}')
-          second = positions[1]
-          marker = '\t_cancel_pending_attack()\n\t# AUDIO001_TRANSIENT_DISAMBIGUATION\n\n\tvar away: Vector3 = global_position - source_position\n'
-          text = text[:second] + marker + text[second + len(seam):]
-          p.write_text(text)
-          PY
-          python3 /tmp/audio001_patch.py
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('gameplay/creatures/underworld/burrower/burrower.gd')
-          text = p.read_text()
-          marker = '\t_cancel_pending_attack()\n\t# AUDIO001_TRANSIENT_DISAMBIGUATION\n\n\tvar away: Vector3 = global_position - source_position\n'
-          original = '\t_cancel_pending_attack()\n\n\tvar away: Vector3 = global_position - source_position\n'
-          if text.count(marker) != 1:
-              raise SystemExit('Burrower transient marker did not survive exactly once')
-          p.write_text(text.replace(marker, original, 1))
-          PY
-
-      - name: Commit exact semantic repair
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add gameplay/player/player.gd \
-                  gameplay/survival/prototype_survival_controller.gd \
-                  gameplay/creatures/underworld/burrower/burrower.gd \
-                  gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd \
-                  worldgen/runtime/underworld_cave_runtime_controller.gd \
-                  app/game/game.gd \
-                  presentation/audio/gameplay_audio_binding.gd \
-                  tests/presentation/test_gameplay_audio_binding.gd
-          git diff --cached --check
-          git diff --cached --quiet && exit 0
-          git commit -m "AUDIO-001: route committed gameplay outcomes"
-          git push origin HEAD:presentation/audio-001-m3-binding
