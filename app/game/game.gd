@@ -211,7 +211,6 @@ func _create_underworld_runtime() -> void:
 			world.generate_initial(spawn_xz)
 			var surface_height: float = world.get_height_at_world(spawn_xz.x, spawn_xz.z)
 			player.global_position = Vector3(spawn_xz.x, surface_height + 3.0, spawn_xz.z)
-			player.set_respawn_position(player.global_position)
 			if water_surface != null:
 				water_surface.position.x = spawn_xz.x
 				water_surface.position.z = spawn_xz.z
@@ -313,7 +312,6 @@ func _create_player() -> void:
 		var spawn_height: float = world.get_height_at_world(spawn_xz.x, spawn_xz.z)
 		spawn_position = Vector3(spawn_xz.x, spawn_height + 3.0, spawn_xz.z)
 	player.global_position = spawn_position
-	player.set_respawn_position(spawn_position)
 	player.set_harvest_range(survival_settings.harvest_range)
 	player.set_tool_use_cooldown(survival_settings.tool_use_cooldown)
 	player.harvest_requested.connect(survival.try_harvest)
