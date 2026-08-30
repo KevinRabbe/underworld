@@ -7,6 +7,7 @@ const CategorySchemaRegistry := preload("res://core/content/schema/category_sche
 const CapabilitySchema := preload("res://core/content/schema/capability_schema.gd")
 const CapabilitySchemaRegistry := preload("res://core/content/schema/capability_schema_registry.gd")
 const ContentValidationPipeline := preload("res://core/content/validation/content_validation_pipeline.gd")
+const ArchetypeFamilyValidator := preload("res://core/content/archetypes/archetype_family_validator.gd")
 const ItemFamilyValidator := preload("res://gameplay/items/validation/item_family_validator.gd")
 const WeaponItemRuleExtension := preload("res://gameplay/items/weapons/validation/weapon_item_rule_extension.gd")
 const CharacterSemanticSchemaCatalog := preload("res://presentation/characters/animation/character_semantic_schema_catalog.gd")
@@ -357,7 +358,11 @@ static func _validate(definitions: Array) -> Dictionary:
 		definitions,
 		_categories(),
 		_capabilities(),
-		[_item_validator(), RecipeFamilyValidator.new().configure_recipe_rules()]
+		[
+			_item_validator(),
+			ArchetypeFamilyValidator.new().configure("archetype"),
+			RecipeFamilyValidator.new().configure_recipe_rules(),
+		]
 	)
 
 
