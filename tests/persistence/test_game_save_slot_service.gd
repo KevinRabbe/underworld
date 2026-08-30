@@ -6,6 +6,7 @@ const ItemContainerState := preload("res://gameplay/items/inventory/item_contain
 const EquipmentHotbarState := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
 const EquipmentService := preload("res://gameplay/items/equipment/equipment_service.gd")
 const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
+const IntegratedGameSaveContract := preload("res://gameplay/persistence/integrated_game_save_contract.gd")
 const GameSaveSlotService := preload("res://gameplay/persistence/game_save_slot_service.gd")
 
 const TEST_SLOT := "user://save_001_slot_service_test.json"
@@ -19,6 +20,7 @@ static func run() -> Array[String]:
 	_test_missing_probe_is_non_mutating(failures)
 	_test_valid_save_probe_and_load(failures)
 	_test_invalid_candidate_preserves_previous_slot(failures)
+	_test_promotion_failure_restores_previous_slot(failures)
 	_test_corrupt_probe_is_non_mutating(failures)
 	_cleanup()
 	return failures
@@ -109,6 +111,65 @@ static func _test_invalid_candidate_preserves_previous_slot(failures: Array[Stri
 		failures.append("rejected SAVE candidate file was not cleaned up")
 	if FileAccess.file_exists(TEST_SLOT + GameSaveSlotService.BACKUP_SUFFIX):
 		failures.append("candidate validation failure disturbed backup lifecycle")
+
+
+static func _test_promotion_failure_restores_previous_slot(failures: Array[String]) -> void:
+	if not FileAccess.file_exists(TEST_SLOT):
+		failures.append("promotion-failure regression requires valid existing slot")
+		return
+	var before: String = _read_text(TEST_SLOT)
+	if before.is_empty():
+		failures.append("promotion-failure regression could not read previous slot")
+		return
+	var fixture: Dictionary = _fixture(failures)
+	if fixture.is_empty():
+		return
+	var replacement_resume: Vector3 = fixture["resume_position"] + Vector3(1.0, 0.0, 0.0)
+	var encoded: Dictionary = IntegratedGameSaveContract.encode(
+		fixture["context"],
+		fixture["delta_store"],
+		fixture["inventory"],
+		fixture["equipment"],
+		[],
+		replacement_resume
+	)
+	if not _require_success(encoded, "promotion-failure replacement encode", failures):
+		return
+	var replacement_json: String = str(encoded.get("json", ""))
+	if replacement_json == before:
+		failures.append("promotion-failure regression replacement candidate did not differ from previous slot")
+		return
+
+	var calls: Array[String] = []
+	var service = GameSaveSlotService.new().configure_rename_operation(
+		func(from_path: String, to_path: String) -> int:
+			calls.append("%s->%s" % [from_path, to_path])
+			if from_path == TEST_SLOT + GameSaveSlotService.CANDIDATE_SUFFIX and to_path == TEST_SLOT:
+				return ERR_CANT_CREATE
+			return int(DirAccess.rename_absolute(
+				ProjectSettings.globalize_path(from_path),
+				ProjectSettings.globalize_path(to_path)
+			))
+	)
+	var rejected: Dictionary = service.persist_candidate_json(replacement_json, TEST_SLOT)
+	if bool(rejected.get("success", false)):
+		failures.append("forced candidate promotion failure unexpectedly succeeded")
+	var expected_calls: Array[String] = [
+		"%s->%s" % [TEST_SLOT, TEST_SLOT + GameSaveSlotService.BACKUP_SUFFIX],
+		"%s->%s" % [TEST_SLOT + GameSaveSlotService.CANDIDATE_SUFFIX, TEST_SLOT],
+		"%s->%s" % [TEST_SLOT + GameSaveSlotService.BACKUP_SUFFIX, TEST_SLOT],
+	]
+	if calls != expected_calls:
+		failures.append("promotion-failure rename sequence was not backup -> failed promote -> restore: %s" % [calls])
+	if _read_text(TEST_SLOT) != before:
+		failures.append("failed candidate promotion did not restore previous slot byte-identically")
+	if FileAccess.file_exists(TEST_SLOT + GameSaveSlotService.CANDIDATE_SUFFIX):
+		failures.append("failed candidate promotion left candidate artifact behind")
+	if FileAccess.file_exists(TEST_SLOT + GameSaveSlotService.BACKUP_SUFFIX):
+		failures.append("failed candidate promotion left backup artifact behind after restoration")
+	var probe: Dictionary = GameSaveSlotService.new().probe_slot(TEST_SLOT)
+	if not bool(probe.get("success", false)) or not bool(probe.get("available", false)):
+		failures.append("restored previous slot lost Continue authority after failed promotion")
 
 
 static func _test_corrupt_probe_is_non_mutating(failures: Array[String]) -> void:
