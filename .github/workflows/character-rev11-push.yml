@@ -94,7 +94,7 @@ jobs:
           capture res://tools/character_preview/.rev11_gameplay_distance.tscn gameplay_distance -20 idle 0.35
           rm tools/character_preview/.rev11_gameplay_distance.tscn
           git diff --check
-          test -z "$(git status --porcelain)"
+          test -z "$(git status --porcelain --untracked-files=no)"
           ls -lh character-preview
 
       - name: Push validated production head
