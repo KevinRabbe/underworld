@@ -12,6 +12,7 @@ var last_diagnostics: Array[String] = []
 
 
 func configure(runtime_controller_value, catalog_value, biome_id_value: String = "") -> Array[String]:
+	_disconnect_runtime()
 	last_diagnostics.clear()
 	runtime_controller = runtime_controller_value
 	catalog = catalog_value
@@ -51,6 +52,16 @@ func apply_to_render_node(mesh_node, cell_semantic_snapshot: Dictionary = {}) ->
 	if not resolved.get("diagnostics", []).is_empty():
 		return {"attachment": null, "material": null, "profile_id": "", "diagnostics": resolved.get("diagnostics", [])}
 	return Realizer.realize(mesh_node, resolved.get("profile"), context)
+
+
+func _disconnect_runtime() -> void:
+	if runtime_controller == null or not is_instance_valid(runtime_controller):
+		return
+	if not runtime_controller.has_signal("cell_attached"):
+		return
+	var callback := Callable(self, "_on_cell_attached")
+	if runtime_controller.is_connected("cell_attached", callback):
+		runtime_controller.disconnect("cell_attached", callback)
 
 
 func _on_cell_attached(address, tier: String) -> void:

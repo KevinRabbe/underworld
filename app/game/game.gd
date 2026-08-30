@@ -6,6 +6,7 @@ const WaterSettingsScript := preload("res://presentation/world/environment/proto
 const CavePresentationControllerScript := preload("res://presentation/world/caves/cave_presentation_controller.gd")
 const PrototypeCavePresentationCatalog := preload("res://content/presentation/caves/prototype_cave_presentation_catalog.tres")
 const SurfaceChunkStreamerScript := preload("res://world/runtime/streaming/surface_chunk_streamer.gd")
+const WorldDeltaStoreScript := preload("res://worldgen/persistence/world_delta_store.gd")
 const PrototypeSurvivalControllerScript := preload("res://gameplay/survival/prototype_survival_controller.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
 const VoxelCharacterPresentationProviderScript := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
@@ -21,6 +22,7 @@ var world_settings
 var survival_settings
 var water_settings
 var world
+var world_delta_store
 var survival
 var player
 var combat_resolver
@@ -110,13 +112,16 @@ func _create_world() -> void:
 	survival_settings = SurvivalSettingsScript.new()
 	water_settings = WaterSettingsScript.new()
 
+	world_delta_store = WorldDeltaStoreScript.new()
 	world = SurfaceChunkStreamerScript.new()
 	world.name = "SurfaceWorld"
+	if not world.bind_world_delta_store(world_delta_store):
+		push_error("Surface world rejected WorldDeltaStore authority")
 	world.configure(world_settings)
 	add_child(world)
 
-	# Prototype survival currently owns the version-2 save orchestration. It loads
-	# generated-world deltas into the streamer before initial chunk construction.
+	# Prototype survival keeps version-2 file orchestration, while the streamer
+	# delegates generated-world destruction authority to WorldDeltaStore.
 	survival = PrototypeSurvivalControllerScript.new()
 	survival.name = "PrototypeSurvival"
 	add_child(survival)
