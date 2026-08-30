@@ -8,15 +8,32 @@ const PrototypeMannequin := preload("res://presentation/characters/player/protot
 const PlayerScript := preload("res://gameplay/player/player.gd")
 const VoxelProvider := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
 const MannequinProvider := preload("res://presentation/characters/player/prototype_mannequin/prototype_mannequin_presentation_provider.gd")
+const SliceProfile := preload("res://presentation/characters/voxel/voxel_character_slice_profile.gd")
 
 
 static func run(tree: SceneTree) -> Array[String]:
 	var failures: Array[String] = []
 	_test_definition_contract(failures)
+	_test_slice_profile_contract(failures)
 	_test_compiler_contract(failures)
 	_test_runtime_presentation(failures)
 	_test_player_default(tree, failures)
 	return failures
+
+
+static func _test_slice_profile_contract(failures: Array[String]) -> void:
+	var profile = SliceProfile.new().configure("fixture.survivor", [
+		{"y": 1, "layers": [{"layer_id": "body", "priority": 0, "palette_index": 0, "semantic": "body", "mask": [".#.", "###"]}]},
+		{"y": 0, "layers": [{"layer_id": "body", "priority": 0, "palette_index": 0, "semantic": "body", "mask": ["###", "###"]}]},
+	])
+	_expect_true(failures, "slice profile validates rectangular layered rows", profile.validate(1).is_empty())
+	var cells: Array[Dictionary] = profile.resolved_cells()
+	_expect_equal(failures, "slice rows resolve deterministically bottom-to-top", cells[0]["position"], Vector3i(0, 0, 0))
+	var fingerprint: String = profile.canonical_fingerprint()
+	profile.rows.reverse()
+	_expect_equal(failures, "slice row order cannot change fingerprint", profile.canonical_fingerprint(), fingerprint)
+	var malformed = SliceProfile.new().configure("fixture.bad", [{"y": 0, "layers": [{"layer_id": "bad", "priority": 0, "palette_index": 4, "mask": ["##", "."]}]}])
+	_expect_true(failures, "malformed slice mask diagnostics are deterministic", malformed.validate(1) == malformed.validate(1) and not malformed.validate(1).is_empty())
 
 
 static func _test_definition_contract(failures: Array[String]) -> void:
