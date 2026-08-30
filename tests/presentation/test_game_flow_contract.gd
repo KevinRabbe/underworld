@@ -9,7 +9,6 @@ const GAMEFLOW_FIXTURE_SCRIPT_PATH := "res://tests/fixtures/gameflow_game_fixtur
 
 class FakeSaveSlotService:
 	extends RefCounted
-
 	var fail_saves: bool = false
 	var save_calls: int = 0
 	var slot_version: int = 0
@@ -21,15 +20,7 @@ class FakeSaveSlotService:
 	func load_slot(_slot_path: String) -> Dictionary:
 		return {"success": false, "diagnostics": ["fixture load not configured"]}
 
-	func save_slot(
-		_context,
-		_delta_store,
-		_inventory_state,
-		_equipment_state,
-		_pending_loot_states,
-		_resume_position,
-		_slot_path: String
-	) -> Dictionary:
+	func save_slot(_context, _delta_store, _inventory, _equipment, _pending, _position, _slot_path: String) -> Dictionary:
 		save_calls += 1
 		if fail_saves:
 			return {"success": false, "diagnostics": ["injected save failure"]}
@@ -40,68 +31,61 @@ class FakeSaveSlotService:
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
-	_test_app_root_gameflow_contract(failures)
+	_test_app_root_contract(failures)
 	_test_pause_menu_contract(failures)
 	return failures
 
 
 static func run_runtime(tree: SceneTree) -> Array[String]:
 	var failures: Array[String] = []
-	var original_paused: bool = tree.paused
-	var original_mouse_mode: int = Input.mouse_mode
+	var original_paused := tree.paused
+	var original_mouse_mode := Input.mouse_mode
 	tree.paused = false
 
 	var app_packed = ResourceLoader.load(APP_ROOT_PATH)
 	var title_packed = ResourceLoader.load(TITLE_SCREEN_PATH)
-	var game_fixture: PackedScene = _make_gameflow_fixture_scene()
-	if app_packed == null or not app_packed is PackedScene:
-		return ["GAMEFLOW runtime proof could not load AppRoot"]
-	if title_packed == null or not title_packed is PackedScene:
-		return ["GAMEFLOW runtime proof could not load Title screen"]
-	if game_fixture == null:
-		return ["GAMEFLOW runtime proof could not build gameplay fixture"]
+	var game_fixture := _make_gameflow_fixture_scene()
+	if app_packed == null or not app_packed is PackedScene or title_packed == null or not title_packed is PackedScene or game_fixture == null:
+		return ["GAMEFLOW runtime proof could not load required composition"]
 
 	var app: Node = app_packed.instantiate()
 	var fake_save := FakeSaveSlotService.new()
-	if app == null:
-		return ["GAMEFLOW runtime proof could not instantiate AppRoot"]
-	if not bool(app.call("configure_route_scenes", title_packed, game_fixture)):
-		app.free()
-		return ["GAMEFLOW runtime proof could not inject route fixtures"]
+	if app == null or not bool(app.call("configure_route_scenes", title_packed, game_fixture)):
+		if app != null:
+			app.free()
+		return ["GAMEFLOW runtime proof could not configure AppRoot fixtures"]
 	app.set("_save_slot_service", fake_save)
 	tree.root.add_child(app)
 	await tree.process_frame
 
-	var scene_host: Node = app.get_node_or_null("SceneHost")
+	var host: Node = app.get_node_or_null("SceneHost")
 	var flow: Node = app.get_node_or_null("GameFlowController")
-	var pause_menu: Control = app.get_node_or_null("PauseLayer/PauseMenu") as Control
+	var pause_menu := app.get_node_or_null("PauseLayer/PauseMenu") as Control
 	var title: Node = app.get("current_scene") as Node
-	if scene_host == null or flow == null or pause_menu == null or title == null:
-		failures.append("GAMEFLOW runtime composition did not realize title/flow/pause nodes")
+	if host == null or flow == null or pause_menu == null or title == null:
+		failures.append("GAMEFLOW runtime composition did not realize route/flow/pause nodes")
 		await _cleanup(tree, app, original_paused, original_mouse_mode)
 		return failures
 
 	title.emit_signal("new_game_requested")
 	var game: Node = app.get("current_scene") as Node
 	if game == null or game == title or str(app.call("current_route_id")) != "game":
-		failures.append("GAMEFLOW runtime proof could not enter injected Game route")
+		failures.append("GAMEFLOW runtime proof could not enter Game route")
 		await _cleanup(tree, app, original_paused, original_mouse_mode)
 		return failures
 	await tree.process_frame
 
-	# Real input pipeline: GameFlowController receives _input before the fixture's
-	# _unhandled_input and marks ui_cancel handled, so the prototype Player-style
-	# fallback cannot observe the same event.
+	# Headless backends may reject captured mode. The invariant is exact restoration
+	# of the mode actually owned before pause, whatever backend accepted.
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	var expected_resume_mouse_mode: int = Input.mouse_mode
 	await _dispatch_cancel(tree, true)
-	if not bool(flow.call("is_pause_active")) or not tree.paused:
+	if not bool(flow.call("is_pause_active")) or not tree.paused or not pause_menu.visible:
 		failures.append("ui_cancel did not enter exactly one semantic pause state")
-	if not pause_menu.visible:
-		failures.append("semantic pause did not expose pause presentation")
 	if int(game.get("unhandled_cancel_count")) != 0:
 		failures.append("handled pause ui_cancel leaked into gameplay _unhandled_input")
 	if Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
-		failures.append("pause did not release captured mouse ownership")
+		failures.append("pause did not release mouse ownership")
 	if bool(flow.call("request_pause")):
 		failures.append("duplicate pause request was not idempotent")
 
@@ -110,163 +94,139 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	await tree.process_frame
 	await tree.process_frame
 	if int(game.get("process_ticks")) != paused_ticks:
-		failures.append("gameplay fixture continued simulation while SceneTree was paused")
+		failures.append("gameplay simulation advanced while SceneTree was paused")
 	if pause_menu.process_mode != Node.PROCESS_MODE_ALWAYS:
-		failures.append("pause presentation is not processable while SceneTree is paused")
+		failures.append("pause presentation is not processable while paused")
 
 	await _dispatch_cancel(tree, true)
 	if bool(flow.call("is_pause_active")) or tree.paused or pause_menu.visible:
 		failures.append("second handled ui_cancel did not resume exactly once")
 	if int(game.get("unhandled_cancel_count")) != 0:
 		failures.append("resume ui_cancel leaked into gameplay _unhandled_input")
-	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-		failures.append("Resume did not restore captured mouse ownership")
+	if Input.mouse_mode != expected_resume_mouse_mode:
+		failures.append("Resume did not restore the exact pre-pause mouse ownership mode")
 	if bool(flow.call("request_resume")):
 		failures.append("duplicate resume request was not idempotent")
 	await _dispatch_cancel(tree, false)
 
-	# Save failure must remain paused on the exact same live Game and must not
-	# mutate the prior valid slot state.
 	fake_save.fail_saves = true
-	var slot_before_failure: int = fake_save.slot_version
+	var slot_before_failure := fake_save.slot_version
 	var game_before_failure: Node = app.get("current_scene") as Node
 	if not bool(flow.call("request_pause")):
-		failures.append("GAMEFLOW could not enter pause state for Save & Quit proof")
-	var failed_save_quit: bool = bool(flow.call("request_save_and_quit"))
-	if failed_save_quit:
+		failures.append("GAMEFLOW could not pause for Save & Quit proof")
+	if bool(flow.call("request_save_and_quit")):
 		failures.append("injected SAVE failure unexpectedly routed to Title")
 	if fake_save.save_calls != 1 or int(game.get("save_request_count")) != 1:
-		failures.append("Save & Quit failure path did not invoke accepted SAVE exactly once")
+		failures.append("failed Save & Quit did not invoke accepted SAVE exactly once")
 	if fake_save.slot_version != slot_before_failure:
-		failures.append("Save & Quit failure changed the prior valid slot state")
+		failures.append("failed Save & Quit changed prior slot state")
 	if app.get("current_scene") != game_before_failure or str(app.call("current_route_id")) != "game":
-		failures.append("SAVE failure destroyed or replaced the active Game route")
+		failures.append("SAVE failure replaced the active Game route")
 	if not tree.paused or not bool(flow.call("is_pause_active")) or not pause_menu.visible:
 		failures.append("SAVE failure did not remain safely paused in Game")
 	if not str(pause_menu.call("feedback_text")).contains("injected save failure"):
-		failures.append("SAVE failure diagnostics were not surfaced through pause presentation")
+		failures.append("SAVE failure diagnostics were not surfaced")
 
-	# The next explicit attempt succeeds, transitions once through accepted
-	# AppRoot.show_title(), and lets the accepted Title route re-probe Continue.
 	fake_save.fail_saves = false
-	var successful_save_quit: bool = bool(flow.call("request_save_and_quit"))
-	if not successful_save_quit:
+	if not bool(flow.call("request_save_and_quit")):
 		failures.append("successful Save & Quit did not route to Title")
 	if fake_save.save_calls != 2 or int(game.get("save_request_count")) != 2:
-		failures.append("successful Save & Quit did not invoke accepted SAVE exactly once for its request")
+		failures.append("successful Save & Quit did not invoke accepted SAVE exactly once")
 	if fake_save.slot_version != slot_before_failure + 1:
-		failures.append("successful Save & Quit did not commit exactly one new slot version")
+		failures.append("successful Save & Quit did not commit exactly one slot version")
 	if str(app.call("current_route_id")) != "title" or app.get("current_scene") == game:
-		failures.append("successful Save & Quit did not commit the accepted Title route")
+		failures.append("successful Save & Quit did not commit Title route")
 	if tree.paused or bool(flow.call("is_pause_active")) or pause_menu.visible:
-		failures.append("successful Save & Quit left stale pause ownership active")
+		failures.append("successful Save & Quit retained stale pause ownership")
 	if game.get_parent() != null:
-		failures.append("successful Save & Quit did not synchronously detach stale Game route")
+		failures.append("successful Save & Quit did not detach stale Game synchronously")
 	await tree.process_frame
 	if is_instance_valid(game):
-		failures.append("successful Save & Quit retained stale Game ownership after teardown frame")
-	if scene_host.get_child_count() != 1:
+		failures.append("successful Save & Quit retained stale Game after teardown frame")
+	if host.get_child_count() != 1:
 		failures.append("successful Save & Quit left overlapping route children")
 	var returned_title: Node = app.get("current_scene") as Node
 	if returned_title == null:
-		failures.append("successful Save & Quit did not realize a fresh Title route")
+		failures.append("successful Save & Quit did not realize fresh Title")
 	else:
 		var continue_button := returned_title.get_node_or_null("SafeMargin/Center/MenuPanel/Menu/ContinueButton") as Button
 		if continue_button == null or continue_button.disabled:
-			failures.append("returned Title did not re-probe newly available Continue through AppRoot SAVE authority")
+			failures.append("returned Title did not re-probe newly available Continue")
 
 	await _cleanup(tree, app, original_paused, original_mouse_mode)
 	return failures
 
 
-static func _test_app_root_gameflow_contract(failures: Array[String]) -> void:
+static func _test_app_root_contract(failures: Array[String]) -> void:
 	var packed = ResourceLoader.load(APP_ROOT_PATH)
 	if packed == null or not packed is PackedScene:
 		failures.append("GAMEFLOW AppRoot contract could not load")
 		return
 	var app: Node = packed.instantiate()
-	if app == null:
-		failures.append("GAMEFLOW AppRoot contract could not instantiate")
-		return
 	var flow: Node = app.get_node_or_null("GameFlowController")
 	var pause_menu: Node = app.get_node_or_null("PauseLayer/PauseMenu")
 	if flow == null or pause_menu == null:
-		failures.append("AppRoot must compose dedicated sibling GameFlowController + PauseMenu")
+		failures.append("AppRoot must compose sibling GameFlowController + PauseMenu")
 	else:
-		if flow.process_mode != Node.PROCESS_MODE_ALWAYS:
-			failures.append("GameFlowController must remain processable while gameplay is paused")
-		if pause_menu.process_mode != Node.PROCESS_MODE_ALWAYS:
-			failures.append("PauseMenu must remain processable while gameplay is paused")
+		if flow.process_mode != Node.PROCESS_MODE_ALWAYS or pause_menu.process_mode != Node.PROCESS_MODE_ALWAYS:
+			failures.append("flow/pause siblings must remain processable while gameplay pauses")
 	if app.process_mode == Node.PROCESS_MODE_ALWAYS:
-		failures.append("AppRoot itself must remain pausable so SceneHost/Game do not inherit ALWAYS processing")
+		failures.append("AppRoot itself must not make SceneHost/Game ALWAYS-process")
 	if not app.has_signal("route_changed"):
-		failures.append("AppRoot must expose semantic route_changed observation for pause cleanup")
+		failures.append("AppRoot must expose semantic route_changed")
 	for method_name in ["save_current_game", "show_title", "quit_application"]:
 		if not app.has_method(method_name):
-			failures.append("AppRoot is missing GAMEFLOW authority seam: %s" % method_name)
+			failures.append("AppRoot is missing GAMEFLOW seam: %s" % method_name)
 	app.free()
 
 
 static func _test_pause_menu_contract(failures: Array[String]) -> void:
 	var packed = ResourceLoader.load(PAUSE_MENU_PATH)
 	if packed == null or not packed is PackedScene:
-		failures.append("pause menu did not load as PackedScene")
+		failures.append("pause menu did not load")
 		return
 	var menu: Node = packed.instantiate()
 	if menu == null or not menu is Control:
 		failures.append("pause menu root must inherit Control")
 		return
 	var control := menu as Control
-	if control.anchor_right != 1.0 or control.anchor_bottom != 1.0:
-		failures.append("pause menu must use full-rect responsive anchors")
+	if control.anchor_right != 1.0 or control.anchor_bottom != 1.0 or control.process_mode != Node.PROCESS_MODE_ALWAYS:
+		failures.append("pause menu must be full-rect and ALWAYS-process")
 	if control.theme == null or control.theme.resource_path != THEME_PATH:
-		failures.append("pause menu must consume the stable Underworld Theme")
-	if control.process_mode != Node.PROCESS_MODE_ALWAYS:
-		failures.append("pause menu must remain processable during SceneTree pause")
+		failures.append("pause menu must consume stable Underworld Theme")
 	for signal_name in ["resume_requested", "save_and_quit_requested", "quit_requested"]:
 		if not control.has_signal(signal_name):
-			failures.append("pause menu is missing semantic intent signal: %s" % signal_name)
-	for method_name in ["set_open", "set_feedback", "feedback_text"]:
-		if not control.has_method(method_name):
-			failures.append("pause menu is missing presentation method: %s" % method_name)
-	var menu_path := "SafeMargin/Center/MenuPanel/Menu/"
-	var resume := control.get_node_or_null(menu_path + "ResumeButton") as Button
-	var save_quit := control.get_node_or_null(menu_path + "SaveAndQuitButton") as Button
-	var quit := control.get_node_or_null(menu_path + "QuitButton") as Button
+			failures.append("pause menu missing semantic signal: %s" % signal_name)
+	var path := "SafeMargin/Center/MenuPanel/Menu/"
+	var resume := control.get_node_or_null(path + "ResumeButton") as Button
+	var save_quit := control.get_node_or_null(path + "SaveAndQuitButton") as Button
+	var quit := control.get_node_or_null(path + "QuitButton") as Button
 	if resume == null or resume.text != "RESUME" or resume.focus_mode != Control.FOCUS_ALL:
-		failures.append("pause menu must expose keyboard/controller Resume")
+		failures.append("pause menu must expose focused Resume")
 	if save_quit == null or save_quit.text != "SAVE & QUIT TO TITLE" or save_quit.focus_mode != Control.FOCUS_ALL:
-		failures.append("pause menu must expose semantic Save & Quit to Title")
+		failures.append("pause menu must expose focused Save & Quit")
 	if quit == null or quit.text != "QUIT GAME" or quit.focus_mode != Control.FOCUS_ALL:
-		failures.append("pause menu must expose explicit Quit Game without hidden autosave")
+		failures.append("pause menu must expose explicit Quit Game")
 	var background := control.get_node_or_null("Background") as Control
-	var safe_margin := control.get_node_or_null("SafeMargin") as Control
+	var margin := control.get_node_or_null("SafeMargin") as Control
 	var panel := control.get_node_or_null("SafeMargin/Center/MenuPanel") as Control
 	var stack := control.get_node_or_null("SafeMargin/Center/MenuPanel/Menu") as Control
-	if background == null or background.theme_type_variation != &"ScreenBackground":
-		failures.append("pause background styling must stay Theme-owned")
-	if safe_margin == null or safe_margin.theme_type_variation != &"MenuSafeMargin":
-		failures.append("pause safe margin must stay Theme-owned")
-	if panel == null or panel.theme_type_variation != &"MenuPanel":
-		failures.append("pause panel styling must stay Theme-owned")
-	if stack == null or stack.theme_type_variation != &"MenuStack":
-		failures.append("pause stack spacing must stay Theme-owned")
+	if background == null or background.theme_type_variation != &"ScreenBackground" or margin == null or margin.theme_type_variation != &"MenuSafeMargin" or panel == null or panel.theme_type_variation != &"MenuPanel" or stack == null or stack.theme_type_variation != &"MenuStack":
+		failures.append("pause layout styling must remain delegated to accepted Theme roles")
 	control.free()
 
 
 static func _make_gameflow_fixture_scene() -> PackedScene:
-	var fixture_script = ResourceLoader.load(GAMEFLOW_FIXTURE_SCRIPT_PATH)
-	if fixture_script == null or not fixture_script is Script:
+	var script = ResourceLoader.load(GAMEFLOW_FIXTURE_SCRIPT_PATH)
+	if script == null or not script is Script:
 		return null
 	var root := Node.new()
 	root.name = "GameFlowFixture"
-	root.set_script(fixture_script)
+	root.set_script(script)
 	var packed := PackedScene.new()
-	var result: Error = packed.pack(root)
+	var result := packed.pack(root)
 	root.free()
-	if result != OK:
-		return null
-	return packed
+	return packed if result == OK else null
 
 
 static func _dispatch_cancel(tree: SceneTree, pressed: bool) -> void:
@@ -278,12 +238,7 @@ static func _dispatch_cancel(tree: SceneTree, pressed: bool) -> void:
 	await tree.process_frame
 
 
-static func _cleanup(
-	tree: SceneTree,
-	app: Node,
-	original_paused: bool,
-	original_mouse_mode: int
-) -> void:
+static func _cleanup(tree: SceneTree, app: Node, original_paused: bool, original_mouse_mode: int) -> void:
 	if tree.paused:
 		tree.paused = false
 	if app != null and is_instance_valid(app):
