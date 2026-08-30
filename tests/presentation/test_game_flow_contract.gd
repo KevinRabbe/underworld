@@ -127,13 +127,34 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	if not str(pause_menu.call("feedback_text")).contains("injected save failure"):
 		failures.append("SAVE failure diagnostics were not surfaced")
 
+	# A successful durable save does not authorize route destruction. If the
+	# subsequent Title replacement fails, the exact current Game stays live and
+	# paused so the player can retry. The successful slot commit is intentionally
+	# retained; GAMEFLOW does not invent persistence rollback authority.
 	fake_save.fail_saves = false
-	if not bool(flow.call("request_save_and_quit")):
-		failures.append("successful Save & Quit did not route to Title")
+	var game_before_route_failure: Node = app.get("current_scene") as Node
+	var invalid_title := PackedScene.new()
+	app.set("_title_scene", invalid_title)
+	if bool(flow.call("request_save_and_quit")):
+		failures.append("failed Game-to-Title replacement unexpectedly reported Save & Quit success")
 	if fake_save.save_calls != 2 or int(game.get("save_request_count")) != 2:
-		failures.append("successful Save & Quit did not invoke accepted SAVE exactly once")
+		failures.append("route-failed Save & Quit did not invoke accepted SAVE exactly once")
 	if fake_save.slot_version != slot_before_failure + 1:
-		failures.append("successful Save & Quit did not commit exactly one slot version")
+		failures.append("successful SAVE before route failure did not commit exactly one slot version")
+	if app.get("current_scene") != game_before_route_failure or str(app.call("current_route_id")) != "game":
+		failures.append("failed Title replacement destroyed or replaced the active Game route")
+	if not tree.paused or not bool(flow.call("is_pause_active")) or not pause_menu.visible:
+		failures.append("failed Title replacement did not remain safely paused in Game")
+	if not str(pause_menu.call("feedback_text")).contains("Title route transition failed"):
+		failures.append("failed Title replacement diagnostics were not surfaced")
+
+	app.set("_title_scene", title_packed)
+	if not bool(flow.call("request_save_and_quit")):
+		failures.append("later explicit Save & Quit did not recover after route failure")
+	if fake_save.save_calls != 3 or int(game.get("save_request_count")) != 3:
+		failures.append("successful Save & Quit did not invoke accepted SAVE exactly once")
+	if fake_save.slot_version != slot_before_failure + 2:
+		failures.append("successful Save & Quit did not commit exactly one additional slot version")
 	if str(app.call("current_route_id")) != "title" or app.get("current_scene") == game:
 		failures.append("successful Save & Quit did not commit Title route")
 	if tree.paused or bool(flow.call("is_pause_active")) or pause_menu.visible:
