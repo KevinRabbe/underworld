@@ -4,6 +4,7 @@ class_name UnderworldBaselineVoxelSurvivorFactory
 const PaletteScript := preload("res://presentation/characters/voxel/voxel_character_palette_definition.gd")
 const ModuleScript := preload("res://presentation/characters/voxel/voxel_character_module_definition.gd")
 const CharacterScript := preload("res://presentation/characters/voxel/voxel_character_definition.gd")
+const SliceProfileScript := preload("res://presentation/characters/voxel/voxel_character_slice_profile.gd")
 
 const SKIN := 0
 const CLOTH := 1
@@ -106,7 +107,48 @@ static func build() -> Resource:
 	character.presentation_bounds = AABB(Vector3(-0.45, 0.0, -0.30), Vector3(0.90, 1.80, 0.60))
 	character.palette = palette
 	character.modules = modules
+	character.slice_profile = _baseline_slice_profile()
 	return character
+
+
+static func _baseline_slice_profile() -> Resource:
+	var rows: Array[Dictionary] = []
+	for y in range(56):
+		var width := _slice_width(y)
+		var depth := _slice_depth(y)
+		var lines: Array[String] = []
+		for z in range(depth):
+			lines.append("#".repeat(width))
+		rows.append({"y": y, "layers": [{"layer_id": "body", "priority": 0, "palette_index": _slice_palette(y), "semantic": _slice_semantic(y), "mask": lines}]})
+	return SliceProfileScript.new().configure("character.voxel.grounded_survivor.slices", rows, PRESENTATION_VOXEL_SIZE)
+
+
+static func _slice_width(y: int) -> int:
+	if y < 8: return 8 # boots
+	if y < 24: return 6 # calves/thighs
+	if y < 34: return 12 # hips/torso
+	if y < 43: return 14 # shoulders/chest
+	return 10 # neck/head
+
+
+static func _slice_depth(y: int) -> int:
+	if y < 8: return 8
+	if y < 24: return 6
+	if y < 43: return 6
+	return 8
+
+
+static func _slice_palette(y: int) -> int:
+	if y < 24: return TROUSER
+	if y < 43: return CANVAS_LIGHT
+	return SKIN
+
+
+static func _slice_semantic(y: int) -> String:
+	if y < 8: return "feet"
+	if y < 24: return "legs"
+	if y < 43: return "torso"
+	return "head"
 
 
 static func _entry(slot: String, color: Color, roughness: float, metallic: float) -> Dictionary:
