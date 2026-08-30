@@ -105,32 +105,40 @@ func issue_for_creature(
 func import_pending_states(states: Array) -> Dictionary:
 	var failures: Array[String] = []
 	var staged: Dictionary = {}
+	var seen_occurrences: Dictionary = {}
 	for index in range(states.size()):
 		var candidate = states[index]
 		if candidate == null or not candidate is PendingLootState:
 			failures.append("pending loot import entry %d must be PendingLootState" % index)
 			continue
-		for failure in candidate.validate_state():
-			failures.append("pending loot import %s: %s" % [candidate.occurrence_id, failure])
-		if not candidate.is_pending():
-			failures.append("pending loot import requires unresolved state: %s" % candidate.occurrence_id)
+
 		var occurrence_id: String = candidate.occurrence_id
-		if staged.has(occurrence_id):
-			failures.append("pending loot import contains duplicate occurrence: %s" % occurrence_id)
+		var candidate_failures: Array[String] = []
+		for failure in candidate.validate_state():
+			candidate_failures.append("pending loot import %s: %s" % [occurrence_id, failure])
+		if not candidate.is_pending():
+			candidate_failures.append("pending loot import requires unresolved state: %s" % occurrence_id)
+		if seen_occurrences.has(occurrence_id):
+			candidate_failures.append("pending loot import contains duplicate occurrence: %s" % occurrence_id)
+		else:
+			seen_occurrences[occurrence_id] = true
 		if _issued_occurrences.has(occurrence_id):
-			failures.append("pending loot import conflicts with issued occurrence: %s" % occurrence_id)
-		if not failures.is_empty():
+			candidate_failures.append("pending loot import conflicts with issued occurrence: %s" % occurrence_id)
+		if not candidate_failures.is_empty():
+			failures.append_array(candidate_failures)
 			continue
+
 		var owned = PendingLootState.new().configure(
 			occurrence_id,
 			candidate.profile_id,
 			candidate.rewards
 		)
 		var owned_failures: Array[String] = owned.validate_state()
-		for failure in owned_failures:
-			failures.append("pending loot import owned state %s: %s" % [occurrence_id, failure])
-		if owned_failures.is_empty():
-			staged[occurrence_id] = owned
+		if not owned_failures.is_empty():
+			for failure in owned_failures:
+				failures.append("pending loot import owned state %s: %s" % [occurrence_id, failure])
+			continue
+		staged[occurrence_id] = owned
 
 	if not failures.is_empty():
 		return _failure(failures)
