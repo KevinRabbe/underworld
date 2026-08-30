@@ -196,7 +196,10 @@ func _build_animation_graph() -> void:
 		var locomotion_node := AnimationNodeAnimation.new()
 		locomotion_node.resource_name = point_data[0]
 		locomotion_node.animation = point_data[0]
-		locomotion.add_blend_point(locomotion_node, point_data[1], -1, StringName(point_data[0]))
+		# Use the three-argument form for compatibility with the editor parser;
+		# assign the stable point name through the dedicated API immediately after.
+		locomotion.add_blend_point(locomotion_node, point_data[1], -1)
+		locomotion.set_blend_point_name(locomotion.get_blend_point_count() - 1, StringName(point_data[0]))
 	state_machine.add_node("locomotion", locomotion)
 	for clip_name in ["sprint", "jump", "fall", "dodge_forward", "dodge_backward", "dodge_left", "dodge_right", "attack_light", "attack_heavy", "block", "parry", "hit", "death", "tool_use"]:
 		var node := AnimationNodeAnimation.new()
