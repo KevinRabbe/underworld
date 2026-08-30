@@ -98,9 +98,6 @@ func _activate() -> void:
 		_fail(["Natural entrance runtime bootstrap did not open traversal gate"])
 		return
 
-	_route = selected.duplicate(true)
-	_route.make_read_only()
-
 	if str(game.call("startup_mode")) == "new":
 		var spawn_variant: Variant = selected.get("recommended_spawn_xz", null)
 		if not spawn_variant is Vector3:
@@ -118,11 +115,16 @@ func _activate() -> void:
 
 	# Refresh the accepted runtime demand against the actual Player position.
 	underworld_runtime.update_player_position(player.global_position)
+	if not underworld_runtime.gate_is_open(entrance_id):
+		_fail(["Natural entrance approach spawn fell outside traversal readiness window"])
+		return
+	_route = selected.duplicate(true)
+	_route.make_read_only()
 	route_ready.emit(route_snapshot())
 
 
 func _fail(raw_diagnostics: Array) -> void:
-	_route.clear()
+	_route = {}
 	_diagnostics.clear()
 	for diagnostic in raw_diagnostics:
 		_diagnostics.append(str(diagnostic))
