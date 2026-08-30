@@ -4,6 +4,7 @@ const ContentRegistry := preload("res://core/content/registry/content_registry.g
 const ItemDefinition := preload("res://gameplay/items/definitions/item_definition.gd")
 const ItemContainerState := preload("res://gameplay/items/inventory/item_container_state.gd")
 const LootRewardService := preload("res://gameplay/loot/runtime/loot_reward_service.gd")
+const PendingLootState := preload("res://gameplay/loot/runtime/pending_loot_state.gd")
 const EncounterController := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
 
 const BURROWER_PATH := "res://content/characters/creatures/prototype_burrower_definition.tres"
@@ -20,6 +21,10 @@ static func run() -> Array[String]:
 	_test_weight_failure_preserves_inventory_and_pending(failures)
 	_test_definition_contract_drift_fails_closed(failures)
 	_test_reward_events_are_semantic(failures)
+	_test_locator_retry_and_nearby_collection(failures)
+	_test_service_import_is_atomic_and_deep_owned(failures)
+	_test_restored_pending_is_collectible_without_reissuance(failures)
+	_test_restored_import_rejects_bad_identity_and_nonfinite_anchor(failures)
 	return failures
 
 
@@ -41,6 +46,10 @@ static func _test_burrower_death_to_exactly_once_collection(failures: Array[Stri
 		failures.append("repeated Burrower death callback created more than one pending reward")
 	if pending_events.size() != 1:
 		failures.append("repeated Burrower death callback emitted more than one loot_pending event")
+	if not controller.has_pending_loot_locator("burrower_contract_1"):
+		failures.append("first Burrower reward issuance did not create a transient collection locator")
+	if controller.get_pending_loot_locator("burrower_contract_1") != Vector3.ZERO:
+		failures.append("Burrower reward locator did not preserve the captured death position")
 	var pending: Dictionary = controller.get_pending_loot_snapshot("burrower_contract_1")
 	if str(pending.get("profile_id", "")) != "loot_profile.creature.burrower.m3":
 		failures.append("Burrower death did not resolve the authored semantic reward profile")
@@ -58,6 +67,8 @@ static func _test_burrower_death_to_exactly_once_collection(failures: Array[Stri
 		failures.append("Burrower collection did not add exactly two chitin through inventory")
 	if controller.get_pending_loot_count() != 0:
 		failures.append("successful Burrower collection did not consume pending reward exactly once")
+	if controller.has_pending_loot_locator("burrower_contract_1"):
+		failures.append("successful Burrower collection did not clear transient locator")
 
 	var inventory_after: String = inventory.canonical_json()
 	var second_collect: Dictionary = controller.collect_pending_loot("burrower_contract_1", inventory)
@@ -211,6 +222,178 @@ static func _test_reward_events_are_semantic(failures: Array[String]) -> void:
 		failures.append("repeated reward issuance did not resolve as an idempotent already-issued occurrence")
 	if not duplicate.get("events", []).is_empty():
 		failures.append("idempotent repeated reward issuance emitted a duplicate semantic reward event")
+
+
+static func _test_locator_retry_and_nearby_collection(failures: Array[String]) -> void:
+	var controller = EncounterController.new()
+	controller.configure(null, null, null)
+	var player_probe = Node3D.new()
+	player_probe.global_position = Vector3.ZERO
+	controller.player = player_probe
+	controller._on_enemy_died("burrower_locator_contract")
+	if not controller.has_pending_loot_locator("burrower_locator_contract"):
+		failures.append("Burrower death did not retain transient locator for collection")
+
+	var full_inventory = ItemContainerState.new().configure(1)
+	var blocker = ItemDefinition.new()
+	blocker.configure_item("item.resource.locator_blocker", 1, 0.0, 1)
+	blocker.configure_schema_declarations(["category.item.resource"], [])
+	full_inventory.add_instance(blocker)
+	var full_before: String = full_inventory.canonical_json()
+	var failed_collect: Dictionary = controller.collect_nearby_pending_loot(full_inventory)
+	if bool(failed_collect.get("success", false)):
+		failures.append("nearby collection unexpectedly succeeded into full inventory")
+	if full_inventory.canonical_json() != full_before:
+		failures.append("failed nearby collection changed full inventory")
+	if not controller.has_pending_loot_locator("burrower_locator_contract"):
+		failures.append("failed nearby collection removed transient retry locator")
+	if controller.get_pending_loot_count() != 1:
+		failures.append("failed nearby collection consumed pending reward")
+
+	var retry_inventory = ItemContainerState.new().configure(2)
+	var retry: Dictionary = controller.collect_nearby_pending_loot(retry_inventory)
+	if not bool(retry.get("success", false)):
+		failures.append("nearby retry did not collect pending reward: %s" % [retry.get("diagnostics", [])])
+	if retry_inventory.quantity_of(CHITIN_ID) != 2:
+		failures.append("nearby retry did not award exactly two chitin")
+	if controller.has_pending_loot_locator("burrower_locator_contract"):
+		failures.append("successful nearby retry did not clear transient locator")
+	controller.free()
+	player_probe.free()
+
+
+static func _test_service_import_is_atomic_and_deep_owned(failures: Array[String]) -> void:
+	var source = LootRewardService.new()
+	var registry = _registry()
+	source.issue_for_creature(
+		"burrower_7",
+		ResourceLoader.load(BURROWER_PATH),
+		ResourceLoader.load(LOOT_PROFILE_PATH),
+		registry
+	)
+	var source_state = source.pending_state("burrower_7")
+	var imported = LootRewardService.new()
+	var import_result: Dictionary = imported.import_pending_states([source_state])
+	if not bool(import_result.get("success", false)):
+		failures.append("valid unresolved pending state failed service import: %s" % [
+			import_result.get("diagnostics", []),
+		])
+		return
+	if not import_result.get("events", []).is_empty():
+		failures.append("pending state import replayed reward issuance events")
+	var imported_before: Dictionary = imported.pending_snapshot("burrower_7")
+	source_state.rewards[0]["quantity"] = 99
+	source_state.profile_id = "loot_profile.mutated.after_import"
+	if imported.pending_snapshot("burrower_7") != imported_before:
+		failures.append("service import retained caller PendingLootState/reward aliases")
+
+	var duplicate_copy = PendingLootState.new().configure(
+		"burrower_8",
+		str(imported_before.get("profile_id", "")),
+		imported_before.get("rewards", [])
+	)
+	var duplicate_copy_2 = PendingLootState.new().configure(
+		"burrower_8",
+		str(imported_before.get("profile_id", "")),
+		imported_before.get("rewards", [])
+	)
+	var count_before: int = imported.pending_count()
+	var failed_batch: Dictionary = imported.import_pending_states([duplicate_copy, duplicate_copy_2])
+	if bool(failed_batch.get("success", false)):
+		failures.append("duplicate restored occurrence batch was accepted")
+	if imported.pending_count() != count_before or imported.has_pending("burrower_8"):
+		failures.append("failed duplicate import batch partially mutated service authority")
+
+
+static func _test_restored_pending_is_collectible_without_reissuance(failures: Array[String]) -> void:
+	var source = LootRewardService.new()
+	var registry = _registry()
+	source.issue_for_creature(
+		"burrower_12",
+		ResourceLoader.load(BURROWER_PATH),
+		ResourceLoader.load(LOOT_PROFILE_PATH),
+		registry
+	)
+	var restored_state = source.pending_state("burrower_12")
+	var controller = EncounterController.new()
+	controller.configure(null, null, null)
+	var issuance_events: Array = []
+	controller.loot_pending.connect(func(occurrence_id, profile_id, world_position):
+		issuance_events.append([occurrence_id, profile_id, world_position])
+	)
+	var anchor := Vector3(14.0, 2.0, -6.0)
+	var import_result: Dictionary = controller.import_pending_loot_states([restored_state], anchor)
+	if not bool(import_result.get("success", false)):
+		failures.append("valid restored pending state failed encounter import: %s" % [
+			import_result.get("diagnostics", []),
+		])
+		controller.free()
+		return
+	if not issuance_events.is_empty():
+		failures.append("restored pending import replayed loot_pending issuance signal")
+	if controller.get_pending_loot_locator("burrower_12") != anchor:
+		failures.append("restored pending state did not use supplied recovery anchor as transient locator")
+	if controller.spawn_serial != 12 or int(import_result.get("next_spawn_serial", -1)) != 13:
+		failures.append("restored burrower_N did not advance occurrence allocator beyond unresolved identity")
+
+	var restored_snapshot: Dictionary = controller.get_pending_loot_snapshot("burrower_12")
+	restored_state.rewards[0]["quantity"] = 77
+	if controller.get_pending_loot_snapshot("burrower_12") != restored_snapshot:
+		failures.append("encounter restore retained alias to detached SAVE pending state")
+
+	var player_probe = Node3D.new()
+	player_probe.global_position = anchor
+	controller.player = player_probe
+	var inventory = ItemContainerState.new().configure(2)
+	var collect: Dictionary = controller.collect_nearby_pending_loot(inventory)
+	if not bool(collect.get("success", false)):
+		failures.append("restored pending reward was not collectible at recovery anchor")
+	if inventory.quantity_of(CHITIN_ID) != 2:
+		failures.append("restored pending collection did not award exact authoritative reward")
+	var after: String = inventory.canonical_json()
+	var duplicate: Dictionary = controller.collect_pending_loot("burrower_12", inventory)
+	if bool(duplicate.get("success", false)) or inventory.canonical_json() != after:
+		failures.append("restored pending reward was collectible more than once")
+	controller.free()
+	player_probe.free()
+
+
+static func _test_restored_import_rejects_bad_identity_and_nonfinite_anchor(failures: Array[String]) -> void:
+	var source = LootRewardService.new()
+	var registry = _registry()
+	source.issue_for_creature(
+		"burrower_3",
+		ResourceLoader.load(BURROWER_PATH),
+		ResourceLoader.load(LOOT_PROFILE_PATH),
+		registry
+	)
+	var valid = source.pending_state("burrower_3")
+	var valid_snapshot: Dictionary = valid.canonical_snapshot()
+	var malformed = PendingLootState.new().configure(
+		"not_burrower_3",
+		str(valid_snapshot.get("profile_id", "")),
+		valid_snapshot.get("rewards", [])
+	)
+	var controller = EncounterController.new()
+	controller.configure(null, null, null)
+	var malformed_result: Dictionary = controller.import_pending_loot_states(
+		[valid, malformed],
+		Vector3.ZERO
+	)
+	if bool(malformed_result.get("success", false)):
+		failures.append("restore import accepted non-canonical Burrower occurrence identity")
+	if controller.get_pending_loot_count() != 0 or controller.spawn_serial != 0:
+		failures.append("malformed restored occurrence partially mutated encounter authority")
+
+	var nonfinite_result: Dictionary = controller.import_pending_loot_states(
+		[valid],
+		Vector3(INF, 0.0, 0.0)
+	)
+	if bool(nonfinite_result.get("success", false)):
+		failures.append("restore import accepted non-finite recovery anchor")
+	if controller.get_pending_loot_count() != 0 or controller.has_pending_loot_locator("burrower_3"):
+		failures.append("non-finite recovery anchor partially activated restored loot")
+	controller.free()
 
 
 static func _registry():
