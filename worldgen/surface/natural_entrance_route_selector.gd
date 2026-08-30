@@ -9,9 +9,9 @@ const EntranceGenerator := preload("res://worldgen/underworld/entrance_generator
 const CanonicalValue := preload("res://worldgen/validation/canonical_value.gd")
 
 const DEFAULT_REGION_RADIUS: int = 1
-const MIN_SPAWN_DISTANCE: float = 48.0
-const TARGET_SPAWN_DISTANCE: float = 64.0
-const MAX_SPAWN_DISTANCE: float = 96.0
+const MIN_SPAWN_DISTANCE: float = 32.0
+const TARGET_SPAWN_DISTANCE: float = 40.0
+const MAX_SPAWN_DISTANCE: float = 48.0
 const MAX_SPAWN_SLOPE: float = 0.70
 
 
@@ -107,7 +107,7 @@ static func _recommended_spawn(descriptor, sampler) -> Dictionary:
 	var found := false
 	var opening: AABB = descriptor.required_opening_bounds.grow(descriptor.clearance_radius)
 	for distance in [MIN_SPAWN_DISTANCE, TARGET_SPAWN_DISTANCE, MAX_SPAWN_DISTANCE]:
-		for lateral_offset in [0.0, -24.0, 24.0, -48.0, 48.0]:
+		for lateral_offset in [0.0, -16.0, 16.0, -24.0, 24.0]:
 			var candidate: Vector3 = (
 				descriptor.surface_world_position
 				+ outward * float(distance)
