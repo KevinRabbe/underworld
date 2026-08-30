@@ -55,11 +55,12 @@ static func compile(profile: Resource, palette: Resource, outfit: Resource = nul
 	var builders: Dictionary = {}
 	_build_torso(builders, profile, outfit)
 	_build_head(builders, profile)
-	_build_arm(builders, profile, true)
-	_build_arm(builders, profile, false)
-	_build_leg(builders, profile, true)
-	_build_leg(builders, profile, false)
-	_build_outfit_details(builders, profile)
+	_build_arm(builders, profile, true, outfit)
+	_build_arm(builders, profile, false, outfit)
+	_build_leg(builders, profile, true, outfit)
+	_build_leg(builders, profile, false, outfit)
+	if outfit != null:
+		_build_outfit_details(builders, profile)
 
 	var bounds := AABB()
 	var has_bounds := false
@@ -143,7 +144,9 @@ static func _build_torso(builders: Dictionary, profile, outfit: Resource) -> voi
 		_ring_y_asym(Vector3(0, shoulder_y - 0.022, -0.002), profile.shoulder_width * 0.355, profile.chest_depth * 0.450, profile.chest_depth * 0.425, _weights(BONE.chest)),
 		_ring_y_asym(Vector3(0, neck_y + 0.008, -0.002), 0.108, 0.090, 0.094, _weights2(BONE.chest, BONE.neck, 0.55)),
 	]
-	_add_y_loft(builders, CANVAS_LIGHT, torso_rings, 12, true, true)
+	_add_y_loft(builders, SKIN if outfit == null else CANVAS_LIGHT, torso_rings, 12, true, true)
+	if outfit == null:
+		return
 
 	# The vest wraps only the back and lateral torso. The forward arc is absent
 	# and rebuilt from separate front panels so the shirt stays visibly open.
@@ -311,7 +314,7 @@ static func _build_head(builders: Dictionary, profile) -> void:
 		-face_front - profile.head_depth * 0.99, -face_front - profile.head_depth * 0.88, skin)
 
 
-static func _build_arm(builders: Dictionary, profile, left: bool) -> void:
+static func _build_arm(builders: Dictionary, profile, left: bool, outfit: Resource = null) -> void:
 	var landmark: Dictionary = profile.anatomy_landmarks()
 	var direction := -1.0 if left else 1.0
 	var upper_bone := int(BONE.upperarm_l if left else BONE.upperarm_r)
@@ -337,7 +340,7 @@ static func _build_arm(builders: Dictionary, profile, left: bool) -> void:
 		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.82), shoulder_y + 0.001, 0.001), 0.075 * mass, 0.071 * mass, _weights2(upper_bone, forearm_bone, 0.18)),
 		_ring_x(Vector3(elbow_x, shoulder_y, 0), 0.068 * mass, 0.066 * mass, _weights2(upper_bone, forearm_bone, 0.50)),
 	]
-	_add_x_loft(builders, CANVAS_LIGHT, upper_rings, 8, true, true, direction)
+	_add_x_loft(builders, SKIN if outfit == null else CANVAS_LIGHT, upper_rings, 8, true, true, direction)
 
 	# The forearm is widest shortly below the elbow, then tapers decisively into
 	# the wrist. This removes the straight tube silhouette visible in side view.
@@ -349,7 +352,7 @@ static func _build_arm(builders: Dictionary, profile, left: bool) -> void:
 		_ring_x(Vector3(lerpf(elbow_x, wrist_x, 0.88), shoulder_y + 0.001, -0.002), 0.057 * mass, 0.051 * mass, _weights2(forearm_bone, hand_bone, 0.25)),
 		_ring_x(Vector3(wrist_x, shoulder_y, 0), 0.049 * mass, 0.045 * mass, _weights2(forearm_bone, hand_bone, 0.65)),
 	]
-	_add_x_loft(builders, CANVAS_LIGHT, forearm_rings, 8, true, true, direction)
+	_add_x_loft(builders, SKIN if outfit == null else CANVAS_LIGHT, forearm_rings, 8, true, true, direction)
 
 	var hand_rings: Array[Dictionary] = [
 		_ring_x(Vector3(wrist_x, shoulder_y, 0), 0.050, 0.043, _weights2(forearm_bone, hand_bone, 0.78)),
@@ -368,13 +371,14 @@ static func _build_arm(builders: Dictionary, profile, left: bool) -> void:
 	], 6, true, true, direction)
 	var cuff_x_a := lerpf(elbow_x, wrist_x, 0.78)
 	var cuff_x_b := lerpf(elbow_x, wrist_x, 0.94)
-	_add_x_loft(builders, LEATHER, [
+	if outfit != null:
+		_add_x_loft(builders, LEATHER, [
 		_ring_x(Vector3(cuff_x_a, shoulder_y, 0), 0.056, 0.051, _weights(forearm_bone)),
 		_ring_x(Vector3(cuff_x_b, shoulder_y, 0), 0.054, 0.049, _weights2(forearm_bone, hand_bone, 0.35)),
-	], 8, true, true, direction)
+		], 8, true, true, direction)
 
 
-static func _build_leg(builders: Dictionary, profile, left: bool) -> void:
+static func _build_leg(builders: Dictionary, profile, left: bool, outfit: Resource = null) -> void:
 	var landmark: Dictionary = profile.anatomy_landmarks()
 	var x: float = (-1.0 if left else 1.0) * float(profile.pelvis_width) * 0.30
 	var thigh_bone := int(BONE.thigh_l if left else BONE.thigh_r)
@@ -400,14 +404,14 @@ static func _build_leg(builders: Dictionary, profile, left: bool) -> void:
 		_ring_y_asym(Vector3(x, calf_low_y, 0.003), profile.calf_diameter * 0.59, profile.calf_diameter * 0.55, profile.calf_diameter * 0.64, _weights(calf_bone)),
 		_ring_y_asym(Vector3(x, lerpf(calf_low_y, ankle_y, 0.65), 0.000), profile.ankle_width * 0.62, profile.ankle_width * 0.60, profile.ankle_width * 0.65, _weights2(calf_bone, foot_bone, 0.18)),
 	]
-	_add_y_loft(builders, TROUSER, trouser_rings, 8, true, true)
+	_add_y_loft(builders, SKIN if outfit == null else TROUSER, trouser_rings, 8, true, true)
 
 	var boot_rings: Array[Dictionary] = [
 		_ring_y_asym(Vector3(x, calf_mass_y - 0.010, 0.008), profile.calf_diameter * 0.70, profile.calf_diameter * 0.65, profile.calf_diameter * 0.73, _weights(calf_bone)),
 		_ring_y_asym(Vector3(x, calf_low_y - 0.020, 0.000), profile.ankle_width * 0.62, profile.ankle_width * 0.62, profile.ankle_width * 0.68, _weights(calf_bone)),
 		_ring_y_asym(Vector3(x, ankle_y, -0.005), profile.ankle_width * 0.56, profile.ankle_width * 0.59, profile.ankle_width * 0.62, _weights2(calf_bone, foot_bone, 0.65)),
 	]
-	_add_y_loft(builders, LEATHER, boot_rings, 8, true, true)
+	_add_y_loft(builders, SKIN if outfit == null else LEATHER, boot_rings, 8, true, true)
 	# Compact rugged boot last.  Rev10 removed the rectangular slab, but its
 	# terminal ring sat too far forward and too low, producing a slipper-like
 	# point in true-side view.  These five stations keep the faceted construction
@@ -427,7 +431,7 @@ static func _build_leg(builders: Dictionary, profile, left: bool) -> void:
 		_ring_z(Vector3(x, sole_y + 0.062, toe_base_z), profile.foot_width * 0.56, 0.047, foot_skin),
 		_ring_z(Vector3(x, sole_y + 0.058, toe_z), profile.foot_width * 0.48, 0.040, foot_skin),
 	]
-	_add_z_loft(builders, LEATHER, foot_rings, 8, true, true, -1.0)
+	_add_z_loft(builders, SKIN if outfit == null else LEATHER, foot_rings, 8, true, true, -1.0)
 
 	# The sole follows the same short, broad last instead of extending into a
 	# pointed platform.  A wide ball and toe-base keep the planted read at
@@ -439,7 +443,7 @@ static func _build_leg(builders: Dictionary, profile, left: bool) -> void:
 		_ring_z(Vector3(x, sole_y + 0.018, toe_base_z - 0.004), profile.foot_width * 0.60, 0.018, foot_skin),
 		_ring_z(Vector3(x, sole_y + 0.018, toe_z - 0.005), profile.foot_width * 0.52, 0.018, foot_skin),
 	]
-	_add_z_loft(builders, SOLE, sole_rings, 8, true, true, -1.0)
+	_add_z_loft(builders, SKIN if outfit == null else SOLE, sole_rings, 8, true, true, -1.0)
 
 
 static func _build_outfit_details(builders: Dictionary, profile) -> void:

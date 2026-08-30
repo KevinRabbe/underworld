@@ -115,7 +115,13 @@ static func build() -> Resource:
 
 static func build_variant(variant_id: String) -> Resource:
 	var character = build()
-	if variant_id == "work":
+	if variant_id == "unarmored":
+		# Character creation previews the same authoritative body and rig without
+		# an outfit shell. Hair, face, sockets, and gameplay identity remain.
+		character.presentation_id = "character.voxel.grounded_survivor.unarmored"
+		character.faceted_outfit_definition = null
+		character.allow_unarmored_faceted_body = true
+	elif variant_id == "work":
 		character.palette.entries[CLOTH]["color"] = Color("6b6252")
 		character.palette.entries[CANVAS_LIGHT]["color"] = Color("aa956f")
 	elif variant_id == "light_armor":

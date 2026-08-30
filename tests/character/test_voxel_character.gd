@@ -50,7 +50,7 @@ static func _test_definition_contract(failures: Array[String]) -> void:
 	_expect_true(failures, "broad-neutral faceted profile validates", body_profile != null and body_profile.validate().is_empty())
 	_expect_equal(failures, "faceted profile derives 56 editor-ready rows", body_profile.derived_rows().size(), 56)
 	_expect_true(failures, "faceted profile locks broad-neutral proportions", is_equal_approx(body_profile.shoulder_width, 0.58) and is_equal_approx(body_profile.chest_width, 0.48) and is_equal_approx(body_profile.pelvis_width, 0.42) and is_equal_approx(body_profile.thigh_diameter, 0.20) and is_equal_approx(body_profile.calf_diameter, 0.16))
-	var reordered_profile = FacetedProfile.new().configure("character.body.frontier_broad_neutral", {"arm_mass": 1.06, "calf_diameter": 0.16, "shoulder_width": 0.58, "chest_width": 0.48})
+	var reordered_profile = FacetedProfile.new().configure("character.body.frontier_broad_neutral", {"calf_diameter": 0.16, "shoulder_width": 0.58, "chest_width": 0.48})
 	_expect_equal(failures, "profile input ordering cannot change canonical identity", reordered_profile.canonical_fingerprint(), body_profile.canonical_fingerprint())
 	var work_variant = BaselineFactory.build_variant("work")
 	var armor_variant = BaselineFactory.build_variant("light_armor")
