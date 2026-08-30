@@ -1,0 +1,54 @@
+name: Character Preview Evidence
+
+on:
+  pull_request:
+    paths:
+      - "presentation/characters/**"
+      - "tools/character_preview/**"
+      - ".github/workflows/character-preview-evidence.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Capture runtime turnaround
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p character-preview
+          capture() {
+            local name="$1"
+            local angle="$2"
+            xvfb-run -a godot --path . --rendering-method gl_compatibility \
+              res://tools/character_preview/voxel_character_preview.tscn -- \
+              --preview-capture="$PWD/character-preview/${name}.png" \
+              --preview-angle="$angle" \
+              --preview-state=idle \
+              --preview-delay=0.15
+          }
+          capture front 0
+          capture three_quarter -35
+          capture side -90
+          capture back 180
+          ls -lh character-preview
+
+      - name: Upload runtime captures
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: character-preview-${{ github.event.pull_request.head.sha }}
+          path: character-preview/*.png
+          if-no-files-found: error
+          retention-days: 3
