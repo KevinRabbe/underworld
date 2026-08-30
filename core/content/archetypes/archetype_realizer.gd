@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ContentRegistry := preload("res://core/content/registry/content_registry.gd")
+const ContentValidationPipeline := preload("res://core/content/validation/content_validation_pipeline.gd")
 const ArchetypeDefinition := preload("res://core/content/archetypes/archetype_definition.gd")
 const ArchetypeComposition := preload("res://core/content/archetypes/archetype_composition.gd")
 const ArchetypeRealizationAdapter := preload("res://core/content/archetypes/archetype_realization_adapter.gd")
@@ -51,7 +52,11 @@ func realize(
 		failures.sort()
 		return _result(content_id, null, "", failures)
 
-	failures.append_array(_validation_prerequisite_failures(validation_result, content_id))
+	failures.append_array(_validation_prerequisite_failures(
+		content_registry,
+		validation_result,
+		content_id
+	))
 	if not failures.is_empty():
 		failures.sort()
 		return _result(content_id, null, "", failures)
@@ -91,6 +96,7 @@ func realize(
 
 
 static func _validation_prerequisite_failures(
+	content_registry,
 	validation_result: Dictionary,
 	content_id: String
 ) -> Array[String]:
@@ -116,13 +122,13 @@ static func _validation_prerequisite_failures(
 		failures.sort()
 		return failures
 
-	var covered: bool = false
-	for raw_id in validation_result.get("validated_definition_ids", []):
-		if str(raw_id) == content_id:
-			covered = true
-			break
-	if not covered:
-		failures.append("CONTENT-005 validation result does not cover content id: %s" % content_id)
+	for failure in ContentValidationPipeline.evidence_failures(
+		validation_result,
+		content_registry,
+		content_id
+	):
+		failures.append("CONTENT-006 validation evidence: %s" % failure)
+	failures.sort()
 	return failures
 
 
