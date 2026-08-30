@@ -12,7 +12,7 @@ func save_slot(
 	delta_store,
 	inventory_state,
 	equipment_state,
-	pending_loot_state,
+	pending_loot_states: Array,
 	resume_position: Vector3,
 	slot_path: String = DEFAULT_SLOT_PATH
 ) -> Dictionary:
@@ -21,7 +21,7 @@ func save_slot(
 		delta_store,
 		inventory_state,
 		equipment_state,
-		pending_loot_state,
+		pending_loot_states,
 		resume_position
 	)
 	if not bool(encoded.get("success", false)):
