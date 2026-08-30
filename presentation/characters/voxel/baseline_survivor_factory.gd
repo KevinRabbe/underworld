@@ -29,13 +29,13 @@ static func build() -> Resource:
 		_entry("skin", Color("bf8b6a"), 0.80, 0.0),
 		_entry("cloth", Color("927958"), 0.93, 0.0),
 		_entry("leather", Color("4b3023"), 0.78, 0.0),
-		_entry("metal", Color("858b8e"), 0.38, 0.62),
+		_entry("metal", Color("777d7b"), 0.82, 0.18),
 		_entry("hair", Color("211713"), 0.92, 0.0),
 		_entry("accent", Color("356f78"), 0.84, 0.0),
 		_entry("face", Color("211a17"), 0.76, 0.0),
 		_entry("canvas_light", Color("b5a486"), 0.95, 0.0),
 		_entry("trouser", Color("373c3b"), 0.92, 0.0),
-		_entry("canvas_dark", Color("5f5544"), 0.96, 0.0),
+		_entry("canvas_dark", Color("6c624f"), 0.96, 0.0),
 		_entry("leather_light", Color("765037"), 0.84, 0.0),
 		_entry("sole", Color("252523"), 0.98, 0.0),
 	])
@@ -520,13 +520,21 @@ static func _pickaxe_head_cells() -> Array[Dictionary]:
 
 static func _axe_head_cells() -> Array[Dictionary]:
 	var cells: Array[Dictionary] = []
-	# A compact one-sided stone blade with a small rear poll.  The silhouette
-	# stays readable after greedy compilation without returning to a debug box.
+	# Broad asymmetric stone blade: the cutting edge fans to the left while a
+	# short rear poll and leather lash keep the haft relationship obvious.
+	var rows := {
+		3: [-1, 1],
+		4: [-3, 2],
+		5: [-4, 1],
+		6: [-4, 0],
+		7: [-3, -1],
+	}
 	for z in range(0, 2):
-		for y in range(3, 7):
-			var minimum_x: int = -2 if y in [4, 5] else -1
-			var maximum_x: int = 1 if y in [3, 4] else 0
-			for x in range(minimum_x, maximum_x + 1):
-				var palette_index: int = LEATHER_LIGHT if x == 0 and y in [3, 4] else METAL
+		for y_value in rows.keys():
+			var y: int = int(y_value)
+			var span: Array = rows[y_value]
+			for x in range(int(span[0]), int(span[1]) + 1):
+				var is_lash: bool = x in [0, 1] and y in [3, 4]
+				var palette_index: int = LEATHER_LIGHT if is_lash else METAL
 				cells.append({"position": Vector3i(x, y, z), "palette_index": palette_index})
 	return cells
