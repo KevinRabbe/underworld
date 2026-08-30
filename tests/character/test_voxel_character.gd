@@ -19,6 +19,7 @@ static func run(tree: SceneTree) -> Array[String]:
 	_test_slice_profile_contract(failures)
 	_test_compiler_contract(failures)
 	_test_faceted_compiler_contract(failures)
+	_test_unarmored_character_creation_contract(failures)
 	_test_runtime_presentation(failures)
 	_test_player_default(tree, failures)
 	return failures
@@ -49,7 +50,7 @@ static func _test_definition_contract(failures: Array[String]) -> void:
 	_expect_true(failures, "broad-neutral faceted profile validates", body_profile != null and body_profile.validate().is_empty())
 	_expect_equal(failures, "faceted profile derives 56 editor-ready rows", body_profile.derived_rows().size(), 56)
 	_expect_true(failures, "faceted profile locks broad-neutral proportions", is_equal_approx(body_profile.shoulder_width, 0.58) and is_equal_approx(body_profile.chest_width, 0.48) and is_equal_approx(body_profile.pelvis_width, 0.42) and is_equal_approx(body_profile.thigh_diameter, 0.20) and is_equal_approx(body_profile.calf_diameter, 0.16))
-	var reordered_profile = FacetedProfile.new().configure("character.body.frontier_broad_neutral", {"calf_diameter": 0.16, "shoulder_width": 0.58, "chest_width": 0.48})
+	var reordered_profile = FacetedProfile.new().configure("character.body.frontier_broad_neutral", {"arm_mass": 1.06, "calf_diameter": 0.16, "shoulder_width": 0.58, "chest_width": 0.48})
 	_expect_equal(failures, "profile input ordering cannot change canonical identity", reordered_profile.canonical_fingerprint(), body_profile.canonical_fingerprint())
 	var work_variant = BaselineFactory.build_variant("work")
 	var armor_variant = BaselineFactory.build_variant("light_armor")
@@ -244,6 +245,25 @@ static func _test_faceted_compiler_contract(failures: Array[String]) -> void:
 	incomplete_palette.entries.resize(4)
 	var missing_material_mesh = FacetedCompiler.compile(character.faceted_body_profile, incomplete_palette, character.faceted_outfit_definition)
 	_expect_true(failures, "missing semantic palette references fail deterministically", not missing_material_mesh.success and missing_material_mesh.diagnostics.any(func(value: String) -> bool: return value.contains("missing required semantic entries")))
+
+
+static func _test_unarmored_character_creation_contract(failures: Array[String]) -> void:
+	var clothed = BaselineFactory.build()
+	var unarmored = BaselineFactory.build_variant("unarmored")
+	_expect_true(failures, "unarmored character-creation definition validates", unarmored.validate_definition().is_empty())
+	_expect_true(failures, "unarmored mode is explicit and presentation-only", unarmored.allow_unarmored_faceted_body and unarmored.faceted_outfit_definition == null)
+	var mesh = FacetedCompiler.compile(unarmored.faceted_body_profile, unarmored.palette, unarmored.faceted_outfit_definition)
+	_expect_true(failures, "unarmored body compiles without clothing resource", mesh.success and mesh.diagnostics.is_empty())
+	_expect_equal(failures, "unarmored body reports no covered zones", int(mesh.metrics.get("coverage_zone_count", -1)), 0)
+	var clothing_palette_indices := [1, 2, 3, 7, 8, 9, 10, 11]
+	var has_clothing_surface := false
+	for surface in mesh.surfaces:
+		if clothing_palette_indices.has(int(surface["palette_index"])):
+			has_clothing_surface = true
+	_expect_true(failures, "unarmored compile contains no clothing surfaces", not has_clothing_surface)
+	var clothed_mesh = FacetedCompiler.compile(clothed.faceted_body_profile, clothed.palette, clothed.faceted_outfit_definition)
+	_expect_true(failures, "removing outfit changes presentation geometry identity", clothed_mesh.source_fingerprint != mesh.source_fingerprint)
+	_expect_equal(failures, "unarmored gameplay rig identity is unchanged", unarmored.rig_profile_id, clothed.rig_profile_id)
 
 
 static func _test_runtime_presentation(failures: Array[String]) -> void:

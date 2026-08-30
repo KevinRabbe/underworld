@@ -120,7 +120,7 @@ func _build_presentation_visuals() -> void:
 		var faceted_started_usec := Time.get_ticks_usec()
 		var faceted_cache_key := "%s|%s|%s|%.6f|%d" % [
 			character_definition.faceted_body_profile.canonical_fingerprint(),
-			character_definition.faceted_outfit_definition.canonical_fingerprint(),
+			character_definition.faceted_outfit_definition.canonical_fingerprint() if character_definition.faceted_outfit_definition != null else "<no-outfit>",
 			palette_fingerprint, character_definition.presentation_scale,
 			FacetedCompilerScript.COMPILER_REVISION,
 		]

@@ -16,6 +16,7 @@ const REQUIRED_SLOTS: Array[StringName] = [
 @export var slice_profile: Resource
 @export var faceted_body_profile: Resource
 @export var faceted_outfit_definition: Resource
+@export var allow_unarmored_faceted_body: bool = false
 @export var faceted_hair_id: String = "hair.frontier.short"
 @export var use_faceted_body: bool = false
 
@@ -49,8 +50,10 @@ func validate_definition() -> Array[String]:
 	elif faceted_body_profile != null:
 		for failure in faceted_body_profile.validate():
 			failures.append("faceted body profile: %s" % failure)
-	if use_faceted_body and (faceted_outfit_definition == null or not faceted_outfit_definition.has_method("validate")):
+	if use_faceted_body and faceted_outfit_definition == null and not allow_unarmored_faceted_body:
 		failures.append("character requires compatible faceted_outfit_definition")
+	elif use_faceted_body and faceted_outfit_definition != null and not faceted_outfit_definition.has_method("validate"):
+		failures.append("character faceted_outfit_definition is incompatible")
 	elif faceted_outfit_definition != null:
 		for failure in faceted_outfit_definition.validate():
 			failures.append("faceted outfit: %s" % failure)
@@ -90,6 +93,7 @@ func canonical_fingerprint() -> String:
 		faceted_outfit_definition.canonical_fingerprint() if faceted_outfit_definition != null else "<no-faceted-outfit>",
 		faceted_hair_id,
 		"faceted=%s" % str(use_faceted_body),
+		"unarmored=%s" % str(allow_unarmored_faceted_body),
 		";".join(module_fingerprints),
 	])
 	return "vcharacter1:sha256:" + descriptor.sha256_text()
