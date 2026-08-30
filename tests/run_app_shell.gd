@@ -13,7 +13,7 @@ func _run() -> void:
 	failures.append_array(runtime_failures)
 	if failures.is_empty():
 		print("[APP SHELL VALIDATION] PASS")
-		print("  main-scene routing / live SceneTree replacement / duplicate guard / fail-closed Continue / theme boundary passed")
+		print("  main-scene routing / off-tree NEW+CONTINUE preparation / fail-closed replacement / duplicate guard / theme boundary passed")
 		quit(0)
 		return
 	printerr("[APP SHELL VALIDATION] FAIL — %d failure(s)" % failures.size())

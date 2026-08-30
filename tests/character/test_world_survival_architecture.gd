@@ -9,6 +9,8 @@ const LEGACY_MANAGER_PATH := "res://world/chunk_manager.gd"
 const LEGACY_DATA_SETTINGS_PATH := "res://" + "data/world_settings.gd"
 const APP_GAME_PATH := "res://app/game/game.gd"
 const SURVIVAL_PATH := "res://gameplay/survival/prototype_survival_controller.gd"
+const INTEGRATED_SURVIVAL_PATH := "res://gameplay/survival/integrated_survival_controller.gd"
+const GAMEPLAY_SAVE_CATALOG_PATH := "res://gameplay/persistence/gameplay_save_catalog.gd"
 const TEST_WORLD_SEED: int = 987654321
 
 
@@ -84,6 +86,7 @@ static func run() -> Array[String]:
 	_expect_true(failures, "survival preserves legacy craft entrypoint", survival.has_method("request_craft"))
 	_expect_true(failures, "survival exposes recipe costs without leaking settings", survival.has_method("get_crafting_cost"))
 	_expect_true(failures, "survival does not own generated-world delta count", not survival.has_method("get_destroyed_object_count"))
+	_expect_true(failures, "survival reports prototype persistence retired", not survival.legacy_persistence_enabled())
 
 	var wood = survival.get_item_definition("item.resource.wood")
 	var stone = survival.get_item_definition("item.resource.stone")
@@ -119,6 +122,17 @@ static func run() -> Array[String]:
 	_expect_true(failures, "harvest does not increment legacy wood counter", not "gathered_wood +=" in survival_source)
 	_expect_true(failures, "harvest does not increment legacy stone counter", not "gathered_stone +=" in survival_source)
 	_expect_true(failures, "surface collection uses non-mutating world query", "world.find_nearby_pickups" in survival_source)
+	_expect_true(failures, "survival consumes shared durable gameplay catalog", GAMEPLAY_SAVE_CATALOG_PATH in survival_source)
+	_expect_true(failures, "prototype survival no longer declares legacy load hook", not "func _load_state()" in survival_source)
+	_expect_true(failures, "prototype survival no longer declares legacy save hook", not "func _save_state()" in survival_source)
+	_expect_true(failures, "prototype survival contains no direct FileAccess authority", not "FileAccess" in survival_source)
+
+	var integrated_survival_source: String = FileAccess.get_file_as_string(INTEGRATED_SURVIVAL_PATH)
+	_expect_true(failures, "integrated survival adapter source is readable", not integrated_survival_source.is_empty())
+	_expect_true(failures, "integrated survival preserves prototype gameplay behavior", "extends \"%s\"" % SURVIVAL_PATH in integrated_survival_source)
+	_expect_true(failures, "integrated survival does not reintroduce legacy load hook", not "func _load_state()" in integrated_survival_source)
+	_expect_true(failures, "integrated survival does not reintroduce legacy save hook", not "func _save_state()" in integrated_survival_source)
+	_expect_true(failures, "integrated survival contains no direct FileAccess authority", not "FileAccess" in integrated_survival_source)
 
 	var world_settings_source: String = FileAccess.get_file_as_string(WORLD_SETTINGS_PATH)
 	var survival_settings_source: String = FileAccess.get_file_as_string(SURVIVAL_SETTINGS_PATH)
@@ -134,7 +148,8 @@ static func run() -> Array[String]:
 	var app_source: String = FileAccess.get_file_as_string(APP_GAME_PATH)
 	_expect_true(failures, "application composition source is readable", not app_source.is_empty())
 	_expect_true(failures, "application composes canonical surface streamer", STREAMER_PATH in app_source)
-	_expect_true(failures, "application composes prototype survival controller", SURVIVAL_PATH in app_source)
+	_expect_true(failures, "application composes integrated survival adapter", INTEGRATED_SURVIVAL_PATH in app_source)
+	_expect_true(failures, "application no longer composes prototype survival controller directly", not SURVIVAL_PATH in app_source)
 	_expect_true(failures, "application composes world settings", WORLD_SETTINGS_PATH in app_source)
 	_expect_true(failures, "application composes survival settings", SURVIVAL_SETTINGS_PATH in app_source)
 	_expect_true(failures, "application composes water settings", WATER_SETTINGS_PATH in app_source)
