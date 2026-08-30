@@ -24,6 +24,7 @@ func _init() -> void:
 	LootCollectionTests._test_reward_events_are_semantic(loot_failures)
 	LootCollectionTests._test_locator_retry_and_nearby_collection(loot_failures)
 	LootCollectionTests._test_service_import_is_atomic_and_deep_owned(loot_failures)
+	LootCollectionTests._test_restored_pending_is_collectible_without_reissuance(loot_failures)
 	failures.append_array(loot_failures)
 	if failures.is_empty():
 		print("[INVENTORY VALIDATION] PASS")
