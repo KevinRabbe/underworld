@@ -10,17 +10,16 @@ const ROW_COUNT := 56
 @export var profile_id: String = ""
 @export var revision: int = CONTRACT_REVISION
 @export var height: float = 1.80
-# The baseline intentionally follows the locked turnaround rather than a
-# generic broad mannequin: roughly 7.2 heads tall, longer legs, a compact
-# torso, and enough shoulder width for the expedition layers without the
-# previous blocky superhero taper.
-@export var shoulder_width: float = 0.555
-@export var chest_width: float = 0.455
+# Preserve the accepted broad-neutral width controls while converging the
+# vertical silhouette on the locked turnaround: roughly 7.2 heads tall,
+# longer legs, a more compact torso, and less mannequin-like limb/head mass.
+@export var shoulder_width: float = 0.58
+@export var chest_width: float = 0.48
 @export var chest_depth: float = 0.285
 @export var waist_width: float = 0.355
-@export var pelvis_width: float = 0.395
-@export var thigh_diameter: float = 0.185
-@export var calf_diameter: float = 0.145
+@export var pelvis_width: float = 0.42
+@export var thigh_diameter: float = 0.20
+@export var calf_diameter: float = 0.16
 @export var ankle_width: float = 0.095
 @export var foot_length: float = 0.275
 @export var foot_width: float = 0.115
