@@ -1,4 +1,4 @@
-[gd_resource type="Resource" load_steps=23 format=3]
+[gd_resource type="Resource" load_steps=24 format=3]
 
 [ext_resource type="Script" path="res://presentation/audio/audio_cue_catalog.gd" id="1_catalog"]
 [ext_resource type="Script" path="res://presentation/audio/audio_cue_definition.gd" id="2_cue"]
@@ -95,6 +95,11 @@ script = ExtResource("2_cue")
 cue_id = "audio_cue.player.parry.success"
 playback_space = "global"
 
+[sub_resource type="Resource" id="Cue_player_respawn"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.player.respawn"
+playback_space = "global"
+
 [sub_resource type="Resource" id="Cue_resource_depleted"]
 script = ExtResource("2_cue")
 cue_id = "audio_cue.resource.depleted"
@@ -107,4 +112,4 @@ playback_space = "spatial"
 
 [resource]
 script = ExtResource("1_catalog")
-cues = [SubResource("Cue_ambience_cave"), SubResource("Cue_ambience_surface"), SubResource("Cue_craft_success"), SubResource("Cue_enemy_attack"), SubResource("Cue_enemy_death"), SubResource("Cue_enemy_hit"), SubResource("Cue_entrance_transition"), SubResource("Cue_equipment_changed"), SubResource("Cue_harvest_complete"), SubResource("Cue_harvest_impact"), SubResource("Cue_inventory_pickup"), SubResource("Cue_loot_available"), SubResource("Cue_loot_collected"), SubResource("Cue_player_attack_heavy"), SubResource("Cue_player_attack_light"), SubResource("Cue_player_damage"), SubResource("Cue_player_death"), SubResource("Cue_player_parry"), SubResource("Cue_resource_depleted"), SubResource("Cue_resource_mine_impact")]
+cues = [SubResource("Cue_ambience_cave"), SubResource("Cue_ambience_surface"), SubResource("Cue_craft_success"), SubResource("Cue_enemy_attack"), SubResource("Cue_enemy_death"), SubResource("Cue_enemy_hit"), SubResource("Cue_entrance_transition"), SubResource("Cue_equipment_changed"), SubResource("Cue_harvest_complete"), SubResource("Cue_harvest_impact"), SubResource("Cue_inventory_pickup"), SubResource("Cue_loot_available"), SubResource("Cue_loot_collected"), SubResource("Cue_player_attack_heavy"), SubResource("Cue_player_attack_light"), SubResource("Cue_player_damage"), SubResource("Cue_player_death"), SubResource("Cue_player_parry"), SubResource("Cue_player_respawn"), SubResource("Cue_resource_depleted"), SubResource("Cue_resource_mine_impact")]
