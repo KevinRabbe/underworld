@@ -12,6 +12,7 @@ const PlayerScript := preload("res://gameplay/player/player.gd")
 const VoxelCharacterPresentationProviderScript := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
+const GameplayHudScript := preload("res://presentation/ui/hud/gameplay_hud.gd")
 const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
 const UnderworldRuntimeControllerScript := preload("res://worldgen/runtime/underworld_cave_runtime_controller.gd")
 const WorldIdScript := preload("res://worldgen/identity/world_id.gd")
@@ -27,12 +28,14 @@ var survival
 var player
 var combat_resolver
 var encounter_controller
+var gameplay_hud
 var debug_hud
 var water_surface: MeshInstance3D
 var underworld_runtime
 var cave_presentation
 var spawn_xz: Vector3 = Vector3.ZERO
 @export var enable_map015_fixture: bool = false
+@export var enable_debug_hud: bool = true
 
 
 func _ready() -> void:
@@ -41,6 +44,7 @@ func _ready() -> void:
 	_create_player()
 	_create_underworld_runtime()
 	_create_combat()
+	_create_gameplay_hud()
 	_create_debug_hud()
 
 
@@ -193,7 +197,30 @@ func _create_combat() -> void:
 	encounter_controller.configure(world, player, world_settings)
 
 
+func _create_gameplay_hud() -> void:
+	gameplay_hud = GameplayHudScript.new()
+	gameplay_hud.name = "GameplayHUD"
+	add_child(gameplay_hud)
+	var hud_failures: Array[String] = gameplay_hud.configure(
+		player,
+		survival.get_inventory_state(),
+		survival.get_equipment_state()
+	)
+	if not hud_failures.is_empty():
+		push_error("Gameplay HUD configuration failed: %s" % [hud_failures])
+	survival.harvest_result.connect(gameplay_hud.present_feedback)
+	player.parry_succeeded.connect(_on_player_parry_succeeded)
+
+
+func _on_player_parry_succeeded(_source_position: Vector3) -> void:
+	if gameplay_hud == null:
+		return
+	gameplay_hud.present_feedback({"type": "combat.parry_succeeded"})
+
+
 func _create_debug_hud() -> void:
+	if not enable_debug_hud:
+		return
 	debug_hud = DebugHudScript.new()
 	debug_hud.name = "DebugHUD"
 	debug_hud.configure(
