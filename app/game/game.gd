@@ -7,7 +7,10 @@ const CavePresentationControllerScript := preload("res://presentation/world/cave
 const PrototypeCavePresentationCatalog := preload("res://content/presentation/caves/prototype_cave_presentation_catalog.tres")
 const SurfaceChunkStreamerScript := preload("res://world/runtime/streaming/surface_chunk_streamer.gd")
 const WorldDeltaStoreScript := preload("res://worldgen/persistence/world_delta_store.gd")
+const WorldGenerationContextScript := preload("res://worldgen/pipeline/world_generation_context.gd")
 const IntegratedGameSaveContractScript := preload("res://gameplay/persistence/integrated_game_save_contract.gd")
+const GameplayStateCodecScript := preload("res://gameplay/persistence/gameplay_state_codec.gd")
+const GameplaySaveCatalogScript := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
 const IntegratedSurvivalControllerScript := preload("res://gameplay/survival/integrated_survival_controller.gd")
 const ItemContainerStateScript := preload("res://gameplay/items/inventory/item_container_state.gd")
 const EquipmentHotbarStateScript := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
@@ -48,7 +51,7 @@ var loot_collection_poll_timer: float = 0.0
 var _startup_prepared: bool = false
 var _startup_mode: StringName = STARTUP_NEW
 var _startup_candidate: Dictionary = {}
-var _restored_pending_loot_state = null
+var _restored_pending_loot_states: Array = []
 
 
 func prepare_new_game() -> bool:
@@ -57,7 +60,7 @@ func prepare_new_game() -> bool:
 		return false
 	_startup_mode = STARTUP_NEW
 	_startup_candidate.clear()
-	_restored_pending_loot_state = null
+	_restored_pending_loot_states.clear()
 	_startup_prepared = true
 	return true
 
@@ -70,9 +73,6 @@ func prepare_continue(candidate: Dictionary) -> bool:
 		push_error("MAP-015 developer fixture cannot be combined with durable Continue state")
 		return false
 
-	# AppRoot supplies a detached decoded candidate, but Game is a second durable
-	# ownership boundary. Clone through the strict SAVE contract before retaining
-	# anything so caller mutation after preparation cannot alias live runtime.
 	var clone_result: Dictionary = IntegratedGameSaveContractScript.clone_candidate(candidate)
 	if not bool(clone_result.get("success", false)):
 		for diagnostic in clone_result.get("diagnostics", []):
@@ -91,7 +91,7 @@ func prepare_continue(candidate: Dictionary) -> bool:
 		return false
 	_startup_mode = STARTUP_CONTINUE
 	_startup_candidate = owned_candidate
-	_restored_pending_loot_state = _startup_candidate.get("pending_loot_state", null)
+	_restored_pending_loot_states = owned_candidate.get("pending_loot_states", []).duplicate()
 	_startup_prepared = true
 	return true
 
@@ -100,18 +100,53 @@ func startup_mode() -> StringName:
 	return _startup_mode
 
 
-func restored_pending_loot_state():
-	return _restored_pending_loot_state
+func build_save_request() -> Dictionary:
+	var failures: Array[String] = []
+	if world_settings == null:
+		failures.append("SAVE runtime snapshot requires WorldSettings")
+	if world_delta_store == null or not world_delta_store is WorldDeltaStoreScript:
+		failures.append("SAVE runtime snapshot requires WorldDeltaStore")
+	if survival == null:
+		failures.append("SAVE runtime snapshot requires Survival")
+	if player == null or not is_instance_valid(player):
+		failures.append("SAVE runtime snapshot requires live Player")
+	if not failures.is_empty():
+		return _failure(failures)
+
+	var pending_result: Dictionary = _capture_pending_loot_states()
+	if not bool(pending_result.get("success", false)):
+		return pending_result
+	var context = WorldGenerationContextScript.new(int(world_settings.world_seed))
+	for failure in context.validate():
+		failures.append("SAVE runtime world context: %s" % failure)
+	var inventory_state = survival.get_inventory_state()
+	var equipment_state = survival.get_equipment_state()
+	if inventory_state == null or not inventory_state is ItemContainerStateScript:
+		failures.append("SAVE runtime snapshot requires ItemContainerState")
+	if equipment_state == null or not equipment_state is EquipmentHotbarStateScript:
+		failures.append("SAVE runtime snapshot requires EquipmentHotbarState")
+	var resume_position: Vector3 = player.global_position
+	if not _is_finite_vector3(resume_position):
+		failures.append("SAVE runtime Player resume position must be finite")
+	if not failures.is_empty():
+		return _failure(failures)
+	return {
+		"success": true,
+		"context": context,
+		"delta_store": world_delta_store,
+		"inventory_state": inventory_state,
+		"equipment_state": equipment_state,
+		"pending_loot_states": pending_result.get("states", []).duplicate(),
+		"resume_position": resume_position,
+		"diagnostics": [],
+	}
 
 
 func _ready() -> void:
-	# Direct developer/test loading of game.tscn retains clean NEW semantics. The
-	# production AppRoot path always calls prepare_new_game()/prepare_continue()
-	# while Game is detached, before this method can execute.
 	if not _startup_prepared:
 		_startup_mode = STARTUP_NEW
 		_startup_candidate.clear()
-		_restored_pending_loot_state = null
+		_restored_pending_loot_states.clear()
 		_startup_prepared = true
 	_setup_environment()
 	_create_world()
@@ -180,7 +215,6 @@ func _create_underworld_runtime() -> void:
 func _setup_environment() -> void:
 	var world_environment: WorldEnvironment = WorldEnvironment.new()
 	world_environment.name = "WorldEnvironment"
-
 	var environment: Environment = Environment.new()
 	environment.background_mode = Environment.BG_COLOR
 	environment.background_color = Color(0.56, 0.72, 0.86)
@@ -189,7 +223,6 @@ func _setup_environment() -> void:
 	environment.ambient_light_energy = 0.8
 	world_environment.environment = environment
 	add_child(world_environment)
-
 	var sun: DirectionalLight3D = DirectionalLight3D.new()
 	sun.name = "Sun"
 	sun.rotation_degrees = Vector3(-55.0, -30.0, 0.0)
@@ -222,8 +255,6 @@ func _create_world() -> void:
 	world.configure(world_settings)
 	add_child(world)
 
-	# Gameplay uses the integrated adapter only for detached restore activation;
-	# the inherited prototype gameplay controller itself has no file authority.
 	survival = IntegratedSurvivalControllerScript.new()
 	survival.name = "PrototypeSurvival"
 	add_child(survival)
@@ -253,22 +284,16 @@ func _create_world() -> void:
 func _create_water_surface() -> void:
 	water_surface = MeshInstance3D.new()
 	water_surface.name = "PrototypeSea"
-
 	var plane: PlaneMesh = PlaneMesh.new()
 	plane.size = Vector2(water_settings.water_plane_size, water_settings.water_plane_size)
 	water_surface.mesh = plane
-
 	var water_material: StandardMaterial3D = StandardMaterial3D.new()
 	water_material.albedo_color = Color(0.08, 0.30, 0.48, 0.72)
 	water_material.roughness = 0.18
 	water_material.metallic = 0.05
 	water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	water_surface.material_override = water_material
-	water_surface.position = Vector3(
-		spawn_xz.x,
-		world_settings.sea_level + 0.03,
-		spawn_xz.z
-	)
+	water_surface.position = Vector3(spawn_xz.x, world_settings.sea_level + 0.03, spawn_xz.z)
 	add_child(water_surface)
 
 
@@ -276,7 +301,6 @@ func _create_player() -> void:
 	player = PlayerScript.new()
 	player.name = "Player"
 	add_child(player)
-
 	var spawn_position: Vector3
 	if _startup_mode == STARTUP_CONTINUE:
 		spawn_position = _startup_candidate.get("resume_position", Vector3.ZERO)
@@ -302,20 +326,22 @@ func _create_combat() -> void:
 	add_child(combat_resolver)
 	combat_resolver.configure(player)
 	player.attack_requested.connect(combat_resolver.try_attack)
-
 	encounter_controller = BurrowerEncounterControllerScript.new()
 	encounter_controller.name = "BurrowerEncounters"
 	add_child(encounter_controller)
 	encounter_controller.configure(world, player, world_settings)
-	if _startup_mode == STARTUP_CONTINUE and _restored_pending_loot_state != null:
+	if _startup_mode == STARTUP_CONTINUE and not _restored_pending_loot_states.is_empty():
 		var import_result: Dictionary = encounter_controller.import_pending_loot_states(
-			[_restored_pending_loot_state],
+			_restored_pending_loot_states,
 			_startup_candidate.get("resume_position", Vector3.ZERO)
 		)
 		if not bool(import_result.get("success", false)):
 			push_error("SAVE hard invariant: preflighted pending loot failed live import: %s" % [
 				import_result.get("diagnostics", []),
 			])
+		else:
+			_restored_pending_loot_states.clear()
+			_startup_candidate["pending_loot_states"] = []
 
 
 func _create_gameplay_hud() -> void:
@@ -334,9 +360,8 @@ func _create_gameplay_hud() -> void:
 
 
 func _on_player_parry_succeeded(_source_position: Vector3) -> void:
-	if gameplay_hud == null:
-		return
-	gameplay_hud.present_feedback({"type": "combat.parry_succeeded"})
+	if gameplay_hud != null:
+		gameplay_hud.present_feedback({"type": "combat.parry_succeeded"})
 
 
 func _create_debug_hud() -> void:
@@ -356,26 +381,48 @@ func _create_debug_hud() -> void:
 	add_child(debug_hud)
 
 
+func _capture_pending_loot_states() -> Dictionary:
+	if encounter_controller == null:
+		return {"success": true, "states": [], "diagnostics": []}
+	var catalog_result: Dictionary = GameplaySaveCatalogScript.build_registry()
+	if not bool(catalog_result.get("success", false)):
+		return _failure(catalog_result.get("diagnostics", []))
+	var registry = catalog_result.get("registry", null)
+	var occurrence_ids: Array[String] = []
+	for raw_id in encounter_controller.get_pending_loot_occurrence_ids():
+		occurrence_ids.append(str(raw_id))
+	occurrence_ids.sort()
+	var states: Array = []
+	for occurrence_id in occurrence_ids:
+		var snapshot: Dictionary = encounter_controller.get_pending_loot_snapshot(occurrence_id)
+		var decoded: Dictionary = GameplayStateCodecScript.decode_pending_loot(snapshot, registry)
+		if not bool(decoded.get("success", false)):
+			return _prefixed_failure(
+				"SAVE runtime pending loot %s" % occurrence_id,
+				decoded.get("diagnostics", [])
+			)
+		var state = decoded.get("state", null)
+		if state == null or not state is PendingLootStateScript or not state.is_pending():
+			return _failure(["SAVE runtime pending loot is not unresolved: %s" % occurrence_id])
+		states.append(state)
+	return {"success": true, "states": states, "diagnostics": []}
+
+
 func _preflight_pending_loot_restore(candidate: Dictionary) -> Array[String]:
-	var pending_loot_state = candidate.get("pending_loot_state", null)
-	if pending_loot_state == null:
+	var states_variant: Variant = candidate.get("pending_loot_states", null)
+	if not states_variant is Array:
+		return ["pending loot restore requires Array state set"]
+	var states: Array = states_variant
+	if states.is_empty():
 		return []
 	var recovery_anchor_variant: Variant = candidate.get("resume_position", null)
 	if not recovery_anchor_variant is Vector3:
 		return ["pending loot restore requires Vector3 recovery anchor"]
-
-	# Run the accepted #272 import semantics on a detached temporary controller.
-	# This validates canonical Burrower occurrence identity, finite recovery anchor,
-	# authored loot registry compatibility and deep-owned import before AppRoot is
-	# allowed to detach Title and attach the real Game scene.
 	var preflight_settings = WorldSettingsScript.new()
 	preflight_settings.world_seed = int(candidate.get("world_seed", 0))
 	var preflight_controller = BurrowerEncounterControllerScript.new()
 	preflight_controller.configure(null, null, preflight_settings)
-	var result: Dictionary = preflight_controller.import_pending_loot_states(
-		[pending_loot_state],
-		recovery_anchor_variant
-	)
+	var result: Dictionary = preflight_controller.import_pending_loot_states(states, recovery_anchor_variant)
 	preflight_controller.free()
 	if bool(result.get("success", false)):
 		return []
@@ -394,7 +441,7 @@ func _validate_continue_candidate(candidate: Dictionary) -> Array[String]:
 	var delta_store = candidate.get("delta_store", null)
 	var inventory_state = candidate.get("inventory_state", null)
 	var equipment_state = candidate.get("equipment_state", null)
-	var pending_loot_state = candidate.get("pending_loot_state", null)
+	var pending_variant: Variant = candidate.get("pending_loot_states", null)
 	var resume_variant: Variant = candidate.get("resume_position", null)
 
 	if world_context == null or not world_context.has_method("validate"):
@@ -419,16 +466,48 @@ func _validate_continue_candidate(candidate: Dictionary) -> Array[String]:
 		failures.append("candidate equipment state is invalid")
 	elif not equipment_state.validate_state().is_empty():
 		failures.append("candidate equipment state failed validation")
-	if pending_loot_state != null:
-		if not pending_loot_state is PendingLootStateScript:
-			failures.append("candidate pending loot state has wrong type")
-		elif not pending_loot_state.validate_state().is_empty():
-			failures.append("candidate pending loot state failed validation")
+	if not pending_variant is Array:
+		failures.append("candidate pending loot states must be Array")
+	else:
+		var seen: Dictionary = {}
+		for index in range(pending_variant.size()):
+			var pending = pending_variant[index]
+			if pending == null or not pending is PendingLootStateScript:
+				failures.append("candidate pending loot state %d has wrong type" % index)
+				continue
+			for failure in pending.validate_state():
+				failures.append("candidate pending loot state %d: %s" % [index, failure])
+			if not pending.is_pending():
+				failures.append("candidate pending loot state must be unresolved: %s" % pending.occurrence_id)
+			if seen.has(pending.occurrence_id):
+				failures.append("candidate pending loot contains duplicate occurrence: %s" % pending.occurrence_id)
+			seen[pending.occurrence_id] = true
 	if not resume_variant is Vector3:
 		failures.append("candidate resume position must be Vector3")
-	else:
-		var resume: Vector3 = resume_variant
-		if is_nan(resume.x) or is_inf(resume.x) or is_nan(resume.y) or is_inf(resume.y) or is_nan(resume.z) or is_inf(resume.z):
-			failures.append("candidate resume position must be finite")
+	elif not _is_finite_vector3(resume_variant):
+		failures.append("candidate resume position must be finite")
 	failures.sort()
 	return failures
+
+
+static func _is_finite_vector3(value: Vector3) -> bool:
+	return (
+		not is_nan(value.x) and not is_inf(value.x)
+		and not is_nan(value.y) and not is_inf(value.y)
+		and not is_nan(value.z) and not is_inf(value.z)
+	)
+
+
+static func _prefixed_failure(prefix: String, messages: Array) -> Dictionary:
+	var failures: Array[String] = []
+	for message in messages:
+		failures.append("%s: %s" % [prefix, str(message)])
+	return _failure(failures)
+
+
+static func _failure(messages: Array) -> Dictionary:
+	var diagnostics: Array[String] = []
+	for message in messages:
+		diagnostics.append(str(message))
+	diagnostics.sort()
+	return {"success": false, "diagnostics": diagnostics}
