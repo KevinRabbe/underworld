@@ -10,7 +10,7 @@ func _init() -> void:
 
 func _run_validation() -> void:
 	var failures: Array[String] = AudioPresentationTests.run()
-	failures.append_array(GameplayAudioBindingTests.run_runtime(self))
+	failures.append_array(GameplayAudioBindingTests.run())
 	if failures.is_empty():
 		print("[AUDIO PRESENTATION VALIDATION] PASS")
 		print("  semantic cue vocabulary / replaceable assets / gameplay binding / global-spatial dispatch / ambience / mute-headless safety contracts passed")
