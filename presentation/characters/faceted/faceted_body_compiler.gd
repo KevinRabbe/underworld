@@ -3,7 +3,7 @@ class_name UnderworldFacetedBodyCompiler
 
 const MeshDataScript := preload("res://presentation/characters/faceted/faceted_skinned_mesh_data.gd")
 
-const COMPILER_REVISION := 7
+const COMPILER_REVISION := 8
 const SKIN := 0
 const CLOTH := 1
 const LEATHER := 2
@@ -125,10 +125,9 @@ static func _build_torso(builders: Dictionary, profile, outfit: Resource) -> voi
 	var shoulder_y: float = float(landmark["shoulder_y"])
 	var neck_y: float = float(landmark["neck_y"])
 
-	# Front/back-asymmetric rings turn the torso from a stack of elliptical
-	# cylinders into an authored ribcage/pelvis silhouette. The broad shoulder
-	# ring sits lower than the collar so the outer shoulder falls naturally
-	# instead of producing the old pointed coat-hanger profile.
+	# The beige undershirt is the actual torso volume. Keeping it continuous
+	# under the vest gives deformation one coherent skinned surface while the
+	# vest itself can be genuinely open at the front instead of merely painted.
 	var torso_rings: Array[Dictionary] = [
 		_ring_y_asym(Vector3(0, hip_y - 0.080, 0.010), profile.pelvis_width * 0.44, profile.chest_depth * 0.40, profile.chest_depth * 0.48, _weights(BONE.pelvis)),
 		_ring_y_asym(Vector3(0, lerpf(hip_y - 0.080, pelvis_y, 0.52), 0.012), profile.pelvis_width * 0.49, profile.chest_depth * 0.44, profile.chest_depth * 0.53, _weights(BONE.pelvis)),
@@ -139,25 +138,29 @@ static func _build_torso(builders: Dictionary, profile, outfit: Resource) -> voi
 		_ring_y_asym(Vector3(0, lower_chest_y, -0.006), profile.chest_width * 0.47, profile.chest_depth * 0.505, profile.chest_depth * 0.465, _weights(BONE.spine_02)),
 		_ring_y_asym(Vector3(0, lerpf(lower_chest_y, chest_y, 0.50), -0.007), profile.chest_width * 0.49, profile.chest_depth * 0.525, profile.chest_depth * 0.475, _weights2(BONE.spine_02, BONE.chest, 0.40)),
 		_ring_y_asym(Vector3(0, chest_y, -0.006), profile.chest_width * 0.50, profile.chest_depth * 0.535, profile.chest_depth * 0.480, _weights2(BONE.spine_02, BONE.chest, 0.65)),
-		_ring_y_asym(Vector3(0, lerpf(chest_y, shoulder_y, 0.45), -0.004), lerpf(profile.chest_width, profile.shoulder_width, 0.46) * 0.50, profile.chest_depth * 0.525, profile.chest_depth * 0.475, _weights(BONE.chest)),
-		_ring_y_asym(Vector3(0, shoulder_y - 0.065, -0.002), profile.shoulder_width * 0.485, profile.chest_depth * 0.505, profile.chest_depth * 0.465, _weights(BONE.chest)),
-		_ring_y_asym(Vector3(0, shoulder_y - 0.022, -0.002), profile.shoulder_width * 0.405, profile.chest_depth * 0.465, profile.chest_depth * 0.435, _weights(BONE.chest)),
-		_ring_y_asym(Vector3(0, neck_y + 0.008, -0.002), 0.112, 0.092, 0.096, _weights2(BONE.chest, BONE.neck, 0.55)),
+		_ring_y_asym(Vector3(0, lerpf(chest_y, shoulder_y, 0.45), -0.004), lerpf(profile.chest_width, profile.shoulder_width, 0.44) * 0.50, profile.chest_depth * 0.515, profile.chest_depth * 0.470, _weights(BONE.chest)),
+		_ring_y_asym(Vector3(0, shoulder_y - 0.065, -0.002), profile.shoulder_width * 0.455, profile.chest_depth * 0.495, profile.chest_depth * 0.460, _weights(BONE.chest)),
+		_ring_y_asym(Vector3(0, shoulder_y - 0.022, -0.002), profile.shoulder_width * 0.355, profile.chest_depth * 0.450, profile.chest_depth * 0.425, _weights(BONE.chest)),
+		_ring_y_asym(Vector3(0, neck_y + 0.008, -0.002), 0.108, 0.090, 0.094, _weights2(BONE.chest, BONE.neck, 0.55)),
 	]
 	_add_y_loft(builders, CANVAS_LIGHT, torso_rings, 12, true, true)
+
+	# The vest wraps only the back and lateral torso. The forward arc is absent
+	# and rebuilt from separate front panels so the shirt stays visibly open.
 	var vest_rings: Array[Dictionary] = []
 	for ring in torso_rings:
-		if float(ring["center"].y) < float(landmark["pelvis_y"]) - 0.01:
+		var ring_y: float = float(ring["center"].y)
+		if ring_y < pelvis_y - 0.010 or ring_y > shoulder_y - 0.050:
 			continue
 		var vest := ring.duplicate(true)
-		vest["rx"] = float(ring["rx"]) + shell
-		vest["rz"] = float(ring["rz"]) + shell
+		vest["rx"] = float(ring["rx"]) + shell * 0.72
+		vest["rz"] = float(ring["rz"]) + shell * 0.72
 		if vest.has("front_rz"):
-			vest["front_rz"] = float(ring["front_rz"]) + shell
+			vest["front_rz"] = float(ring["front_rz"]) + shell * 0.72
 		if vest.has("back_rz"):
-			vest["back_rz"] = float(ring["back_rz"]) + shell
+			vest["back_rz"] = float(ring["back_rz"]) + shell * 0.72
 		vest_rings.append(vest)
-	_add_y_loft(builders, CLOTH, vest_rings, 12, true, true)
+	_add_y_loft_open_front(builders, CLOTH, vest_rings, 12)
 
 
 static func _build_head(builders: Dictionary, profile) -> void:
@@ -344,14 +347,6 @@ static func _build_arm(builders: Dictionary, profile, left: bool) -> void:
 	]
 	_add_x_loft(builders, CANVAS_LIGHT, upper_rings, 8, true, true, direction)
 
-	# Keep the vest shoulder seam compact so the beige sleeve remains the main
-	# arm read, matching the reference instead of forming a dark shoulder block.
-	_add_x_loft(builders, CANVAS_DARK, [
-		_ring_x(Vector3(shoulder_x - direction * 0.024, shoulder_y - 0.011, 0), 0.094 * mass, 0.087 * mass, _weights2(BONE.chest, upper_bone, 0.28)),
-		_ring_x(Vector3(shoulder_x, shoulder_y, 0), 0.112 * mass, 0.102 * mass, _weights(upper_bone)),
-		_ring_x(Vector3(lerpf(shoulder_x, elbow_x, 0.12), shoulder_y - 0.004, 0), 0.108 * mass, 0.098 * mass, _weights(upper_bone)),
-	], 8, true, true, direction)
-
 	# The forearm is widest shortly below the elbow, then tapers decisively into
 	# the wrist. This removes the straight tube silhouette visible in side view.
 	var forearm_rings: Array[Dictionary] = [
@@ -426,77 +421,85 @@ static func _build_outfit_details(builders: Dictionary, profile) -> void:
 	var landmark: Dictionary = profile.anatomy_landmarks()
 	var pelvis_y: float = float(landmark["pelvis_y"])
 	var shoulder_y: float = float(landmark["shoulder_y"])
+	var chest_y: float = float(landmark["chest_y"])
+	var lower_chest_y: float = float(landmark["lower_chest_y"])
+	var waist_y: float = float(landmark["waist_y"])
+
+	# Belt and buckle stay independent of the garment shell.
 	_add_y_loft(builders, LEATHER, [
 		_ring_y(Vector3(0, pelvis_y - 0.035, 0), profile.pelvis_width * 0.52, profile.chest_depth * 0.54, _weights(BONE.pelvis)),
 		_ring_y(Vector3(0, pelvis_y + 0.025, 0), profile.pelvis_width * 0.52, profile.chest_depth * 0.54, _weights(BONE.pelvis)),
 	], 12, true, true)
 	_add_box(builders, METAL, Vector3(-0.035, pelvis_y - 0.025, -profile.chest_depth * 0.58), Vector3(0.035, pelvis_y + 0.020, -profile.chest_depth * 0.52), _weights(BONE.pelvis), 0.006)
-	var front_z: float = -float(profile.chest_depth) * 0.50 - float(profile.outfit_shell_offset) - 0.004
-	# Project-owned front panels break up the large torso facets and make the
-	# undershirt/jacket layering readable at the normal gameplay camera.
-	_add_ribbon_z(builders, CANVAS_LIGHT, Vector2(0.0, pelvis_y + 0.040), Vector2(0.0, float(landmark["chest_y"]) + 0.025), front_z - 0.006, 0.082, _weights(BONE.pelvis), _weights(BONE.chest), -1.0)
-	_add_ribbon_z(builders, CANVAS_DARK, Vector2(-0.135, pelvis_y + 0.025), Vector2(-0.155, shoulder_y - 0.090), front_z - 0.010, 0.067, _weights(BONE.pelvis), _weights(BONE.chest), -1.0)
-	_add_ribbon_z(builders, CANVAS_DARK, Vector2(0.135, pelvis_y + 0.025), Vector2(0.155, shoulder_y - 0.090), front_z - 0.010, 0.067, _weights(BONE.pelvis), _weights(BONE.chest), -1.0)
-	_add_ribbon_z(builders, LEATHER, Vector2(-float(profile.shoulder_width) * 0.30, shoulder_y - 0.045), Vector2(float(profile.pelvis_width) * 0.30, pelvis_y - 0.015), front_z, 0.030, _weights(BONE.chest), _weights(BONE.pelvis), -1.0)
-	_add_ribbon_z(builders, LEATHER_LIGHT, Vector2(-0.012, shoulder_y - 0.06), Vector2(-0.012, pelvis_y + 0.035), front_z - 0.003, 0.007, _weights(BONE.chest), _weights(BONE.pelvis), -1.0)
-	_add_ribbon_z(builders, CANVAS_LIGHT, Vector2(-0.055, shoulder_y - 0.045), Vector2(-0.145, float(landmark["chest_y"]) - 0.02), front_z - 0.006, 0.025, _weights(BONE.chest), _weights(BONE.chest), -1.0)
-	_add_ribbon_z(builders, CANVAS_LIGHT, Vector2(0.055, shoulder_y - 0.045), Vector2(0.145, float(landmark["chest_y"]) - 0.02), front_z - 0.006, 0.025, _weights(BONE.chest), _weights(BONE.chest), -1.0)
-	# A shallow faceted scarf volume remains readable after skinning and at the
-	# gameplay camera.  The old paper-thin ribbons could disappear against the
-	# vest even though their authored coordinates were correct.
-	_add_tri_prism_z(builders, ACCENT,
-		Vector2(-0.120, shoulder_y - 0.045),
-		Vector2(-0.050, shoulder_y - 0.045),
-		Vector2(0.0, float(landmark["chest_y"]) - 0.120),
-		front_z - 0.070, front_z - 0.038, _weights(BONE.chest))
-	_add_tri_prism_z(builders, ACCENT,
-		Vector2(0.050, shoulder_y - 0.045),
-		Vector2(0.120, shoulder_y - 0.045),
-		Vector2(0.0, float(landmark["chest_y"]) - 0.120),
-		front_z - 0.070, front_z - 0.038, _weights(BONE.chest))
-	_add_tri_prism_z(builders, ACCENT,
-		Vector2(-0.032, float(landmark["chest_y"]) - 0.105),
-		Vector2(0.038, float(landmark["chest_y"]) - 0.105),
-		Vector2(0.016, float(landmark["lower_chest_y"]) - 0.052),
-		front_z - 0.073, front_z - 0.040, _weights2(BONE.chest, BONE.spine_02, 0.25))
-	# Raised lapel edges frame the scarf and break the vest into intentional
-	# garment planes instead of one dark torso shell.
-	_add_ribbon_z(builders, CANVAS_LIGHT, Vector2(-0.142, shoulder_y - 0.050), Vector2(-0.045, float(landmark["chest_y"]) - 0.155), front_z - 0.078, 0.018, _weights(BONE.chest), _weights(BONE.chest), -1.0)
-	_add_ribbon_z(builders, CANVAS_LIGHT, Vector2(0.142, shoulder_y - 0.050), Vector2(0.045, float(landmark["chest_y"]) - 0.155), front_z - 0.078, 0.018, _weights(BONE.chest), _weights(BONE.chest), -1.0)
-	# Split jacket skirts add weight around the hips without becoming armor or
-	# changing the body profile used by the future character editor.
-	_add_ribbon_z(builders, CANVAS_DARK, Vector2(-0.112, pelvis_y + 0.025), Vector2(-0.135, float(landmark["hip_y"]) - 0.055), front_z - 0.010, 0.092, _weights(BONE.pelvis), _weights(BONE.pelvis), -1.0)
-	_add_ribbon_z(builders, CANVAS_DARK, Vector2(0.112, pelvis_y + 0.025), Vector2(0.135, float(landmark["hip_y"]) - 0.055), front_z - 0.010, 0.092, _weights(BONE.pelvis), _weights(BONE.pelvis), -1.0)
-	_add_box(builders, CANVAS_DARK, Vector3(-0.205, float(landmark["waist_y"]) + 0.02, front_z - 0.014), Vector3(-0.075, float(landmark["waist_y"]) + 0.105, front_z - 0.004), _weights2(BONE.spine_01, BONE.pelvis, 0.45), 0.004)
-	_add_box(builders, CANVAS_DARK, Vector3(0.075, float(landmark["waist_y"]) + 0.02, front_z - 0.014), Vector3(0.205, float(landmark["waist_y"]) + 0.105, front_z - 0.004), _weights2(BONE.spine_01, BONE.pelvis, 0.45), 0.004)
-	for button_y in [float(landmark["lower_chest_y"]) - 0.055, float(landmark["waist_y"]) + 0.080, pelvis_y + 0.070]:
-		_add_box(builders, METAL, Vector3(-0.010, button_y - 0.010, front_z - 0.026), Vector3(0.010, button_y + 0.010, front_z - 0.018), _weights(BONE.spine_02 if button_y > float(landmark["waist_y"]) + 0.12 else BONE.spine_01), 0.004)
+
+	var front_z: float = -float(profile.chest_depth) * 0.50 - float(profile.outfit_shell_offset) - 0.006
+	var vest_front_z: float = front_z - 0.040
+	var vest_back_z: float = front_z - 0.014
+
+	# Two real prismatic panels form the open tan vest. Their inner edges stop
+	# clear of centre, exposing the beige shirt as actual underlying geometry.
+	_add_quad_prism_z(builders, CLOTH,
+		Vector2(-0.205, shoulder_y - 0.078),
+		Vector2(-0.046, chest_y - 0.135),
+		Vector2(-0.062, pelvis_y + 0.040),
+		Vector2(-0.205, pelvis_y + 0.020),
+		vest_front_z, vest_back_z, _weights2(BONE.chest, BONE.spine_02, 0.25))
+	_add_quad_prism_z(builders, CLOTH,
+		Vector2(0.205, shoulder_y - 0.078),
+		Vector2(0.046, chest_y - 0.135),
+		Vector2(0.062, pelvis_y + 0.040),
+		Vector2(0.205, pelvis_y + 0.020),
+		vest_front_z, vest_back_z, _weights2(BONE.chest, BONE.spine_02, 0.25))
+
+	# Raised darker lapel edges make the V readable at normal camera distance.
+	_add_ribbon_z(builders, CANVAS_DARK, Vector2(-0.158, shoulder_y - 0.060), Vector2(-0.043, chest_y - 0.142), vest_front_z - 0.010, 0.020, _weights(BONE.chest), _weights(BONE.chest), -1.0)
+	_add_ribbon_z(builders, CANVAS_DARK, Vector2(0.158, shoulder_y - 0.060), Vector2(0.043, chest_y - 0.142), vest_front_z - 0.010, 0.020, _weights(BONE.chest), _weights(BONE.chest), -1.0)
+
+	# Compact teal neck wrap and triangular drape replace the old long Y strips.
 	_add_y_loft(builders, ACCENT, [
-		_ring_y(Vector3(0, shoulder_y - 0.025, 0), 0.125, 0.105, _weights(BONE.chest)),
-		_ring_y(Vector3(0, float(landmark["neck_y"]) + 0.015, -0.002), 0.112, 0.097, _weights2(BONE.chest, BONE.neck, 0.60)),
+		_ring_y(Vector3(0, shoulder_y - 0.030, -0.003), 0.132, 0.108, _weights(BONE.chest)),
+		_ring_y(Vector3(0, float(landmark["neck_y"]) + 0.020, -0.004), 0.115, 0.098, _weights2(BONE.chest, BONE.neck, 0.60)),
 	], 12, true, true)
-	# Compact pack, bedroll, and side pouch stay bone-bound but share the same
-	# skinned payload, so the normal player owns one coherent body mesh.  The
-	# pack uses a tapered faceted shell instead of a rectangular debug box.
+	_add_tri_prism_z(builders, ACCENT,
+		Vector2(-0.100, shoulder_y - 0.052),
+		Vector2(0.100, shoulder_y - 0.052),
+		Vector2(0.012, chest_y - 0.125),
+		vest_front_z - 0.055, vest_front_z - 0.025, _weights(BONE.chest))
+
+	# Raised leather expedition strap sits over both vest and shirt.
+	_add_ribbon_z(builders, LEATHER_LIGHT,
+		Vector2(-float(profile.shoulder_width) * 0.31, shoulder_y - 0.060),
+		Vector2(float(profile.pelvis_width) * 0.31, pelvis_y - 0.005),
+		vest_front_z - 0.074, 0.034,
+		_weights(BONE.chest), _weights(BONE.pelvis), -1.0)
+	_add_box(builders, METAL,
+		Vector3(0.045, lower_chest_y - 0.045, vest_front_z - 0.084),
+		Vector3(0.080, lower_chest_y - 0.012, vest_front_z - 0.074),
+		_weights(BONE.spine_02), 0.004)
+
+	_add_box(builders, CLOTH, Vector3(-0.192, waist_y + 0.020, vest_front_z - 0.010), Vector3(-0.080, waist_y + 0.095, vest_front_z + 0.002), _weights2(BONE.spine_01, BONE.pelvis, 0.45), 0.006)
+	_add_box(builders, CLOTH, Vector3(0.080, waist_y + 0.020, vest_front_z - 0.010), Vector3(0.192, waist_y + 0.095, vest_front_z + 0.002), _weights2(BONE.spine_01, BONE.pelvis, 0.45), 0.006)
+
+	# Pack/bedroll stay bone-bound while the torso front converges.
 	_add_y_loft(builders, CANVAS_DARK, [
-		_ring_y(Vector3(0, float(landmark["waist_y"]), 0.205), 0.135, 0.075, _weights(BONE.chest)),
-		_ring_y(Vector3(0, lerpf(float(landmark["waist_y"]), float(landmark["lower_chest_y"]), 0.55), 0.220), 0.175, 0.100, _weights(BONE.chest)),
-		_ring_y(Vector3(0, float(landmark["chest_y"]) - 0.030, 0.225), 0.185, 0.105, _weights(BONE.chest)),
+		_ring_y(Vector3(0, waist_y, 0.205), 0.135, 0.075, _weights(BONE.chest)),
+		_ring_y(Vector3(0, lerpf(waist_y, lower_chest_y, 0.55), 0.220), 0.175, 0.100, _weights(BONE.chest)),
+		_ring_y(Vector3(0, chest_y - 0.030, 0.225), 0.185, 0.105, _weights(BONE.chest)),
 		_ring_y(Vector3(0, shoulder_y - 0.125, 0.215), 0.168, 0.095, _weights(BONE.chest)),
 		_ring_y(Vector3(0, shoulder_y - 0.050, 0.195), 0.135, 0.070, _weights(BONE.chest)),
 	], 8, true, true)
-	_add_box(builders, CANVAS_LIGHT, Vector3(-0.155, float(landmark["chest_y"]) - 0.105, 0.306), Vector3(0.155, float(landmark["chest_y"]) + 0.045, 0.326), _weights(BONE.chest), 0.008)
-	_add_box(builders, CANVAS_DARK, Vector3(-0.222, float(landmark["waist_y"]) + 0.035, 0.210), Vector3(-0.170, float(landmark["waist_y"]) + 0.155, 0.292), _weights(BONE.chest), 0.012)
-	_add_box(builders, CANVAS_DARK, Vector3(0.170, float(landmark["waist_y"]) + 0.035, 0.210), Vector3(0.222, float(landmark["waist_y"]) + 0.155, 0.292), _weights(BONE.chest), 0.012)
-	_add_box(builders, CANVAS_LIGHT, Vector3(-0.220, float(landmark["waist_y"]) + 0.140, 0.206), Vector3(-0.172, float(landmark["waist_y"]) + 0.172, 0.296), _weights(BONE.chest), 0.006)
-	_add_box(builders, CANVAS_LIGHT, Vector3(0.172, float(landmark["waist_y"]) + 0.140, 0.206), Vector3(0.220, float(landmark["waist_y"]) + 0.172, 0.296), _weights(BONE.chest), 0.006)
+	_add_box(builders, CANVAS_LIGHT, Vector3(-0.155, chest_y - 0.105, 0.306), Vector3(0.155, chest_y + 0.045, 0.326), _weights(BONE.chest), 0.008)
+	_add_box(builders, CANVAS_DARK, Vector3(-0.222, waist_y + 0.035, 0.210), Vector3(-0.170, waist_y + 0.155, 0.292), _weights(BONE.chest), 0.012)
+	_add_box(builders, CANVAS_DARK, Vector3(0.170, waist_y + 0.035, 0.210), Vector3(0.222, waist_y + 0.155, 0.292), _weights(BONE.chest), 0.012)
+	_add_box(builders, CANVAS_LIGHT, Vector3(-0.220, waist_y + 0.140, 0.206), Vector3(-0.172, waist_y + 0.172, 0.296), _weights(BONE.chest), 0.006)
+	_add_box(builders, CANVAS_LIGHT, Vector3(0.172, waist_y + 0.140, 0.206), Vector3(0.220, waist_y + 0.172, 0.296), _weights(BONE.chest), 0.006)
 	for strap_x in [-0.115, 0.115]:
-		_add_ribbon_z(builders, LEATHER, Vector2(strap_x, float(landmark["waist_y"]) + 0.02), Vector2(strap_x, shoulder_y - 0.02), 0.350, 0.018, _weights(BONE.chest), _weights(BONE.chest), 1.0)
+		_add_ribbon_z(builders, LEATHER, Vector2(strap_x, waist_y + 0.02), Vector2(strap_x, shoulder_y - 0.02), 0.350, 0.018, _weights(BONE.chest), _weights(BONE.chest), 1.0)
 		_add_box(builders, METAL,
-			Vector3(strap_x - 0.020, float(landmark["lower_chest_y"]) - 0.010, 0.349),
-			Vector3(strap_x + 0.020, float(landmark["lower_chest_y"]) + 0.026, 0.358),
+			Vector3(strap_x - 0.020, lower_chest_y - 0.010, 0.349),
+			Vector3(strap_x + 0.020, lower_chest_y + 0.026, 0.358),
 			_weights(BONE.chest), 0.004)
-	_add_ribbon_z(builders, LEATHER_LIGHT, Vector2(-0.14, float(landmark["chest_y"]) - 0.02), Vector2(0.14, float(landmark["chest_y"]) - 0.02), 0.352, 0.012, _weights(BONE.chest), _weights(BONE.chest), 1.0)
+	_add_ribbon_z(builders, LEATHER_LIGHT, Vector2(-0.14, chest_y - 0.02), Vector2(0.14, chest_y - 0.02), 0.352, 0.012, _weights(BONE.chest), _weights(BONE.chest), 1.0)
 	_add_x_loft(builders, ACCENT, [
 		_ring_x(Vector3(-0.18, shoulder_y, 0.275), 0.060, 0.060, _weights(BONE.chest)),
 		_ring_x(Vector3(0.18, shoulder_y, 0.275), 0.060, 0.060, _weights(BONE.chest)),
@@ -504,8 +507,15 @@ static func _build_outfit_details(builders: Dictionary, profile) -> void:
 	for roll_strap_x in [-0.105, 0.105]:
 		_add_box(builders, LEATHER, Vector3(roll_strap_x - 0.018, shoulder_y - 0.069, 0.212), Vector3(roll_strap_x + 0.018, shoulder_y + 0.069, 0.340), _weights(BONE.chest), 0.008)
 		_add_box(builders, METAL, Vector3(roll_strap_x - 0.014, shoulder_y - 0.012, 0.337), Vector3(roll_strap_x + 0.014, shoulder_y + 0.014, 0.348), _weights(BONE.chest), 0.004)
-	_add_box(builders, LEATHER, Vector3(profile.pelvis_width * 0.48, float(landmark["hip_y"]), -0.02), Vector3(profile.pelvis_width * 0.48 + 0.12, float(landmark["waist_y"]) - 0.03, 0.11), _weights(BONE.pelvis), 0.018)
-	_add_box(builders, METAL, Vector3(profile.pelvis_width * 0.48 + 0.042, float(landmark["waist_y"]) - 0.072, -0.030), Vector3(profile.pelvis_width * 0.48 + 0.078, float(landmark["waist_y"]) - 0.038, -0.018), _weights(BONE.pelvis), 0.004)
+
+	# Two balanced utility pouches stay clear of hand sockets/collision.
+	for pouch_side in [-1.0, 1.0]:
+		var pouch_x: float = pouch_side * profile.pelvis_width * 0.48
+		var inner_x: float = pouch_x - 0.060 if pouch_side > 0.0 else pouch_x - 0.120
+		var outer_x: float = pouch_x + 0.120 if pouch_side > 0.0 else pouch_x + 0.060
+		_add_box(builders, LEATHER, Vector3(inner_x, float(landmark["hip_y"]), -0.02), Vector3(outer_x, waist_y - 0.03, 0.11), _weights(BONE.pelvis), 0.018)
+		_add_box(builders, METAL, Vector3(pouch_x - 0.018, waist_y - 0.072, -0.030), Vector3(pouch_x + 0.018, waist_y - 0.038, -0.018), _weights(BONE.pelvis), 0.004)
+
 	for side_data in [[-1.0, int(BONE.calf_l), int(BONE.thigh_l)], [1.0, int(BONE.calf_r), int(BONE.thigh_r)]]:
 		var leg_x: float = float(side_data[0]) * float(profile.pelvis_width) * 0.30
 		var leg_bone: int = int(side_data[1])
@@ -518,7 +528,7 @@ static func _build_outfit_details(builders: Dictionary, profile) -> void:
 			Vector3(minf(pocket_inner_x, pocket_outer_x), float(landmark["knee_y"]) + 0.105, -0.072),
 			Vector3(maxf(pocket_inner_x, pocket_outer_x), float(landmark["thigh_mass_y"]) + 0.020, 0.055),
 			_weights(thigh_bone), 0.010)
-		_add_box(builders, CANVAS_LIGHT,
+		_add_box(builders, TROUSER,
 			Vector3(minf(pocket_inner_x, pocket_outer_x) - 0.003, float(landmark["thigh_mass_y"]) + 0.005, -0.077),
 			Vector3(maxf(pocket_inner_x, pocket_outer_x) + 0.003, float(landmark["thigh_mass_y"]) + 0.040, 0.060),
 			_weights(thigh_bone), 0.006)
@@ -596,6 +606,26 @@ static func _add_y_loft(builders: Dictionary, palette_index: int, rings: Array[D
 		_add_y_cap(builders, palette_index, rings[0], sides, -1.0)
 	if cap_end:
 		_add_y_cap(builders, palette_index, rings[-1], sides, 1.0)
+
+
+static func _add_y_loft_open_front(builders: Dictionary, palette_index: int, rings: Array[Dictionary], sides: int) -> void:
+	if rings.size() < 2:
+		return
+	for ring_index in range(rings.size() - 1):
+		var lower := rings[ring_index]
+		var upper := rings[ring_index + 1]
+		for side in range(sides):
+			var mid_angle := (float(side) + 0.5) * TAU / float(sides)
+			if sin(mid_angle) < -0.45:
+				continue
+			var next := (side + 1) % sides
+			var p0 := _point_y(lower, side, sides)
+			var p1 := _point_y(lower, next, sides)
+			var q0 := _point_y(upper, side, sides)
+			var q1 := _point_y(upper, next, sides)
+			var expected := Vector3(cos(mid_angle), 0.0, sin(mid_angle)).normalized()
+			_emit_triangle(builders, palette_index, p0, q0, q1, expected, lower["skin"], upper["skin"], upper["skin"], Vector2(float(side) / sides, float(ring_index) / (rings.size() - 1)), Vector2(float(side) / sides, float(ring_index + 1) / (rings.size() - 1)), Vector2(float(next) / sides, float(ring_index + 1) / (rings.size() - 1)))
+			_emit_triangle(builders, palette_index, p0, q1, p1, expected, lower["skin"], upper["skin"], lower["skin"], Vector2(float(side) / sides, float(ring_index) / (rings.size() - 1)), Vector2(float(next) / sides, float(ring_index + 1) / (rings.size() - 1)), Vector2(float(next) / sides, float(ring_index) / (rings.size() - 1)))
 
 
 static func _add_x_loft(builders: Dictionary, palette_index: int, rings: Array[Dictionary], sides: int, cap_start: bool, cap_end: bool, direction: float) -> void:
@@ -689,6 +719,20 @@ static func _add_ribbon_z(builders: Dictionary, palette_index: int, start: Vecto
 	var expected := Vector3(0.0, 0.0, normal_direction)
 	_emit_triangle(builders, palette_index, a, b, c, expected, start_skin, start_skin, finish_skin, Vector2(0,0), Vector2(1,0), Vector2(1,1))
 	_emit_triangle(builders, palette_index, a, c, d, expected, start_skin, finish_skin, finish_skin, Vector2(0,0), Vector2(1,1), Vector2(0,1))
+
+
+static func _add_quad_prism_z(builders: Dictionary, palette_index: int, a: Vector2, b: Vector2, c: Vector2, d: Vector2, front_z: float, back_z: float, skin_weights: Dictionary) -> void:
+	var front := [Vector3(a.x, a.y, front_z), Vector3(b.x, b.y, front_z), Vector3(c.x, c.y, front_z), Vector3(d.x, d.y, front_z)]
+	var back := [Vector3(a.x, a.y, back_z), Vector3(b.x, b.y, back_z), Vector3(c.x, c.y, back_z), Vector3(d.x, d.y, back_z)]
+	_emit_triangle(builders, palette_index, front[0], front[1], front[2], Vector3(0, 0, -1), skin_weights, skin_weights, skin_weights, Vector2(0,0), Vector2(1,0), Vector2(1,1))
+	_emit_triangle(builders, palette_index, front[0], front[2], front[3], Vector3(0, 0, -1), skin_weights, skin_weights, skin_weights, Vector2(0,0), Vector2(1,1), Vector2(0,1))
+	_emit_triangle(builders, palette_index, back[0], back[2], back[1], Vector3(0, 0, 1), skin_weights, skin_weights, skin_weights, Vector2(0,0), Vector2(1,1), Vector2(1,0))
+	_emit_triangle(builders, palette_index, back[0], back[3], back[2], Vector3(0, 0, 1), skin_weights, skin_weights, skin_weights, Vector2(0,0), Vector2(0,1), Vector2(1,1))
+	for edge in [[0, 1], [1, 2], [2, 3], [3, 0]]:
+		var edge_direction: Vector3 = front[edge[1]] - front[edge[0]]
+		var expected := edge_direction.cross(Vector3(0, 0, back_z - front_z)).normalized()
+		_emit_triangle(builders, palette_index, front[edge[0]], back[edge[0]], back[edge[1]], expected, skin_weights, skin_weights, skin_weights, Vector2(0,0), Vector2(0,1), Vector2(1,1))
+		_emit_triangle(builders, palette_index, front[edge[0]], back[edge[1]], front[edge[1]], expected, skin_weights, skin_weights, skin_weights, Vector2(0,0), Vector2(1,1), Vector2(1,0))
 
 
 static func _add_tri_prism_z(builders: Dictionary, palette_index: int, a: Vector2, b: Vector2, c: Vector2, front_z: float, back_z: float, skin_weights: Dictionary) -> void:
