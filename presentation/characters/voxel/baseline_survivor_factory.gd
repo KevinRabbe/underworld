@@ -41,9 +41,9 @@ static func build() -> Resource:
 		_module("body", &"body_base", _slice_body_parts()),
 		_module("head", &"head_hair", _slice_head_parts()),
 		_module("jacket", &"torso_outfit", [
-			_part("jacket_front", "rig_role.chest", _jacket_front_cells(), Vector3i.ZERO),
-			_part("jacket_trim", "rig_role.chest", _jacket_trim_cells(), Vector3i.ZERO),
-			_part("jacket_lower", "rig_role.spine.lower", _jacket_lower_cells(), Vector3i(0,1,0)),
+			_slice_overlay_part("jacket_front", "rig_role.chest", 34, 46, 42, CLOTH, -1),
+			_slice_overlay_part("jacket_trim", "rig_role.chest", 39, 44, 42, CANVAS_LIGHT, -2),
+			_slice_overlay_part("jacket_lower", "rig_role.spine.lower", 28, 38, 33, CANVAS_LIGHT, -1),
 			_part("shoulder_l", "rig_role.clavicle.left", _box(Vector3i(-2,-1,-1), Vector3i(1,1,1), CLOTH), Vector3i.ZERO),
 			_part("shoulder_r", "rig_role.clavicle.right", _box(Vector3i(-1,-1,-1), Vector3i(2,1,1), CLOTH), Vector3i.ZERO),
 			_part("neck_connector", "rig_role.neck", _box(Vector3i(-1,-2,-1), Vector3i(0,0,1), CLOTH), Vector3i.ZERO),
@@ -166,6 +166,21 @@ static func _slice_part(id_value: String, rig_role: String, all_cells: Array[Dic
 		var row_depth := _slice_depth(position.y)
 		var local_position := Vector3i(position.x - floori(float(row_width) * 0.5), position.y - anchor_y, position.z - floori(float(row_depth) * 0.5))
 		cells.append({"position": local_position, "palette_index": int(source.get("palette_index", CANVAS_LIGHT))})
+	return _raw_part(id_value, rig_role, cells, Vector3i.ZERO)
+
+
+static func _slice_overlay_part(id_value: String, rig_role: String, minimum_y: int, maximum_y: int, anchor_y: int, palette_index: int, depth_offset: int) -> Dictionary:
+	var profile = _baseline_slice_profile()
+	var cells: Array[Dictionary] = []
+	for cell_value in profile.resolved_cells():
+		var source: Dictionary = cell_value
+		var position: Vector3i = source["position"]
+		if position.y < minimum_y or position.y > maximum_y:
+			continue
+		var row_width := _slice_width(position.y)
+		var row_depth := _slice_depth(position.y)
+		var local_position := Vector3i(position.x - floori(float(row_width) * 0.5), position.y - anchor_y, position.z - floori(float(row_depth) * 0.5) + depth_offset)
+		cells.append({"position": local_position, "palette_index": palette_index})
 	return _raw_part(id_value, rig_role, cells, Vector3i.ZERO)
 
 
