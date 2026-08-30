@@ -8,6 +8,11 @@ const ProvisionalStreams := preload("res://presentation/audio/provisional_audio_
 
 const RESOURCE_SCHEMA := "resource.runtime.depletion.v1"
 const MAX_RECENT_CUES := 64
+const CRAFTED_ITEM_IDS: Array[String] = [
+	"item.tool.stone_axe",
+	"item.tool.stone_pickaxe",
+	"item.weapon.iron_sword",
+]
 
 var _game: Node = null
 var _audio = null
@@ -21,8 +26,7 @@ var _bound: bool = false
 var _last_player_health: int = 0
 var _enemy_state: Dictionary = {}
 var _last_harvest_progress: Dictionary = {}
-var _last_selected_hotbar: int = -1
-var _last_selected_item_id: String = ""
+var _last_equipment_descriptor: String = ""
 var _known_owned_item_ids: Dictionary = {}
 var _pending_loot_ids: Dictionary = {}
 var _resource_remaining: Dictionary = {}
@@ -108,7 +112,7 @@ func poll_now() -> void:
 	_observe_player_damage()
 	_observe_enemies()
 	_observe_harvest_progress()
-	_observe_equipment()
+	_observe_equipment_and_crafting()
 	_observe_pending_loot()
 	_observe_resource_depletion()
 	_observe_cave_presence()
@@ -133,8 +137,7 @@ func is_bound() -> bool:
 func _prime_state() -> void:
 	_last_player_health = int(_player.get("health"))
 	_last_harvest_progress = _dictionary_copy(_survival.get("object_hit_progress"))
-	_last_selected_hotbar = _selected_hotbar()
-	_last_selected_item_id = _selected_item_id()
+	_last_equipment_descriptor = _equipment_descriptor()
 	_known_owned_item_ids = _owned_item_ids()
 	_pending_loot_ids = _current_pending_loot_ids()
 	_resource_remaining = _current_resource_remaining()
@@ -261,16 +264,17 @@ func _observe_harvest_progress() -> void:
 	_last_harvest_progress = current
 
 
-func _observe_equipment() -> void:
-	var selected_hotbar: int = _selected_hotbar()
-	var selected_item_id: String = _selected_item_id()
-	if selected_hotbar != _last_selected_hotbar or selected_item_id != _last_selected_item_id:
+func _observe_equipment_and_crafting() -> void:
+	var current_equipment: String = _equipment_descriptor()
+	var current_owned: Dictionary = _owned_item_ids()
+	if current_equipment != _last_equipment_descriptor:
 		_dispatch("audio_cue.equipment.changed")
-		if not selected_item_id.is_empty() and not _known_owned_item_ids.has(selected_item_id):
+	for crafted_item_id in CRAFTED_ITEM_IDS:
+		if current_owned.has(crafted_item_id) and not _known_owned_item_ids.has(crafted_item_id):
 			_dispatch("audio_cue.craft.success")
-	_last_selected_hotbar = selected_hotbar
-	_last_selected_item_id = selected_item_id
-	_known_owned_item_ids = _owned_item_ids()
+			break
+	_last_equipment_descriptor = current_equipment
+	_known_owned_item_ids = current_owned
 
 
 func _observe_pending_loot() -> void:
@@ -337,27 +341,20 @@ func _is_player_in_realized_cave() -> bool:
 	return false
 
 
-func _selected_hotbar() -> int:
-	var equipment = _equipment_state()
-	if equipment == null or not equipment.has_method("selected_hotbar"):
-		return -1
-	return int(equipment.call("selected_hotbar"))
-
-
-func _selected_item_id() -> String:
-	var equipment = _equipment_state()
-	if equipment == null or not equipment.has_method("selected_definition"):
-		return ""
-	var definition = equipment.call("selected_definition")
-	if definition == null:
-		return ""
-	return str(definition.get("content_id"))
-
-
 func _equipment_state():
 	if _survival == null or not _survival.has_method("get_equipment_state"):
 		return null
 	return _survival.call("get_equipment_state")
+
+
+func _equipment_descriptor() -> String:
+	var equipment = _equipment_state()
+	if equipment == null or not equipment.has_method("canonical_snapshot"):
+		return ""
+	var snapshot_variant = equipment.call("canonical_snapshot")
+	if not snapshot_variant is Dictionary:
+		return ""
+	return JSON.stringify(snapshot_variant)
 
 
 func _owned_item_ids() -> Dictionary:
