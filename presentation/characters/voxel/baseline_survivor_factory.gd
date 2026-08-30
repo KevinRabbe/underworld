@@ -128,7 +128,7 @@ static func _tool_part(id_value: String, variant_id: String, cells: Array[Dictio
 
 
 static func _scale_grid(value: Vector3i) -> Vector3i:
-	return Vector3i(roundi(float(value.x) * DETAIL_SCALE), roundi(float(value.y) * DETAIL_SCALE), roundi(float(value.z) * DETAIL_SCALE))
+	return Vector3i(floori(float(value.x) * DETAIL_SCALE), floori(float(value.y) * DETAIL_SCALE), floori(float(value.z) * DETAIL_SCALE))
 
 
 static func _scale_cells(cells: Array[Dictionary]) -> Array[Dictionary]:
@@ -138,12 +138,26 @@ static func _scale_cells(cells: Array[Dictionary]) -> Array[Dictionary]:
 		var cell: Dictionary = cell_value
 		if not cell.get("position", null) is Vector3i:
 			continue
-		var position: Vector3i = _scale_grid(cell["position"])
-		var key := "%d,%d,%d" % [position.x, position.y, position.z]
-		if occupied.has(key):
-			continue
-		occupied[key] = true
-		scaled.append({"position": position, "palette_index": int(cell.get("palette_index", -1))})
+		var source: Vector3i = cell["position"]
+		# Expand each source voxel over the complete half-open interval it
+		# occupies. Scaling only its centre creates 1-cell holes and spikes
+		# whenever the scale factor is non-integral (the defect seen in the first
+		# 56-voxel preview).
+		var minimum := _scale_grid(source)
+		var maximum := Vector3i(
+			ceili(float(source.x + 1) * DETAIL_SCALE) - 1,
+			ceili(float(source.y + 1) * DETAIL_SCALE) - 1,
+			ceili(float(source.z + 1) * DETAIL_SCALE) - 1
+		)
+		for z in range(minimum.z, maximum.z + 1):
+			for y in range(minimum.y, maximum.y + 1):
+				for x in range(minimum.x, maximum.x + 1):
+					var position := Vector3i(x, y, z)
+					var key := "%d,%d,%d" % [x, y, z]
+					if occupied.has(key):
+						continue
+					occupied[key] = true
+					scaled.append({"position": position, "palette_index": int(cell.get("palette_index", -1))})
 	return scaled
 
 
