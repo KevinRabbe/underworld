@@ -16,7 +16,7 @@ const GameSaveSlotService := preload("res://gameplay/persistence/game_save_slot_
 
 const TEST_SEED: int = 2174242
 const WOOD_ID := "item.resource.wood"
-const AXE_ID := "item.tool.stone_axe"
+const SWORD_ID := "item.weapon.iron_sword"
 const CHITIN_ID := "item.resource.burrower_chitin"
 const PROFILE_ID := "loot_profile.creature.burrower.m3"
 const OCCURRENCE_ID := "burrower_42"
@@ -36,6 +36,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var expected_inventory: String = fixture["inventory"].canonical_json()
 	var expected_equipment: Dictionary = fixture["equipment"].canonical_snapshot()
 	var expected_pending: Dictionary = fixture["pending_loot"].canonical_snapshot()
+	var expected_weapon_contract: String = fixture["weapon_contract"]
 	var expected_resume: Vector3 = fixture["resume_position"]
 	var stable_id: String = fixture["stable_id"]
 
@@ -73,6 +74,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		expected_inventory,
 		expected_equipment,
 		expected_pending,
+		expected_weapon_contract,
 		expected_resume,
 		failures
 	)
@@ -81,7 +83,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var request_variant: Variant = game.call("build_save_request")
 	if not request_variant is Dictionary or not bool(request_variant.get("success", false)):
 		failures.append("live Game could not build production SAVE request: %s" % [
-		request_variant.get("diagnostics", []) if request_variant is Dictionary else [],
+			request_variant.get("diagnostics", []) if request_variant is Dictionary else [],
 		])
 		_free_attached(game)
 		_cleanup_slot()
@@ -141,6 +143,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		expected_inventory,
 		expected_equipment,
 		expected_pending,
+		expected_weapon_contract,
 		expected_resume,
 		failures
 	)
@@ -184,6 +187,7 @@ static func _verify_live_runtime(
 	expected_inventory: String,
 	expected_equipment: Dictionary,
 	expected_pending: Dictionary,
+	expected_weapon_contract: String,
 	expected_resume: Vector3,
 	failures: Array[String]
 ) -> void:
@@ -204,6 +208,12 @@ static func _verify_live_runtime(
 			failures.append("real Game Continue activation changed equipment")
 		elif live_equipment.selected_hotbar() != 4:
 			failures.append("real Game Continue activation lost selected hotbar slot 4")
+		else:
+			var selected_definition = live_equipment.selected_definition()
+			if selected_definition == null or str(selected_definition.content_id) != SWORD_ID:
+				failures.append("real Game Continue activation did not restore production iron sword semantic identity")
+			elif InventoryStateCodec.canonical_json(selected_definition.canonical_descriptor()) != expected_weapon_contract:
+				failures.append("real Game Continue activation changed production iron sword authored definition contract")
 	var encounter = game.get("encounter_controller")
 	if encounter == null:
 		failures.append("real Game Continue activation did not create encounter controller")
@@ -229,25 +239,25 @@ static func _fixture(failures: Array[String]) -> Dictionary:
 		return {}
 	var registry = catalog_result.get("registry", null)
 	var wood = registry.get_definition(WOOD_ID)
-	var axe = registry.get_definition(AXE_ID)
+	var sword = registry.get_definition(SWORD_ID)
 	var chitin = registry.get_definition(CHITIN_ID)
-	if wood == null or axe == null or chitin == null:
-		failures.append("runtime SAVE fixture is missing production item definitions")
+	if wood == null or sword == null or chitin == null:
+		failures.append("runtime SAVE fixture is missing production item definitions including iron sword")
 		return {}
 	var inventory = ItemContainerState.new().configure(8, 100.0)
 	if not _require_success(inventory.add_stack(wood, 7, {"batch": "runtime"}), "runtime SAVE wood fixture", failures):
 		return {}
-	var axe_add: Dictionary = inventory.add_instance(axe, {"durability": 73})
-	if not _require_success(axe_add, "runtime SAVE axe fixture", failures):
+	var sword_add: Dictionary = inventory.add_instance(sword)
+	if not _require_success(sword_add, "runtime SAVE iron sword fixture", failures):
 		return {}
 	var equipment = EquipmentHotbarState.new().configure(GameplaySaveCatalog.equipment_rules(), GameplaySaveCatalog.hotbar_bindings())
 	if not _require_success(
-		EquipmentService.new().equip_from_inventory(equipment, inventory, int(axe_add.get("slot", -1)), axe, GameplaySaveCatalog.SLOT_UTILITY),
-		"runtime SAVE utility equip",
+		EquipmentService.new().equip_from_inventory(equipment, inventory, int(sword_add.get("slot", -1)), sword, GameplaySaveCatalog.SLOT_UTILITY),
+		"runtime SAVE production iron sword utility equip",
 		failures
 	):
 		return {}
-	if not _require_success(equipment.select_hotbar(4), "runtime SAVE hotbar-4 fixture", failures):
+	if not _require_success(equipment.select_hotbar(4), "runtime SAVE hotbar-4 sword fixture", failures):
 		return {}
 	var context = WorldGenerationContext.new(TEST_SEED)
 	var delta_store = WorldDeltaStore.new()
@@ -276,6 +286,7 @@ static func _fixture(failures: Array[String]) -> Dictionary:
 		"inventory": inventory,
 		"equipment": equipment,
 		"pending_loot": pending,
+		"weapon_contract": InventoryStateCodec.canonical_json(sword.canonical_descriptor()),
 		"resume_position": resume_position,
 		"stable_id": stable_id,
 		"candidate": {
