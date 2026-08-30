@@ -122,6 +122,13 @@ static func _validation_prerequisite_failures(
 		failures.sort()
 		return failures
 
+	# Preserve the legacy coverage diagnostic during migration, but never treat
+	# the mutable compatibility projection as runtime authority. CONTENT-006
+	# evidence verification below is still mandatory for realization.
+	var compatibility_ids: Array = validation_result.get("validated_definition_ids", [])
+	if not compatibility_ids.has(content_id):
+		failures.append("CONTENT-005 validation result does not cover content id: %s" % content_id)
+
 	for failure in ContentValidationPipeline.evidence_failures(
 		validation_result,
 		content_registry,
