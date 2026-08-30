@@ -162,7 +162,7 @@ static func _build_head(builders: Dictionary, profile) -> void:
 	var crown_y: float = float(landmark["crown_y"])
 	var head_height: float = crown_y - shoulder_y
 	var face_span: float = brow_y - jaw_y
-	var skin := _weights(BONE.head)
+	var skin: Dictionary = _weights(BONE.head)
 
 	# The skull is deliberately front/back asymmetric. The previous revision
 	# used concentric ellipses, which made every view read like a primitive egg.
@@ -189,8 +189,9 @@ static func _build_head(builders: Dictionary, profile) -> void:
 
 	# Faceted ears are small vertical lofts integrated into the temporal plane,
 	# not rectangular side blocks. They contribute to the true-side silhouette.
-	for side in [-1.0, 1.0]:
-		var ear_x := side * float(profile.head_width) * 0.525
+	for side_value in [-1.0, 1.0]:
+		var side: float = float(side_value)
+		var ear_x: float = side * float(profile.head_width) * 0.525
 		_add_y_loft(builders, SKIN, [
 			_ring_y(Vector3(ear_x, jaw_y + face_span * 0.24, 0.010), 0.010, 0.014, skin),
 			_ring_y(Vector3(ear_x, jaw_y + face_span * 0.49, 0.012), 0.015, 0.021, skin),
@@ -200,62 +201,66 @@ static func _build_head(builders: Dictionary, profile) -> void:
 	# Raised brow wedges create the forehead/eye-socket break visible in the
 	# reference. Dark eye planes sit slightly behind them instead of reading as
 	# square decals stuck onto a spherical head.
-	for side in [-1.0, 1.0]:
-		var inner_x := side * 0.014
-		var outer_x := side * 0.049
-		var brow_outer_x := side * 0.058
+	for side_value in [-1.0, 1.0]:
+		var side: float = float(side_value)
+		var inner_x: float = side * 0.014
+		var outer_x: float = side * 0.049
+		var brow_outer_x: float = side * 0.058
 		_add_tri_prism_z(builders, SKIN,
 			Vector2(inner_x, eye_y + 0.006),
 			Vector2(outer_x, eye_y + 0.007),
 			Vector2(brow_outer_x, eye_y + 0.025),
 			face_front - 0.012, face_front - 0.002, skin)
-		var eye_inner := Vector3(inner_x, eye_y - 0.001, face_front - 0.014)
-		var eye_outer := Vector3(outer_x, eye_y - 0.003, face_front - 0.012)
-		var eye_outer_low := Vector3(outer_x * 0.96, eye_y - 0.014, face_front - 0.011)
-		var eye_inner_low := Vector3(inner_x * 1.10, eye_y - 0.012, face_front - 0.013)
+		var eye_inner: Vector3 = Vector3(inner_x, eye_y - 0.001, face_front - 0.014)
+		var eye_outer: Vector3 = Vector3(outer_x, eye_y - 0.003, face_front - 0.012)
+		var eye_outer_low: Vector3 = Vector3(outer_x * 0.96, eye_y - 0.014, face_front - 0.011)
+		var eye_inner_low: Vector3 = Vector3(inner_x * 1.10, eye_y - 0.012, face_front - 0.013)
 		_emit_triangle(builders, FACE, eye_inner, eye_outer, eye_outer_low, Vector3(0, 0, -1), skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2.ONE)
 		_emit_triangle(builders, FACE, eye_inner, eye_outer_low, eye_inner_low, Vector3(0, 0, -1), skin, skin, skin, Vector2.ZERO, Vector2.ONE, Vector2(0,1))
 
 	# Cheek planes bridge the socket, zygomatic mass and jaw. Their slight
 	# lateral normal is what makes the face read in 3/4 instead of only front-on.
-	for side in [-1.0, 1.0]:
-		var cheek_expected := Vector3(side * 0.28, 0.0, -1.0).normalized()
-		var socket_outer := Vector3(side * 0.052, eye_y - 0.016, face_front - 0.006)
-		var cheek_outer := Vector3(side * 0.086, cheek_y, face_front + 0.002)
-		var cheek_inner := Vector3(side * 0.031, cheek_y - 0.006, face_front - 0.010)
-		var jaw_outer := Vector3(side * 0.066, jaw_y + face_span * 0.10, face_front + 0.010)
+	for side_value in [-1.0, 1.0]:
+		var side: float = float(side_value)
+		var cheek_expected: Vector3 = Vector3(side * 0.28, 0.0, -1.0).normalized()
+		var socket_outer: Vector3 = Vector3(side * 0.052, eye_y - 0.016, face_front - 0.006)
+		var cheek_outer: Vector3 = Vector3(side * 0.086, cheek_y, face_front + 0.002)
+		var cheek_inner: Vector3 = Vector3(side * 0.031, cheek_y - 0.006, face_front - 0.010)
+		var jaw_outer: Vector3 = Vector3(side * 0.066, jaw_y + face_span * 0.10, face_front + 0.010)
 		_emit_triangle(builders, SKIN, socket_outer, cheek_outer, cheek_inner, cheek_expected, skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2.ONE)
 		_emit_triangle(builders, SKIN, cheek_outer, jaw_outer, cheek_inner, cheek_expected, skin, skin, skin, Vector2(1,0), Vector2(1,1), Vector2.ZERO)
 
 	# Projected multi-plane nose. The tip now changes the true-side silhouette;
 	# it is no longer a thin rectangular stripe on the face.
-	var nose_top_y := jaw_y + face_span * 0.73
-	var nose_mid_y := jaw_y + face_span * 0.56
-	var nose_tip_y := jaw_y + face_span * 0.40
-	var nose_base_y := jaw_y + face_span * 0.29
-	var nose_top_l := Vector3(-0.010, nose_top_y, face_front - 0.010)
-	var nose_top_r := Vector3(0.010, nose_top_y, face_front - 0.010)
-	var nose_mid_l := Vector3(-0.013, nose_mid_y, face_front - 0.027)
-	var nose_mid_r := Vector3(0.013, nose_mid_y, face_front - 0.027)
-	var nose_tip_l := Vector3(-0.019, nose_tip_y, face_front - 0.050)
-	var nose_tip_r := Vector3(0.019, nose_tip_y, face_front - 0.050)
-	var nose_base_l := Vector3(-0.023, nose_base_y, face_front - 0.024)
-	var nose_base_r := Vector3(0.023, nose_base_y, face_front - 0.024)
-	for quad in [
+	var nose_top_y: float = jaw_y + face_span * 0.73
+	var nose_mid_y: float = jaw_y + face_span * 0.56
+	var nose_tip_y: float = jaw_y + face_span * 0.40
+	var nose_base_y: float = jaw_y + face_span * 0.29
+	var nose_top_l: Vector3 = Vector3(-0.010, nose_top_y, face_front - 0.010)
+	var nose_top_r: Vector3 = Vector3(0.010, nose_top_y, face_front - 0.010)
+	var nose_mid_l: Vector3 = Vector3(-0.013, nose_mid_y, face_front - 0.027)
+	var nose_mid_r: Vector3 = Vector3(0.013, nose_mid_y, face_front - 0.027)
+	var nose_tip_l: Vector3 = Vector3(-0.019, nose_tip_y, face_front - 0.050)
+	var nose_tip_r: Vector3 = Vector3(0.019, nose_tip_y, face_front - 0.050)
+	var nose_base_l: Vector3 = Vector3(-0.023, nose_base_y, face_front - 0.024)
+	var nose_base_r: Vector3 = Vector3(0.023, nose_base_y, face_front - 0.024)
+	for quad_value in [
 		[nose_top_l, nose_top_r, nose_mid_r, nose_mid_l],
 		[nose_mid_l, nose_mid_r, nose_tip_r, nose_tip_l],
 		[nose_tip_l, nose_tip_r, nose_base_r, nose_base_l],
 	]:
-		_emit_triangle(builders, SKIN, quad[0], quad[1], quad[2], Vector3(0, 0, -1), skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2.ONE)
-		_emit_triangle(builders, SKIN, quad[0], quad[2], quad[3], Vector3(0, 0, -1), skin, skin, skin, Vector2.ZERO, Vector2.ONE, Vector2(0,1))
-	for side in [-1.0, 1.0]:
-		var side_expected := Vector3(side, 0.0, -0.35).normalized()
-		var top := nose_top_l if side < 0.0 else nose_top_r
-		var mid := nose_mid_l if side < 0.0 else nose_mid_r
-		var tip := nose_tip_l if side < 0.0 else nose_tip_r
-		var base := nose_base_l if side < 0.0 else nose_base_r
-		var bridge_anchor := Vector3(side * 0.030, nose_mid_y, face_front + 0.001)
-		var base_anchor := Vector3(side * 0.034, nose_base_y, face_front - 0.001)
+		var quad: Array = quad_value
+		_emit_triangle(builders, SKIN, Vector3(quad[0]), Vector3(quad[1]), Vector3(quad[2]), Vector3(0, 0, -1), skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2.ONE)
+		_emit_triangle(builders, SKIN, Vector3(quad[0]), Vector3(quad[2]), Vector3(quad[3]), Vector3(0, 0, -1), skin, skin, skin, Vector2.ZERO, Vector2.ONE, Vector2(0,1))
+	for side_value in [-1.0, 1.0]:
+		var side: float = float(side_value)
+		var side_expected: Vector3 = Vector3(side, 0.0, -0.35).normalized()
+		var top: Vector3 = nose_top_l if side < 0.0 else nose_top_r
+		var mid: Vector3 = nose_mid_l if side < 0.0 else nose_mid_r
+		var tip: Vector3 = nose_tip_l if side < 0.0 else nose_tip_r
+		var base: Vector3 = nose_base_l if side < 0.0 else nose_base_r
+		var bridge_anchor: Vector3 = Vector3(side * 0.030, nose_mid_y, face_front + 0.001)
+		var base_anchor: Vector3 = Vector3(side * 0.034, nose_base_y, face_front - 0.001)
 		_emit_triangle(builders, SKIN, top, mid, bridge_anchor, side_expected, skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2.ONE)
 		_emit_triangle(builders, SKIN, mid, tip, bridge_anchor, side_expected, skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2.ONE)
 		_emit_triangle(builders, SKIN, tip, base, base_anchor, side_expected, skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2.ONE)
@@ -267,10 +272,10 @@ static func _build_head(builders: Dictionary, profile) -> void:
 		Vector2(0.046, mouth_y - 0.006),
 		Vector2(0.0, jaw_y - 0.020),
 		face_front - 0.013, face_front + 0.003, skin)
-	var mouth_left := Vector3(-0.030, mouth_y, face_front - 0.015)
-	var mouth_mid := Vector3(0.0, mouth_y - 0.002, face_front - 0.016)
-	var mouth_right := Vector3(0.030, mouth_y, face_front - 0.015)
-	var mouth_low := Vector3(0.0, mouth_y - 0.006, face_front - 0.014)
+	var mouth_left: Vector3 = Vector3(-0.030, mouth_y, face_front - 0.015)
+	var mouth_mid: Vector3 = Vector3(0.0, mouth_y - 0.002, face_front - 0.016)
+	var mouth_right: Vector3 = Vector3(0.030, mouth_y, face_front - 0.015)
+	var mouth_low: Vector3 = Vector3(0.0, mouth_y - 0.006, face_front - 0.014)
 	_emit_triangle(builders, FACE, mouth_left, mouth_mid, mouth_low, Vector3(0,0,-1), skin, skin, skin, Vector2.ZERO, Vector2(0.5,0), Vector2(0.5,1))
 	_emit_triangle(builders, FACE, mouth_mid, mouth_right, mouth_low, Vector3(0,0,-1), skin, skin, skin, Vector2(0.5,0), Vector2.ONE, Vector2(0.5,1))
 
