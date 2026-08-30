@@ -173,6 +173,8 @@ The locked faceted-body target is [Frontier Underworld faceted survivor v2](refe
 
 The normal provider now compiles a deterministic low-poly skinned body from presentation-only anatomy landmarks and outfit coverage. The earlier rigid voxel survivor and box mannequin remain explicit regression fixtures. This character evaluation does not change the environment-wide visual-direction decision.
 
+Character creation uses the same compiled body with an explicit unarmored presentation variant. The skin core, face, hands and shaped feet remain authoritative presentation geometry while expedition clothing is an optional opaque shell; swapping or removing that shell never changes the semantic rig, collision, action results or save identity.
+
 The isolated authoring scene at `res://tools/character_preview/voxel_character_preview.tscn` provides a neutral-lit character review environment. It can exercise directional locomotion, airborne poses, dodges, light/heavy attacks, block, parry, hit, death, tool use, equipment visibility and manual turntable rotation without changing the gameplay scene.
 
 For repeatable visual review, the scene also accepts user arguments such as `--preview-capture=<absolute PNG path>`, `--preview-state=attack_heavy`, `--preview-pose-time=0.38`, and `--preview-angle=-33`. Capture mode freezes the requested clip at the normalized pose time after compiling the real runtime modules; it is evidence of the implemented presentation rather than a separate mockup.
