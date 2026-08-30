@@ -47,10 +47,12 @@ static func build() -> Resource:
 			_raw_part("shoulder_l", "rig_role.clavicle.left", _arm_cells(true, 3, CLOTH), Vector3i.ZERO),
 			_raw_part("shoulder_r", "rig_role.clavicle.right", _arm_cells(false, 3, CLOTH), Vector3i.ZERO),
 			_slice_overlay_part("neck_connector", "rig_role.neck", 42, 46, 44, CLOTH, -1),
-			_raw_part("upperarm_l", "rig_role.upper_arm.left", _arm_cells(true, 6, CLOTH), Vector3i.ZERO),
-			_raw_part("forearm_l", "rig_role.forearm.left", _arm_cells(true, 6, LEATHER), Vector3i.ZERO),
-			_raw_part("upperarm_r", "rig_role.upper_arm.right", _arm_cells(false, 6, CLOTH), Vector3i.ZERO),
-			_raw_part("forearm_r", "rig_role.forearm.right", _arm_cells(false, 6, LEATHER), Vector3i.ZERO),
+			# Bone segments are authored in metres; nine grid cells span the
+			# shoulder-to-elbow segment so the rigid parts meet instead of floating.
+			_raw_part("upperarm_l", "rig_role.upper_arm.left", _arm_cells(true, 9, CLOTH), Vector3i.ZERO),
+			_raw_part("forearm_l", "rig_role.forearm.left", _arm_cells(true, 8, LEATHER), Vector3i.ZERO),
+			_raw_part("upperarm_r", "rig_role.upper_arm.right", _arm_cells(false, 9, CLOTH), Vector3i.ZERO),
+			_raw_part("forearm_r", "rig_role.forearm.right", _arm_cells(false, 8, LEATHER), Vector3i.ZERO),
 			_slice_overlay_part("scarf", "rig_role.neck", 39, 44, 42, ACCENT, -2),
 			_slice_overlay_part("belt", "rig_role.pelvis", 25, 29, 28, LEATHER, -2),
 			_raw_part("belt_buckle", "rig_role.pelvis", _box(Vector3i(0,1,-3), Vector3i(2,3,-3), METAL), Vector3i.ZERO),
@@ -81,9 +83,9 @@ static func build() -> Resource:
 			_slice_overlay_part("pack_buckles", "rig_role.chest", 36, 43, 40, METAL, 5),
 		]),
 		_module("tools", &"held_item", [
-			_tool_part("axe_handle", "stone_axe", _box(Vector3i(0,-7,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO),
-			_tool_part("axe_head", "stone_axe", _box(Vector3i(-3,3,0), Vector3i(3,5,1), METAL), Vector3i.ZERO),
-			_tool_part("pickaxe_handle", "stone_pickaxe", _box(Vector3i(0,-7,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO),
+			_tool_part("axe_handle", "stone_axe", _box(Vector3i(0,-6,0), Vector3i(0,3,0), LEATHER), Vector3i.ZERO),
+			_tool_part("axe_head", "stone_axe", _box(Vector3i(-2,2,0), Vector3i(2,4,1), METAL), Vector3i.ZERO),
+			_tool_part("pickaxe_handle", "stone_pickaxe", _box(Vector3i(0,-6,0), Vector3i(0,3,0), LEATHER), Vector3i.ZERO),
 			_tool_part("pickaxe_head", "stone_pickaxe", _pickaxe_head_cells(), Vector3i.ZERO),
 		]),
 	]
