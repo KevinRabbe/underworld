@@ -75,10 +75,10 @@ static func build() -> Resource:
 			_raw_part("foot_r", "rig_role.foot.right", _foot_slice_cells(), Vector3i.ZERO),
 		]),
 		_module("pouch", &"back_accessory", [
-			_part("hip_pouch", "rig_role.pelvis", _box(Vector3i(3,-1,1), Vector3i(5,2,2), LEATHER), Vector3i.ZERO),
-			_part("expedition_pack", "rig_role.chest", _expedition_pack_cells(), Vector3i.ZERO),
-			_part("pack_roll", "rig_role.chest", _pack_roll_cells(), Vector3i.ZERO),
-			_part("pack_buckles", "rig_role.chest", _pack_buckle_cells(), Vector3i.ZERO),
+			_slice_overlay_part("hip_pouch", "rig_role.pelvis", 24, 31, 28, LEATHER, 3),
+			_slice_overlay_part("expedition_pack", "rig_role.chest", 34, 45, 42, CANVAS_DARK, 4),
+			_slice_overlay_part("pack_roll", "rig_role.chest", 42, 47, 44, LEATHER_LIGHT, 5),
+			_slice_overlay_part("pack_buckles", "rig_role.chest", 36, 43, 40, METAL, 5),
 		]),
 		_module("tools", &"held_item", [
 			_tool_part("axe_handle", "stone_axe", _box(Vector3i(0,-7,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO),
