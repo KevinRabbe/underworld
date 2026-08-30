@@ -44,13 +44,13 @@ static func build() -> Resource:
 			_slice_overlay_part("jacket_front", "rig_role.chest", 34, 46, 42, CLOTH, -1),
 			_slice_overlay_part("jacket_trim", "rig_role.chest", 39, 44, 42, CANVAS_LIGHT, -2),
 			_slice_overlay_part("jacket_lower", "rig_role.spine.lower", 28, 38, 33, CANVAS_LIGHT, -1),
-			_part("shoulder_l", "rig_role.clavicle.left", _box(Vector3i(-2,-1,-1), Vector3i(1,1,1), CLOTH), Vector3i.ZERO),
-			_part("shoulder_r", "rig_role.clavicle.right", _box(Vector3i(-1,-1,-1), Vector3i(2,1,1), CLOTH), Vector3i.ZERO),
+			_raw_part("shoulder_l", "rig_role.clavicle.left", _arm_cells(true, 3, CLOTH), Vector3i.ZERO),
+			_raw_part("shoulder_r", "rig_role.clavicle.right", _arm_cells(false, 3, CLOTH), Vector3i.ZERO),
 			_part("neck_connector", "rig_role.neck", _box(Vector3i(-1,-2,-1), Vector3i(0,0,1), CLOTH), Vector3i.ZERO),
-			_part("upperarm_l", "rig_role.upper_arm.left", _upper_arm_cells(true), Vector3i(-1,0,0)),
-			_part("forearm_l", "rig_role.forearm.left", _box(Vector3i(-5,-1,-1), Vector3i(0,0,1), LEATHER), Vector3i(-1,0,0)),
-			_part("upperarm_r", "rig_role.upper_arm.right", _upper_arm_cells(false), Vector3i(1,0,0)),
-			_part("forearm_r", "rig_role.forearm.right", _box(Vector3i(0,-1,-1), Vector3i(5,0,1), LEATHER), Vector3i(1,0,0)),
+			_raw_part("upperarm_l", "rig_role.upper_arm.left", _arm_cells(true, 6, CLOTH), Vector3i.ZERO),
+			_raw_part("forearm_l", "rig_role.forearm.left", _arm_cells(true, 6, LEATHER), Vector3i.ZERO),
+			_raw_part("upperarm_r", "rig_role.upper_arm.right", _arm_cells(false, 6, CLOTH), Vector3i.ZERO),
+			_raw_part("forearm_r", "rig_role.forearm.right", _arm_cells(false, 6, LEATHER), Vector3i.ZERO),
 			_part("scarf", "rig_role.neck", _box(Vector3i(-2,-1,-2), Vector3i(1,1,1), ACCENT), Vector3i(0,0,0)),
 			_part("belt", "rig_role.pelvis", _box(Vector3i(-3,1,-2), Vector3i(2,2,1), LEATHER), Vector3i(0,0,0)),
 			_part("belt_buckle", "rig_role.pelvis", _box(Vector3i(0,1,-3), Vector3i(1,2,-3), METAL), Vector3i.ZERO),
@@ -209,6 +209,17 @@ static func _foot_slice_cells() -> Array[Dictionary]:
 		for y in range(-1, 2):
 			for x in range(-2, 3):
 				var palette_index := SOLE if y == -1 else (LEATHER_LIGHT if z <= -2 else LEATHER)
+				cells.append({"position": Vector3i(x, y, z), "palette_index": palette_index})
+	return cells
+
+
+static func _arm_cells(left: bool, length: int, palette_index: int) -> Array[Dictionary]:
+	var cells: Array[Dictionary] = []
+	for i in range(length):
+		var x := -i - 1 if left else i
+		var radius := 2 if i < 2 else 1
+		for y in range(-radius, radius + 1):
+			for z in range(-1, 2):
 				cells.append({"position": Vector3i(x, y, z), "palette_index": palette_index})
 	return cells
 
