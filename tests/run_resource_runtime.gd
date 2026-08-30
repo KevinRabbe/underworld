@@ -4,7 +4,15 @@ const ItemContainerState := preload("res://gameplay/items/inventory/item_contain
 const RuntimeService := preload("res://gameplay/resources/runtime/underground_resource_runtime_service.gd")
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
 const RuntimeTests := preload("res://tests/resources/test_underground_resource_runtime.gd")
-const REQUIRED_INVENTORY_DEPENDENCY_PATHS: Array[String] = [
+const REQUIRED_ITEM_DEPENDENCY_PATHS: Array[String] = [
+	"content/items/tools/stone_pickaxe_definition.tres",
+	"gameplay/items/definitions/item_definition.gd",
+	"gameplay/items/equipment/equipment_hotbar_state.gd",
+	"gameplay/items/equipment/equipped_item_resolver.gd",
+	"gameplay/items/equipment/equipment_slot_rule.gd",
+	"gameplay/items/equipment/equipment_service.gd",
+	"gameplay/items/weapons/definitions/weapon_definition.gd",
+	"gameplay/items/weapons/runtime/weapon_attack_resolver.gd",
 	"gameplay/items/inventory/item_container_state.gd",
 	"gameplay/items/inventory/inventory_transaction_plan.gd",
 	"gameplay/items/inventory/inventory_transaction_service.gd",
@@ -52,18 +60,84 @@ func _test_workflow_dependency_triggers(failures: Array[String]) -> void:
 	if workflow_file == null:
 		failures.append("Resource Runtime workflow could not be opened for dependency-trigger validation")
 		return
-	var workflow_text: String = workflow_file.get_as_text()
-	var push_trigger_offset: int = workflow_text.find("\n  push:")
-	if push_trigger_offset < 0:
-		failures.append("Resource Runtime workflow is missing its push trigger boundary")
-		return
-	var pull_request_trigger_block: String = workflow_text.substr(0, push_trigger_offset)
-	for dependency_path in REQUIRED_INVENTORY_DEPENDENCY_PATHS:
-		var expected_path_filter := "- '%s'" % dependency_path
-		if pull_request_trigger_block.find(expected_path_filter) < 0:
+	var pull_request_paths: Array[String] = _pull_request_path_filters(
+		workflow_file.get_as_text(),
+		failures
+	)
+	for dependency_path in REQUIRED_ITEM_DEPENDENCY_PATHS:
+		if not pull_request_paths.has(dependency_path):
 			failures.append(
-				"Resource Runtime pull_request.paths is missing inventory dependency trigger: %s" % dependency_path
+				"Resource Runtime pull_request.paths is missing item dependency trigger: %s" % dependency_path
 			)
+
+
+func _pull_request_path_filters(
+	workflow_text: String,
+	failures: Array[String]
+) -> Array[String]:
+	var result: Array[String] = []
+	var found_pull_request: bool = false
+	var found_paths: bool = false
+	var in_pull_request: bool = false
+	var in_paths: bool = false
+
+	for raw_line in workflow_text.split("\n"):
+		var line: String = str(raw_line).replace("\r", "")
+		if line == "  pull_request:":
+			found_pull_request = true
+			in_pull_request = true
+			in_paths = false
+			continue
+		if not in_pull_request:
+			continue
+
+		# Any new two-space key ends the pull_request mapping.
+		if line.begins_with("  ") and not line.begins_with("    "):
+			break
+
+		if not in_paths:
+			if line == "    paths:":
+				found_paths = true
+				in_paths = true
+			continue
+
+		# Any new four-space key ends the paths sequence.
+		if line.begins_with("    ") and not line.begins_with("      "):
+			break
+		if line.begins_with("      - "):
+			var encoded_value: String = line.substr(8)
+			if encoded_value.length() < 2:
+				failures.append("Resource Runtime pull_request.paths contains an empty list entry")
+				continue
+			var quote: String = encoded_value.substr(0, 1)
+			if (quote != "'" and quote != "\"") or not encoded_value.ends_with(quote):
+				failures.append(
+					"Resource Runtime pull_request.paths entry must be a quoted scalar: %s" % encoded_value
+				)
+				continue
+			var path_value: String = encoded_value.substr(1, encoded_value.length() - 2)
+			if path_value.is_empty() or path_value != path_value.strip_edges():
+				failures.append("Resource Runtime pull_request.paths contains an invalid path scalar")
+				continue
+			if result.has(path_value):
+				failures.append(
+					"Resource Runtime pull_request.paths contains duplicate entry: %s" % path_value
+				)
+				continue
+			result.append(path_value)
+			continue
+
+		var trimmed: String = line.strip_edges()
+		if not trimmed.is_empty() and not trimmed.begins_with("#"):
+			failures.append(
+				"Resource Runtime pull_request.paths contains unexpected non-list content: %s" % trimmed
+			)
+
+	if not found_pull_request:
+		failures.append("Resource Runtime workflow is missing on.pull_request")
+	elif not found_paths:
+		failures.append("Resource Runtime workflow is missing on.pull_request.paths")
+	return result
 
 
 func _test_commit_phase_failure_restores_world_delta(failures: Array[String]) -> void:
