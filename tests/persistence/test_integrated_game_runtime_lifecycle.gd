@@ -63,6 +63,9 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	candidate["resume_position"] = Vector3(999.0, 999.0, 999.0)
 	candidate["pending_loot_states"] = []
 
+	# add_child() synchronously realizes _ready(); no frame wait is required for
+	# the startup assertions. Keeping cleanup synchronous lets Persistence State
+	# retain its existing --quit-after 1 workflow contract.
 	tree.root.add_child(game)
 	_verify_live_runtime(
 		game,
@@ -80,8 +83,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		failures.append("live Game could not build production SAVE request: %s" % [
 		request_variant.get("diagnostics", []) if request_variant is Dictionary else [],
 		])
-		game.queue_free()
-		await tree.process_frame
+		_free_attached(game)
 		_cleanup_slot()
 		return failures
 	var request: Dictionary = request_variant
@@ -102,27 +104,23 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		TEST_SLOT
 	)
 	if not _require_success(saved, "live runtime atomic SAVE", failures):
-		game.queue_free()
-		await tree.process_frame
+		_free_attached(game)
 		_cleanup_slot()
 		return failures
 	var loaded: Dictionary = service.load_slot(TEST_SLOT)
 	if not _require_success(loaded, "live runtime slot reload", failures):
-		game.queue_free()
-		await tree.process_frame
+		_free_attached(game)
 		_cleanup_slot()
 		return failures
 	var loaded_candidate_variant: Variant = loaded.get("candidate", null)
 	if not loaded_candidate_variant is Dictionary:
 		failures.append("live runtime slot reload did not return detached candidate")
-		game.queue_free()
-		await tree.process_frame
+		_free_attached(game)
 		_cleanup_slot()
 		return failures
 	var loaded_candidate: Dictionary = loaded_candidate_variant
 
-	game.queue_free()
-	await tree.process_frame
+	_free_attached(game)
 
 	var resumed: Node = packed.instantiate()
 	resumed.set("enable_debug_hud", false)
@@ -173,8 +171,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		elif not after_request.get("pending_loot_states", ["sentinel"]).is_empty():
 			failures.append("post-collection SAVE snapshot retained consumed pending loot")
 
-	resumed.queue_free()
-	await tree.process_frame
+	_free_attached(resumed)
 	_cleanup_slot()
 	return failures
 
@@ -290,6 +287,16 @@ static func _fixture(failures: Array[String]) -> Dictionary:
 			"resume_position": resume_position,
 		},
 	}
+
+
+static func _free_attached(node: Node) -> void:
+	if node == null:
+		return
+	if node.is_inside_tree():
+		var parent: Node = node.get_parent()
+		if parent != null:
+			parent.remove_child(node)
+	node.free()
 
 
 static func _cleanup_slot() -> void:
