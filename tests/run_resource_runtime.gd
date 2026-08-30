@@ -5,6 +5,7 @@ const RuntimeService := preload("res://gameplay/resources/runtime/underground_re
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
 const RuntimeTests := preload("res://tests/resources/test_underground_resource_runtime.gd")
 const REQUIRED_ITEM_DEPENDENCY_PATHS: Array[String] = [
+	"content/items/resources/stone_definition.tres",
 	"content/items/tools/stone_pickaxe_definition.tres",
 	"gameplay/items/definitions/item_definition.gd",
 	"gameplay/items/equipment/equipment_hotbar_state.gd",
@@ -64,6 +65,10 @@ func _test_workflow_dependency_triggers(failures: Array[String]) -> void:
 		workflow_file.get_as_text(),
 		failures
 	)
+	if pull_request_paths.has("gameplay/items/**"):
+		failures.append(
+			"Resource Runtime dependency trigger must remain precise; broad gameplay/items/** is not allowed"
+		)
 	for dependency_path in REQUIRED_ITEM_DEPENDENCY_PATHS:
 		if not pull_request_paths.has(dependency_path):
 			failures.append(
