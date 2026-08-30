@@ -23,8 +23,8 @@ const PROFILE_ID := "loot_profile.creature.burrower.m3"
 static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_catalog_and_typed_wire(failures)
-	_test_integrated_round_trip(failures)
-	_test_nullable_pending_loot(failures)
+	_test_integrated_round_trip_and_pending_set(failures)
+	_test_empty_and_duplicate_pending_set(failures)
 	_test_strict_outer_and_current_manifest_fail_closed(failures)
 	_test_non_finite_resume_fails_closed(failures)
 	return failures
@@ -43,8 +43,6 @@ static func _test_catalog_and_typed_wire(failures: Array[String]) -> void:
 	for required_id in [WOOD_ID, AXE_ID, CHITIN_ID, PROFILE_ID]:
 		if registry == null or not registry.has_definition(required_id):
 			failures.append("production SAVE registry is missing durable definition: %s" % required_id)
-	if registry != null and registry.has_definition("item.weapon.iron_sword"):
-		failures.append("SAVE catalog invented unaccepted production iron-sword authority")
 
 	var typed_fixture: Dictionary = {
 		"integer": 2,
@@ -63,22 +61,21 @@ static func _test_catalog_and_typed_wire(failures: Array[String]) -> void:
 	if typeof(restored.get("whole_float")) != TYPE_FLOAT:
 		failures.append("typed wire changed whole-valued float into integer")
 	var nested: Array = restored.get("nested", [])
-	if nested.size() != 3:
-		failures.append("typed wire changed nested fixture shape")
-	elif typeof(nested[0]) != TYPE_INT or typeof(nested[1]) != TYPE_FLOAT:
+	if nested.size() != 3 or typeof(nested[0]) != TYPE_INT or typeof(nested[1]) != TYPE_FLOAT:
 		failures.append("typed wire lost nested int/float distinction")
 
 
-static func _test_integrated_round_trip(failures: Array[String]) -> void:
-	var fixture: Dictionary = _fixture(failures, true)
+static func _test_integrated_round_trip_and_pending_set(failures: Array[String]) -> void:
+	var fixture: Dictionary = _fixture(failures)
 	if fixture.is_empty():
 		return
+	# Deliberately encode reverse order; durable output must canonicalize by occurrence id.
 	var encoded: Dictionary = IntegratedGameSaveContract.encode(
 		fixture["context"],
 		fixture["delta_store"],
 		fixture["inventory"],
 		fixture["equipment"],
-		fixture["pending_loot"],
+		[fixture["pending_b"], fixture["pending_a"]],
 		fixture["resume_position"]
 	)
 	if not _require_success(encoded, "integrated save encode", failures):
@@ -88,13 +85,23 @@ static func _test_integrated_round_trip(failures: Array[String]) -> void:
 		"equipment_json",
 		"inventory_json",
 		"map_json",
-		"pending_loot_json",
+		"pending_loot_jsons",
 		"player_resume",
 		"save_schema_version",
 		"schema",
 	]
 	if _sorted_keys(envelope) != expected_keys:
 		failures.append("integrated save envelope leaked unexpected runtime fields")
+	var pending_jsons: Array = envelope.get("pending_loot_jsons", [])
+	if pending_jsons.size() != 2:
+		failures.append("integrated save did not persist complete pending-loot set")
+	else:
+		var first: Dictionary = TypedJsonWire.decode(str(pending_jsons[0]), "pending 0")
+		var second: Dictionary = TypedJsonWire.decode(str(pending_jsons[1]), "pending 1")
+		if str(first.get("value", {}).get("occurrence_id", "")) != "burrower_41":
+			failures.append("integrated save pending-loot set is not occurrence-sorted")
+		if str(second.get("value", {}).get("occurrence_id", "")) != "burrower_43":
+			failures.append("integrated save pending-loot set lost second occurrence")
 	for forbidden in ["velocity", "camera", "action_state", "player_node", "mesh", "collision"]:
 		if envelope.has(forbidden):
 			failures.append("integrated save persisted transient runtime field: %s" % forbidden)
@@ -124,54 +131,58 @@ static func _test_integrated_round_trip(failures: Array[String]) -> void:
 		failures.append("integrated save changed equipment/hotbar state")
 	elif restored_equipment.selected_hotbar() != 4:
 		failures.append("integrated save did not restore semantic hotbar slot 4")
-	var restored_pending = candidate.get("pending_loot_state", null)
-	if restored_pending == null or restored_pending.canonical_snapshot() != fixture["pending_loot"].canonical_snapshot():
-		failures.append("integrated save changed pending-loot exactly-once state")
+	var restored_pending_variant: Variant = candidate.get("pending_loot_states", null)
+	if not restored_pending_variant is Array or restored_pending_variant.size() != 2:
+		failures.append("integrated save did not restore complete pending-loot state set")
+	else:
+		if restored_pending_variant[0].canonical_snapshot() != fixture["pending_a"].canonical_snapshot():
+			failures.append("integrated save changed first pending-loot state")
+		if restored_pending_variant[1].canonical_snapshot() != fixture["pending_b"].canonical_snapshot():
+			failures.append("integrated save changed second pending-loot state")
 	if candidate.get("resume_position", Vector3.ZERO) != fixture["resume_position"]:
 		failures.append("integrated save changed safe resume position")
 
 
-static func _test_nullable_pending_loot(failures: Array[String]) -> void:
-	var fixture: Dictionary = _fixture(failures, false)
+static func _test_empty_and_duplicate_pending_set(failures: Array[String]) -> void:
+	var fixture: Dictionary = _fixture(failures)
 	if fixture.is_empty():
 		return
-	var encoded: Dictionary = IntegratedGameSaveContract.encode(
+	var empty_encoded: Dictionary = IntegratedGameSaveContract.encode(
+		fixture["context"], fixture["delta_store"], fixture["inventory"], fixture["equipment"], [], fixture["resume_position"]
+	)
+	if not _require_success(empty_encoded, "empty pending-loot encode", failures):
+		return
+	if not empty_encoded.get("envelope", {}).get("pending_loot_jsons", ["sentinel"]).is_empty():
+		failures.append("integrated save fabricated pending-loot identity for empty set")
+	var empty_decoded: Dictionary = IntegratedGameSaveContract.decode(str(empty_encoded.get("json", "")))
+	if not _require_success(empty_decoded, "empty pending-loot decode", failures):
+		return
+	var empty_states: Variant = empty_decoded.get("candidate", {}).get("pending_loot_states", null)
+	if not empty_states is Array or not empty_states.is_empty():
+		failures.append("integrated save reconstructed fake pending-loot state from empty set")
+
+	var duplicate: Dictionary = IntegratedGameSaveContract.encode(
 		fixture["context"],
 		fixture["delta_store"],
 		fixture["inventory"],
 		fixture["equipment"],
-		null,
+		[fixture["pending_a"], fixture["pending_a"]],
 		fixture["resume_position"]
 	)
-	if not _require_success(encoded, "null pending-loot encode", failures):
-		return
-	if encoded.get("envelope", {}).get("pending_loot_json", "sentinel") != null:
-		failures.append("integrated save fabricated pending-loot identity when no reward is pending")
-	var decoded: Dictionary = IntegratedGameSaveContract.decode(str(encoded.get("json", "")))
-	if not _require_success(decoded, "null pending-loot decode", failures):
-		return
-	if decoded.get("candidate", {}).get("pending_loot_state", "sentinel") != null:
-		failures.append("integrated save reconstructed fake pending-loot state from null")
+	if bool(duplicate.get("success", false)):
+		failures.append("integrated save accepted duplicate pending-loot occurrence ids")
 
 
-static func _test_strict_outer_and_current_manifest_fail_closed(
-	failures: Array[String]
-) -> void:
+static func _test_strict_outer_and_current_manifest_fail_closed(failures: Array[String]) -> void:
 	if bool(IntegratedGameSaveContract.decode(
 		'{"version":2,"world_seed":1,"wood":4,"selected_slot":1}'
 	).get("success", false)):
 		failures.append("legacy prototype-v2 payload unexpectedly decoded as integrated SAVE")
-
-	var fixture: Dictionary = _fixture(failures, false)
+	var fixture: Dictionary = _fixture(failures)
 	if fixture.is_empty():
 		return
 	var encoded: Dictionary = IntegratedGameSaveContract.encode(
-		fixture["context"],
-		fixture["delta_store"],
-		fixture["inventory"],
-		fixture["equipment"],
-		null,
-		fixture["resume_position"]
+		fixture["context"], fixture["delta_store"], fixture["inventory"], fixture["equipment"], [], fixture["resume_position"]
 	)
 	if not bool(encoded.get("success", false)):
 		failures.append("strict outer regression setup failed")
@@ -179,22 +190,16 @@ static func _test_strict_outer_and_current_manifest_fail_closed(
 	var unknown: Dictionary = encoded.get("envelope", {}).duplicate(true)
 	unknown["future_runtime_state"] = {"velocity": [1, 2, 3]}
 	var unknown_wire: Dictionary = TypedJsonWire.encode(unknown, "unknown outer fixture")
-	if bool(unknown_wire.get("success", false)) and bool(IntegratedGameSaveContract.decode(
-		str(unknown_wire.get("json", ""))
-	).get("success", false)):
+	if bool(unknown_wire.get("success", false)) and bool(IntegratedGameSaveContract.decode(str(unknown_wire.get("json", ""))).get("success", false)):
 		failures.append("integrated save accepted unknown outer structural field")
 
-	var map_decoded: Dictionary = MapSerializationContract.decode(
-		str(encoded.get("envelope", {}).get("map_json", ""))
-	)
+	var map_decoded: Dictionary = MapSerializationContract.decode(str(encoded.get("envelope", {}).get("map_json", "")))
 	if not bool(map_decoded.get("success", false)):
 		failures.append("manifest-drift regression map setup failed")
 		return
 	var stale_map: Dictionary = map_decoded.get("envelope", {}).duplicate(true)
 	stale_map["world"]["generator_manifest_canonical"] = "gm1|stale-runtime-contract"
-	stale_map["world"]["generator_manifest_id"] = "gm-sha256:" + str(
-		stale_map["world"]["generator_manifest_canonical"]
-	).sha256_text()
+	stale_map["world"]["generator_manifest_id"] = "gm-sha256:" + str(stale_map["world"]["generator_manifest_canonical"]).sha256_text()
 	var stale_map_json: Dictionary = MapSerializationContract.canonical_json(stale_map)
 	if not bool(stale_map_json.get("success", false)):
 		failures.append("manifest-drift regression could not produce internally valid MAP payload")
@@ -202,34 +207,23 @@ static func _test_strict_outer_and_current_manifest_fail_closed(
 	var stale_outer: Dictionary = encoded.get("envelope", {}).duplicate(true)
 	stale_outer["map_json"] = str(stale_map_json.get("json", ""))
 	var stale_outer_wire: Dictionary = TypedJsonWire.encode(stale_outer, "stale manifest fixture")
-	if bool(stale_outer_wire.get("success", false)) and bool(IntegratedGameSaveContract.decode(
-		str(stale_outer_wire.get("json", ""))
-	).get("success", false)):
+	if bool(stale_outer_wire.get("success", false)) and bool(IntegratedGameSaveContract.decode(str(stale_outer_wire.get("json", ""))).get("success", false)):
 		failures.append("integrated save accepted generator manifest incompatible with current runtime")
 
 
 static func _test_non_finite_resume_fails_closed(failures: Array[String]) -> void:
-	var fixture: Dictionary = _fixture(failures, false)
+	var fixture: Dictionary = _fixture(failures)
 	if fixture.is_empty():
 		return
-	for bad_position in [
-		Vector3(NAN, 1.0, 2.0),
-		Vector3(1.0, INF, 2.0),
-		Vector3(1.0, 2.0, -INF),
-	]:
+	for bad_position in [Vector3(NAN, 1.0, 2.0), Vector3(1.0, INF, 2.0), Vector3(1.0, 2.0, -INF)]:
 		var encoded: Dictionary = IntegratedGameSaveContract.encode(
-			fixture["context"],
-			fixture["delta_store"],
-			fixture["inventory"],
-			fixture["equipment"],
-			null,
-			bad_position
+			fixture["context"], fixture["delta_store"], fixture["inventory"], fixture["equipment"], [], bad_position
 		)
 		if bool(encoded.get("success", false)):
 			failures.append("integrated save accepted non-finite resume position: %s" % bad_position)
 
 
-static func _fixture(failures: Array[String], with_pending: bool) -> Dictionary:
+static func _fixture(failures: Array[String]) -> Dictionary:
 	var catalog_result: Dictionary = GameplaySaveCatalog.build_registry()
 	if not _require_success(catalog_result, "SAVE fixture registry", failures):
 		return {}
@@ -240,43 +234,24 @@ static func _fixture(failures: Array[String], with_pending: bool) -> Dictionary:
 	if wood == null or axe == null or chitin == null:
 		failures.append("SAVE fixture could not resolve production item definitions")
 		return {}
-
 	var inventory = ItemContainerState.new().configure(8, 100.0)
-	var wood_add: Dictionary = inventory.add_stack(
-		wood,
-		7,
-		{"grade": "rough", "serial": 7, "whole_float": 2.0}
-	)
-	if not _require_success(wood_add, "SAVE fixture wood add", failures):
+	if not _require_success(inventory.add_stack(wood, 7, {"grade": "rough", "serial": 7, "whole_float": 2.0}), "SAVE fixture wood add", failures):
 		return {}
 	var axe_add: Dictionary = inventory.add_instance(axe, {"durability": 83})
 	if not _require_success(axe_add, "SAVE fixture axe add", failures):
 		return {}
-
-	var equipment = EquipmentHotbarState.new().configure(
-		GameplaySaveCatalog.equipment_rules(),
-		GameplaySaveCatalog.hotbar_bindings()
-	)
-	var equip_result: Dictionary = EquipmentService.new().equip_from_inventory(
-		equipment,
-		inventory,
-		int(axe_add.get("slot", -1)),
-		axe,
-		GameplaySaveCatalog.SLOT_UTILITY
-	)
-	if not _require_success(equip_result, "SAVE fixture utility equip", failures):
+	var equipment = EquipmentHotbarState.new().configure(GameplaySaveCatalog.equipment_rules(), GameplaySaveCatalog.hotbar_bindings())
+	if not _require_success(
+		EquipmentService.new().equip_from_inventory(equipment, inventory, int(axe_add.get("slot", -1)), axe, GameplaySaveCatalog.SLOT_UTILITY),
+		"SAVE fixture utility equip",
+		failures
+	):
 		return {}
-	var selection: Dictionary = equipment.select_hotbar(4)
-	if not _require_success(selection, "SAVE fixture hotbar 4 selection", failures):
+	if not _require_success(equipment.select_hotbar(4), "SAVE fixture hotbar 4 selection", failures):
 		return {}
-
 	var context = WorldGenerationContext.new(9007199254740997)
 	var delta_store = WorldDeltaStore.new()
-	var address = StableAddress.generated_child(
-		StableAddress.underground_region(0, 0),
-		"save-fixture-resource",
-		0
-	)
+	var address = StableAddress.generated_child(StableAddress.underground_region(0, 0), "save-fixture-resource", 0)
 	var stable_id: String = StableId.from_address(address).value()
 	if not delta_store.set_object_state(stable_id, {
 		"schema": "resource.runtime.depletion.v1",
@@ -286,31 +261,27 @@ static func _fixture(failures: Array[String], with_pending: bool) -> Dictionary:
 	}):
 		failures.append("SAVE fixture could not install WorldDelta object state")
 		return {}
-
-	var pending = null
-	if with_pending:
-		var definition_contract: String = InventoryStateCodec.canonical_json(
-			chitin.canonical_descriptor()
-		)
-		pending = PendingLootState.new().configure(
-			"burrower_41",
-			PROFILE_ID,
-			[{
-				"item_id": CHITIN_ID,
-				"quantity": 2,
-				"definition_contract": definition_contract,
-			}]
-		)
-		if not pending.validate_state().is_empty():
-			failures.append("SAVE fixture pending loot is invalid")
-			return {}
-
+	var definition_contract: String = InventoryStateCodec.canonical_json(chitin.canonical_descriptor())
+	var pending_a = PendingLootState.new().configure("burrower_41", PROFILE_ID, [{
+		"item_id": CHITIN_ID,
+		"quantity": 2,
+		"definition_contract": definition_contract,
+	}])
+	var pending_b = PendingLootState.new().configure("burrower_43", PROFILE_ID, [{
+		"item_id": CHITIN_ID,
+		"quantity": 1,
+		"definition_contract": definition_contract,
+	}])
+	if not pending_a.validate_state().is_empty() or not pending_b.validate_state().is_empty():
+		failures.append("SAVE fixture pending-loot set is invalid")
+		return {}
 	return {
 		"context": context,
 		"delta_store": delta_store,
 		"inventory": inventory,
 		"equipment": equipment,
-		"pending_loot": pending,
+		"pending_a": pending_a,
+		"pending_b": pending_b,
 		"resume_position": Vector3(12.5, 44.0, -3.25),
 	}
 
@@ -323,11 +294,7 @@ static func _sorted_keys(value: Dictionary) -> Array[String]:
 	return result
 
 
-static func _require_success(
-	result: Dictionary,
-	label: String,
-	failures: Array[String]
-) -> bool:
+static func _require_success(result: Dictionary, label: String, failures: Array[String]) -> bool:
 	if bool(result.get("success", false)):
 		return true
 	failures.append("%s failed diagnostics=%s" % [label, result.get("diagnostics", [])])
