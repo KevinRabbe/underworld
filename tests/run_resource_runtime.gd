@@ -4,6 +4,15 @@ const ItemContainerState := preload("res://gameplay/items/inventory/item_contain
 const RuntimeService := preload("res://gameplay/resources/runtime/underground_resource_runtime_service.gd")
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
 const RuntimeTests := preload("res://tests/resources/test_underground_resource_runtime.gd")
+const REQUIRED_INVENTORY_DEPENDENCY_PATHS: Array[String] = [
+	"gameplay/items/inventory/item_container_state.gd",
+	"gameplay/items/inventory/inventory_transaction_plan.gd",
+	"gameplay/items/inventory/inventory_transaction_service.gd",
+	"gameplay/items/inventory/inventory_transaction_checkpoint.gd",
+	"gameplay/items/inventory/inventory_state_codec.gd",
+	"gameplay/items/inventory/item_stack_state.gd",
+	"gameplay/items/inventory/item_instance_state.gd",
+]
 
 
 class CommitFailingInventory extends ItemContainerState:
@@ -20,10 +29,11 @@ class CommitFailingInventory extends ItemContainerState:
 
 func _init() -> void:
 	var failures: Array[String] = RuntimeTests.run()
+	_test_workflow_dependency_triggers(failures)
 	_test_commit_phase_failure_restores_world_delta(failures)
 	if failures.is_empty():
 		print("[RESOURCE RUNTIME VALIDATION] PASS")
-		print("  iron content / archetype realization / semantic pickaxe eligibility / atomic inventory yield / persistent depletion / idempotence / strict restore compatibility / commit-phase rollback passed")
+		print("  iron content / archetype realization / semantic pickaxe eligibility / atomic inventory yield / persistent depletion / idempotence / strict restore compatibility / commit-phase rollback / workflow dependency triggers passed")
 		quit(0)
 		return
 
@@ -31,6 +41,24 @@ func _init() -> void:
 	for failure in failures:
 		printerr("  - " + failure)
 	quit(1)
+
+
+func _test_workflow_dependency_triggers(failures: Array[String]) -> void:
+	const WORKFLOW_PATH := "res://.github/workflows/resource-runtime-validation.yml"
+	if not FileAccess.file_exists(WORKFLOW_PATH):
+		failures.append("Resource Runtime workflow file is missing")
+		return
+	var workflow_file := FileAccess.open(WORKFLOW_PATH, FileAccess.READ)
+	if workflow_file == null:
+		failures.append("Resource Runtime workflow could not be opened for dependency-trigger validation")
+		return
+	var workflow_text: String = workflow_file.get_as_text()
+	for dependency_path in REQUIRED_INVENTORY_DEPENDENCY_PATHS:
+		var expected_path_filter := "- '%s'" % dependency_path
+		if workflow_text.find(expected_path_filter) < 0:
+			failures.append(
+				"Resource Runtime workflow is missing inventory dependency trigger: %s" % dependency_path
+			)
 
 
 func _test_commit_phase_failure_restores_world_delta(failures: Array[String]) -> void:
