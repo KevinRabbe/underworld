@@ -127,7 +127,7 @@ func collect_nearby_pending_loot(
 		if not loot_reward_service.has_pending(occurrence_id):
 			continue
 		var locator = pending_loot_locators.get(occurrence_id, null)
-		if not locator is Vector3 or not _is_finite_vector3(locator):
+		if typeof(locator) != TYPE_VECTOR3 or not _is_finite_vector3(locator):
 			continue
 		var distance: float = player_position.distance_to(locator)
 		if distance > collection_range:
