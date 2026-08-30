@@ -358,7 +358,6 @@ func _create_gameplay_hud() -> void:
 	survival.harvest_result.connect(gameplay_hud.present_feedback)
 	player.parry_succeeded.connect(_on_player_parry_succeeded)
 
-
 func _on_player_parry_succeeded(_source_position: Vector3) -> void:
 	if gameplay_hud != null:
 		gameplay_hud.present_feedback({"type": "combat.parry_succeeded"})
@@ -395,15 +394,32 @@ func _capture_pending_loot_states() -> Dictionary:
 	var states: Array = []
 	for occurrence_id in occurrence_ids:
 		var snapshot: Dictionary = encounter_controller.get_pending_loot_snapshot(occurrence_id)
-		var decoded: Dictionary = GameplayStateCodecScript.decode_pending_loot(snapshot, registry)
-		if not bool(decoded.get("success", false)):
+		if str(snapshot.get("schema", "")) != PendingLootStateScript.SNAPSHOT_SCHEMA:
+			return _failure(["SAVE runtime pending loot has unexpected native schema: %s" % occurrence_id])
+		if str(snapshot.get("occurrence_id", "")) != occurrence_id:
+			return _failure(["SAVE runtime pending loot occurrence mismatch: %s" % occurrence_id])
+		if bool(snapshot.get("consumed", true)):
+			return _failure(["SAVE runtime pending loot is not unresolved: %s" % occurrence_id])
+		var rewards_variant: Variant = snapshot.get("rewards", null)
+		if not rewards_variant is Array:
+			return _failure(["SAVE runtime pending loot rewards are malformed: %s" % occurrence_id])
+		var state = PendingLootStateScript.new().configure(
+			occurrence_id,
+			str(snapshot.get("profile_id", "")),
+			rewards_variant
+		)
+		var state_failures: Array[String] = state.validate_state()
+		if not state_failures.is_empty():
+			return _prefixed_failure("SAVE runtime pending loot %s" % occurrence_id, state_failures)
+		# The runtime-native snapshot is never treated as a durable payload. Passing
+		# the reconstructed semantic state through #259's encoder validates current
+		# authored profile/item contracts before the outer SAVE contract serializes it.
+		var durable_validation: Dictionary = GameplayStateCodecScript.encode_pending_loot(state, registry)
+		if not bool(durable_validation.get("success", false)):
 			return _prefixed_failure(
 				"SAVE runtime pending loot %s" % occurrence_id,
-				decoded.get("diagnostics", [])
+				durable_validation.get("diagnostics", [])
 			)
-		var state = decoded.get("state", null)
-		if state == null or not state is PendingLootStateScript or not state.is_pending():
-			return _failure(["SAVE runtime pending loot is not unresolved: %s" % occurrence_id])
 		states.append(state)
 	return {"success": true, "states": states, "diagnostics": []}
 
