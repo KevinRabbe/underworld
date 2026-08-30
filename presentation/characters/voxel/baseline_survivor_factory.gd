@@ -253,8 +253,12 @@ static func _raw_part(id_value: String, rig_role: String, cells: Array[Dictionar
 static func _slice_width(y: int) -> int:
 	if y < 8: return 8 # boots
 	if y < 24: return 6 # calves/thighs
-	if y < 34: return 12 # hips/torso
-	if y < 43: return 14 # shoulders/chest
+	if y < 28: return 10 # hip taper
+	if y < 34: return 12 # waist/torso
+	if y == 34 or y == 42: return 12 # shoulder and hem chamfer
+	if y < 43: return 14 # chest/shoulder span
+	if y == 43 or y == 54 or y == 55: return 8 # head chamfer bands
+	if y >= 51: return 9 # crown taper
 	return 10 # neck/head
 
 
