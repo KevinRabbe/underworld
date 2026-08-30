@@ -43,8 +43,8 @@ class_name UnderworldPrototypeSurfaceSettings
 @export_range(0.0, 1.0, 0.01) var rock_density: float = 0.30
 
 @export_group("Loose Pickup Generation")
-# Pickup density is intentionally frozen for prototype-v2 compatibility because
-# collected pickup persistence used deterministic accepted-array indices.
+# Pickup density remains generator-compatibility state. Durable pickup identity
+# derives from the semantic candidate cell/slot and not from accepted-array order.
 @export_range(2, 12, 1) var pickup_vertex_step: int = 5
 @export_range(0.0, 1.0, 0.01) var branch_pickup_density: float = 0.16
 @export_range(0.0, 1.0, 0.01) var loose_stone_pickup_density: float = 0.13

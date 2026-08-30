@@ -10,6 +10,7 @@ const StableId := preload("res://worldgen/identity/stable_id.gd")
 static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_round_trip(failures)
+	_test_loaded_payload_ownership(failures)
 	_test_deterministic_json(failures)
 	_test_corrupt_headers(failures)
 	_test_schema_boundary(failures)
@@ -84,6 +85,144 @@ static func _test_round_trip(failures: Array[String]) -> void:
 	_expect_true(failures, "decoded envelope re-encodes", bool(reencoded.get("success", false)))
 	if bool(reencoded.get("success", false)):
 		_expect_equal(failures, "canonical JSON round-trips byte-identically", reencoded["json"], encoded["json"])
+
+
+static func _test_loaded_payload_ownership(failures: Array[String]) -> void:
+	var context = WorldGenerationContext.new(273273)
+	var ids: Array[String] = _sample_ids()
+	var payload: Dictionary = {
+		"destroyed_objects": [ids[0]],
+		"object_state": {
+			ids[0]: {
+				"schema": "resource.runtime.depletion.v1",
+				"placement_stable_id": ids[0],
+				"placement_fingerprint": "sha256:worlddelta-ownership-fixture",
+				"resource_content_id": "resource.deposit.iron_outcrop",
+				"depletion": {
+					"resource_content_id": "resource.deposit.iron_outcrop",
+					"remaining_capacity_units": 3.0,
+					"mutable_delta": {
+						"completed_operation_ids": ["operation.initial"],
+						"nested": [{"marker": "original"}],
+					},
+				},
+			},
+		},
+		"special_location_state": {
+			ids[1]: {
+				"nested": {
+					"flags": ["cleared", {"state": "original"}],
+				},
+			},
+		},
+		"terrain_delta_index": {
+			"cell:0:0": {
+				"layers": [
+					{"material": "stone"},
+					["inner", {"depth": "original"}],
+				],
+			},
+		},
+		"player_created_objects": {
+			"build-ownership": {
+				"components": [
+					{"kind": "wall", "tags": ["placed", {"owner": "original"}]},
+				],
+			},
+		},
+	}
+	var store = WorldDeltaStore.new()
+	_expect_equal(
+		failures,
+		"ownership fixture loads",
+		store.load_modern_delta_payload(payload),
+		[]
+	)
+	var baseline: Dictionary = store.snapshot()
+	var baseline_encoded: Dictionary = SerializationContract.encode(context, store)
+	_expect_true(
+		failures,
+		"ownership baseline encodes",
+		bool(baseline_encoded.get("success", false))
+	)
+
+	_mutate_ownership_fixture(payload, ids, "caller-mutated")
+	_expect_true(failures, "caller payload mutation is observable", payload != baseline)
+	_expect_equal(
+		failures,
+		"caller payload cannot mutate authoritative WorldDeltaStore",
+		store.snapshot(),
+		baseline
+	)
+
+	var returned_snapshot: Dictionary = store.snapshot()
+	_mutate_ownership_fixture(returned_snapshot, ids, "snapshot-mutated")
+	_expect_true(
+		failures,
+		"returned snapshot mutation is observable",
+		returned_snapshot != baseline
+	)
+	_expect_equal(
+		failures,
+		"returned snapshot cannot mutate authoritative WorldDeltaStore",
+		store.snapshot(),
+		baseline
+	)
+
+	var after_mutations: Dictionary = SerializationContract.encode(context, store)
+	_expect_true(
+		failures,
+		"ownership fixture re-encodes after external mutation attempts",
+		bool(after_mutations.get("success", false))
+	)
+	if (
+		bool(baseline_encoded.get("success", false))
+		and bool(after_mutations.get("success", false))
+	):
+		_expect_equal(
+			failures,
+			"external mutation attempts preserve canonical encoded world delta",
+			after_mutations["json"],
+			baseline_encoded["json"]
+		)
+
+
+static func _mutate_ownership_fixture(
+	payload: Dictionary,
+	ids: Array[String],
+	marker: String
+) -> void:
+	var object_state: Dictionary = payload["object_state"]
+	var resource_envelope: Dictionary = object_state[ids[0]]
+	var depletion: Dictionary = resource_envelope["depletion"]
+	var mutable_delta: Dictionary = depletion["mutable_delta"]
+	var completed_operation_ids: Array = mutable_delta["completed_operation_ids"]
+	completed_operation_ids.append(marker)
+	var resource_nested: Array = mutable_delta["nested"]
+	var resource_nested_state: Dictionary = resource_nested[0]
+	resource_nested_state["marker"] = marker
+
+	var special_location_state: Dictionary = payload["special_location_state"]
+	var special_state: Dictionary = special_location_state[ids[1]]
+	var special_nested: Dictionary = special_state["nested"]
+	var special_flags: Array = special_nested["flags"]
+	var special_flag_state: Dictionary = special_flags[1]
+	special_flag_state["state"] = marker
+
+	var terrain_delta_index: Dictionary = payload["terrain_delta_index"]
+	var terrain_state: Dictionary = terrain_delta_index["cell:0:0"]
+	var terrain_layers: Array = terrain_state["layers"]
+	var inner_layer: Array = terrain_layers[1]
+	var inner_depth: Dictionary = inner_layer[1]
+	inner_depth["depth"] = marker
+
+	var player_created_objects: Dictionary = payload["player_created_objects"]
+	var player_object: Dictionary = player_created_objects["build-ownership"]
+	var components: Array = player_object["components"]
+	var component: Dictionary = components[0]
+	var tags: Array = component["tags"]
+	var owner_state: Dictionary = tags[1]
+	owner_state["owner"] = marker
 
 
 static func _test_deterministic_json(failures: Array[String]) -> void:

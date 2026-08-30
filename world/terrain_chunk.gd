@@ -1,5 +1,7 @@
 extends MeshInstance3D
 
+const StableIdScript := preload("res://worldgen/identity/stable_id.gd")
+
 var chunk_coord: Vector2i = Vector2i.ZERO
 var _collision_body: StaticBody3D
 var _collision_heights: PackedFloat32Array = PackedFloat32Array()
@@ -19,9 +21,13 @@ var branch_instance_count: int = 0
 var loose_stone_instance_count: int = 0
 
 var _tree_transforms: Array = []
+var _tree_stable_ids: Array = []
 var _rock_transforms: Array = []
+var _rock_stable_ids: Array = []
 var _branch_transforms: Array = []
+var _branch_stable_ids: Array = []
 var _loose_stone_transforms: Array = []
+var _loose_stone_stable_ids: Array = []
 
 var _destroyed_tree_indices: Dictionary = {}
 var _destroyed_rock_indices: Dictionary = {}
@@ -83,9 +89,13 @@ func build(
 
 func _build_decorations(data: Dictionary, destroyed_objects: Dictionary) -> void:
 	_tree_transforms = data.get("tree_transforms", [])
+	_tree_stable_ids = data.get("tree_stable_ids", [])
 	_rock_transforms = data.get("rock_transforms", [])
+	_rock_stable_ids = data.get("rock_stable_ids", [])
 	_branch_transforms = data.get("branch_transforms", [])
+	_branch_stable_ids = data.get("branch_stable_ids", [])
 	_loose_stone_transforms = data.get("loose_stone_transforms", [])
+	_loose_stone_stable_ids = data.get("loose_stone_stable_ids", [])
 
 	_destroyed_tree_indices.clear()
 	_destroyed_rock_indices.clear()
@@ -115,7 +125,8 @@ func _load_destroyed_indices(
 	world_destroyed: Dictionary
 ) -> void:
 	for index in range(transforms.size()):
-		if world_destroyed.has(_make_object_id(object_type, index)):
+		var object_id: String = _make_object_id(object_type, index)
+		if not object_id.is_empty() and world_destroyed.has(object_id):
 			destroyed[index] = true
 
 
@@ -292,8 +303,11 @@ func _find_pickup_set(
 		var delta: Vector3 = instance_transform.origin - player_local
 		if delta.length_squared() > radius_sq:
 			continue
+		var object_id: String = _make_object_id(object_type, index)
+		if object_id.is_empty():
+			continue
 		found.append({
-			"object_id": _make_object_id(object_type, index),
+			"object_id": object_id,
 			"object_type": object_type,
 			"index": index,
 		})
@@ -344,10 +358,13 @@ func _collect_pickup_set(
 		var delta: Vector3 = instance_transform.origin - player_local
 		if delta.length_squared() > radius_sq:
 			continue
+		var object_id: String = _make_object_id(object_type, index)
+		if object_id.is_empty():
+			continue
 		destroyed[index] = true
 		changed = true
 		collected.append({
-			"object_id": _make_object_id(object_type, index),
+			"object_id": object_id,
 			"object_type": object_type,
 			"index": index,
 		})
@@ -427,10 +444,14 @@ func _update_proxy_set(
 		if _horizontal_distance_squared(instance_transform.origin, player_local) > activation_sq:
 			continue
 
+		var object_id: String = _make_object_id(object_type, index)
+		if object_id.is_empty():
+			continue
 		var body: StaticBody3D = _create_world_object_body(
 			object_type,
 			index,
-			instance_transform
+			instance_transform,
+			object_id
 		)
 		_world_object_root.add_child(body)
 		active_bodies[index] = body
@@ -439,7 +460,8 @@ func _update_proxy_set(
 func _create_world_object_body(
 	object_type: String,
 	index: int,
-	instance_transform: Transform3D
+	instance_transform: Transform3D,
+	object_id: String
 ) -> StaticBody3D:
 	var body: StaticBody3D = StaticBody3D.new()
 	body.name = "%s_%d" % [object_type.capitalize(), index]
@@ -448,7 +470,7 @@ func _create_world_object_body(
 	body.set_meta("world_object_type", object_type)
 	body.set_meta("world_object_index", index)
 	body.set_meta("world_object_chunk", chunk_coord)
-	body.set_meta("world_object_id", _make_object_id(object_type, index))
+	body.set_meta("world_object_id", object_id)
 
 	var collision: CollisionShape3D = CollisionShape3D.new()
 	collision.name = "CollisionShape3D"
@@ -482,7 +504,25 @@ func _create_world_object_body(
 
 
 func _make_object_id(object_type: String, index: int) -> String:
-	return "%d:%d:%s:%d" % [chunk_coord.x, chunk_coord.y, object_type, index]
+	var stable_ids: Array = []
+	match object_type:
+		"tree":
+			stable_ids = _tree_stable_ids
+		"rock":
+			stable_ids = _rock_stable_ids
+		"branch":
+			stable_ids = _branch_stable_ids
+		"loose_stone":
+			stable_ids = _loose_stone_stable_ids
+		_:
+			return ""
+
+	if index < 0 or index >= stable_ids.size():
+		return ""
+	var stable_id: String = str(stable_ids[index])
+	if StableIdScript.parse(stable_id) == null:
+		return ""
+	return stable_id
 
 
 func _horizontal_distance_squared(a: Vector3, b: Vector3) -> float:

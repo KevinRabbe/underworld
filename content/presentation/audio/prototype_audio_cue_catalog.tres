@@ -1,0 +1,110 @@
+[gd_resource type="Resource" load_steps=23 format=3]
+
+[ext_resource type="Script" path="res://presentation/audio/audio_cue_catalog.gd" id="1_catalog"]
+[ext_resource type="Script" path="res://presentation/audio/audio_cue_definition.gd" id="2_cue"]
+
+[sub_resource type="Resource" id="Cue_ambience_cave"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.ambience.cave"
+playback_space = "ambience"
+looping = true
+
+[sub_resource type="Resource" id="Cue_ambience_surface"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.ambience.surface"
+playback_space = "ambience"
+looping = true
+
+[sub_resource type="Resource" id="Cue_craft_success"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.craft.success"
+playback_space = "global"
+
+[sub_resource type="Resource" id="Cue_enemy_attack"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.enemy.burrower.attack"
+playback_space = "spatial"
+
+[sub_resource type="Resource" id="Cue_enemy_death"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.enemy.burrower.death"
+playback_space = "spatial"
+
+[sub_resource type="Resource" id="Cue_enemy_hit"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.enemy.burrower.hit"
+playback_space = "spatial"
+
+[sub_resource type="Resource" id="Cue_entrance_transition"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.entrance.transition"
+playback_space = "global"
+
+[sub_resource type="Resource" id="Cue_equipment_changed"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.equipment.changed"
+playback_space = "global"
+
+[sub_resource type="Resource" id="Cue_harvest_complete"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.harvest.complete"
+playback_space = "global"
+
+[sub_resource type="Resource" id="Cue_harvest_impact"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.harvest.impact"
+playback_space = "spatial"
+
+[sub_resource type="Resource" id="Cue_inventory_pickup"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.inventory.pickup"
+playback_space = "global"
+
+[sub_resource type="Resource" id="Cue_loot_available"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.loot.available"
+playback_space = "spatial"
+
+[sub_resource type="Resource" id="Cue_loot_collected"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.loot.collected"
+playback_space = "global"
+
+[sub_resource type="Resource" id="Cue_player_attack_heavy"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.player.attack.heavy"
+playback_space = "global"
+
+[sub_resource type="Resource" id="Cue_player_attack_light"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.player.attack.light"
+playback_space = "global"
+
+[sub_resource type="Resource" id="Cue_player_damage"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.player.damage"
+playback_space = "global"
+
+[sub_resource type="Resource" id="Cue_player_death"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.player.death"
+playback_space = "global"
+
+[sub_resource type="Resource" id="Cue_player_parry"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.player.parry.success"
+playback_space = "global"
+
+[sub_resource type="Resource" id="Cue_resource_depleted"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.resource.depleted"
+playback_space = "spatial"
+
+[sub_resource type="Resource" id="Cue_resource_mine_impact"]
+script = ExtResource("2_cue")
+cue_id = "audio_cue.resource.mine.impact"
+playback_space = "spatial"
+
+[resource]
+script = ExtResource("1_catalog")
+cues = [SubResource("Cue_ambience_cave"), SubResource("Cue_ambience_surface"), SubResource("Cue_craft_success"), SubResource("Cue_enemy_attack"), SubResource("Cue_enemy_death"), SubResource("Cue_enemy_hit"), SubResource("Cue_entrance_transition"), SubResource("Cue_equipment_changed"), SubResource("Cue_harvest_complete"), SubResource("Cue_harvest_impact"), SubResource("Cue_inventory_pickup"), SubResource("Cue_loot_available"), SubResource("Cue_loot_collected"), SubResource("Cue_player_attack_heavy"), SubResource("Cue_player_attack_light"), SubResource("Cue_player_damage"), SubResource("Cue_player_death"), SubResource("Cue_player_parry"), SubResource("Cue_resource_depleted"), SubResource("Cue_resource_mine_impact")]

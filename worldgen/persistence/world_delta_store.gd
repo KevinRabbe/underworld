@@ -20,20 +20,26 @@ func clear() -> void:
 
 func load_modern_delta_payload(delta_payload: Dictionary) -> Array[String]:
 	clear()
-	var failures: Array[String] = []
-
-	var destroyed: Array = delta_payload.get("destroyed_objects", [])
-	for id_variant in destroyed:
-		var stable_id: String = str(id_variant)
-		if StableIdScript.parse(stable_id) == null:
-			failures.append("WorldDeltaStore rejected invalid destroyed StableId: %s" % stable_id)
-			continue
-		_destroyed_objects[stable_id] = true
+	var failures: Array[String] = replace_destroyed_object_ids(
+		delta_payload.get("destroyed_objects", [])
+	)
 
 	_copy_map(delta_payload.get("object_state", {}), _object_state)
 	_copy_map(delta_payload.get("special_location_state", {}), _special_location_state)
 	_copy_map(delta_payload.get("terrain_delta_index", {}), _terrain_delta_index)
 	_copy_map(delta_payload.get("player_created_objects", {}), _player_created_objects)
+	return failures
+
+
+func replace_destroyed_object_ids(object_ids: Array) -> Array[String]:
+	_destroyed_objects.clear()
+	var failures: Array[String] = []
+	for id_variant in object_ids:
+		var stable_id: String = str(id_variant)
+		if StableIdScript.parse(stable_id) == null:
+			failures.append("WorldDeltaStore rejected invalid destroyed StableId: %s" % stable_id)
+			continue
+		_destroyed_objects[stable_id] = true
 	return failures
 
 
@@ -78,4 +84,12 @@ static func _copy_map(source_variant, target: Dictionary) -> void:
 		return
 	var source: Dictionary = source_variant
 	for key in source.keys():
-		target[key] = source[key]
+		target[key] = _deep_owned_value(source[key])
+
+
+static func _deep_owned_value(value):
+	if value is Dictionary:
+		return value.duplicate(true)
+	if value is Array:
+		return value.duplicate(true)
+	return value

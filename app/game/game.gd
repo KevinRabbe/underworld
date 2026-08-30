@@ -6,10 +6,12 @@ const WaterSettingsScript := preload("res://presentation/world/environment/proto
 const CavePresentationControllerScript := preload("res://presentation/world/caves/cave_presentation_controller.gd")
 const PrototypeCavePresentationCatalog := preload("res://content/presentation/caves/prototype_cave_presentation_catalog.tres")
 const SurfaceChunkStreamerScript := preload("res://world/runtime/streaming/surface_chunk_streamer.gd")
+const WorldDeltaStoreScript := preload("res://worldgen/persistence/world_delta_store.gd")
 const PrototypeSurvivalControllerScript := preload("res://gameplay/survival/prototype_survival_controller.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
+const GameplayHudScript := preload("res://presentation/ui/hud/gameplay_hud.gd")
 const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
 const UnderworldRuntimeControllerScript := preload("res://worldgen/runtime/underworld_cave_runtime_controller.gd")
 const WorldIdScript := preload("res://worldgen/identity/world_id.gd")
@@ -20,16 +22,19 @@ var world_settings
 var survival_settings
 var water_settings
 var world
+var world_delta_store
 var survival
 var player
 var combat_resolver
 var encounter_controller
+var gameplay_hud
 var debug_hud
 var water_surface: MeshInstance3D
 var underworld_runtime
 var cave_presentation
 var spawn_xz: Vector3 = Vector3.ZERO
 @export var enable_map015_fixture: bool = false
+@export var enable_debug_hud: bool = true
 
 
 func _ready() -> void:
@@ -38,6 +43,7 @@ func _ready() -> void:
 	_create_player()
 	_create_underworld_runtime()
 	_create_combat()
+	_create_gameplay_hud()
 	_create_debug_hud()
 
 
@@ -109,13 +115,16 @@ func _create_world() -> void:
 	survival_settings = SurvivalSettingsScript.new()
 	water_settings = WaterSettingsScript.new()
 
+	world_delta_store = WorldDeltaStoreScript.new()
 	world = SurfaceChunkStreamerScript.new()
 	world.name = "SurfaceWorld"
+	if not world.bind_world_delta_store(world_delta_store):
+		push_error("Surface world rejected WorldDeltaStore authority")
 	world.configure(world_settings)
 	add_child(world)
 
-	# Prototype survival currently owns the version-2 save orchestration. It loads
-	# generated-world deltas into the streamer before initial chunk construction.
+	# Prototype survival keeps version-2 file orchestration, while the streamer
+	# delegates generated-world destruction authority to WorldDeltaStore.
 	survival = PrototypeSurvivalControllerScript.new()
 	survival.name = "PrototypeSurvival"
 	add_child(survival)
@@ -186,7 +195,30 @@ func _create_combat() -> void:
 	encounter_controller.configure(world, player, world_settings)
 
 
+func _create_gameplay_hud() -> void:
+	gameplay_hud = GameplayHudScript.new()
+	gameplay_hud.name = "GameplayHUD"
+	add_child(gameplay_hud)
+	var hud_failures: Array[String] = gameplay_hud.configure(
+		player,
+		survival.get_inventory_state(),
+		survival.get_equipment_state()
+	)
+	if not hud_failures.is_empty():
+		push_error("Gameplay HUD configuration failed: %s" % [hud_failures])
+	survival.harvest_result.connect(gameplay_hud.present_feedback)
+	player.parry_succeeded.connect(_on_player_parry_succeeded)
+
+
+func _on_player_parry_succeeded(_source_position: Vector3) -> void:
+	if gameplay_hud == null:
+		return
+	gameplay_hud.present_feedback({"type": "combat.parry_succeeded"})
+
+
 func _create_debug_hud() -> void:
+	if not enable_debug_hud:
+		return
 	debug_hud = DebugHudScript.new()
 	debug_hud.name = "DebugHUD"
 	debug_hud.configure(
