@@ -52,7 +52,6 @@ var camera_pitch: float = deg_to_rad(-12.0)
 var camera_distance: float = DEFAULT_CAMERA_DISTANCE
 var coyote_timer: float = 0.0
 var jump_buffer_timer: float = 0.0
-var respawn_position: Vector3 = Vector3.ZERO
 var harvest_range: float = 4.5
 var tool_use_cooldown_duration: float = 0.38
 var tool_use_cooldown_timer: float = 0.0
@@ -88,7 +87,6 @@ func _ready() -> void:
 	_configure_character_body()
 	_build_character_visual()
 	_build_camera()
-	respawn_position = global_position
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
@@ -174,10 +172,6 @@ func _physics_process(delta: float) -> void:
 	stamina.tick(delta)
 
 
-func set_respawn_position(position: Vector3) -> void:
-	respawn_position = position
-
-
 func set_harvest_range(distance: float) -> void:
 	harvest_range = maxf(distance, 0.1)
 
@@ -216,7 +210,6 @@ func get_stamina() -> float:
 
 func get_max_stamina() -> float:
 	return stamina.max_stamina
-
 
 func get_action_state_name() -> String:
 	return action_controller.state_name()
@@ -768,7 +761,6 @@ func commit_respawn(position: Vector3) -> bool:
 	if not defeated or not _is_finite_vector3(position):
 		return false
 	global_position = position
-	respawn_position = position
 	velocity = Vector3.ZERO
 	health = MAX_HEALTH
 	damage_invulnerability_timer = POST_RESPAWN_INVULNERABILITY
