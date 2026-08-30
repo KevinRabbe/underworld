@@ -102,11 +102,18 @@ static func select(
 
 
 static func _select_viable_candidate(candidates: Array[Dictionary]) -> Dictionary:
-	if candidates.is_empty():
+	var viable: Array[Dictionary] = []
+	for candidate in candidates:
+		var spawn_variant: Variant = candidate.get("spawn_xz", null)
+		if not spawn_variant is Vector3:
+			continue
+		if not _is_finite_vector3(spawn_variant):
+			continue
+		viable.append(candidate)
+	if viable.is_empty():
 		return {}
-	var ordered: Array[Dictionary] = candidates.duplicate(true)
-	ordered.sort_custom(_candidate_less)
-	return ordered[0]
+	viable.sort_custom(_candidate_less)
+	return viable[0]
 
 
 static func _recommended_spawn(descriptor, sampler) -> Dictionary:
