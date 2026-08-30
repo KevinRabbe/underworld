@@ -5,6 +5,8 @@ const PaletteScript := preload("res://presentation/characters/voxel/voxel_charac
 const ModuleScript := preload("res://presentation/characters/voxel/voxel_character_module_definition.gd")
 const CharacterScript := preload("res://presentation/characters/voxel/voxel_character_definition.gd")
 const SliceProfileScript := preload("res://presentation/characters/voxel/voxel_character_slice_profile.gd")
+const FacetedProfileScript := preload("res://presentation/characters/faceted/faceted_humanoid_body_profile.gd")
+const FacetedOutfitScript := preload("res://presentation/characters/faceted/faceted_humanoid_outfit_definition.gd")
 
 const SKIN := 0
 const CLOTH := 1
@@ -25,13 +27,13 @@ const DETAIL_SCALE := 1.555555556 # 36 authored voxels -> 56-voxel presentation
 static func build() -> Resource:
 	var palette = PaletteScript.new().configure("palette.character.earth_teal", [
 		_entry("skin", Color("c39570"), 0.78, 0.0),
-		_entry("cloth", Color("716655"), 0.92, 0.0),
+		_entry("cloth", Color("554f43"), 0.92, 0.0),
 		_entry("leather", Color("503a2b"), 0.76, 0.0),
 		_entry("metal", Color("858b8e"), 0.38, 0.62),
 		_entry("hair", Color("4a3326"), 0.88, 0.0),
-		_entry("accent", Color("2e7180"), 0.82, 0.0),
+		_entry("accent", Color("235d68"), 0.82, 0.0),
 		_entry("face", Color("4a392d"), 0.72, 0.0),
-		_entry("canvas_light", Color("9a896a"), 0.94, 0.0),
+		_entry("canvas_light", Color("7f725b"), 0.94, 0.0),
 		_entry("trouser", Color("343835"), 0.90, 0.0),
 		_entry("canvas_dark", Color("5b5445"), 0.95, 0.0),
 		_entry("leather_light", Color("75543a"), 0.80, 0.0),
@@ -83,9 +85,9 @@ static func build() -> Resource:
 			_slice_overlay_part("pack_buckles", "rig_role.chest", 36, 43, 40, METAL, 5),
 		]),
 		_module("tools", &"held_item", [
-			_tool_part("axe_handle", "stone_axe", _box(Vector3i(0,-6,0), Vector3i(0,3,0), LEATHER), Vector3i.ZERO),
-			_tool_part("axe_head", "stone_axe", _box(Vector3i(-2,2,0), Vector3i(2,4,1), METAL), Vector3i.ZERO),
-			_tool_part("pickaxe_handle", "stone_pickaxe", _box(Vector3i(0,-6,0), Vector3i(0,3,0), LEATHER), Vector3i.ZERO),
+			_tool_part("axe_handle", "stone_axe", _box(Vector3i(0,-9,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO),
+			_tool_part("axe_head", "stone_axe", _box(Vector3i(-3,3,0), Vector3i(3,6,1), METAL), Vector3i.ZERO),
+			_tool_part("pickaxe_handle", "stone_pickaxe", _box(Vector3i(0,-9,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO),
 			_tool_part("pickaxe_head", "stone_pickaxe", _pickaxe_head_cells(), Vector3i.ZERO),
 		]),
 	]
@@ -102,6 +104,12 @@ static func build() -> Resource:
 	character.palette = palette
 	character.modules = modules
 	character.slice_profile = _baseline_slice_profile()
+	character.faceted_body_profile = FacetedProfileScript.new().configure("character.body.frontier_broad_neutral")
+	character.faceted_outfit_definition = FacetedOutfitScript.new().configure("outfit.frontier.expedition.baseline", [
+		&"torso", &"upper_arm_l", &"upper_arm_r", &"thigh_l", &"thigh_r",
+		&"calf_l", &"calf_r", &"foot_l", &"foot_r",
+	], {&"torso": 0.018, &"upper_arm_l": 0.012, &"upper_arm_r": 0.012, &"thigh_l": 0.014, &"thigh_r": 0.014})
+	character.use_faceted_body = true
 	return character
 
 
@@ -114,6 +122,26 @@ static func build_variant(variant_id: String) -> Resource:
 		character.palette.entries[CLOTH]["color"] = Color("4f5960")
 		character.palette.entries[METAL]["color"] = Color("a7b1b3")
 		character.palette.entries[METAL]["roughness"] = 0.30
+	elif variant_id == "slim":
+		character.faceted_body_profile = FacetedProfileScript.new().configure("character.body.frontier_slim", {
+			"shoulder_width": 0.52, "chest_width": 0.43, "waist_width": 0.35,
+			"pelvis_width": 0.39, "thigh_diameter": 0.17, "calf_diameter": 0.14,
+			"ankle_width": 0.09, "arm_mass": 0.88,
+		})
+	elif variant_id == "heavy":
+		character.faceted_body_profile = FacetedProfileScript.new().configure("character.body.frontier_heavy", {
+			"shoulder_width": 0.64, "chest_width": 0.53, "chest_depth": 0.34,
+			"waist_width": 0.43, "pelvis_width": 0.47, "thigh_diameter": 0.23,
+			"calf_diameter": 0.18, "ankle_width": 0.11, "foot_width": 0.13,
+			"arm_mass": 1.12,
+		})
+	return character
+
+
+static func build_legacy_voxel() -> Resource:
+	var character = build()
+	character.presentation_id = "character.voxel.grounded_survivor.legacy"
+	character.use_faceted_body = false
 	return character
 
 

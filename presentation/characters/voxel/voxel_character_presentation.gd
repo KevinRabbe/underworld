@@ -3,6 +3,11 @@ class_name UnderworldVoxelCharacterPresentation
 
 const CompilerScript := preload("res://presentation/characters/voxel/voxel_module_compiler.gd")
 const BaselineFactoryScript := preload("res://presentation/characters/voxel/baseline_survivor_factory.gd")
+const FacetedCompilerScript := preload("res://presentation/characters/faceted/faceted_body_compiler.gd")
+
+const FACETED_REPLACED_SLOTS: Array[StringName] = [
+	&"body_base", &"head_hair", &"torso_outfit", &"leg_outfit", &"hands", &"feet", &"back_accessory",
+]
 
 const ROLE_TO_BONE := {
 	"rig_role.root": "root", "rig_role.pelvis": "pelvis",
@@ -17,6 +22,7 @@ const ROLE_TO_BONE := {
 }
 
 static var _mesh_data_cache: Dictionary = {}
+static var _faceted_mesh_data_cache: Dictionary = {}
 
 var character_definition: Resource
 var mesh_metrics: Dictionary = {}
@@ -25,6 +31,8 @@ var animation_player: AnimationPlayer
 var animation_tree: AnimationTree
 var current_animation_state: StringName = &"idle"
 var death_pose_active: bool = false
+var faceted_body_mesh: MeshInstance3D
+var locomotion_point_indices: Dictionary = {}
 
 
 func _init(definition: Resource = null) -> void:
@@ -47,6 +55,55 @@ func build() -> void:
 		tool_visual_root.position = Vector3(0.13, 0.02, 0.01)
 		tool_visual_root.rotation_degrees = Vector3(0.0, 0.0, -35.0)
 	_build_animation_graph()
+	_apply_base_pose(Vector3.ZERO, true, false, 0.0)
+
+
+func _build_skeleton() -> void:
+	super._build_skeleton()
+	if character_definition == null or not character_definition.use_faceted_body or character_definition.faceted_body_profile == null:
+		return
+	var profile = character_definition.faceted_body_profile
+	var landmark: Dictionary = profile.anatomy_landmarks()
+	var pelvis_y: float = float(landmark["pelvis_y"])
+	var waist_y: float = float(landmark["waist_y"])
+	var lower_chest_y: float = float(landmark["lower_chest_y"])
+	var chest_y: float = float(landmark["chest_y"])
+	var shoulder_y: float = float(landmark["shoulder_y"])
+	var jaw_y: float = float(landmark["jaw_y"])
+	_set_profile_bone_rest("pelvis", Vector3(0.0, pelvis_y, 0.0))
+	_set_profile_bone_rest("spine_01", Vector3(0.0, waist_y - pelvis_y, 0.0))
+	_set_profile_bone_rest("spine_02", Vector3(0.0, lower_chest_y - waist_y, 0.0))
+	_set_profile_bone_rest("chest", Vector3(0.0, chest_y - lower_chest_y, 0.0))
+	_set_profile_bone_rest("neck", Vector3(0.0, shoulder_y - chest_y, 0.0))
+	_set_profile_bone_rest("head", Vector3(0.0, jaw_y - shoulder_y, 0.0))
+	var clavicle_x: float = float(profile.shoulder_width) * 0.31
+	var upperarm_x: float = float(profile.shoulder_width) * 0.12
+	var arm_length: float = float(landmark["arm_length"])
+	for side_data in [["l", -1.0], ["r", 1.0]]:
+		var suffix: String = side_data[0]
+		var direction: float = side_data[1]
+		_set_profile_bone_rest("clavicle_%s" % suffix, Vector3(direction * clavicle_x, shoulder_y - chest_y, 0.0))
+		_set_profile_bone_rest("upperarm_%s" % suffix, Vector3(direction * upperarm_x, 0.0, 0.0))
+		_set_profile_bone_rest("forearm_%s" % suffix, Vector3(direction * arm_length * 0.42, 0.0, 0.0))
+		_set_profile_bone_rest("hand_%s" % suffix, Vector3(direction * arm_length * 0.38, 0.0, 0.0))
+	var hip_y: float = float(landmark["hip_y"])
+	var knee_y: float = float(landmark["knee_y"])
+	var ankle_y: float = float(landmark["ankle_y"])
+	var hip_x: float = float(profile.pelvis_width) * 0.255
+	for side_data in [["l", -1.0], ["r", 1.0]]:
+		var suffix: String = side_data[0]
+		var direction: float = side_data[1]
+		_set_profile_bone_rest("thigh_%s" % suffix, Vector3(direction * hip_x, hip_y - pelvis_y, 0.0))
+		_set_profile_bone_rest("calf_%s" % suffix, Vector3(0.0, knee_y - hip_y, 0.0))
+		_set_profile_bone_rest("foot_%s" % suffix, Vector3(0.0, ankle_y - knee_y, 0.0))
+
+
+func _set_profile_bone_rest(bone_name: String, local_position: Vector3) -> void:
+	var bone_index: int = skeleton.find_bone(bone_name)
+	if bone_index < 0:
+		return
+	skeleton.set_bone_rest(bone_index, Transform3D(Basis.IDENTITY, local_position))
+	skeleton.set_bone_pose_position(bone_index, local_position)
 
 
 func _build_presentation_materials() -> void:
@@ -59,8 +116,37 @@ func _build_presentation_visuals() -> void:
 	var palette_fingerprint: String = character_definition.palette.canonical_fingerprint()
 	var totals := {"parts": 0, "cells": 0, "triangles": 0, "vertices": 0, "estimated_bytes": 0, "compilation_usec": 0, "resource_creation_usec": 0, "cache_hits": 0}
 	var part_fingerprints: Array[String] = []
+	if character_definition.use_faceted_body:
+		var faceted_started_usec := Time.get_ticks_usec()
+		var faceted_cache_key := "%s|%s|%s|%.6f|%d" % [
+			character_definition.faceted_body_profile.canonical_fingerprint(),
+			character_definition.faceted_outfit_definition.canonical_fingerprint(),
+			palette_fingerprint, character_definition.presentation_scale,
+			FacetedCompilerScript.COMPILER_REVISION,
+		]
+		var faceted_data = _faceted_mesh_data_cache.get(faceted_cache_key)
+		if faceted_data == null:
+			faceted_data = FacetedCompilerScript.compile(character_definition.faceted_body_profile, character_definition.palette, character_definition.faceted_outfit_definition)
+			if faceted_data.success:
+				_faceted_mesh_data_cache[faceted_cache_key] = faceted_data
+		else:
+			totals["cache_hits"] += 1
+		if not faceted_data.success:
+			for diagnostic in faceted_data.diagnostics:
+				push_error("Faceted survivor: %s" % diagnostic)
+		else:
+			_realize_faceted_body(faceted_data)
+			totals["parts"] += 1
+			totals["triangles"] += int(faceted_data.metrics.get("triangles", 0))
+			totals["vertices"] += int(faceted_data.metrics.get("vertices", 0))
+			totals["estimated_bytes"] += int(faceted_data.metrics.get("estimated_bytes", 0))
+			totals["compilation_usec"] += int(faceted_data.metrics.get("compilation_usec", 0))
+			totals["resource_creation_usec"] += Time.get_ticks_usec() - faceted_started_usec
+			part_fingerprints.append(faceted_data.source_fingerprint)
 	for module in character_definition.modules:
 		if module.slot_id == &"held_item":
+			continue
+		if character_definition.use_faceted_body and module.slot_id in FACETED_REPLACED_SLOTS:
 			continue
 		var module_fingerprint_value: String = module.canonical_fingerprint()
 		for part_value in module.resolved_parts():
@@ -88,6 +174,32 @@ func _build_presentation_visuals() -> void:
 	part_fingerprints.sort()
 	module_fingerprint = "vpresentation1:sha256:" + (character_fingerprint + "|" + ";".join(part_fingerprints)).sha256_text()
 	mesh_metrics = totals
+
+
+func _realize_faceted_body(mesh_data) -> void:
+	faceted_body_mesh = MeshInstance3D.new()
+	faceted_body_mesh.name = "FacetedSurvivorBody"
+	var array_mesh := ArrayMesh.new()
+	for surface in mesh_data.surfaces:
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = surface["vertices"]
+		arrays[Mesh.ARRAY_NORMAL] = surface["normals"]
+		arrays[Mesh.ARRAY_COLOR] = surface["colors"]
+		arrays[Mesh.ARRAY_TEX_UV] = surface["uvs"]
+		arrays[Mesh.ARRAY_BONES] = surface["bones"]
+		arrays[Mesh.ARRAY_WEIGHTS] = surface["weights"]
+		arrays[Mesh.ARRAY_INDEX] = surface["indices"]
+		array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		array_mesh.surface_set_material(array_mesh.get_surface_count() - 1, _material_for_palette(int(surface["palette_index"])))
+	faceted_body_mesh.mesh = array_mesh
+	faceted_body_mesh.scale = Vector3.ONE * character_definition.presentation_scale
+	add_child(faceted_body_mesh)
+	faceted_body_mesh.skeleton = NodePath("../Skeleton3D")
+	var skin := Skin.new()
+	for bone_index in range(skeleton.get_bone_count()):
+		skin.add_bind(bone_index, skeleton.get_bone_global_rest(bone_index).affine_inverse())
+	faceted_body_mesh.skin = skin
 
 
 func _build_presentation_face_details() -> void:
@@ -192,14 +304,13 @@ func _build_animation_graph() -> void:
 	var state_machine := AnimationNodeStateMachine.new()
 	var locomotion := AnimationNodeBlendSpace2D.new()
 	locomotion.blend_mode = AnimationNodeBlendSpace2D.BLEND_MODE_DISCRETE_CARRY
+	locomotion_point_indices.clear()
 	for point_data in [["idle", Vector2.ZERO], ["walk_forward", Vector2(0,1)], ["walk_backward", Vector2(0,-1)], ["strafe_left", Vector2(-1,0)], ["strafe_right", Vector2(1,0)]]:
 		var locomotion_node := AnimationNodeAnimation.new()
 		locomotion_node.resource_name = point_data[0]
 		locomotion_node.animation = point_data[0]
-		# Use the three-argument form for compatibility with the editor parser;
-		# assign the stable point name through the dedicated API immediately after.
 		locomotion.add_blend_point(locomotion_node, point_data[1], -1)
-		locomotion.set_blend_point_name(locomotion.get_blend_point_count() - 1, StringName(point_data[0]))
+		locomotion_point_indices[StringName(point_data[0])] = locomotion.get_blend_point_count() - 1
 	state_machine.add_node("locomotion", locomotion)
 	for clip_name in ["sprint", "jump", "fall", "dodge_forward", "dodge_backward", "dodge_left", "dodge_right", "attack_light", "attack_heavy", "block", "parry", "hit", "death", "tool_use"]:
 		var node := AnimationNodeAnimation.new()
@@ -221,6 +332,8 @@ func update_voxel_visual(delta: float, local_horizontal_velocity: Vector3, verti
 		return
 	if current_action != ACTION_NONE or blocking_pose_active:
 		return
+	if grounded and Vector2(local_horizontal_velocity.x, local_horizontal_velocity.z).length() < 0.08:
+		_apply_relaxed_knees()
 	if not grounded:
 		_set_animation_state(&"jump" if vertical_velocity > 0.2 else &"fall")
 	elif Vector2(local_horizontal_velocity.x, local_horizontal_velocity.z).length() < 0.08:
@@ -316,6 +429,10 @@ func _build_pose_clip(clip_name: String) -> Animation:
 			_add_rotation_keys(animation, "chest", [[0.0, Vector3.ZERO], [0.5, Vector3(deg_to_rad(2),0,0)], [1.0, Vector3.ZERO]])
 			_add_rotation_keys(animation, "head", [[0.0, Vector3(0,deg_to_rad(-2),0)], [0.5, Vector3(0,deg_to_rad(2),0)], [1.0, Vector3(0,deg_to_rad(-2),0)]])
 			_add_relaxed_arm_keys(animation)
+			_add_rotation_keys(animation, "thigh_l", [[0.0, Vector3(deg_to_rad(-2),0,0)], [1.0, Vector3(deg_to_rad(-2),0,0)]])
+			_add_rotation_keys(animation, "thigh_r", [[0.0, Vector3(deg_to_rad(-2),0,0)], [1.0, Vector3(deg_to_rad(-2),0,0)]])
+			_add_rotation_keys(animation, "calf_l", [[0.0, Vector3(deg_to_rad(4),0,0)], [1.0, Vector3(deg_to_rad(4),0,0)]])
+			_add_rotation_keys(animation, "calf_r", [[0.0, Vector3(deg_to_rad(4),0,0)], [1.0, Vector3(deg_to_rad(4),0,0)]])
 		"walk_forward", "walk_backward":
 			_add_gait_keys(animation, 24.0 if clip_name == "walk_forward" else -20.0, 0.08)
 		"strafe_left", "strafe_right":
@@ -381,6 +498,13 @@ func _add_relaxed_arm_keys(animation: Animation) -> void:
 	_add_rotation_keys(animation, "upperarm_r", [[0.0, Vector3(0,0,deg_to_rad(-68))], [1.0, Vector3(0,0,deg_to_rad(-68))]])
 	_add_rotation_keys(animation, "forearm_l", [[0.0, Vector3(-0.12,0,deg_to_rad(16))], [1.0, Vector3(-0.12,0,deg_to_rad(16))]])
 	_add_rotation_keys(animation, "forearm_r", [[0.0, Vector3(-0.12,0,deg_to_rad(-16))], [1.0, Vector3(-0.12,0,deg_to_rad(-16))]])
+
+
+func _apply_relaxed_knees() -> void:
+	_set_rot("thigh_l", Vector3(deg_to_rad(-2.0), 0.0, 0.0))
+	_set_rot("thigh_r", Vector3(deg_to_rad(-2.0), 0.0, 0.0))
+	_set_rot("calf_l", Vector3(deg_to_rad(4.0), 0.0, 0.0))
+	_set_rot("calf_r", Vector3(deg_to_rad(4.0), 0.0, 0.0))
 
 
 func _add_light_attack_clip(animation: Animation) -> void:
@@ -474,7 +598,7 @@ func realized_visual_bounds() -> AABB:
 	var bounds := AABB()
 	var has_bounds := false
 	var presentation_inverse := global_transform.affine_inverse()
-	for child in find_children("Voxel*", "MeshInstance3D", true, false):
+	for child in find_children("*", "MeshInstance3D", true, false):
 		var mesh_instance: MeshInstance3D = child
 		if mesh_instance.name.begins_with("VoxelHeld") or mesh_instance.mesh == null:
 			continue

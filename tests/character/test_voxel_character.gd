@@ -9,6 +9,8 @@ const PlayerScript := preload("res://gameplay/player/player.gd")
 const VoxelProvider := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
 const MannequinProvider := preload("res://presentation/characters/player/prototype_mannequin/prototype_mannequin_presentation_provider.gd")
 const SliceProfile := preload("res://presentation/characters/voxel/voxel_character_slice_profile.gd")
+const FacetedProfile := preload("res://presentation/characters/faceted/faceted_humanoid_body_profile.gd")
+const FacetedCompiler := preload("res://presentation/characters/faceted/faceted_body_compiler.gd")
 
 
 static func run(tree: SceneTree) -> Array[String]:
@@ -16,6 +18,7 @@ static func run(tree: SceneTree) -> Array[String]:
 	_test_definition_contract(failures)
 	_test_slice_profile_contract(failures)
 	_test_compiler_contract(failures)
+	_test_faceted_compiler_contract(failures)
 	_test_runtime_presentation(failures)
 	_test_player_default(tree, failures)
 	return failures
@@ -38,12 +41,29 @@ static func _test_slice_profile_contract(failures: Array[String]) -> void:
 
 static func _test_definition_contract(failures: Array[String]) -> void:
 	var character = BaselineFactory.build()
-	_expect_true(failures, "baseline voxel survivor validates", character.validate_definition().is_empty())
+	_expect_true(failures, "baseline faceted survivor definition validates", character.validate_definition().is_empty())
 	_expect_true(failures, "baseline voxel size is high-detail presentation pitch", is_equal_approx(character.voxel_size, 0.032142857))
 	_expect_true(failures, "baseline survivor is 56 authored voxels tall at 1.8 m", is_equal_approx(character.presentation_bounds.size.y, 1.8))
+	_expect_true(failures, "faceted survivor is the normal presentation provider", character.use_faceted_body)
+	var body_profile = character.faceted_body_profile
+	_expect_true(failures, "broad-neutral faceted profile validates", body_profile != null and body_profile.validate().is_empty())
+	_expect_equal(failures, "faceted profile derives 56 editor-ready rows", body_profile.derived_rows().size(), 56)
+	_expect_true(failures, "faceted profile locks broad-neutral proportions", is_equal_approx(body_profile.shoulder_width, 0.58) and is_equal_approx(body_profile.chest_width, 0.48) and is_equal_approx(body_profile.pelvis_width, 0.42) and is_equal_approx(body_profile.thigh_diameter, 0.20) and is_equal_approx(body_profile.calf_diameter, 0.16))
+	var reordered_profile = FacetedProfile.new().configure("character.body.frontier_broad_neutral", {"calf_diameter": 0.16, "shoulder_width": 0.58, "chest_width": 0.48})
+	_expect_equal(failures, "profile input ordering cannot change canonical identity", reordered_profile.canonical_fingerprint(), body_profile.canonical_fingerprint())
 	var work_variant = BaselineFactory.build_variant("work")
 	var armor_variant = BaselineFactory.build_variant("light_armor")
 	_expect_true(failures, "preview variants change presentation fingerprints", work_variant.canonical_fingerprint() != character.canonical_fingerprint() and armor_variant.canonical_fingerprint() != character.canonical_fingerprint())
+	var slim_variant = BaselineFactory.build_variant("slim")
+	var heavy_variant = BaselineFactory.build_variant("heavy")
+	_expect_true(failures, "anatomy controls produce deterministic presentation variants", slim_variant.validate_definition().is_empty() and heavy_variant.validate_definition().is_empty() and slim_variant.canonical_fingerprint() != heavy_variant.canonical_fingerprint())
+	_expect_true(failures, "anatomy variants preserve presentation height", is_equal_approx(slim_variant.faceted_body_profile.height, 1.8) and is_equal_approx(heavy_variant.faceted_body_profile.height, 1.8))
+	var hair_variant = BaselineFactory.build()
+	hair_variant.faceted_hair_id = "hair.frontier.cropped.control"
+	_expect_true(failures, "hair selection changes presentation identity only", hair_variant.canonical_fingerprint() != character.canonical_fingerprint() and hair_variant.rig_profile_id == character.rig_profile_id)
+	var outfit_variant = BaselineFactory.build()
+	outfit_variant.faceted_outfit_definition.outfit_id = "outfit.frontier.expedition.control"
+	_expect_true(failures, "outfit selection changes presentation identity only", outfit_variant.canonical_fingerprint() != character.canonical_fingerprint() and outfit_variant.rig_profile_id == character.rig_profile_id)
 	var palette_slots: Array[String] = []
 	for entry_value in character.palette.entries:
 		palette_slots.append(str(entry_value.get("slot", "")))
@@ -145,6 +165,68 @@ static func _test_compiler_contract(failures: Array[String]) -> void:
 	_expect_true(failures, "duplicate voxel cell fails deterministically", not malformed.success and not malformed.diagnostics.is_empty())
 
 
+static func _test_faceted_compiler_contract(failures: Array[String]) -> void:
+	var character = BaselineFactory.build()
+	var mesh_data = FacetedCompiler.compile(character.faceted_body_profile, character.palette, character.faceted_outfit_definition)
+	_expect_true(failures, "faceted broad-neutral survivor compiles", mesh_data.success and mesh_data.diagnostics.is_empty())
+	_expect_true(failures, "faceted compiler emits one multi-surface skinned payload", mesh_data.surfaces.size() >= 8)
+	_expect_true(failures, "faceted survivor owns substantial indexed geometry", int(mesh_data.metrics.get("vertices", 0)) > 500 and int(mesh_data.metrics.get("triangles", 0)) > 150)
+	_expect_equal(failures, "covered body zones are omitted beneath outfit shells", int(mesh_data.metrics.get("omitted_covered_body_zones", 0)), character.faceted_outfit_definition.coverage_zones.size())
+	var overlap_margins: Dictionary = mesh_data.metrics.get("joint_overlap_margins", {})
+	_expect_equal(failures, "faceted compiler records every articulated joint boundary", overlap_margins.size(), 12)
+	for joint_name in overlap_margins.keys():
+		_expect_true(failures, "faceted joint %s has no uncovered geometric gap" % joint_name, float(overlap_margins[joint_name]) >= 0.0)
+	_expect_true(failures, "faceted survivor bounds match grounded 1.8 m target", mesh_data.bounds.position.y >= -0.001 and mesh_data.bounds.end.y >= 1.79 and mesh_data.bounds.end.y <= 1.82)
+	for surface in mesh_data.surfaces:
+		var vertices: PackedVector3Array = surface["vertices"]
+		var normals: PackedVector3Array = surface["normals"]
+		var colors: PackedColorArray = surface["colors"]
+		var uvs: PackedVector2Array = surface["uvs"]
+		var bones: PackedInt32Array = surface["bones"]
+		var weights: PackedFloat32Array = surface["weights"]
+		var indices: PackedInt32Array = surface["indices"]
+		_expect_equal(failures, "faceted vertices, normals, colors, and UVs align", [normals.size(), colors.size(), uvs.size()], [vertices.size(), vertices.size(), vertices.size()])
+		_expect_equal(failures, "faceted mesh stores four bones per vertex", bones.size(), vertices.size() * 4)
+		_expect_equal(failures, "faceted mesh stores four weights per vertex", weights.size(), vertices.size() * 4)
+		for vertex_index in range(vertices.size()):
+			_expect_true(failures, "faceted vertices are finite", vertices[vertex_index].is_finite())
+			_expect_true(failures, "faceted normals are finite and unit length", normals[vertex_index].is_finite() and is_equal_approx(normals[vertex_index].length(), 1.0))
+			var weight_sum := 0.0
+			for slot in range(4):
+				var offset := vertex_index * 4 + slot
+				_expect_true(failures, "faceted skin references valid semantic bones", bones[offset] >= 0 and bones[offset] < 21)
+				_expect_true(failures, "faceted skin weights are finite and non-negative", is_finite(weights[offset]) and weights[offset] >= 0.0)
+				weight_sum += weights[offset]
+			_expect_true(failures, "faceted skin weights normalize per vertex", is_equal_approx(weight_sum, 1.0))
+		for triangle_index in range(0, indices.size(), 3):
+			var ia := indices[triangle_index]
+			var ib := indices[triangle_index + 1]
+			var ic := indices[triangle_index + 2]
+			_expect_true(failures, "faceted indices reference emitted vertices", ia >= 0 and ia < vertices.size() and ib >= 0 and ib < vertices.size() and ic >= 0 and ic < vertices.size())
+			if ia >= 0 and ia < vertices.size() and ib >= 0 and ib < vertices.size() and ic >= 0 and ic < vertices.size():
+				var face_normal := (vertices[ib] - vertices[ia]).cross(vertices[ic] - vertices[ia])
+				_expect_true(failures, "faceted triangles are non-degenerate", face_normal.length_squared() > 0.00000001)
+				_expect_true(failures, "faceted winding matches outward flat normals", face_normal.normalized().dot(normals[ia]) > 0.99)
+	var repeated = FacetedCompiler.compile(character.faceted_body_profile, character.palette, character.faceted_outfit_definition)
+	_expect_equal(failures, "faceted compilation reproduces exact fingerprint", repeated.source_fingerprint, mesh_data.source_fingerprint)
+	_expect_equal(failures, "faceted compilation reproduces exact surface descriptor", repeated.canonical_surface_descriptor(), mesh_data.canonical_surface_descriptor())
+	var malformed_profile = FacetedProfile.new().configure("fixture.invalid", {"shoulder_width": 0.30, "chest_width": 0.48, "ankle_width": 0.22})
+	var malformed = FacetedCompiler.compile(malformed_profile, character.palette, character.faceted_outfit_definition)
+	_expect_true(failures, "malformed anatomy fails deterministically", not malformed.success and malformed.diagnostics == FacetedCompiler.compile(malformed_profile, character.palette, character.faceted_outfit_definition).diagnostics)
+	var malformed_outfit = character.faceted_outfit_definition.duplicate(true)
+	malformed_outfit.coverage_zones.append(&"unknown_zone")
+	malformed_outfit.shell_offsets[&"torso"] = 0.5
+	var malformed_outfit_mesh = FacetedCompiler.compile(character.faceted_body_profile, character.palette, malformed_outfit)
+	_expect_true(failures, "malformed coverage and shell offsets fail deterministically", not malformed_outfit_mesh.success and malformed_outfit_mesh.diagnostics.any(func(value: String) -> bool: return value.contains("unknown coverage zone")) and malformed_outfit_mesh.diagnostics.any(func(value: String) -> bool: return value.contains("shell offset")))
+	var reordered_outfit = character.faceted_outfit_definition.duplicate(true)
+	reordered_outfit.coverage_zones.reverse()
+	_expect_equal(failures, "coverage input ordering cannot change canonical identity", reordered_outfit.canonical_fingerprint(), character.faceted_outfit_definition.canonical_fingerprint())
+	var incomplete_palette = character.palette.duplicate(true)
+	incomplete_palette.entries.resize(4)
+	var missing_material_mesh = FacetedCompiler.compile(character.faceted_body_profile, incomplete_palette, character.faceted_outfit_definition)
+	_expect_true(failures, "missing semantic palette references fail deterministically", not missing_material_mesh.success and missing_material_mesh.diagnostics.any(func(value: String) -> bool: return value.contains("missing required semantic entries")))
+
+
 static func _test_runtime_presentation(failures: Array[String]) -> void:
 	var character := VoxelPresentation.new()
 	character.build()
@@ -157,11 +239,14 @@ static func _test_runtime_presentation(failures: Array[String]) -> void:
 	var pelvis_pose: Vector3 = character.skeleton.get_bone_global_pose(character.skeleton.find_bone("pelvis")).origin
 	var head_pose: Vector3 = character.skeleton.get_bone_global_pose(character.skeleton.find_bone("head")).origin
 	var foot_pose: Vector3 = character.skeleton.get_bone_global_pose(character.skeleton.find_bone("foot_l")).origin
-	_expect_true(failures, "procedural bone translations remain assembled after reset", pelvis_pose.y > 0.8 and head_pose.y > 1.6 and absf(foot_pose.y) < 0.05)
+	_expect_true(failures, "profile-derived bone translations remain assembled after reset", pelvis_pose.y > 0.8 and head_pose.y >= 1.59 and foot_pose.y > 0.05 and foot_pose.y < 0.15)
 	_expect_true(failures, "voxel presentation owns AnimationTree", character.get_animation_tree() != null)
 	var library: AnimationLibrary = character.animation_player.get_animation_library("")
 	for clip_name in ["idle", "walk_forward", "walk_backward", "strafe_left", "strafe_right", "sprint", "jump", "fall", "dodge_forward", "dodge_backward", "dodge_left", "dodge_right", "attack_light", "attack_heavy", "block", "parry", "hit", "death", "tool_use"]:
 		_expect_true(failures, "%s owns authored pose tracks" % clip_name, library.has_animation(clip_name) and library.get_animation(clip_name).get_track_count() > 0)
+		var clip: Animation = library.get_animation(clip_name)
+		for track_index in range(clip.get_track_count()):
+			_expect_true(failures, "%s remains rotation-only with no root motion" % clip_name, str(clip.track_get_path(track_index)).ends_with("/rotation"))
 	for action_clip_name in ["jump", "fall", "dodge_forward", "dodge_backward", "dodge_left", "dodge_right", "attack_light", "attack_heavy", "block", "parry", "hit", "death", "tool_use"]:
 		var action_clip: Animation = library.get_animation(action_clip_name)
 		_expect_true(failures, "%s owns complete left/right upper-arm silhouette tracks" % action_clip_name, _has_bone_rotation_track(action_clip, character.skeleton, "upperarm_l") and _has_bone_rotation_track(action_clip, character.skeleton, "upperarm_r"))
@@ -172,15 +257,30 @@ static func _test_runtime_presentation(failures: Array[String]) -> void:
 	var state_machine: AnimationNodeStateMachine = character.animation_tree.tree_root
 	var locomotion: AnimationNodeBlendSpace2D = state_machine.get_node("locomotion")
 	_expect_equal(failures, "directional locomotion blend owns five canonical points", locomotion.get_blend_point_count(), 5)
-	_expect_equal(failures, "forward locomotion point has stable name", locomotion.find_blend_point_by_name(&"walk_forward"), 1)
-	_expect_true(failures, "voxel presentation compiles modular parts", int(character.mesh_metrics.get("parts", 0)) >= 16)
+	var forward_index: int = int(character.locomotion_point_indices.get(&"walk_forward", -1))
+	_expect_equal(failures, "project-owned forward locomotion point has stable index", forward_index, 1)
+	_expect_true(failures, "forward locomotion node and position resolve without engine-specific names", forward_index >= 0 and locomotion.get_blend_point_node(forward_index).animation == &"walk_forward" and locomotion.get_blend_point_position(forward_index).is_equal_approx(Vector2(0, 1)))
+	var expected_points := {&"idle": Vector2.ZERO, &"walk_forward": Vector2(0,1), &"walk_backward": Vector2(0,-1), &"strafe_left": Vector2(-1,0), &"strafe_right": Vector2(1,0)}
+	for point_name in expected_points.keys():
+		var point_index: int = int(character.locomotion_point_indices.get(point_name, -1))
+		_expect_true(failures, "%s locomotion point resolves canonically" % point_name, point_index >= 0 and locomotion.get_blend_point_node(point_index).animation == point_name and locomotion.get_blend_point_position(point_index).is_equal_approx(expected_points[point_name]))
+	_expect_equal(failures, "faceted presentation realizes one coherent body mesh", int(character.mesh_metrics.get("parts", 0)), 1)
 	_expect_true(failures, "voxel presentation records main-thread resource timing", int(character.mesh_metrics.get("resource_creation_usec", -1)) >= 0)
 	_expect_true(failures, "voxel presentation has canonical source fingerprint", character.presentation_fingerprint().begins_with("vpresentation1:sha256:"))
-	var mesh_instances := character.find_children("Voxel*", "MeshInstance3D", true, false)
-	_expect_equal(failures, "runtime owns one mesh node per rigid part", mesh_instances.size(), int(character.mesh_metrics.get("parts", 0)))
+	var mesh_instances := character.find_children("FacetedSurvivorBody", "MeshInstance3D", true, false)
+	_expect_equal(failures, "runtime owns exactly one faceted body mesh", mesh_instances.size(), 1)
 	var all_body_meshes := character.find_children("*", "MeshInstance3D", true, false)
 	_expect_equal(failures, "voxel presentation contains no hidden mannequin duplicate meshes", all_body_meshes.size(), mesh_instances.size())
-	_expect_true(failures, "runtime never creates one Node per voxel", mesh_instances.size() < int(character.mesh_metrics.get("cells", 0)))
+	_expect_true(failures, "runtime never creates one Node per faceted triangle", mesh_instances.size() < int(character.mesh_metrics.get("triangles", 0)))
+	var cached_character := VoxelPresentation.new(BaselineFactory.build())
+	cached_character.build()
+	_expect_true(failures, "faceted runtime cache is keyed by presentation inputs", int(cached_character.mesh_metrics.get("cache_hits", 0)) >= 1 and cached_character.presentation_fingerprint() == character.presentation_fingerprint())
+	cached_character.free()
+	var legacy_character := VoxelPresentation.new(BaselineFactory.build_legacy_voxel())
+	legacy_character.build()
+	var legacy_meshes := legacy_character.find_children("Voxel*", "MeshInstance3D", true, false)
+	_expect_true(failures, "legacy voxel body remains an explicit regression fixture", legacy_meshes.size() >= 16 and legacy_character.find_child("FacetedSurvivorBody", true, false) == null)
+	legacy_character.free()
 	character.play_attack(0.6, &"heavy")
 	_expect_equal(failures, "heavy attack selects distinct animation state", character.current_animation_state, &"attack_heavy")
 	_expect_true(failures, "gameplay attack duration controls presentation playback", is_equal_approx(character.animation_player.speed_scale, 1.0 / 0.6))
@@ -211,8 +311,8 @@ static func _test_runtime_presentation(failures: Array[String]) -> void:
 	var recolored_character := VoxelPresentation.new(recolored_definition)
 	recolored_character.build()
 	_expect_true(failures, "palette swap changes cached presentation fingerprint", recolored_character.presentation_fingerprint() != character.presentation_fingerprint())
-	var base_head: MeshInstance3D = character.find_child("VoxelHeadSkin", true, false)
-	var recolored_head: MeshInstance3D = recolored_character.find_child("VoxelHeadSkin", true, false)
+	var base_head: MeshInstance3D = character.find_child("FacetedSurvivorBody", true, false)
+	var recolored_head: MeshInstance3D = recolored_character.find_child("FacetedSurvivorBody", true, false)
 	var base_colors: PackedColorArray = base_head.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
 	var recolored_colors: PackedColorArray = recolored_head.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
 	_expect_true(failures, "palette swap bypasses stale global mesh cache colors", not base_colors.is_empty() and not recolored_colors.is_empty() and base_colors[0] != recolored_colors[0])
@@ -240,11 +340,11 @@ static func _test_player_default(tree: SceneTree, failures: Array[String]) -> vo
 	_expect_equal(failures, "Player owns exactly one character presentation", visual_root.get_child_count(), 1)
 	var visual_bounds: AABB = voxel_character.realized_visual_bounds()
 	_expect_true(failures, "voxel feet align with Player ground origin (got %.3f)" % visual_bounds.position.y, visual_bounds.position.y >= -0.15 and visual_bounds.position.y <= 0.05)
-	_expect_true(failures, "voxel survivor fills the gameplay capsule height (got %.3f)" % visual_bounds.end.y, visual_bounds.end.y >= 1.65 and visual_bounds.end.y <= 1.95)
+	_expect_true(failures, "faceted survivor fills the gameplay capsule height (got %.3f)" % visual_bounds.end.y, visual_bounds.end.y >= 1.65 and visual_bounds.end.y <= 1.95)
 	voxel_character.reset_pose()
 	var reset_bounds: AABB = voxel_character.realized_visual_bounds()
 	_expect_true(failures, "reset pose keeps voxel feet at ground origin (got %.3f)" % reset_bounds.position.y, reset_bounds.position.y >= -0.15 and reset_bounds.position.y <= 0.05)
-	_expect_true(failures, "reset pose keeps full voxel survivor height (got %.3f)" % reset_bounds.end.y, reset_bounds.end.y >= 1.65 and reset_bounds.end.y <= 1.95)
+	_expect_true(failures, "reset pose keeps full faceted survivor height (got %.3f)" % reset_bounds.end.y, reset_bounds.end.y >= 1.65 and reset_bounds.end.y <= 1.95)
 	var tool_root: Node3D = voxel_character.get_tool_visual_root()
 	_expect_true(failures, "equipped tool uses semantic hand socket", tool_root != null and tool_root.get_parent() == voxel_character.get_socket(&"hand_r"))
 	_expect_true(failures, "equipped axe realizes voxel modules", tool_root != null and tool_root.find_children("VoxelHeld*", "MeshInstance3D", true, false).size() == 2)
@@ -260,6 +360,14 @@ static func _test_player_default(tree: SceneTree, failures: Array[String]) -> vo
 	_expect_equal(failures, "rapid axe replacement owns one head", tool_root.find_children("VoxelHeldAxeHead", "MeshInstance3D", true, false).size(), 1)
 	voxel_character.character_definition.palette.entries[0]["color"] = Color.MAGENTA
 	_expect_true(failures, "palette replacement cannot alter Player collision", is_equal_approx(collision.shape.radius, collision_radius) and is_equal_approx(collision.shape.height, collision_height))
+	for variant_id in ["slim", "heavy"]:
+		var variant_player: Node = PlayerScript.new()
+		variant_player.set("character_presentation_provider", VoxelProvider.new(BaselineFactory.build_variant(variant_id)))
+		root.add_child(variant_player)
+		var variant_collision: CollisionShape3D = variant_player.get_node_or_null("CollisionShape3D")
+		var variant_actions = variant_player.get("action_controller")
+		_expect_true(failures, "%s anatomy keeps gameplay collision unchanged" % variant_id, variant_collision != null and is_equal_approx(variant_collision.shape.radius, collision_radius) and is_equal_approx(variant_collision.shape.height, collision_height))
+		_expect_equal(failures, "%s anatomy keeps gameplay action acceptance unchanged" % variant_id, variant_actions.try_start_attack(0.12, 0.08, 0.30), true)
 
 	var scaled_definition = BaselineFactory.build()
 	scaled_definition.presentation_scale = 1.25
@@ -274,7 +382,7 @@ static func _test_player_default(tree: SceneTree, failures: Array[String]) -> vo
 	scaled_character.add_child(wrong_root)
 	_expect_true(failures, "voxel provider rejects a non-semantic attachment root", not scaled_provider.realize_held_item(scaled_character, wrong_root, "stone_axe") and wrong_root.get_child_count() == 0)
 	_expect_true(failures, "voxel provider realizes held items through the supplied semantic root", scaled_provider.realize_held_item(scaled_character, scaled_root, "stone_axe"))
-	var scaled_body: MeshInstance3D = scaled_character.find_child("VoxelHeadSkin", true, false)
+	var scaled_body: MeshInstance3D = scaled_character.find_child("FacetedSurvivorBody", true, false)
 	var scaled_tool: MeshInstance3D = scaled_root.find_child("VoxelHeldAxeHandle", true, false)
 	_expect_true(failures, "body and held-item meshes apply the same presentation scale", scaled_body != null and scaled_tool != null and scaled_body.scale.is_equal_approx(Vector3.ONE * 1.25) and scaled_tool.scale.is_equal_approx(Vector3.ONE * 1.25))
 	_expect_true(failures, "non-default presentation scale cannot alter Player collision", scaled_collision != null and is_equal_approx(scaled_collision.shape.radius, collision_radius) and is_equal_approx(scaled_collision.shape.height, collision_height))

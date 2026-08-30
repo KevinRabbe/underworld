@@ -14,6 +14,10 @@ const REQUIRED_SLOTS: Array[StringName] = [
 @export var palette: Resource
 @export var modules: Array[Resource] = []
 @export var slice_profile: Resource
+@export var faceted_body_profile: Resource
+@export var faceted_outfit_definition: Resource
+@export var faceted_hair_id: String = "hair.frontier.short"
+@export var use_faceted_body: bool = false
 
 
 func validate_definition() -> Array[String]:
@@ -40,6 +44,18 @@ func validate_definition() -> Array[String]:
 	elif slice_profile != null:
 		for failure in slice_profile.validate(palette.entries.size()):
 			failures.append("slice profile: %s" % failure)
+	if use_faceted_body and (faceted_body_profile == null or not faceted_body_profile.has_method("validate")):
+		failures.append("character requires compatible faceted_body_profile")
+	elif faceted_body_profile != null:
+		for failure in faceted_body_profile.validate():
+			failures.append("faceted body profile: %s" % failure)
+	if use_faceted_body and (faceted_outfit_definition == null or not faceted_outfit_definition.has_method("validate")):
+		failures.append("character requires compatible faceted_outfit_definition")
+	elif faceted_outfit_definition != null:
+		for failure in faceted_outfit_definition.validate():
+			failures.append("faceted outfit: %s" % failure)
+	if faceted_hair_id.is_empty() or faceted_hair_id != faceted_hair_id.strip_edges():
+		failures.append("character faceted_hair_id must be non-empty and trimmed")
 	var slots: Dictionary = {}
 	for module in modules:
 		if module == null or not module.has_method("validate_definition"):
@@ -70,6 +86,10 @@ func canonical_fingerprint() -> String:
 		"%.6f,%.6f,%.6f|%.6f,%.6f,%.6f" % [presentation_bounds.position.x, presentation_bounds.position.y, presentation_bounds.position.z, presentation_bounds.size.x, presentation_bounds.size.y, presentation_bounds.size.z],
 		palette.canonical_fingerprint() if palette != null else "<missing-palette>",
 		slice_profile.canonical_fingerprint() if slice_profile != null else "<no-slice-profile>",
+		faceted_body_profile.canonical_fingerprint() if faceted_body_profile != null else "<no-faceted-body-profile>",
+		faceted_outfit_definition.canonical_fingerprint() if faceted_outfit_definition != null else "<no-faceted-outfit>",
+		faceted_hair_id,
+		"faceted=%s" % str(use_faceted_body),
 		";".join(module_fingerprints),
 	])
 	return "vcharacter1:sha256:" + descriptor.sha256_text()

@@ -47,7 +47,7 @@ func _run_tests() -> void:
 		print("  combat resolution / encounter ownership split contracts passed")
 		print("  surface streaming / prototype survival ownership split contracts passed")
 		print("  responsive light/heavy action, buffering, stamina, and transition contracts passed")
-		print("  modular voxel character data, compiler, runtime, and gameplay-boundary contracts passed")
+		print("  faceted skinned survivor, legacy voxel fixture, runtime, and gameplay-boundary contracts passed")
 		print("  unsupported held-item presentation fails to explicit hidden fallback without gameplay mutation")
 		quit(0)
 		return

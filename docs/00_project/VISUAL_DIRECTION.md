@@ -163,11 +163,15 @@ The current box mannequin remains a valid rig/gameplay test representation until
 
 ### Voxel character pipeline evaluation
 
-CHAR-PRESENT-001 evaluates a high-quality modular voxel player presentation while preserving the same semantic humanoid rig, equipment sockets, gameplay collision and animation-role contracts. The voxel survivor is a character-pipeline experiment, not an environment-wide renderer decision. Its internal module, palette and compiled-mesh boundaries are deliberately replaceable so an authored voxel source or a different compatible character presentation can later use the same gameplay contract.
+CHAR-PRESENT-001 began as a modular voxel-character evaluation and now uses that work as a compatibility fixture beneath a faceted low-poly player presentation. The normal survivor preserves the same semantic humanoid rig, equipment sockets, gameplay collision and animation-role contracts. Its anatomy, outfit, module, palette and compiled-mesh boundaries remain deliberately replaceable so authored sources or a different compatible character presentation can later use the same gameplay contract.
 
 The working character theme is **Frontier Underworld Expedition**. It is a reversible art-direction choice rather than permanent world lore. The baseline survivor uses practical layered canvas, leather, rugged trousers, boots, a compact field pack, pouches, restrained teal identification accents and chunky cave-working tools. The silhouette should communicate a capable explorer at normal gameplay distance without borrowing a specific historical culture, religion or mythology.
 
 The approved first-pass turnaround and action reference is [Frontier Underworld Expedition character reference v1](reference/frontier_underworld_expedition_character_reference_v1.png). It guides proportions, palette, module layering and pose readability; it is preview/reference material and is not loaded by the runtime.
+
+The locked faceted-body target is [Frontier Underworld faceted survivor v2](reference/frontier_underworld_faceted_survivor_v2.png). It replaces the thin voxel mannequin as the silhouette and mass reference for CHAR-PRESENT-001: broad neutral anatomy, substantial limbs, planted boots, body-following expedition layers, compact field equipment and restrained earth-and-teal materials. It is project-owned reference material only and is never imported as runtime character geometry or texture data.
+
+The normal provider now compiles a deterministic low-poly skinned body from presentation-only anatomy landmarks and outfit coverage. The earlier rigid voxel survivor and box mannequin remain explicit regression fixtures. This character evaluation does not change the environment-wide visual-direction decision.
 
 The isolated authoring scene at `res://tools/character_preview/voxel_character_preview.tscn` provides a neutral-lit character review environment. It can exercise directional locomotion, airborne poses, dodges, light/heavy attacks, block, parry, hit, death, tool use, equipment visibility and manual turntable rotation without changing the gameplay scene.
 
