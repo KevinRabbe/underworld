@@ -27,15 +27,15 @@ const DETAIL_SCALE := 1.555555556 # 36 authored voxels -> 56-voxel presentation
 static func build() -> Resource:
 	var palette = PaletteScript.new().configure("palette.character.earth_teal", [
 		_entry("skin", Color("9b6749"), 0.80, 0.0),
-		_entry("cloth", Color("403e36"), 0.93, 0.0),
+		_entry("cloth", Color("565247"), 0.93, 0.0),
 		_entry("leather", Color("3e2a20"), 0.78, 0.0),
 		_entry("metal", Color("858b8e"), 0.38, 0.62),
 		_entry("hair", Color("211713"), 0.92, 0.0),
 		_entry("accent", Color("347a86"), 0.84, 0.0),
 		_entry("face", Color("211a17"), 0.76, 0.0),
-		_entry("canvas_light", Color("655b48"), 0.95, 0.0),
-		_entry("trouser", Color("242725"), 0.92, 0.0),
-		_entry("canvas_dark", Color("3b372f"), 0.96, 0.0),
+		_entry("canvas_light", Color("776b54"), 0.95, 0.0),
+		_entry("trouser", Color("323532"), 0.92, 0.0),
+		_entry("canvas_dark", Color("48443a"), 0.96, 0.0),
 		_entry("leather_light", Color("5a3b29"), 0.84, 0.0),
 		_entry("sole", Color("252523"), 0.98, 0.0),
 	])
