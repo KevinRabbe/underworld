@@ -153,12 +153,13 @@ static func _test_ambience_transition(game, binding, failures: Array[String]) ->
 static func _test_muting_never_changes_semantic_routing(game, binding, failures: Array[String]) -> void:
 	var audio = binding.audio_controller()
 	binding.clear_recent_cues()
+	var active_before: int = audio.active_one_shot_count()
 	audio.set_muted(true)
 	game.player.damage_committed.emit(1, 99, Vector3.ZERO)
 	if binding.recent_cue_ids() != ["audio_cue.player.damage"]:
 		failures.append("muting changed semantic audio routing")
-	if audio.active_one_shot_count() != 0:
-		failures.append("muted committed outcome created physical one-shot playback")
+	if audio.active_one_shot_count() != active_before:
+		failures.append("muted committed outcome changed physical one-shot playback count")
 	audio.set_muted(false)
 
 
