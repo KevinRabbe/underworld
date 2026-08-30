@@ -11,6 +11,7 @@ const CombatArchitectureTests := preload("res://tests/character/test_combat_arch
 const WorldSurvivalArchitectureTests := preload("res://tests/character/test_world_survival_architecture.gd")
 const PlayerFeelTests := preload("res://tests/character/test_player_feel.gd")
 const VoxelCharacterTests := preload("res://tests/character/test_voxel_character.gd")
+const UnsupportedHeldItemPresentationTests := preload("res://tests/character/test_unsupported_held_item_presentation.gd")
 
 
 func _init() -> void:
@@ -32,6 +33,7 @@ func _run_tests() -> void:
 	failures.append_array(WorldSurvivalArchitectureTests.run())
 	failures.append_array(PlayerFeelTests.run(self))
 	failures.append_array(VoxelCharacterTests.run(self))
+	failures.append_array(UnsupportedHeldItemPresentationTests.run(self))
 
 	if failures.is_empty():
 		print("[CHARACTER VALIDATION] PASS")
@@ -46,6 +48,7 @@ func _run_tests() -> void:
 		print("  surface streaming / prototype survival ownership split contracts passed")
 		print("  responsive light/heavy action, buffering, stamina, and transition contracts passed")
 		print("  modular voxel character data, compiler, runtime, and gameplay-boundary contracts passed")
+		print("  unsupported held-item presentation fails to explicit hidden fallback without gameplay mutation")
 		quit(0)
 		return
 
