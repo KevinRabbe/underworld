@@ -57,10 +57,10 @@ static func build() -> Resource:
 			_part("pack_straps", "rig_role.chest", _pack_strap_cells(), Vector3i.ZERO),
 		]),
 		_module("trousers", &"leg_outfit", [
-			_part("thigh_l", "rig_role.thigh.left", _box(Vector3i(-1,-8,-1), Vector3i(1,0,1), TROUSER), Vector3i(0,-1,0)),
-			_part("calf_l", "rig_role.calf.left", _box(Vector3i(-1,-2,-1), Vector3i(1,0,1), TROUSER), Vector3i(0,-1,0)),
-			_part("thigh_r", "rig_role.thigh.right", _box(Vector3i(-1,-8,-1), Vector3i(1,0,1), TROUSER), Vector3i(0,-1,0)),
-			_part("calf_r", "rig_role.calf.right", _box(Vector3i(-1,-2,-1), Vector3i(1,0,1), TROUSER), Vector3i(0,-1,0)),
+			_slice_limb_part("thigh_l", "rig_role.thigh.left", 14, 25, 24, true, TROUSER),
+			_slice_limb_part("calf_l", "rig_role.calf.left", 5, 15, 14, true, TROUSER),
+			_slice_limb_part("thigh_r", "rig_role.thigh.right", 14, 25, 24, false, TROUSER),
+			_slice_limb_part("calf_r", "rig_role.calf.right", 5, 15, 14, false, TROUSER),
 			_part("knee_l", "rig_role.calf.left", _box(Vector3i(-1,-1,-2), Vector3i(1,1,-2), LEATHER), Vector3i.ZERO),
 			_part("knee_r", "rig_role.calf.right", _box(Vector3i(-1,-1,-2), Vector3i(1,1,-2), LEATHER), Vector3i.ZERO),
 			_part("boot_shaft_l", "rig_role.calf.left", _box(Vector3i(-1,-7,-1), Vector3i(1,-3,1), LEATHER), Vector3i(0,-1,0)),
@@ -71,8 +71,8 @@ static func build() -> Resource:
 			_mirrored_part("hand_r", "rig_role.hand.right", "hand_l", Vector3i(1,0,0)),
 		]),
 		_module("boots", &"feet", [
-			_part("foot_l", "rig_role.foot.left", _boot_cells(), Vector3i(0,0,0)),
-			_part("foot_r", "rig_role.foot.right", _boot_cells(), Vector3i(0,0,0)),
+			_raw_part("foot_l", "rig_role.foot.left", _foot_slice_cells(), Vector3i.ZERO),
+			_raw_part("foot_r", "rig_role.foot.right", _foot_slice_cells(), Vector3i.ZERO),
 		]),
 		_module("pouch", &"back_accessory", [
 			_part("hip_pouch", "rig_role.pelvis", _box(Vector3i(3,-1,1), Vector3i(5,2,2), LEATHER), Vector3i.ZERO),
@@ -182,6 +182,35 @@ static func _slice_overlay_part(id_value: String, rig_role: String, minimum_y: i
 		var local_position := Vector3i(position.x - floori(float(row_width) * 0.5), position.y - anchor_y, position.z - floori(float(row_depth) * 0.5) + depth_offset)
 		cells.append({"position": local_position, "palette_index": palette_index})
 	return _raw_part(id_value, rig_role, cells, Vector3i.ZERO)
+
+
+static func _slice_limb_part(id_value: String, rig_role: String, minimum_y: int, maximum_y: int, anchor_y: int, left: bool, palette_index: int) -> Dictionary:
+	var profile = _baseline_slice_profile()
+	var cells: Array[Dictionary] = []
+	for cell_value in profile.resolved_cells():
+		var source: Dictionary = cell_value
+		var position: Vector3i = source["position"]
+		if position.y < minimum_y or position.y > maximum_y:
+			continue
+		var row_width := _slice_width(position.y)
+		var row_depth := _slice_depth(position.y)
+		var centered_x := position.x - floori(float(row_width) * 0.5)
+		if left and centered_x >= 0: continue
+		if not left and centered_x < 0: continue
+		var local_x := centered_x + (2 if left else -2)
+		var local_position := Vector3i(local_x, position.y - anchor_y, position.z - floori(float(row_depth) * 0.5))
+		cells.append({"position": local_position, "palette_index": palette_index})
+	return _raw_part(id_value, rig_role, cells, Vector3i.ZERO)
+
+
+static func _foot_slice_cells() -> Array[Dictionary]:
+	var cells: Array[Dictionary] = []
+	for z in range(-4, 2):
+		for y in range(-1, 2):
+			for x in range(-2, 3):
+				var palette_index := SOLE if y == -1 else (LEATHER_LIGHT if z <= -2 else LEATHER)
+				cells.append({"position": Vector3i(x, y, z), "palette_index": palette_index})
+	return cells
 
 
 static func _raw_part(id_value: String, rig_role: String, cells: Array[Dictionary], pivot: Vector3i) -> Dictionary:
