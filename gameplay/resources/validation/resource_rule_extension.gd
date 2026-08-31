@@ -1,5 +1,7 @@
 extends RefCounted
 
+const EVIDENCE_REVISION := 1
+
 var rule_id: String = ""
 
 
@@ -21,3 +23,15 @@ func applies_to(_definition, _context: Dictionary) -> bool:
 
 func validate_definition(_definition, _context: Dictionary) -> Array[String]:
 	return []
+
+
+func canonical_evidence_descriptor() -> Dictionary:
+	var script_path: String = ""
+	var script = get_script()
+	if script != null:
+		script_path = str(script.resource_path)
+	return {
+		"rule_id": rule_id,
+		"evidence_revision": EVIDENCE_REVISION,
+		"extension_script": script_path,
+	}

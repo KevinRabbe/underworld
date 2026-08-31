@@ -20,3 +20,10 @@ func validate_definition(definition, _context: Dictionary) -> Array[String]:
 	if int(definition.schema_revision) < minimum_revision:
 		failures.append("%s requires schema revision >= %d" % [rule_label, minimum_revision])
 	return failures
+
+
+func canonical_evidence_descriptor() -> Dictionary:
+	var descriptor: Dictionary = super.canonical_evidence_descriptor()
+	descriptor["rule_label"] = rule_label
+	descriptor["minimum_revision"] = minimum_revision
+	return descriptor
