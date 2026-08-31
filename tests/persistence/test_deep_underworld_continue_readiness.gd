@@ -360,9 +360,11 @@ static func _find_observer_boundary_target(
 		observer_position = next_position_variant
 
 	failures.append(
-		"deep boundary search exhausted geometry-seeded physics exploration: "
-		+ "ready_cells=%d seam_probes=%d raycasts=%d hits=%d floor_hits=%d "
-		+ "multicell_hits=%d physics_attempts=%d records=%d collisions=%d"
+		(
+			"deep boundary search exhausted geometry-seeded physics exploration: "
+			+ "ready_cells=%d seam_probes=%d raycasts=%d hits=%d floor_hits=%d "
+			+ "multicell_hits=%d physics_attempts=%d records=%d collisions=%d"
+		)
 		% [
 			totals["ready_cells"],
 			totals["seam_probes"],
