@@ -39,6 +39,8 @@ var last_bootstrap_surface_position: Vector3 = Vector3.ZERO
 var _player_in_realized_cave: bool = false
 var _definition_service
 var _runtime_executor
+# Runtime-only suppression for currently relevant failed binding attempts. It is
+# pruned against the streamer's bounded record table every update.
 var _observer_binding_failures: Dictionary = {}
 
 
@@ -294,6 +296,7 @@ func update_player_position(position: Vector3) -> void:
 			_bind_unbound_observer_cells(position)
 	else:
 		_release_observer_source("player")
+	_prune_observer_binding_failures()
 
 	for entrance_id in gates.keys():
 		var handoff = entrance_plans[entrance_id]
@@ -332,6 +335,8 @@ func update_player_position(position: Vector3) -> void:
 
 func _bind_unbound_observer_cells(position: Vector3) -> void:
 	var candidates: Array[Dictionary] = []
+	# Streamer records is already current relevance only; this scan is therefore
+	# bounded by the live/release envelope rather than total explored history.
 	for record in streamer.records.values():
 		if record == null or not record.demands.has("player"):
 			continue
@@ -386,6 +391,7 @@ func _bind_unbound_observer_cells(position: Vector3) -> void:
 			str(definition["source_fingerprint"]),
 			str(definition["provenance_fingerprint"])
 		)
+		_observer_binding_failures.erase(record.key)
 		bound += 1
 
 
@@ -406,12 +412,27 @@ func _observer_streaming_active(position: Vector3) -> bool:
 
 
 func _release_observer_source(source: String) -> void:
-	for record in streamer.records.values():
-		if record == null or not record.demands.has(source):
+	# release_demand may synchronously erase a fully dormant record. Iterate a
+	# snapshot so dictionary mutation never invalidates this release pass.
+	for record in streamer.records.values().duplicate():
+		if record == null or not streamer.records.has(record.key) or not record.demands.has(source):
 			continue
 		streamer.release_demand(record.cell_address, source)
-		if record.demands.is_empty():
-			streamer.release_cell(record.cell_address)
+
+
+func _prune_observer_binding_failures() -> void:
+	if streamer == null:
+		_observer_binding_failures.clear()
+		return
+	for raw_key in _observer_binding_failures.keys().duplicate():
+		var key: String = str(raw_key)
+		var record = streamer.records.get(key, null)
+		if record == null or not record.demands.has("player"):
+			_observer_binding_failures.erase(raw_key)
+
+
+func observer_binding_failure_count() -> int:
+	return _observer_binding_failures.size()
 
 
 func _prune_definition_cache() -> void:
