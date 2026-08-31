@@ -66,19 +66,34 @@ func demand_cell(address, source: String, tiers: Array, source_fingerprint: Stri
 
 
 func set_demand(address, source: String, tiers: Array, source_fingerprint: String = "", provenance_fingerprint: String = ""):
-	var record = _ensure_record(address)
-	var identity_changed: bool = (not source_fingerprint.is_empty() and not record.source_fingerprint.is_empty() and source_fingerprint != record.source_fingerprint) or (not provenance_fingerprint.is_empty() and not record.provenance_fingerprint.is_empty() and provenance_fingerprint != record.provenance_fingerprint)
-	if identity_changed:
-		_invalidate_generation(record)
+	# Normalize the desired lease before acquiring runtime ownership. An empty
+	# desired state is a release/no-op and must never recreate an evicted record.
 	var lease: Dictionary = {}
 	for tier in tiers:
 		var tier_name := str(tier)
 		if TIERS.has(tier_name):
 			lease[tier_name] = 1
+	var record = _lookup_record(address)
 	if lease.is_empty():
-		record.demands.erase(source)
-	else:
-		record.demands[source] = lease
+		if record == null:
+			return null
+		if record.demands.has(source):
+			record.demands.erase(source)
+			_retire_undemanded_tiers(record)
+		if record.demands.is_empty():
+			record.release_pending = true
+			record.state = "release_pending"
+			release_cell(record.cell_address)
+			return record
+		record.release_pending = false
+		_queue_if_needed(record)
+		return record
+	if record == null:
+		record = _ensure_record(address)
+	var identity_changed: bool = (not source_fingerprint.is_empty() and not record.source_fingerprint.is_empty() and source_fingerprint != record.source_fingerprint) or (not provenance_fingerprint.is_empty() and not record.provenance_fingerprint.is_empty() and provenance_fingerprint != record.provenance_fingerprint)
+	if identity_changed:
+		_invalidate_generation(record)
+	record.demands[source] = lease
 	record.release_pending = false
 	if not source_fingerprint.is_empty():
 		record.source_fingerprint = source_fingerprint
