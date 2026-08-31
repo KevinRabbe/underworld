@@ -24,13 +24,15 @@ static func run() -> Array[String]:
 	_expect(failures, "independent tier demand observable", record.demand_count("render") == 1 and record.demand_count("collision") == 1)
 	_expect(failures, "negative observer cell", streamer.observer_cell(Vector3(-64.1, 96.0, -128.1)) == Vector3i(-3, 3, -5))
 	_expect(failures, "frontier queues definition before blocked tiers", _request_count(executor.requests, "definition") == 1 and _request_count(executor.requests, "render") == 0)
-	streamer.update_observer(Vector3.ZERO)
-	_expect(failures, "observer demand uses hysteresis tiers", streamer.active_owner_count() > 0)
 	var stale := Result.new(address, record.generation - 1, "render", "plan:a", "prov:a", null)
 	_expect(failures, "stale generation rejected", not streamer.accept_result(stale))
 	var accepted := Result.new(address, record.generation, "definition", "plan:a", "prov:a", null, true, [], "world:a", "manifest:a")
 	_expect(failures, "matching definition accepted", streamer.accept_result(accepted))
 	_expect(failures, "definition acceptance exposes fragment frontier", _request_count(executor.requests, "fragment_plan") == 1)
+	# Observer movement may legitimately retire the far test cell's geometry tiers;
+	# verify the dependency frontier before that movement mutates its lease set.
+	streamer.update_observer(Vector3.ZERO)
+	_expect(failures, "observer demand uses hysteresis tiers", streamer.active_owner_count() > 0)
 	var wrong_source := Result.new(address, record.generation, "render", "plan:old", "prov:a", null, true, [], "world:a", "manifest:a")
 	_expect(failures, "mismatched source rejected", not streamer.accept_result(wrong_source))
 	streamer.release_demand(address, "player")
