@@ -1,268 +1,592 @@
 # Underworld UI / UX — World-Domain Amendment
 
-Status: **UI-UX-002 AMENDMENT — supersedes continuous-cave transition assumptions**  
-Parent design authority candidate: `docs/design/ui/PRODUCTION_UI_UX_SPEC.md`  
-World architecture dependency: PR #403 / WORLD-DOMAIN-001 #404
+Status: **FROZEN DESIGN AUTHORITY CANDIDATE — UI-UX-002 / #387**  
+Accepted architecture authority: **ADR-001 / DOCS-ARCH-001, landed through #428 at `b1974fe8…`**  
+World-domain runtime owner: **#404 WORLD-DOMAIN-001**  
+Application startup-loading owner: **#427 APP-LOAD-001**  
+Performance owners: **#364 PERF-003 / #369 SCALE-001**  
+Reference logical viewport: **1280 × 720**
 
-This amendment updates the production UI/UX contract for the project's explicit independent `OVERWORLD` and `UNDERWORLD` runtime domains.
+This amendment adapts the production UI/UX specification to the accepted architecture in which **OVERWORLD** and **UNDERWORLD** are independent procedural world domains connected by explicit semantic gateways.
 
-It does not replace the general UI architecture, HUD geometry, ItemSlot system, Inventory, Crafting, menu, focus, input-capture or skin contracts defined by UI-UX-002. It only supersedes statements that assumed entering the Underworld meant physically crossing into cave geometry inside one continuous coordinate volume.
+It supersedes any earlier UI assumption that cave entry must be detected through shared Y, physical mesh continuity, cave AABB membership or camera depth.
 
-The governing rule is:
+The core presentation rule is:
 
-> **UI presents an explicit world-domain transition. It does not infer world identity from geometry, coordinates, rendered cave cells or depth.**
+> **The player experiences one coherent journey; presentation consumes explicit domain/transition truth and never reconstructs it from geometry.**
 
 ---
 
-## 1. Authoritative world identity
+## 1. Accepted world-domain model
 
-Player-facing presentation consumes an accepted read-only world-domain value owned by the world/gateway runtime.
+UI must assume:
 
-Initial semantic values:
+- `OVERWORLD` and `UNDERWORLD` are explicit independent domains;
+- each domain uses domain-local transforms/depth;
+- matching XYZ is neither required nor authoritative;
+- a semantic gateway links source-domain gateway identity to destination-domain entry-site identity;
+- direct fade/loading is intentional valid V1 UX;
+- only committed `active_domain` is normal gameplay domain truth;
+- destination readiness precedes release of Player control;
+- inactive full-domain runtime is not required to remain live;
+- SAVE/Continue preserve active domain + domain-local position/state according to #404/Persistence authority.
 
-- `OVERWORLD`
-- `UNDERWORLD`
+UI does not reinterpret historical `EntranceDefinition`, `ug.entrance.*`, Underworld StableIds or old physical-seam language as cross-domain authority.
 
-UI does not derive active domain from:
+---
 
-- Player Y coordinate;
-- cave-cell AABB membership;
-- render visibility;
+## 2. Presentation must not infer domain state
+
+Forbidden presentation authority includes:
+
+- Player Y sign;
+- distance below surface terrain;
+- cave mesh visibility;
 - camera position;
-- ambience state;
-- entrance proximity;
-- mesh/collision node names;
-- DebugHUD state.
+- collision AABB membership;
+- proximity to an old entrance Node;
+- whether an Underworld cell happens to exist in memory;
+- ambience/acoustic state;
+- loading-screen text itself.
 
-The exact runtime API is owned by #404. Presentation consumes a value/snapshot only.
+Player-facing state consumes explicit read-only domain/gateway/lifecycle data from #404/AppRoot composition.
 
-## 2. Gateway interaction replaces continuous cave-entry semantics
+This applies to:
 
-The old conceptual UX chain:
+- objectives;
+- global ambience presentation;
+- transition labels;
+- HUD suppression;
+- Continue reconstruction messaging;
+- death/recovery narrative;
+- readiness/loading completion.
 
-`find cave -> physically descend through shared geometry -> detect cave occupancy`
+---
 
-is superseded for cross-domain Underworld entrances by:
+# 3. Two distinct loading surfaces
 
-`find accepted Overworld gateway -> interact/enter -> transition begins -> destination becomes ready -> active domain commits to UNDERWORLD -> resume player control`.
+There are **two** reusable-looking but separately-owned loading surfaces.
 
-A local cave, cellar, mine or overhang that remains in `OVERWORLD` is not an Underworld transition merely because it looks underground.
+## 3.1 In-Game WorldTransitionOverlay — Game lifetime
 
-Therefore UI copy must describe the authored semantic action rather than infer a world transfer from cave-shaped geometry.
+Owner: #404/Game route.
 
-Examples:
+Used for:
 
-- `Enter` / `Descend` / context-authored gateway verb;
-- `Return to Surface` for a paired Underworld exit where appropriate;
-- never generic `You are underground` as world-domain authority.
+- Overworld → Underworld gateway transition;
+- Underworld → paired/authorized Overworld return;
+- cross-domain recovery where accepted recovery policy uses #404.
 
-## 3. M3 objective integration
+It exists inside an already-live Game route.
 
-The production objective seam owned by #220 must update its gateway step to consume #404's accepted read-only state.
+## 3.2 AppStartupLoading — AppRoot lifetime
 
-Required completion semantics:
+Owner: #427/AppRoot.
 
-1. locate the accepted Overworld gateway/entrance target;
-2. request/perform the accepted gateway interaction;
-3. transition succeeds;
-4. authoritative active domain is `UNDERWORLD`.
+Used for:
 
-Entrance proximity, fade start, loading-screen visibility or destination-cell creation by themselves are insufficient to complete the objective.
+- Title → NEW Game startup;
+- Title → CONTINUE startup;
+- future major AppRoot route loading only where explicitly adopted.
 
-On return, authoritative domain `OVERWORLD` is the presentation truth for surface state.
+It exists **before** a new Game can be considered safe/active.
 
-No objective flag is persisted merely to remember that a fade occurred.
+## 3.3 Reuse rule
 
-## 4. WorldTransitionOverlay becomes a first-class V1 screen
+Both may share:
 
-A direct fade/loading boundary is accepted architecture rather than a temporary workaround.
+- shade treatment;
+- status typography;
+- indeterminate activity animation;
+- timing grammar;
+- reduced-motion behavior.
 
-The reusable `WorldTransitionOverlay` should therefore be designed as an intentional production surface.
+They do **not** share:
 
-### Reference states
+- lifecycle owner;
+- readiness authority;
+- transaction state;
+- rollback semantics;
+- one repository-global loading singleton.
 
-At minimum:
+AppRoot loading does not become WorldDomain authority. Game-local transition loading does not become AppRoot route authority.
 
-- `preparing` — accepted gateway request is being validated/prepared;
-- `leaving_source` — source-domain handoff is committed/in progress;
-- `loading_destination` — destination runtime is preparing required readiness;
-- `ready_to_reveal` — destination is ready and presentation may fade in;
-- `failed` — transition did not commit successfully and owning lifecycle provides failure result.
+---
 
-These names are conceptual presentation stages. UI must consume the exact lifecycle contract exposed by #404 rather than creating a second state machine.
+# 4. CanvasLayer ordering
 
-### Reference copy
+Reference ordering from the core spec:
 
-Preferred copy is semantic and destination-aware:
+- `80–89` — Game-owned WorldTransitionOverlay;
+- `90–99` — AppRoot startup loading;
+- `100` — Pause;
+- `110` — Settings;
+- `120` — app-level Modal.
 
-- Overworld -> Underworld: `DESCENDING...` or `ENTERING THE UNDERWORLD...`;
-- Underworld -> Overworld: `RETURNING TO THE SURFACE...`;
-- generic fallback: `TRAVELLING...` / `LOADING...`.
+A staging Game/HUD cannot visually cover AppRoot startup loading merely because it selected a high local CanvasLayer.
 
-Do not display internal domain enum names if player-facing vocabulary later differs.
+Ordinary user Pause cannot be opened during a startup operation simply because its layer is numerically higher. Layering is not permission/state authority.
 
-### Visual layout — 1280x720
+---
 
-First slice may be deliberately restrained:
+# 5. Gateway interaction UX
 
-- full-screen fade/shade;
-- centered compact transition status block;
-- optional understated indeterminate activity animation;
-- optional single short gameplay/world hint if measured duration warrants it;
-- no unrelated HUD, inventory counters or debug information during handoff.
+## 5.1 Discovery / prompt
 
-Destination art/background is optional. The transition must remain valid with a flat shade and text.
+When gameplay exposes a valid gateway through #416/#404 contextual query, HUD may show one primary semantic action such as:
 
-## 5. Honest progress
+- `Enter Underworld`;
+- `Return to Overworld`.
 
-The previous UI-UX-002 rule remains and is strengthened:
+Binding presentation comes from #410.
 
-**Never show a numeric 0–100% progress bar unless #404/runtime exposes a meaningful monotonic progress value.**
+UI does not show raw gateway ID, source-site ID, StableId or destination coordinates.
 
-World-domain separation makes stage-based progress more plausible, but stage count is not automatically percentage progress.
+## 5.2 Activation
 
-Allowed first slice:
+Gateway activation submits a semantic intent to #404.
 
-- indeterminate animation;
-- semantic stage text;
-- bounded stage indicators only if every stage is authoritative and cannot regress/misrepresent readiness.
+UI never:
 
-Do not estimate progress from elapsed time or average cave-generation duration.
+- chooses the destination domain independently;
+- converts coordinates;
+- creates destination runtime cells;
+- decides readiness;
+- commits `active_domain`.
 
-## 6. Readiness and input ownership
+## 5.3 Objective completion
 
-The transition overlay does not decide when gameplay resumes.
+The M3 world-entry objective completes only after:
 
-Player control remains suppressed until the authoritative world/gateway lifecycle confirms the destination domain is safe/ready for Player physics.
+1. the intended gateway transition succeeds; and
+2. committed `active_domain == UNDERWORLD`.
 
-This composes with UI-INPUT-001/#399:
+Starting a fade, seeing Underworld geometry or crossing a geometric threshold is insufficient.
 
-- transition captures/blocks ordinary gameplay interaction;
-- UI focus is not required for a non-interactive loading surface;
-- `ui_cancel` does not cancel a transition unless #404 explicitly exposes a cancellable transition policy;
-- presentation timers/animations cannot release gameplay input by themselves.
+---
 
-If failure returns the player to the source domain, source-domain readiness and input restoration are also lifecycle-owned.
+# 6. In-Game transition transaction
 
-## 7. HUD domain behavior
+Presentation mirrors #404's atomic transaction; it does not invent a parallel one.
 
-Ordinary GameplayHUD layout remains the same in both domains unless a later product decision adds domain-specific information.
+Conceptual lifecycle:
 
-The HUD should not maintain separate OverworldHUD and UnderworldHUD implementations merely because runtime domains differ.
+```text
+OVERWORLD committed
+-> gateway intent accepted
+-> PREPARING destination
+-> destination readiness satisfied
+-> COMMITTING
+-> UNDERWORLD committed
+-> control released
+```
 
-Shared elements remain:
+Return is equivalent in the opposite semantic direction.
 
-- health/stamina;
+### During PREPARING / COMMITTING
+
+- ordinary gameplay input is suppressed by accepted lifecycle/input authority;
+- normal HUD/prompts/toasts may be visually suppressed;
+- Pause/Save & Quit cannot nest into the transition operation;
+- destination presentation may be staged but is not gameplay-authoritative;
+- source truth needed for rollback remains owned by #404;
+- UI never treats staged destination existence as commit.
+
+### Commit
+
+Only #404 changes active-domain truth.
+
+Transition overlay disappears only after the owning lifecycle reports the destination is ready and the commit/control-release boundary is satisfied.
+
+No timer-only dismissal.
+
+---
+
+# 7. Transition failure / rollback
+
+Failure is fail-closed.
+
+Presentation must not:
+
+- reveal an unready destination as playable;
+- remove the shade because an animation timer ended;
+- infer rollback completion from source mesh visibility;
+- leave mixed Overworld/Underworld HUD state.
+
+Reference behavior:
+
+1. transition remains visually controlled while #404 resolves failure;
+2. source committed truth remains/restores according to authority;
+3. Player control returns only when rollback/source state is safe;
+4. bounded player-facing failure appears in the transition/modal owner when action is required;
+5. raw diagnostics remain logs/test evidence.
+
+A failed transition does not falsely complete #220 objective progression.
+
+---
+
+# 8. Honest loading presentation
+
+## 8.1 No fake percentage
+
+Do **not** show `0–100%` unless runtime exposes a meaningful monotonic progress contract.
+
+Current safe first slice uses:
+
+- shade/fade;
+- semantic status;
+- indeterminate activity.
+
+Examples where accurate:
+
+- `DESCENDING...`;
+- `RETURNING TO SURFACE...`;
+- `LOADING WORLD...`;
+- `CONTINUING...`.
+
+Copy is presentation, not lifecycle authority.
+
+## 8.2 Fast/slow timing
+
+To avoid one-frame spinner flashes while still presenting before expensive work:
+
+- shade/fade may begin immediately after accepted operation intent;
+- verbose status/spinner may appear after roughly **150–250 ms** if the operation is still active;
+- never impose an artificial multi-second minimum;
+- if readiness completes quickly, reveal promptly;
+- animations must not delay control after authority says the destination/startup is safe.
+
+Exact threshold may be tuned from human testing; the behavioral rule is stable.
+
+## 8.3 Performance truth
+
+A loading screen is not permission for uncontrolled synchronous work.
+
+#364/#369 remain responsible for:
+
+- total cold/warm latency;
+- worst main-thread hitch;
+- bounded relevance/work queues;
+- avoiding history-proportional work.
+
+If the main thread stalls after static loading presentation appeared, that remains a performance defect even though the player did not see an unpainted frame.
+
+---
+
+# 9. AppRoot Title → Game startup
+
+The earlier Game-local transition overlay cannot honestly cover startup work that occurs before the Game's presentation surfaces exist. #427 therefore owns AppRoot startup loading.
+
+## 9.1 NEW startup
+
+Reference flow:
+
+```text
+Title NEW intent
+-> AppRoot startup operation accepted
+-> AppStartupLoading shown/armed
+-> prepare new Game off the current route authority boundary
+-> root world seed/config fixed before generation
+-> required initial world/domain readiness
+-> Game reports startup-ready
+-> AppRoot activates/commits Game route
+-> startup loading removed
+```
+
+The old Title remains the recoverable source surface until the startup transaction reaches the accepted route-commit boundary.
+
+## 9.2 CONTINUE startup
+
+Reference flow:
+
+```text
+Title CONTINUE intent
+-> AppRoot startup operation accepted
+-> AppStartupLoading shown/armed
+-> durable slot load/decode
+-> explicit saved active_domain resolved
+-> required saved-domain runtime reconstructed
+-> exact saved transform readiness satisfied
+-> Game reports startup-ready
+-> AppRoot activates/commits Game route
+-> startup loading removed
+```
+
+Continue must not briefly present an unrelated Overworld session before reconstructing a saved Underworld state.
+
+---
+
+# 10. Presentation-before-work requirement
+
+When startup may perform synchronous/expensive work, the loading surface must be installed/armed before that work begins so the app has an honest visual state rather than a frozen Title click.
+
+Implementation may require a deferred frame/paint boundary before expensive startup.
+
+This rule does not authorize fake progress or artificial delay.
+
+---
+
+# 11. Staged Game inactivity
+
+Merely adding/preparing a Game Node is not startup commit.
+
+Before AppRoot activates the new Game:
+
+- Player input/physics is inactive;
+- camera/mouse gameplay control is inactive;
+- Game HUD is not allowed to become the player's interactive surface;
+- gameplay producers do not run as an authoritative session;
+- #399/accepted input-gate architecture is reused rather than inventing a second Player-specific loading boolean where possible.
+
+Startup readiness is a lifecycle state, not a visual opacity trick.
+
+---
+
+# 12. Startup failure
+
+If NEW/CONTINUE preparation fails before route commit:
+
+- previous Title remains/restores as active route;
+- startup loading closes only after failure resolution is safe;
+- bounded player-facing error is shown through Title/app modal/status owner;
+- Continue state may refresh if persistence classification changed;
+- no half-live Game remains behind Title;
+- no Player/camera input leaks from a failed staged Game.
+
+Presentation does not delete/repair slots itself.
+
+---
+
+# 13. Direct Underworld Continue
+
+Saved `active_domain == UNDERWORLD` means startup reconstructs Underworld directly.
+
+#404/#372 determine the required bounded readiness around the exact durable Player support envelope.
+
+UI requirements:
+
+- use startup/loading language, not gateway-traversal fiction;
+- do not play an `Entered Underworld` objective completion as though a gateway was just used;
+- do not construct Overworld solely to make the loading presentation feel continuous;
+- restore ordinary shared HUD after Game startup commits.
+
+The same principle applies to saved Overworld Continue.
+
+---
+
+# 14. Save state and transition exclusion
+
+While #404 owns PREPARING/COMMITTING:
+
+- ordinary Pause/Save & Quit is unavailable;
+- UI must not offer an operation that persistence authority rejects as ambiguous transition state;
+- no save UI can infer a safe boundary from fade progress.
+
+Once a domain commit/rollback settles, ordinary GameFlow policy resumes.
+
+AppRoot startup similarly owns its route transaction until Game activation or rollback-to-Title finishes.
+
+---
+
+# 15. HUD behavior across domains
+
+Default production rule: **one shared Gameplay HUD** in both domains.
+
+Do not create a separate Underworld HUD theme/layout merely because the environment changes.
+
+The following remain in stable positions:
+
+- vitals;
+- objective;
 - reticle;
-- interaction prompt;
-- objective display;
-- transient feedback;
-- hotbar.
+- InteractionPrompt;
+- Hotbar;
+- notifications.
 
-Domain-specific objective/action copy may differ through supplied semantic snapshots.
+Content/action state changes semantically through normal read models.
 
-Do not permanently display `OVERWORLD` / `UNDERWORLD` as HUD chrome without a demonstrated player need.
+A future environment-specific ornament treatment may be Theme/presentation-only if it does not change hierarchy or authority.
 
-## 8. Audio/UI separation
+---
 
-Audio may consume the same authoritative world-domain identity for ambience selection, but UI does not infer active domain from currently playing ambience.
+# 16. Global ambience presentation
 
-Likewise Audio does not infer domain from loading-overlay visibility.
+Global world ambience follows committed `active_domain`, not Y/AABB/mesh presence.
 
-Both consume the world/gateway authority independently.
+Local cave acoustics may refine sound **inside the active Underworld** according to their own accepted presentation authority.
 
-## 9. Save / Continue presentation
+During transition PREPARING, ambience staging/crossfade may occur, but ordinary player-facing domain truth remains the committed domain until #404 commit.
 
-Persistence now restores an explicit active world domain with a domain-local player transform.
+UI should not use audio state to decide which domain is active.
 
-Title Continue remains a simple availability action; the Title screen does not need to expose coordinates/domain internals.
+---
 
-If future save-slot presentation shows location, it must use a player-facing resolved location/domain label supplied from persistence/presentation metadata rather than formatting internal runtime identifiers.
+# 17. Notifications during transition/startup
 
-Continue behavior relevant to UI:
+### In-Game world transition
 
-- loading an Overworld save may show the transition/loading surface while Overworld runtime is prepared;
-- loading an Underworld save may directly prepare Underworld without constructing Overworld first;
-- the overlay copy should describe loading/resuming rather than falsely claiming the Player is currently travelling through a gateway when Continue is direct reconstruction.
+Normal low-priority gameplay Toasts may be suppressed while WorldTransitionOverlay owns presentation. Do not replay a stale acquisition backlog after the transition.
 
-Suggested generic Continue copy while preparing:
+Critical lifecycle failure belongs to transition/modal presentation, not hidden Toasts.
 
-`LOADING WORLD...`
+### App startup
 
-Destination-specific flavour may appear only when the loaded active domain is authoritatively known.
+Game-owned notification queues do not exist as a cross-route history source. Continue must not replay pickups/crafts merely because restored canonical state contains them.
 
-## 10. Failure UX
+---
 
-World-transition failure must remain fail-closed.
+# 18. Interaction prompts near gateways
 
-Presentation responsibilities:
+Before activation:
 
-- keep the transition surface active while lifecycle outcome is unresolved;
-- on recoverable failure, show concise player-facing failure copy and return to the lifecycle-provided safe UI/world state;
-- on fatal failure, use the shared ModalDialog/error surface;
-- never place the player into a partially ready destination merely to remove the loading screen.
+- one valid semantic gateway action may be displayed.
 
-Raw gateway IDs, StableIds, fingerprints, seed values and internal cell addresses are not normal player copy.
+After transition intent is accepted:
 
-## 11. Gateway interaction prompt
+- ordinary InteractionPrompt is suppressed;
+- repeated activation cannot create duplicate transition attempts;
+- status comes from the transition overlay.
 
-`InteractionPrompt` / `KeyPrompt` consumes an already-resolved gateway interaction snapshot.
+On rollback:
 
-Examples:
+- contextual query refreshes from current authoritative source state;
+- gateway prompt returns only if the action is again valid.
 
-`[E] Enter`
+---
 
-`[E] Descend`
+# 19. Death / recovery across domains
 
-`[E] Return to Surface`
+The UI presents one coherent recovery narrative regardless of whether recovery remains in-domain or returns to Overworld.
 
-The prompt does not decide whether the gateway is valid/ready and does not compute destination domain.
+Example:
 
-If the gateway is temporarily unavailable and gameplay exposes an authored reason, presentation may show bounded feedback such as `Passage unavailable` rather than silently accepting input.
+```text
+YOU FELL
+Recovering...
+```
 
-## 12. No coordinate-continuity UI
+If Underworld defeat requires Overworld recovery:
 
-The following UI concepts are explicitly forbidden as architecture assumptions:
+- #381 determines a safe recovery target;
+- #404 performs the cross-domain transition/commit ordering;
+- Player respawn commit remains gameplay authority;
+- UI does not expose an internal teleport coordinate or treat shared XYZ as conversion.
 
-- depth meters whose meaning is `distance below the Overworld` for world-domain identity;
-- transition progress derived from Player Y;
-- minimap stitching between Overworld and Underworld coordinate spaces;
-- arrows that assume an Underworld destination is directly beneath its Overworld gateway;
-- save/location labels derived by converting positions between domains.
+Overlay clears only after accepted recovery commit/control state.
 
-Future maps may represent each domain separately and represent gateways as logical links.
+---
 
-## 13. Building/UI interaction
+# 20. Building across domains
 
-Building is domain-local unless gameplay later introduces explicit cross-domain construction semantics.
+The same Build Catalog and Placement HUD serve both domains.
 
-The UI should therefore treat the currently active domain as context supplied by gameplay/world authority, not as an extra build-piece property the player manually selects.
+UI does not expose a manual `Overworld / Underworld` build selector.
 
-Cross-domain gateway objects are not ordinary building pieces unless a future gameplay system explicitly says otherwise.
+Building validation/content authority may report domain-specific availability/restrictions, but presentation consumes those semantic results.
 
-## 14. Validation additions
+A gateway is not an ordinary constructible build piece unless a future gameplay system explicitly defines one.
 
-Any implementation of the transition/domain UI must prove:
+---
 
-1. Overworld -> Underworld overlay begins from an accepted gateway transition request, not entrance proximity alone;
-2. overlay cannot declare success before authoritative destination readiness/domain commit;
-3. active `UNDERWORLD` domain drives the #220 gateway-objective completion seam;
-4. returning commits `OVERWORLD` and does not depend on coordinate conversion;
-5. local Overworld cave-shaped geometry does not falsely set Underworld presentation state;
-6. HUD remains the same reusable system in both domains;
-7. direct Underworld Continue uses loading/reconstruction presentation without pretending a gateway traversal occurred;
-8. no fake numeric progress is shown without real monotonic runtime progress;
-9. transition failure cannot release gameplay into a partially prepared destination;
-10. presentation contains no world-coordinate conversion or geometry-derived domain detector.
+# 21. Objective reconstruction
 
-## 15. Review/acceptance dependency
+#220 objective progression remains derived, not persisted UI state.
 
-UI-UX-002 must not be accepted as final design authority against the obsolete continuous-world assumption.
+Relevant world-domain rules:
 
-Independent review #396 should review:
+- locating a gateway may be based on accepted semantic discovery/availability;
+- entering Underworld completes only after transition success + committed active domain;
+- Continue reconstructs the correct current objective from durable gameplay state and saved active domain;
+- loading/fade text is never parsed as progression truth;
+- direct Underworld Continue must not fabricate a fresh gateway-entry milestone.
 
-- the original production UI/UX specification;
-- this amendment;
-- accepted/final world-domain architecture from #403/#404.
+---
 
-If #403 changes materially before acceptance, this amendment must be rechecked and updated before UI-UX-002 can become implementation authority.
+# 22. Accessibility / reduced-motion compatibility
+
+Transition/startup visual grammar must support future reduced-motion preference without changing lifecycle semantics.
+
+Safe fallback can be:
+
+- immediate shade/cut instead of animated fade;
+- static activity glyph/text instead of moving spinner;
+- identical semantic status and readiness rules.
+
+No flashing effect is required.
+
+Status remains readable independently of environment brightness because the loading/transition surface supplies its own contrast.
+
+---
+
+# 23. Validation contract
+
+At minimum prove:
+
+## World-domain truth
+
+1. HUD/objective/domain presentation uses explicit active-domain/gateway state, never Y/AABB/render heuristics;
+2. gateway objective completes only after successful commit to UNDERWORLD;
+3. failed transition does not advance objective/domain presentation;
+4. direct Underworld Continue does not masquerade as gateway traversal.
+
+## Transition lifecycle
+
+5. ordinary world input is suppressed during PREPARING/COMMITTING;
+6. Pause/Save & Quit cannot nest during in-flight domain transition;
+7. overlay does not disappear before authoritative readiness/commit;
+8. failure rollback leaves exactly one coherent committed source/destination presentation state;
+9. duplicate gateway activation cannot create duplicate transition overlays/commits.
+
+## Startup lifecycle
+
+10. AppRoot startup surface becomes present/armed before expensive NEW/CONTINUE work;
+11. staged Game cannot run Player physics/input/camera as authoritative gameplay before activation;
+12. failed startup restores Title without stale staged Game input/UI;
+13. saved active-domain reconstruction chooses required domain directly;
+14. AppRoot loading and Game-local WorldTransitionOverlay remain separate lifetime owners.
+
+## Timing / performance presentation
+
+15. quick operations do not require an artificial minimum loading duration;
+16. slow operations show bounded indeterminate status without fake percentage;
+17. static loading presentation does not convert unbounded/hitching work into accepted performance;
+18. ready state is revealed promptly after authoritative readiness.
+
+## Ordering / focus
+
+19. Game-local transition layer is below AppRoot startup/Pause/Settings/Modal according to shared band policy;
+20. lower gameplay UI cannot become interactive through the transition/loading shade;
+21. route/domain rollback restores deterministic focus/mouse/input ownership.
+
+---
+
+# 24. Explicit non-goals
+
+This amendment does **not** authorize:
+
+- physically continuous Overworld/Underworld mesh requirements;
+- coordinate conversion between domains;
+- domain inference from depth/Y;
+- seamless/no-loading presentation as an M3 requirement;
+- fake percent progress;
+- permanent simultaneous full-domain residency;
+- AppRoot becoming world generation authority;
+- WorldTransitionOverlay becoming a global route loader;
+- one global loading singleton owning all transitions;
+- UI-owned SAVE/Continue migration;
+- performance debt hidden behind long forced loading animations.
+
+---
+
+# 25. Design acceptance condition
+
+Independent #396 should verify this amendment together with:
+
+- `PRODUCTION_UI_UX_SPEC.md`;
+- `BUILDING_UI_UX_SPEC.md`;
+- accepted ADR-001 and current architecture docs;
+- #404/#427 ownership boundaries;
+- #399 input/focus rules;
+- #364/#369 performance/scale constraints.
+
+PASS freezes the presentation contract around explicit world domains and loading lifetimes while leaving final visual art replaceable.
