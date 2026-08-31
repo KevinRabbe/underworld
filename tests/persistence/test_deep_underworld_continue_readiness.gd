@@ -13,6 +13,7 @@ const PlayerSupportBounds := preload("res://gameplay/player/player_collision_sup
 const TEST_SEED: int = 2174242
 const BOUNDARY_INSET: float = 0.10
 const FLOOR_CLEARANCE: float = 0.04
+const MAX_BOUNDARY_TRIANGLE_DISTANCE: float = 0.38
 
 
 static func run_runtime(tree: SceneTree) -> Array[String]:
@@ -267,7 +268,7 @@ static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> 
 			continue
 		if not _record_is_gameplay_ready(runtime, record, key):
 			continue
-		for axis in [Vector3i(1, 0, 0), Vector3i(0, 0, 1)]:
+		for axis in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
 			var neighbor_coordinate: Vector3i = coordinate + axis
 			var neighbor_key: String = "gcell1:r1:x%d:y%d:z%d" % [
 				neighbor_coordinate.x,
@@ -284,10 +285,14 @@ static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> 
 				(float(coordinate.y) + 0.5) * cell_size.y,
 				(float(coordinate.z) + 0.5) * cell_size.z
 			)
-			if axis.x != 0:
+			if axis.x > 0:
 				probe.x = float(coordinate.x + 1) * cell_size.x - BOUNDARY_INSET
-			else:
+			elif axis.x < 0:
+				probe.x = float(coordinate.x) * cell_size.x + BOUNDARY_INSET
+			elif axis.z > 0:
 				probe.z = float(coordinate.z + 1) * cell_size.z - BOUNDARY_INSET
+			else:
+				probe.z = float(coordinate.z) * cell_size.z + BOUNDARY_INSET
 			var floor_position_variant: Variant = _generated_floor_position(runtime, coordinate, probe)
 			if not floor_position_variant is Vector3:
 				continue
@@ -321,9 +326,17 @@ static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> 
 				continue
 			for _step in range(12):
 				runtime.update_player_position(settled)
-			var settled_key: String = runtime.streamer.records.get(key, record).cell_address.canonical_text()
+			var settled_coordinate: Vector3i = runtime.streamer.observer_cell(settled)
+			var settled_key: String = "gcell1:r1:x%d:y%d:z%d" % [
+				settled_coordinate.x,
+				settled_coordinate.y,
+				settled_coordinate.z,
+			]
 			var settled_record = runtime.streamer.records.get(settled_key, null)
 			if not _record_is_gameplay_ready(runtime, settled_record, settled_key):
+				continue
+			var settled_support: Dictionary = _support_keys_for_player(runtime, player, settled)
+			if not bool(settled_support.get("success", false)) or settled_support.get("keys", []).size() < 2:
 				continue
 			return {
 				"key": settled_key,
@@ -335,42 +348,73 @@ static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> 
 
 
 static func _generated_floor_position(runtime, coordinate: Vector3i, probe: Vector3) -> Variant:
-	if runtime == null or not runtime.is_inside_tree():
+	if runtime == null:
 		return null
-	var world: World3D = runtime.get_world_3d()
-	if world == null:
+	var key: String = "gcell1:r1:x%d:y%d:z%d" % [coordinate.x, coordinate.y, coordinate.z]
+	var body_variant: Variant = runtime.collision_nodes.get(key, null)
+	if not body_variant is StaticBody3D:
 		return null
+	var body: StaticBody3D = body_variant
+	var collider_variant: Variant = body.get_node_or_null("CollisionShape3D")
+	if not collider_variant is CollisionShape3D:
+		return null
+	var shape_variant: Variant = collider_variant.shape
+	if not shape_variant is ConcavePolygonShape3D:
+		return null
+	var shape: ConcavePolygonShape3D = shape_variant
+	var faces: PackedVector3Array = shape.get_faces()
+	if faces.size() < 3:
+		return null
+
 	var cell_size: Vector3 = runtime.streamer.cell_size
-	var ray_from := Vector3(
-		probe.x,
-		float(coordinate.y + 1) * cell_size.y - 0.25,
-		probe.z
-	)
-	var ray_to := Vector3(
-		probe.x,
-		float(coordinate.y) * cell_size.y + 0.25,
-		probe.z
-	)
-	var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to)
-	query.collision_mask = 1
-	query.collide_with_areas = false
-	query.collide_with_bodies = true
-	var hit: Dictionary = world.direct_space_state.intersect_ray(query)
-	if hit.is_empty():
-		return null
-	var normal_variant: Variant = hit.get("normal", null)
-	var position_variant: Variant = hit.get("position", null)
-	var collider_variant: Variant = hit.get("collider", null)
-	if not normal_variant is Vector3 or not position_variant is Vector3:
-		return null
-	if normal_variant.dot(Vector3.UP) < 0.55:
-		return null
-	if collider_variant == null or not collider_variant is Node or collider_variant.get_parent() != runtime:
-		return null
-	var position: Vector3 = position_variant + Vector3.UP * FLOOR_CLEARANCE
-	if position.y >= 0.0 or position.y <= -95.0:
-		return null
-	return position
+	var cell_min: Vector3 = Vector3(coordinate) * cell_size
+	var cell_max: Vector3 = cell_min + cell_size
+	var x_probe_distance: float = minf(absf(probe.x - cell_min.x), absf(probe.x - cell_max.x))
+	var z_probe_distance: float = minf(absf(probe.z - cell_min.z), absf(probe.z - cell_max.z))
+	var use_x_boundary: bool = x_probe_distance <= z_probe_distance
+	var boundary_value: float
+	if use_x_boundary:
+		boundary_value = cell_min.x if absf(probe.x - cell_min.x) < absf(probe.x - cell_max.x) else cell_max.x
+	else:
+		boundary_value = cell_min.z if absf(probe.z - cell_min.z) < absf(probe.z - cell_max.z) else cell_max.z
+
+	var best_position: Variant = null
+	var best_score: float = INF
+	for index in range(0, faces.size(), 3):
+		if index + 2 >= faces.size():
+			break
+		var a: Vector3 = faces[index]
+		var b: Vector3 = faces[index + 1]
+		var c: Vector3 = faces[index + 2]
+		var normal: Vector3 = (b - a).cross(c - a)
+		if normal.length_squared() <= 0.000001:
+			continue
+		normal = normal.normalized()
+		# Backface collision is disabled in production. Only an upward-facing
+		# generated triangle can actually support the Player from above.
+		if normal.y < 0.55:
+			continue
+		var centroid: Vector3 = (a + b + c) / 3.0
+		for vertex in [a, b, c]:
+			# Stay inside the triangle instead of placing exactly on a shared vertex.
+			var candidate: Vector3 = vertex.lerp(centroid, 0.08)
+			var boundary_distance: float = (
+				absf(candidate.x - boundary_value)
+				if use_x_boundary
+				else absf(candidate.z - boundary_value)
+			)
+			if boundary_distance > MAX_BOUNDARY_TRIANGLE_DISTANCE:
+				continue
+			var lateral_distance: float = (
+				absf(candidate.z - probe.z)
+				if use_x_boundary
+				else absf(candidate.x - probe.x)
+			)
+			var score: float = boundary_distance * 100.0 + lateral_distance
+			if score < best_score:
+				best_score = score
+				best_position = candidate + Vector3.UP * FLOOR_CLEARANCE
+	return best_position
 
 
 static func _support_keys_for_player(runtime, player, position: Vector3) -> Dictionary:
