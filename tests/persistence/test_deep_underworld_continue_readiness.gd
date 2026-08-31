@@ -352,7 +352,8 @@ static func _scan_current_boundary_target(
 			if normal.length_squared() <= 0.000001:
 				continue
 			normal = normal.normalized()
-			if normal.y < 0.55:
+			var vertical_alignment: float = absf(normal.y)
+			if vertical_alignment < 0.55:
 				continue
 			floor_triangles += 1
 			var centroid: Vector3 = (a + b + c) / 3.0
@@ -380,7 +381,7 @@ static func _scan_current_boundary_target(
 				var nearest_plane: float = _nearest_cell_plane_distance(candidate, runtime.streamer.cell_size)
 				candidates.append({
 					"position": candidate,
-					"normal_y": normal.y,
+					"normal_y": vertical_alignment,
 					"plane_distance": nearest_plane,
 					"source_key": key,
 				})
@@ -393,7 +394,7 @@ static func _scan_current_boundary_target(
 		var lp: Vector3 = left["position"]
 		var rp: Vector3 = right["position"]
 		if not is_equal_approx(lp.y, rp.y):
-			return lp.y > rp.y
+			return lp.y < rp.y
 		if not is_equal_approx(lp.x, rp.x):
 			return lp.x < rp.x
 		return lp.z < rp.z
