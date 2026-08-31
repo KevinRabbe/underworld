@@ -135,13 +135,13 @@ func sample(game, player, inventory_state, equipment_state) -> Dictionary:
 
 	var chitin_quantity: int = inventory.quantity_of(CHITIN_ID)
 	var pending_loot_count: int = _pending_loot_count(game)
+	if pending_loot_count > 0:
+		return _objective(
+			"collect_burrower_reward",
+			"Collect the Burrower reward",
+			{"pending_loot_count": pending_loot_count, "reward_quantity": chitin_quantity}
+		)
 	if chitin_quantity <= 0:
-		if pending_loot_count > 0:
-			return _objective(
-				"collect_burrower_reward",
-				"Collect the Burrower reward",
-				{"pending_loot_count": pending_loot_count}
-			)
 		if not in_cave:
 			return _route_objective(game, player as Node3D, route, route_ready, "Return to the cave and defeat a Burrower")
 		return _objective("defeat_burrower", "Defeat a Burrower", {"in_cave": true})
