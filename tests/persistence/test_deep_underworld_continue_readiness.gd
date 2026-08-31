@@ -337,7 +337,7 @@ static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> 
 static func _generated_floor_position(runtime, coordinate: Vector3i, probe: Vector3) -> Variant:
 	if runtime == null or not runtime.is_inside_tree():
 		return null
-	var world := runtime.get_world_3d()
+	var world: World3D = runtime.get_world_3d()
 	if world == null:
 		return null
 	var cell_size: Vector3 = runtime.streamer.cell_size
