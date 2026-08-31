@@ -52,16 +52,19 @@ func sample(game, player, inventory_state, equipment_state) -> Dictionary:
 	var axe_equipped: bool = _equipped_item_id(equipment, SLOT_AXE) == AXE_ID
 	var pickaxe_equipped: bool = _equipped_item_id(equipment, SLOT_PICKAXE) == PICKAXE_ID
 	var sword_equipped: bool = _equipped_item_id(equipment, SLOT_UTILITY) == SWORD_ID
+	var axe_owned: bool = axe_equipped or inventory.quantity_of(AXE_ID) > 0
+	var pickaxe_owned: bool = pickaxe_equipped or inventory.quantity_of(PICKAXE_ID) > 0
+	var sword_owned: bool = sword_equipped or inventory.quantity_of(SWORD_ID) > 0
 
 	var required_wood: int = 0
 	var required_stone: int = 0
-	if not axe_equipped:
+	if not axe_owned:
 		required_wood += _ingredient_quantity(StoneAxeRecipe, WOOD_ID)
 		required_stone += _ingredient_quantity(StoneAxeRecipe, STONE_ID)
-	if not pickaxe_equipped:
+	if not pickaxe_owned:
 		required_wood += _ingredient_quantity(StonePickaxeRecipe, WOOD_ID)
 		required_stone += _ingredient_quantity(StonePickaxeRecipe, STONE_ID)
-	if not sword_equipped:
+	if not sword_owned:
 		# Reserve the sword's surface ingredient before committing to the cave route.
 		required_wood += _ingredient_quantity(IronSwordRecipe, WOOD_ID)
 
@@ -93,7 +96,12 @@ func sample(game, player, inventory_state, equipment_state) -> Dictionary:
 		return _objective(
 			"craft_equip_stone_tools",
 			"Craft and equip %s" % " + ".join(missing),
-			{"axe_equipped": axe_equipped, "pickaxe_equipped": pickaxe_equipped}
+			{
+				"axe_owned": axe_owned,
+				"axe_equipped": axe_equipped,
+				"pickaxe_owned": pickaxe_owned,
+				"pickaxe_equipped": pickaxe_equipped,
+			}
 		)
 
 	var route_variant: Variant = game.call("selected_entrance_route_snapshot")
@@ -105,7 +113,7 @@ func sample(game, player, inventory_state, equipment_state) -> Dictionary:
 	var iron_required: int = _ingredient_quantity(IronSwordRecipe, IRON_ID)
 	var iron_quantity: int = inventory.quantity_of(IRON_ID)
 
-	if iron_quantity < iron_required:
+	if not sword_owned and iron_quantity < iron_required:
 		if not in_cave:
 			return _route_objective(game, player as Node3D, route, route_ready, "Reach the natural cave entrance")
 		return _objective(
@@ -117,8 +125,12 @@ func sample(game, player, inventory_state, equipment_state) -> Dictionary:
 	if not sword_equipped:
 		return _objective(
 			"craft_equip_iron_sword",
-			"Craft and equip the Iron Sword in hotbar 4",
-			{"iron": iron_quantity, "iron_required": iron_required}
+			"Equip the Iron Sword in hotbar 4" if sword_owned else "Craft and equip the Iron Sword in hotbar 4",
+			{
+				"iron": iron_quantity,
+				"iron_required": iron_required,
+				"sword_owned": sword_owned,
+			}
 		)
 
 	var chitin_quantity: int = inventory.quantity_of(CHITIN_ID)
