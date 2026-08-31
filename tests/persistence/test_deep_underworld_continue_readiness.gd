@@ -11,9 +11,8 @@ const GameSaveSlotService := preload("res://gameplay/persistence/game_save_slot_
 const PlayerSupportBounds := preload("res://gameplay/player/player_collision_support_bounds.gd")
 
 const TEST_SEED: int = 2174242
-const BOUNDARY_INSET: float = 0.10
 const FLOOR_CLEARANCE: float = 0.04
-const MAX_FLOOR_SEEDS_PER_BOUNDARY: int = 24
+const MAX_BOUNDARY_CANDIDATES_PER_CELL: int = 64
 
 
 static func run_runtime(tree: SceneTree) -> Array[String]:
@@ -251,7 +250,6 @@ static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> 
 		runtime.update_player_position(anchor_position)
 	await tree.physics_frame
 
-	var cell_size: Vector3 = runtime.streamer.cell_size
 	var keys: Array = runtime.streamer.records.keys()
 	keys.sort()
 	for raw_key in keys:
@@ -268,35 +266,16 @@ static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> 
 			continue
 		if not _record_is_gameplay_ready(runtime, record, key):
 			continue
-		for axis in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
-			var neighbor_coordinate: Vector3i = coordinate + axis
-			var neighbor_key: String = "gcell1:r1:x%d:y%d:z%d" % [
-				neighbor_coordinate.x,
-				neighbor_coordinate.y,
-				neighbor_coordinate.z,
-			]
-			if handoff_keys.has(neighbor_key):
-				continue
-			var neighbor = runtime.streamer.records.get(neighbor_key, null)
-			if not _record_is_gameplay_ready(runtime, neighbor, neighbor_key):
-				continue
-			var probe := Vector3(
-				(float(coordinate.x) + 0.5) * cell_size.x,
-				(float(coordinate.y) + 0.5) * cell_size.y,
-				(float(coordinate.z) + 0.5) * cell_size.z
-			)
-			if axis.x > 0:
-				probe.x = float(coordinate.x + 1) * cell_size.x - BOUNDARY_INSET
-			elif axis.x < 0:
-				probe.x = float(coordinate.x) * cell_size.x + BOUNDARY_INSET
-			elif axis.z > 0:
-				probe.z = float(coordinate.z + 1) * cell_size.z - BOUNDARY_INSET
-			else:
-				probe.z = float(coordinate.z) * cell_size.z + BOUNDARY_INSET
-			var floor_position_variant: Variant = _generated_floor_position(runtime, coordinate, probe)
-			if not floor_position_variant is Vector3:
-				continue
-			var floor_position: Vector3 = floor_position_variant
+
+		# A boundary is whichever geometry-cell plane the actual Player collision /
+		# floor-snap support AABB crosses. Do not couple this proof to an X/Z-only
+		# seam or to where Marching Cubes happened to place vertices.
+		var floor_candidates: Array[Vector3] = _generated_multicell_floor_candidates(
+			runtime,
+			player,
+			coordinate
+		)
+		for floor_position in floor_candidates:
 			var support: Dictionary = _support_keys_for_player(runtime, player, floor_position)
 			if not bool(support.get("success", false)) or support.get("keys", []).size() < 2:
 				continue
@@ -309,9 +288,9 @@ static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> 
 			if not all_ready:
 				continue
 
-			# Prove this is a real standable generated point before saving it. Let the
-			# actual Player physics settle for a few frames, then retain that exact
-			# settled position (X/Z remain deliberately near the cell face).
+			# The candidate comes directly from generated collision geometry. Real
+			# CharacterBody physics is still the authority for whether it is actually
+			# standable; retain the exact settled position only when it stays stable.
 			player.global_position = floor_position
 			player.velocity = Vector3.ZERO
 			var before: Vector3 = floor_position
@@ -332,11 +311,21 @@ static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> 
 				settled_coordinate.y,
 				settled_coordinate.z,
 			]
+			if handoff_keys.has(settled_key):
+				continue
 			var settled_record = runtime.streamer.records.get(settled_key, null)
 			if not _record_is_gameplay_ready(runtime, settled_record, settled_key):
 				continue
 			var settled_support: Dictionary = _support_keys_for_player(runtime, player, settled)
 			if not bool(settled_support.get("success", false)) or settled_support.get("keys", []).size() < 2:
+				continue
+			var settled_support_ready: bool = true
+			for support_key in settled_support.get("keys", []):
+				var support_record = runtime.streamer.records.get(str(support_key), null)
+				if not _record_is_gameplay_ready(runtime, support_record, str(support_key)):
+					settled_support_ready = false
+					break
+			if not settled_support_ready:
 				continue
 			return {
 				"key": settled_key,
@@ -347,41 +336,33 @@ static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> 
 	return {}
 
 
-static func _generated_floor_position(runtime, coordinate: Vector3i, probe: Vector3) -> Variant:
+static func _generated_multicell_floor_candidates(
+	runtime,
+	player,
+	coordinate: Vector3i
+) -> Array[Vector3]:
+	var result: Array[Vector3] = []
 	if runtime == null or not runtime.is_inside_tree():
-		return null
+		return result
 	var key: String = "gcell1:r1:x%d:y%d:z%d" % [coordinate.x, coordinate.y, coordinate.z]
 	var body_variant: Variant = runtime.collision_nodes.get(key, null)
 	if not body_variant is StaticBody3D:
-		return null
+		return result
 	var body: StaticBody3D = body_variant
 	var collider_variant: Variant = body.get_node_or_null("CollisionShape3D")
 	if not collider_variant is CollisionShape3D:
-		return null
+		return result
 	var shape_variant: Variant = collider_variant.shape
 	if not shape_variant is ConcavePolygonShape3D:
-		return null
+		return result
 	var shape: ConcavePolygonShape3D = shape_variant
 	var faces: PackedVector3Array = shape.get_faces()
 	if faces.size() < 3:
-		return null
-	var world: World3D = runtime.get_world_3d()
-	if world == null:
-		return null
+		return result
 
-	var cell_size: Vector3 = runtime.streamer.cell_size
-	var cell_min: Vector3 = Vector3(coordinate) * cell_size
-	var cell_max: Vector3 = cell_min + cell_size
-	var x_probe_distance: float = minf(absf(probe.x - cell_min.x), absf(probe.x - cell_max.x))
-	var z_probe_distance: float = minf(absf(probe.z - cell_min.z), absf(probe.z - cell_max.z))
-	var use_x_boundary: bool = x_probe_distance <= z_probe_distance
-
-	# The collision mesh tessellation does not have to place a vertex near a cell
-	# seam. Use real upward-facing triangles only as local floor-height/lateral
-	# seeds, then query production physics at the exact near-seam X/Z position.
-	var seeds: Array[Dictionary] = []
+	var seen: Dictionary = {}
 	for index in range(0, faces.size(), 3):
-		if index + 2 >= faces.size():
+		if index + 2 >= faces.size() or result.size() >= MAX_BOUNDARY_CANDIDATES_PER_CELL:
 			break
 		var a: Vector3 = body.global_transform * faces[index]
 		var b: Vector3 = body.global_transform * faces[index + 1]
@@ -393,53 +374,29 @@ static func _generated_floor_position(runtime, coordinate: Vector3i, probe: Vect
 		if normal.y < 0.55:
 			continue
 		var centroid: Vector3 = (a + b + c) / 3.0
-		var lateral_distance: float = (
-			absf(centroid.z - probe.z)
-			if use_x_boundary
-			else absf(centroid.x - probe.x)
-		)
-		var boundary_distance: float = (
-			minf(absf(centroid.x - cell_min.x), absf(centroid.x - cell_max.x))
-			if use_x_boundary
-			else minf(absf(centroid.z - cell_min.z), absf(centroid.z - cell_max.z))
-		)
-		seeds.append({
-			"point": centroid,
-			"score": lateral_distance + boundary_distance * 0.05,
-		})
-	seeds.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return float(a["score"]) < float(b["score"])
-	)
-
-	var seed_count: int = mini(seeds.size(), MAX_FLOOR_SEEDS_PER_BOUNDARY)
-	for seed_index in range(seed_count):
-		var seed_point: Vector3 = seeds[seed_index]["point"]
-		var ray_x: float = probe.x
-		var ray_z: float = probe.z
-		if use_x_boundary:
-			ray_z = clampf(seed_point.z, cell_min.z + 0.25, cell_max.z - 0.25)
-		else:
-			ray_x = clampf(seed_point.x, cell_min.x + 0.25, cell_max.x - 0.25)
-		var ray_from := Vector3(ray_x, seed_point.y + 0.60, ray_z)
-		var ray_to := Vector3(ray_x, seed_point.y - 4.0, ray_z)
-		var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to)
-		query.collision_mask = 1
-		query.collide_with_areas = false
-		query.collide_with_bodies = true
-		var hit: Dictionary = world.direct_space_state.intersect_ray(query)
-		if hit.is_empty():
-			continue
-		var normal_variant: Variant = hit.get("normal", null)
-		var position_variant: Variant = hit.get("position", null)
-		var hit_collider: Variant = hit.get("collider", null)
-		if not normal_variant is Vector3 or not position_variant is Vector3:
-			continue
-		if normal_variant.dot(Vector3.UP) < 0.55:
-			continue
-		if hit_collider == null or not hit_collider is Node or hit_collider.get_parent() != runtime:
-			continue
-		return position_variant + Vector3.UP * FLOOR_CLEARANCE
-	return null
+		# Near-vertex samples make the search sensitive to actual cell-boundary
+		# geometry without requiring a vertex itself to be the final Player origin.
+		var samples: Array[Vector3] = [
+			centroid,
+			a.lerp(centroid, 0.18),
+			b.lerp(centroid, 0.18),
+			c.lerp(centroid, 0.18),
+		]
+		for sample in samples:
+			if result.size() >= MAX_BOUNDARY_CANDIDATES_PER_CELL:
+				break
+			var candidate: Vector3 = sample + Vector3.UP * FLOOR_CLEARANCE
+			if candidate.y >= 0.0 or candidate.y <= -95.0:
+				continue
+			var support: Dictionary = _support_keys_for_player(runtime, player, candidate)
+			if not bool(support.get("success", false)) or support.get("keys", []).size() < 2:
+				continue
+			var dedupe_key: String = "%.3f:%.3f:%.3f" % [candidate.x, candidate.y, candidate.z]
+			if seen.has(dedupe_key):
+				continue
+			seen[dedupe_key] = true
+			result.append(candidate)
+	return result
 
 
 static func _support_keys_for_player(runtime, player, position: Vector3) -> Dictionary:
