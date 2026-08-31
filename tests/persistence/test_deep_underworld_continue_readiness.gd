@@ -13,7 +13,7 @@ const PlayerSupportBounds := preload("res://gameplay/player/player_collision_sup
 const TEST_SEED: int = 2174242
 const BOUNDARY_INSET: float = 0.10
 const FLOOR_CLEARANCE: float = 0.04
-const MAX_BOUNDARY_TRIANGLE_DISTANCE: float = 0.38
+const MAX_FLOOR_SEEDS_PER_BOUNDARY: int = 24
 
 
 static func run_runtime(tree: SceneTree) -> Array[String]:
@@ -348,7 +348,7 @@ static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> 
 
 
 static func _generated_floor_position(runtime, coordinate: Vector3i, probe: Vector3) -> Variant:
-	if runtime == null:
+	if runtime == null or not runtime.is_inside_tree():
 		return null
 	var key: String = "gcell1:r1:x%d:y%d:z%d" % [coordinate.x, coordinate.y, coordinate.z]
 	var body_variant: Variant = runtime.collision_nodes.get(key, null)
@@ -365,6 +365,9 @@ static func _generated_floor_position(runtime, coordinate: Vector3i, probe: Vect
 	var faces: PackedVector3Array = shape.get_faces()
 	if faces.size() < 3:
 		return null
+	var world: World3D = runtime.get_world_3d()
+	if world == null:
+		return null
 
 	var cell_size: Vector3 = runtime.streamer.cell_size
 	var cell_min: Vector3 = Vector3(coordinate) * cell_size
@@ -372,49 +375,71 @@ static func _generated_floor_position(runtime, coordinate: Vector3i, probe: Vect
 	var x_probe_distance: float = minf(absf(probe.x - cell_min.x), absf(probe.x - cell_max.x))
 	var z_probe_distance: float = minf(absf(probe.z - cell_min.z), absf(probe.z - cell_max.z))
 	var use_x_boundary: bool = x_probe_distance <= z_probe_distance
-	var boundary_value: float
-	if use_x_boundary:
-		boundary_value = cell_min.x if absf(probe.x - cell_min.x) < absf(probe.x - cell_max.x) else cell_max.x
-	else:
-		boundary_value = cell_min.z if absf(probe.z - cell_min.z) < absf(probe.z - cell_max.z) else cell_max.z
 
-	var best_position: Variant = null
-	var best_score: float = INF
+	# The collision mesh tessellation does not have to place a vertex near a cell
+	# seam. Use real upward-facing triangles only as local floor-height/lateral
+	# seeds, then query production physics at the exact near-seam X/Z position.
+	var seeds: Array[Dictionary] = []
 	for index in range(0, faces.size(), 3):
 		if index + 2 >= faces.size():
 			break
-		var a: Vector3 = faces[index]
-		var b: Vector3 = faces[index + 1]
-		var c: Vector3 = faces[index + 2]
+		var a: Vector3 = body.global_transform * faces[index]
+		var b: Vector3 = body.global_transform * faces[index + 1]
+		var c: Vector3 = body.global_transform * faces[index + 2]
 		var normal: Vector3 = (b - a).cross(c - a)
 		if normal.length_squared() <= 0.000001:
 			continue
 		normal = normal.normalized()
-		# Backface collision is disabled in production. Only an upward-facing
-		# generated triangle can actually support the Player from above.
 		if normal.y < 0.55:
 			continue
 		var centroid: Vector3 = (a + b + c) / 3.0
-		for vertex in [a, b, c]:
-			# Stay inside the triangle instead of placing exactly on a shared vertex.
-			var candidate: Vector3 = vertex.lerp(centroid, 0.08)
-			var boundary_distance: float = (
-				absf(candidate.x - boundary_value)
-				if use_x_boundary
-				else absf(candidate.z - boundary_value)
-			)
-			if boundary_distance > MAX_BOUNDARY_TRIANGLE_DISTANCE:
-				continue
-			var lateral_distance: float = (
-				absf(candidate.z - probe.z)
-				if use_x_boundary
-				else absf(candidate.x - probe.x)
-			)
-			var score: float = boundary_distance * 100.0 + lateral_distance
-			if score < best_score:
-				best_score = score
-				best_position = candidate + Vector3.UP * FLOOR_CLEARANCE
-	return best_position
+		var lateral_distance: float = (
+			absf(centroid.z - probe.z)
+			if use_x_boundary
+			else absf(centroid.x - probe.x)
+		)
+		var boundary_distance: float = (
+			minf(absf(centroid.x - cell_min.x), absf(centroid.x - cell_max.x))
+			if use_x_boundary
+			else minf(absf(centroid.z - cell_min.z), absf(centroid.z - cell_max.z))
+		)
+		seeds.append({
+			"point": centroid,
+			"score": lateral_distance + boundary_distance * 0.05,
+		})
+	seeds.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a["score"]) < float(b["score"])
+	)
+
+	var seed_count: int = mini(seeds.size(), MAX_FLOOR_SEEDS_PER_BOUNDARY)
+	for seed_index in range(seed_count):
+		var seed_point: Vector3 = seeds[seed_index]["point"]
+		var ray_x: float = probe.x
+		var ray_z: float = probe.z
+		if use_x_boundary:
+			ray_z = clampf(seed_point.z, cell_min.z + 0.25, cell_max.z - 0.25)
+		else:
+			ray_x = clampf(seed_point.x, cell_min.x + 0.25, cell_max.x - 0.25)
+		var ray_from := Vector3(ray_x, seed_point.y + 0.60, ray_z)
+		var ray_to := Vector3(ray_x, seed_point.y - 4.0, ray_z)
+		var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to)
+		query.collision_mask = 1
+		query.collide_with_areas = false
+		query.collide_with_bodies = true
+		var hit: Dictionary = world.direct_space_state.intersect_ray(query)
+		if hit.is_empty():
+			continue
+		var normal_variant: Variant = hit.get("normal", null)
+		var position_variant: Variant = hit.get("position", null)
+		var hit_collider: Variant = hit.get("collider", null)
+		if not normal_variant is Vector3 or not position_variant is Vector3:
+			continue
+		if normal_variant.dot(Vector3.UP) < 0.55:
+			continue
+		if hit_collider == null or not hit_collider is Node or hit_collider.get_parent() != runtime:
+			continue
+		return position_variant + Vector3.UP * FLOOR_CLEARANCE
+	return null
 
 
 static func _support_keys_for_player(runtime, player, position: Vector3) -> Dictionary:
