@@ -8,6 +8,8 @@ const Demand := preload("res://worldgen/surface/entrance_runtime_demand.gd")
 const WorldId := preload("res://worldgen/identity/world_id.gd")
 const Manifest := preload("res://worldgen/versioning/generator_manifest.gd")
 const Map015Fixture := preload("res://worldgen/validation/map015_fixture.gd")
+const DefinitionService := preload("res://worldgen/runtime/underworld_runtime_cell_definition_service.gd")
+const RuntimeExecutor := preload("res://worldgen/runtime/underworld_runtime_cell_executor.gd")
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -40,6 +42,7 @@ static func run() -> Array[String]:
 	_test_tier_retirement_and_replacement(failures)
 	_test_full_controller_world_swap_clears_entrance_state(failures)
 	_test_bounded_observer_nodes(failures)
+	_test_secondary_runtime_bookkeeping_is_bounded(failures)
 	_test_production_observer_execution_and_reentry(failures)
 	return failures
 
@@ -163,6 +166,116 @@ static func _test_bounded_observer_nodes(failures: Array[String]) -> void:
 	controller.free()
 
 
+static func _test_secondary_runtime_bookkeeping_is_bounded(failures: Array[String]) -> void:
+	var controller := Controller.new()
+	controller.configure("world:bookkeeping", "manifest:bookkeeping")
+	var definitions := DefinitionService.new()
+	var definition_failures: Array[String] = definitions.configure(1)
+	_expect(failures, "secondary bookkeeping definition service configures", definition_failures.is_empty())
+	if not definition_failures.is_empty():
+		controller.free()
+		return
+	var executor := RuntimeExecutor.new()
+	var executor_failures: Array[String] = executor.configure(
+		controller.streamer,
+		definitions,
+		controller
+	)
+	_expect(failures, "secondary bookkeeping executor configures", executor_failures.is_empty())
+	if not executor_failures.is_empty():
+		controller.free()
+		return
+	controller._definition_service = definitions
+	controller._runtime_executor = executor
+	controller.streamer.executor = executor
+
+	# Exercise far more retired addresses than any live observer window without
+	# running expensive voxel extraction. Real set/release ownership queues and
+	# cancels executor work; synthetic cache entries stand in for already-computed
+	# deterministic definitions/meshes so pruning can be validated directly.
+	for step in range(200):
+		var address := Address.new(Vector3i(step, -1, step % 7))
+		var key: String = address.canonical_text()
+		var record = controller.streamer.set_demand(
+			address,
+			"player",
+			["definition"],
+			"source:history:%d" % step,
+			"provenance:history:%d" % step
+		)
+		_expect(failures, "historical bookkeeping record exists step %d" % step, record != null)
+		if record == null:
+			continue
+		definitions._cells[key] = {"historical": step}
+		var region: Vector2i = definitions.region_for_address(address)
+		var region_key: String = _region_key(region)
+		definitions._regions[region_key] = {"historical": step}
+		definitions._base_regions[region_key] = {"historical": step}
+		for offset in DefinitionService.NEIGHBOR_OFFSETS:
+			definitions._base_regions[_region_key(region + offset)] = {"historical": step}
+		controller._observer_binding_failures[key] = ["synthetic historical failure"]
+		executor._mesh_cache["%s|%d|synthetic|synthetic" % [key, record.generation]] = "mesh"
+		controller.streamer.release_demand(address, "player")
+
+	_expect(failures, "retired history leaves no runtime records", controller.streamer.records.is_empty())
+	_expect(failures, "retired history cancels executor jobs", executor.queued_job_count() == 0)
+	_expect(failures, "retired history cancels executor mesh cache", executor.mesh_cache_count() == 0)
+	controller._prune_observer_binding_failures()
+	controller._prune_definition_cache()
+	_expect(failures, "retired history prunes observer binding failures", controller.observer_binding_failure_count() == 0)
+	_expect(failures, "retired history prunes definition cell cache", definitions.cached_cell_count() == 0)
+	_expect(failures, "retired history prunes definition region cache", definitions.cached_region_count() == 0)
+	_expect(failures, "retired history prunes definition base-region cache", definitions._base_regions.size() == 0)
+
+	var active_addresses: Array = [
+		Address.new(Vector3i(0, -1, 0)),
+		Address.new(Vector3i(17, -1, 0)),
+		Address.new(Vector3i(34, -1, 0)),
+		Address.new(Vector3i(51, -1, 0)),
+	]
+	for index in range(active_addresses.size()):
+		var address = active_addresses[index]
+		var key: String = address.canonical_text()
+		var record = controller.streamer.set_demand(
+			address,
+			"player",
+			["definition"],
+			"source:active:%d" % index,
+			"provenance:active:%d" % index
+		)
+		definitions._cells[key] = {"active": index}
+		var region: Vector2i = definitions.region_for_address(address)
+		definitions._regions[_region_key(region)] = {"active": index}
+		definitions._base_regions[_region_key(region)] = {"active": index}
+		for offset in DefinitionService.NEIGHBOR_OFFSETS:
+			definitions._base_regions[_region_key(region + offset)] = {"active": index}
+		controller._observer_binding_failures[key] = ["synthetic current failure"]
+		if record != null:
+			executor._mesh_cache["%s|%d|synthetic|synthetic" % [key, record.generation]] = "mesh"
+
+	# Re-seed a stale cache/failure after the live set exists to prove pruning is
+	# keyed to current relevance rather than merely benefiting from an empty table.
+	var stale_address := Address.new(Vector3i(999, -1, 999))
+	var stale_key: String = stale_address.canonical_text()
+	definitions._cells[stale_key] = {"stale": true}
+	var stale_region: Vector2i = definitions.region_for_address(stale_address)
+	definitions._regions[_region_key(stale_region)] = {"stale": true}
+	definitions._base_regions[_region_key(stale_region)] = {"stale": true}
+	controller._observer_binding_failures[stale_key] = ["stale"]
+	executor._mesh_cache["%s|1|synthetic|synthetic" % stale_key] = "mesh"
+
+	controller._prune_observer_binding_failures()
+	controller._prune_definition_cache()
+	executor.prune_runtime_cache()
+	_expect(failures, "binding failure table follows current player relevance", controller.observer_binding_failure_count() == active_addresses.size())
+	_expect(failures, "definition cell cache follows current records", definitions.cached_cell_count() == active_addresses.size())
+	_expect(failures, "definition region cache is bounded by current regions", definitions.cached_region_count() <= active_addresses.size())
+	_expect(failures, "definition base cache is bounded by current region neighborhoods", definitions._base_regions.size() <= active_addresses.size() * 5)
+	_expect(failures, "executor queue is bounded by current records", executor.queued_job_count() <= controller.streamer.records.size())
+	_expect(failures, "executor mesh cache follows current records", executor.mesh_cache_count() <= controller.streamer.records.size())
+	controller.free()
+
+
 static func _test_production_observer_execution_and_reentry(failures: Array[String]) -> void:
 	var controller := Controller.new()
 	controller.configure(
@@ -238,9 +351,18 @@ static func _test_production_observer_execution_and_reentry(failures: Array[Stri
 		not first_source.is_empty() and not first_provenance.is_empty()
 	)
 
-	var far_position := target_position + Vector3(controller.streamer.cell_size.x * 8.0, 0.0, 0.0)
+	var target_region: Vector2i = controller._definition_service.region_for_address(target_address)
+	var far_position := target_position + Vector3(controller.streamer.cell_size.x * 20.0, 0.0, 0.0)
+	var far_address := Address.new(controller.streamer.observer_cell(far_position))
+	var far_region: Vector2i = controller._definition_service.region_for_address(far_address)
+	_expect(failures, "observer excursion crosses a canonical region boundary", far_region != target_region)
 	for _step in range(4):
 		controller.update_player_position(far_position)
+	_expect(
+		failures,
+		"cross-region observer demand binds canonical runtime identity",
+		_has_bound_player_record_in_region(controller, far_region)
+	)
 	var released_record = controller.streamer.records.get(target_key, null)
 	_expect(
 		failures,
@@ -288,6 +410,21 @@ static func _test_production_observer_execution_and_reentry(failures: Array[Stri
 		controller.render_nodes.size() <= 27 and controller.collision_nodes.size() <= 27
 	)
 	controller.free()
+
+
+static func _has_bound_player_record_in_region(controller, region: Vector2i) -> bool:
+	for record in controller.streamer.records.values():
+		if record == null or not record.demands.has("player"):
+			continue
+		if controller._definition_service.region_for_address(record.cell_address) != region:
+			continue
+		if not record.source_fingerprint.is_empty() and not record.provenance_fingerprint.is_empty():
+			return true
+	return false
+
+
+static func _region_key(region: Vector2i) -> String:
+	return "%d:%d" % [region.x, region.y]
 
 
 static func _has_demand_source(records: Dictionary, source: String) -> bool:
