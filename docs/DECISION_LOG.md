@@ -473,3 +473,75 @@ The following remain intentionally open and must not become accidental permanent
 - exact save file/sharding/compression format;
 - exact terrain/deformation delta representation;
 - exact performance budgets/statistical tuning thresholds.
+
+## 2026-08-31 — Two independent procedural world domains — LOCKED / SUPERSEDING DECISION
+
+ADR authority: [`00_project/ADR-001_TWO_WORLD_DOMAINS.md`](00_project/ADR-001_TWO_WORLD_DOMAINS.md)  
+Owning contracts: [`20_world/WORLD_DOMAINS_AND_TRANSITIONS.md`](20_world/WORLD_DOMAINS_AND_TRANSITIONS.md), [`WORLD_ARCHITECTURE.md`](WORLD_ARCHITECTURE.md), [`TECHNICAL_ARCHITECTURE.md`](TECHNICAL_ARCHITECTURE.md), [`STREAMING_OWNERSHIP.md`](STREAMING_OWNERSHIP.md), [`20_world/UNDERWORLD_GENERATION_PIPELINE.md`](20_world/UNDERWORLD_GENERATION_PIPELINE.md), [`PERSISTENCE_AND_VERSIONING.md`](PERSISTENCE_AND_VERSIONING.md).
+
+### Superseded 2026-08-27 clauses
+
+The following earlier locked requirements are superseded and retained above only as historical record:
+
+- Surface/Overworld and Underworld **do not** need one shared/global 3D coordinate relationship.
+- Cross-domain travel **does not** require one continuous runtime world or simultaneous surface + cave traversal residency.
+- Underworld entry identity **does not** require physical `SurfaceEntranceIntegrationDescriptor` mesh openings or surface-chunk generation that queries Underworld definitions.
+- Underworld shallow/mid/deep grammar **does not** require `surface height - shared world Y` or other mandatory surface-relative depth.
+- Approaching a gateway **does not** require the old physical overlap/prefetch route with both domains rendered/collided in one space.
+
+This also supersedes the cross-domain interpretation of the 2026-08-27 `EntranceDefinition`/surface-sampler cycle. Existing accepted entrance StableIds, historical seed domains and deterministic artifacts may remain supported as legacy/internal Underworld generation contracts where compatibility requires them; their old physical cross-domain meaning is not new architecture.
+
+### New governing world-domain rule — LOCKED
+
+- `OVERWORLD` and `UNDERWORLD` are independent first-class procedural domains under one root `WorldId`/seed/compatible generator-manifest scope.
+- Coordinates and depth are **domain-local**. A transform is meaningful together with its owning domain.
+- Cross-domain relationships are deterministic semantic mappings: `source gateway identity -> destination domain + destination entry/arrival identity`.
+- A direct fade/loading transition is valid V1 presentation. Hiding that boundary later is optional presentation work, not an architecture requirement.
+- Destination render/collision readiness required for safe Player control must be satisfied before control/physics resumes.
+- Active domain is explicit runtime and persistence state; it is never inferred from Y sign, camera depth, mesh visibility or nearest entrance.
+- Source state may be retained during bounded destination preparation for rollback, but inactive full-domain runtime must not remain permanently streamed without explicit relevance.
+- Overworld digging does not reach Underworld merely by crossing a global Y/depth threshold.
+
+### Generation and identity ownership — LOCKED
+
+- Overworld and Underworld generators do not own one another.
+- The Underworld retains deterministic region/network/node/edge/entry-site topology, stable candidate identities, 3D domain-local geometry and 3D runtime-cell architecture.
+- Cross-domain gateway identity/mapping belongs to the world-domain/gateway layer, not to topology, surface geometry or a streamer.
+- Existing persistent seed-domain identifiers never silently change semantic meaning. New gateway behavior receives new semantic domains/contracts rather than repurposing historical `ug.entrance.*` meanings.
+
+### Persistence — LOCKED
+
+Durable Player location is conceptually:
+
+```text
+PlayerWorldLocation
+- active_domain
+- domain_local_transform
+```
+
+Continue reconstructs the saved active domain directly, applies that domain's deterministic truth + durable deltas, establishes required runtime safety, then restores Player control.
+
+Legacy saves that lack explicit domain state require an explicit schema compatibility/migration decision. Domain must not be guessed from coordinate sign or nearest generated geometry.
+
+### Preserved 2026-08-27 architecture
+
+The two-domain decision does **not** invalidate the following still-governing contracts:
+
+- pure deterministic generation stages;
+- StableAddress / StableId candidate identity;
+- named revisioned seed domains and project-owned deterministic RNG contracts;
+- topology before geometry;
+- canonical fingerprints and schedule/load-order independence;
+- deterministic cross-region Underworld ownership;
+- continuous shallow/mid/deep profile blending **inside the Underworld domain**;
+- 3D Underworld runtime cells;
+- representation tiers, hysteresis and bounded relevance;
+- worker/main-thread separation;
+- async request identity/generation tokens and stale-result rejection;
+- runtime/caches not owning durable world truth;
+- `WorldDeltaStore` ownership of persistent player-caused changes;
+- regeneration of untouched deterministic base truth instead of serializing visited runtime scenes.
+
+### Product consequence — LOCKED DIRECTION
+
+The project intentionally spends saved complexity on the quality, scale and variety of each domain rather than on invisible cross-domain geometric continuity. A modeled cave mouth, short local tunnel, mine door, fissure or other Overworld presentation can still represent a gateway, while the destination Underworld is generated and streamed independently.
