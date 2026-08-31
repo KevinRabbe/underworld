@@ -591,6 +591,8 @@ Visual action order:
 
 Continue remains in the layout even when disabled so availability does not move other actions.
 
+When Continue is unavailable (`checking`, `none`, `incompatible` or `invalid`), its control is disabled and explicitly **non-focusable (`FOCUS_NONE`)**. Keyboard/controller navigation must never land on an unavailable Continue action.
+
 ## 13.1 Continue state
 
 Presentation consumes a bounded persistence/AppRoot classification, conceptually:
@@ -986,17 +988,17 @@ Do not fabricate a complete screen-reader/subtitle/accessibility subsystem befor
 
 Broad UI implementation remains controlled and should not become an M3 feature-expansion blocker.
 
-After #396 PASS, preferred foundation order is:
+After #396 PASS, dependency-closed execution is:
 
-1. **#397 UI-SKIN-002** — Theme/style/skin source of truth;
-2. **#423 UI scale** and **#400 presentation metadata** may proceed where path-disjoint;
-3. **#401 UI-COMP-001** — ItemSlot, ResourceBar, KeyPrompt, BoundedScreenShell; Toast/Modal only when consumed;
-4. **#399 UI input/focus** and application preference/binding/startup work proceed in their gameplay/AppRoot paths with explicit serialization;
-5. **#388 production HUD** consumes accepted #220 semantics and shared primitives;
-6. #390 Inventory;
-7. #391 Crafting;
-8. #398/#412/#393 system/menu Settings slices according to dependency readiness;
-9. #407 Building UI only alongside the corresponding real Building gameplay/read-model seams.
+1. **Foundation authorities** — #397 Theme/skin plus path-disjoint #400 ContentId presentation metadata, #399 UI input/focus arbitration, #410 binding presentation, and #423 root scale policy as applicable. These may proceed in parallel only where file ownership is disjoint.
+2. **#401 UI-COMP-001** — ItemSlot, ResourceBar, KeyPrompt and BoundedScreenShell consume those accepted foundation contracts; Toast/Modal are added only when a real consumer requires them.
+3. **Semantic/read-model handoff** — #220 structured objective/HUD semantics and #404 world-domain/readiness semantics must be accepted before the corresponding production HUD/domain surfaces claim those truths.
+4. **Feedback/prompt adapters** — #415 global committed-outcome notifications and #416 non-mutating contextual interaction query/execution feedback land before production HUD claims those lanes.
+5. **Inventory interaction prerequisites** — #421 target resolution and #422 live equipment command composition land before #390 exposes interactive Equip/Unequip.
+6. **Crafting interaction prerequisites** — #414 authoritative non-mutating craftability preflight and #417 production recipe/read-model composition land before #391 becomes the full data-driven Crafting surface.
+7. **Screen/system implementation** — #388 HUD, #390 Inventory, #391 Crafting, #398 menus, #412 Settings/#393 system UI and #407 Building proceed only when their specific prerequisite seams above are accepted.
+
+Parallelism remains encouraged across genuinely disjoint paths, but screen implementation must not outrun required semantic, input, binding, scale, metadata or command authorities.
 
 ### Shared-path serialization
 
@@ -1015,6 +1017,10 @@ New component directories under `presentation/ui/components/**` can otherwise be
 # 25. Validation contract
 
 Production UI acceptance should extend existing UI/HUD/App Shell validation rather than create redundant workflow families.
+
+**#413 owns the shared UI validation/path-trigger envelope.** The UI workflow must trigger when screens consume or when a change modifies shared component paths, semantic Theme/style assets, or root UI scale/project settings such as `project.godot`. Trigger coverage must follow the real shared dependency graph rather than only individual screen paths.
+
+Renderer/scene tests should preserve read-model and authority semantics without freezing prototype copy or obsolete prototype layout. In particular they must not make permanent `_feedback_text`, permanent material-list text, or exact provisional player-facing strings into production architecture.
 
 At minimum prove:
 
