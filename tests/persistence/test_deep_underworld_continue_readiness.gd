@@ -13,12 +13,15 @@ const PlayerSupportBounds := preload("res://gameplay/player/player_collision_sup
 const TEST_SEED: int = 2174242
 const FLOOR_CLEARANCE: float = 0.04
 const BOUNDARY_INSET: float = 0.10
+const SEAM_GEOMETRY_BAND: float = 1.25
+const SEAM_QUANTIZATION: float = 0.10
+const SEAM_TANGENTIAL_OFFSETS: Array[float] = [-0.45, 0.0, 0.45]
+const MAX_SEAM_PROBES_PER_SIDE: int = 48
 const MAX_SEARCH_HOPS: int = 4
 const UPDATES_PER_HOP: int = 18
 const SCAN_INTERVAL: int = 6
 const MAX_PHYSICS_CANDIDATES: int = 48
 const MAX_RAY_HITS_PER_PROBE: int = 8
-const PROBE_FRACTIONS: Array[float] = [0.18, 0.34, 0.50, 0.66, 0.82]
 
 
 static func run_runtime(tree: SceneTree) -> Array[String]:
@@ -57,7 +60,9 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		failures
 	)
 	if target.is_empty():
-		failures.append("production observer path did not find a standable multi-cell underground target outside entrance handoff")
+		failures.append(
+			"production observer path did not find a standable multi-cell underground target outside entrance handoff"
+		)
 		_free_attached(game)
 		_cleanup_slot()
 		return failures
@@ -73,7 +78,10 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 
 	var initial_support: Dictionary = _support_keys_for_player(runtime, player, target_position)
 	if not bool(initial_support.get("success", false)):
-		failures.append("deep observer target support query failed: %s" % [initial_support.get("diagnostics", [])])
+		failures.append(
+			"deep observer target support query failed: %s"
+			% [initial_support.get("diagnostics", [])]
+		)
 	elif initial_support.get("keys", []).size() < 2:
 		failures.append("deep observer target does not cross a runtime cell boundary")
 	else:
@@ -81,17 +89,26 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			var key: String = str(raw_key)
 			var support_record = runtime.streamer.records.get(key, null)
 			if not _record_is_gameplay_ready(runtime, support_record, key):
-				failures.append("deep observer target support cell is not gameplay-ready before SAVE: %s" % key)
+				failures.append(
+					"deep observer target support cell is not gameplay-ready before SAVE: %s"
+					% key
+				)
 
 	var request_variant: Variant = game.call("build_save_request")
-	if not request_variant is Dictionary or not bool(request_variant.get("success", false)):
+	if (
+		not request_variant is Dictionary
+		or not bool(request_variant.get("success", false))
+	):
 		failures.append("deep observer Game could not build production SAVE request")
 		_free_attached(game)
 		_cleanup_slot()
 		return failures
 	var request: Dictionary = request_variant
 	var saved_resume_variant: Variant = request.get("resume_position", null)
-	if not saved_resume_variant is Vector3 or not saved_resume_variant.is_equal_approx(target_position):
+	if (
+		not saved_resume_variant is Vector3
+		or not saved_resume_variant.is_equal_approx(target_position)
+	):
 		failures.append("deep observer SAVE did not preserve exact runtime Player position")
 
 	var service = GameSaveSlotService.new()
@@ -105,13 +122,19 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		TEST_SLOT
 	)
 	if not bool(saved.get("success", false)):
-		failures.append("deep observer production SAVE failed: %s" % [saved.get("diagnostics", [])])
+		failures.append(
+			"deep observer production SAVE failed: %s"
+			% [saved.get("diagnostics", [])]
+		)
 		_free_attached(game)
 		_cleanup_slot()
 		return failures
 	var loaded: Dictionary = service.load_slot(TEST_SLOT)
 	if not bool(loaded.get("success", false)):
-		failures.append("deep observer detached slot load failed: %s" % [loaded.get("diagnostics", [])])
+		failures.append(
+			"deep observer detached slot load failed: %s"
+			% [loaded.get("diagnostics", [])]
+		)
 		_free_attached(game)
 		_cleanup_slot()
 		return failures
@@ -150,13 +173,17 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 
 	var readiness_variant: Variant = gate.call("resolve_now")
 	if not readiness_variant is Array or not readiness_variant.is_empty():
-		failures.append("deep Continue local reconstruction failed: %s" % [readiness_variant])
+		failures.append(
+			"deep Continue local reconstruction failed: %s" % [readiness_variant]
+		)
 	if resumed.process_mode == Node.PROCESS_MODE_DISABLED:
 		failures.append("deep Continue did not release Game processing after collision readiness")
 	if not bool(gate.call("resume_ready")):
 		failures.append("deep Continue readiness gate did not report resolved state")
 	if str(gate.call("resume_cell_key")) != target_key:
-		failures.append("deep Continue reconstructed a different containing runtime cell than the saved position")
+		failures.append(
+			"deep Continue reconstructed a different containing runtime cell than the saved position"
+		)
 
 	var resumed_support_variant: Variant = gate.call("resume_support_cell_keys")
 	if not resumed_support_variant is Array or resumed_support_variant.size() < 2:
@@ -166,13 +193,18 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			var key: String = str(raw_key)
 			var support_record = resumed_runtime.streamer.records.get(key, null)
 			if not _record_is_gameplay_ready(resumed_runtime, support_record, key):
-				failures.append("deep Continue released Game before required support cell readiness: %s" % key)
+				failures.append(
+					"deep Continue released Game before required support cell readiness: %s"
+					% key
+				)
 	if not resumed_player.global_position.is_equal_approx(target_position):
 		failures.append("deep Continue relocated Player while reconstructing local cave")
 
 	var resumed_record = resumed_runtime.streamer.records.get(target_key, null)
 	if not _record_is_gameplay_ready(resumed_runtime, resumed_record, target_key):
-		failures.append("deep Continue released Player before saved containing-cell render/collision readiness")
+		failures.append(
+			"deep Continue released Player before saved containing-cell render/collision readiness"
+		)
 	elif (
 		resumed_record.source_fingerprint != target_source
 		or resumed_record.provenance_fingerprint != target_provenance
@@ -182,13 +214,23 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var first_physics_position: Vector3 = resumed_player.global_position
 	for _frame in range(6):
 		await tree.physics_frame
-	if resumed_player.has_method("is_defeated") and bool(resumed_player.call("is_defeated")):
+	if (
+		resumed_player.has_method("is_defeated")
+		and bool(resumed_player.call("is_defeated"))
+	):
 		failures.append("deep Continue first real physics frames triggered Player defeat")
 	var after_physics: Vector3 = resumed_player.global_position
-	if Vector2(after_physics.x, after_physics.z).distance_to(Vector2(first_physics_position.x, first_physics_position.z)) > 0.05:
+	if (
+		Vector2(after_physics.x, after_physics.z).distance_to(
+			Vector2(first_physics_position.x, first_physics_position.z)
+		)
+		> 0.05
+	):
 		failures.append("deep Continue first physics frames horizontally relocated Player")
 	if absf(after_physics.y - first_physics_position.y) > 0.35:
-		failures.append("deep Continue first physics frames fell/teleported Player despite support readiness")
+		failures.append(
+			"deep Continue first physics frames fell/teleported Player despite support readiness"
+		)
 
 	var entrance_ids: Array = resumed_runtime.entrance_plans.keys()
 	entrance_ids.sort()
@@ -210,21 +252,33 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			for _step in range(8):
 				resumed_runtime.update_player_position(entrance_position)
 			if not resumed_runtime.gate_is_open(entrance_id):
-				failures.append("deep Continue backtrack did not restore traversable entrance readiness")
+				failures.append(
+					"deep Continue backtrack did not restore traversable entrance readiness"
+				)
 			resumed_player.global_position = target_position
 			resumed_player.velocity = Vector3.ZERO
 			for _step in range(24):
 				resumed_runtime.update_player_position(target_position)
 			var returned_record = resumed_runtime.streamer.records.get(target_key, null)
-			if not _record_is_gameplay_ready(resumed_runtime, returned_record, target_key):
-				failures.append("deep Continue return did not re-establish saved-cell readiness")
+			if not _record_is_gameplay_ready(
+				resumed_runtime,
+				returned_record,
+				target_key
+			):
+				failures.append(
+					"deep Continue return did not re-establish saved-cell readiness"
+				)
 			elif (
 				returned_record.source_fingerprint != target_source
 				or returned_record.provenance_fingerprint != target_provenance
 			):
-				failures.append("deep Continue backtrack/return changed saved-cell identity")
+				failures.append(
+					"deep Continue backtrack/return changed saved-cell identity"
+				)
 			if resumed_runtime.streamer.stale_result_count != 0:
-				failures.append("deep Continue backtrack/return resurrected stale runtime results")
+				failures.append(
+					"deep Continue backtrack/return resurrected stale runtime results"
+				)
 
 	_free_attached(resumed)
 	_cleanup_slot()
@@ -262,12 +316,16 @@ static func _find_observer_boundary_target(
 	)
 	var observer_position: Vector3 = anchor_position
 	var visited_observer_keys: Dictionary = {}
-	var scanned_ready_cells: int = 0
-	var scanned_raycasts: int = 0
-	var scanned_hits: int = 0
-	var scanned_floor_hits: int = 0
-	var scanned_multicell_hits: int = 0
-	var scanned_physics_attempts: int = 0
+	var scanned_collision_keys: Dictionary = {}
+	var totals := {
+		"ready_cells": 0,
+		"seam_probes": 0,
+		"raycasts": 0,
+		"hits": 0,
+		"floor_hits": 0,
+		"multicell_hits": 0,
+		"physics_attempts": 0,
+	}
 
 	for _hop in range(MAX_SEARCH_HOPS):
 		var observer_coordinate: Vector3i = runtime.streamer.observer_cell(observer_position)
@@ -282,14 +340,11 @@ static func _find_observer_boundary_target(
 				player,
 				tree,
 				handoff_keys,
-				safe_player_position
+				safe_player_position,
+				scanned_collision_keys
 			)
-			scanned_ready_cells += int(scan.get("ready_cells", 0))
-			scanned_raycasts += int(scan.get("raycasts", 0))
-			scanned_hits += int(scan.get("hits", 0))
-			scanned_floor_hits += int(scan.get("floor_hits", 0))
-			scanned_multicell_hits += int(scan.get("multicell_hits", 0))
-			scanned_physics_attempts += int(scan.get("physics_attempts", 0))
+			for counter in totals.keys():
+				totals[counter] = int(totals[counter]) + int(scan.get(counter, 0))
 			var target_variant: Variant = scan.get("target", null)
 			if target_variant is Dictionary and not target_variant.is_empty():
 				return target_variant
@@ -305,13 +360,17 @@ static func _find_observer_boundary_target(
 		observer_position = next_position_variant
 
 	failures.append(
-		"deep boundary search exhausted bounded physics exploration: ready_cell_scans=%d raycasts=%d hits=%d floor_hits=%d multicell_hits=%d physics_attempts=%d records=%d collisions=%d" % [
-			scanned_ready_cells,
-			scanned_raycasts,
-			scanned_hits,
-			scanned_floor_hits,
-			scanned_multicell_hits,
-			scanned_physics_attempts,
+		"deep boundary search exhausted geometry-seeded physics exploration: "
+		+ "ready_cells=%d seam_probes=%d raycasts=%d hits=%d floor_hits=%d "
+		+ "multicell_hits=%d physics_attempts=%d records=%d collisions=%d"
+		% [
+			totals["ready_cells"],
+			totals["seam_probes"],
+			totals["raycasts"],
+			totals["hits"],
+			totals["floor_hits"],
+			totals["multicell_hits"],
+			totals["physics_attempts"],
 			runtime.streamer.records.size(),
 			runtime.collision_nodes.size(),
 		]
@@ -324,11 +383,13 @@ static func _scan_current_boundary_target(
 	player,
 	tree: SceneTree,
 	handoff_keys: Dictionary,
-	safe_player_position: Vector3
+	safe_player_position: Vector3,
+	scanned_collision_keys: Dictionary
 ) -> Dictionary:
 	var result := {
 		"target": {},
 		"ready_cells": 0,
+		"seam_probes": 0,
 		"raycasts": 0,
 		"hits": 0,
 		"floor_hits": 0,
@@ -340,14 +401,16 @@ static func _scan_current_boundary_target(
 	var world: World3D = runtime.get_world_3d()
 	if world == null:
 		return result
+
 	var cell_size: Vector3 = runtime.streamer.cell_size
 	var minimum_floor_dot: float = cos(float(player.floor_max_angle))
 	var candidates: Array[Dictionary] = []
 	var keys: Array = runtime.streamer.records.keys()
 	keys.sort()
+
 	for raw_key in keys:
 		var key: String = str(raw_key)
-		if handoff_keys.has(key):
+		if handoff_keys.has(key) or scanned_collision_keys.has(key):
 			continue
 		var record = runtime.streamer.records.get(key, null)
 		if record == null or record.cell_address == null:
@@ -359,6 +422,18 @@ static func _scan_current_boundary_target(
 			continue
 		if not _record_is_gameplay_ready(runtime, record, key):
 			continue
+
+		var body_variant: Variant = runtime.collision_nodes.get(key, null)
+		if not body_variant is StaticBody3D:
+			continue
+		var collider_variant: Variant = body_variant.get_node_or_null("CollisionShape3D")
+		if not collider_variant is CollisionShape3D:
+			continue
+		var shape_variant: Variant = collider_variant.shape
+		if not shape_variant is ConcavePolygonShape3D:
+			continue
+
+		scanned_collision_keys[key] = true
 		result["ready_cells"] = int(result["ready_cells"]) + 1
 		var cell_min: Vector3 = Vector3(coordinate) * cell_size
 		var cell_max: Vector3 = cell_min + cell_size
@@ -367,34 +442,32 @@ static func _scan_current_boundary_target(
 		if top_y <= bottom_y:
 			continue
 
-		for fraction in PROBE_FRACTIONS:
-			var z: float = lerpf(cell_min.z, cell_max.z, fraction)
-			var x_probe: Vector3 = Vector3(cell_max.x - BOUNDARY_INSET, top_y, z)
-			var x_hit: Dictionary = _first_floor_hit(
+		var probes: Array[Vector3] = _collision_seam_probes(
+			body_variant,
+			shape_variant,
+			cell_min,
+			cell_max
+		)
+		result["seam_probes"] = int(result["seam_probes"]) + probes.size()
+		for probe in probes:
+			var ray_start := Vector3(probe.x, top_y, probe.z)
+			var floor_hit: Dictionary = _first_floor_hit(
 				world,
 				player,
 				runtime,
 				handoff_keys,
-				x_probe,
+				ray_start,
 				bottom_y,
 				minimum_floor_dot,
 				result
 			)
-			_add_physics_candidate(runtime, player, x_hit, candidates, result)
-
-			var x: float = lerpf(cell_min.x, cell_max.x, fraction)
-			var z_probe: Vector3 = Vector3(x, top_y, cell_max.z - BOUNDARY_INSET)
-			var z_hit: Dictionary = _first_floor_hit(
-				world,
-				player,
+			_add_physics_candidate(
 				runtime,
-				handoff_keys,
-				z_probe,
-				bottom_y,
-				minimum_floor_dot,
+				player,
+				floor_hit,
+				candidates,
 				result
 			)
-			_add_physics_candidate(runtime, player, z_hit, candidates, result)
 
 	candidates.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
 		if not is_equal_approx(float(left["floor_dot"]), float(right["floor_dot"])):
@@ -420,39 +493,43 @@ static func _scan_current_boundary_target(
 		for _frame in range(3):
 			await tree.physics_frame
 		if player.has_method("is_defeated") and bool(player.call("is_defeated")):
-			player.global_position = safe_player_position
-			player.velocity = Vector3.ZERO
+			_restore_probe_player(player, safe_player_position)
 			continue
 		var settled: Vector3 = player.global_position
-		if Vector2(settled.x, settled.z).distance_to(Vector2(floor_position.x, floor_position.z)) > 0.05:
-			player.global_position = safe_player_position
-			player.velocity = Vector3.ZERO
+		if (
+			Vector2(settled.x, settled.z).distance_to(
+				Vector2(floor_position.x, floor_position.z)
+			)
+			> 0.05
+		):
+			_restore_probe_player(player, safe_player_position)
 			continue
 		if absf(settled.y - floor_position.y) > 0.30:
-			player.global_position = safe_player_position
-			player.velocity = Vector3.ZERO
+			_restore_probe_player(player, safe_player_position)
 			continue
+
 		for _step in range(12):
 			runtime.update_player_position(settled)
 		var settled_coordinate: Vector3i = runtime.streamer.observer_cell(settled)
 		var settled_key: String = _cell_key(settled_coordinate)
 		if handoff_keys.has(settled_key):
-			player.global_position = safe_player_position
-			player.velocity = Vector3.ZERO
+			_restore_probe_player(player, safe_player_position)
 			continue
 		var settled_record = runtime.streamer.records.get(settled_key, null)
 		if not _record_is_gameplay_ready(runtime, settled_record, settled_key):
-			player.global_position = safe_player_position
-			player.velocity = Vector3.ZERO
+			_restore_probe_player(player, safe_player_position)
 			continue
-		var settled_support: Dictionary = _support_keys_for_player(runtime, player, settled)
+		var settled_support: Dictionary = _support_keys_for_player(
+			runtime,
+			player,
+			settled
+		)
 		if (
 			not bool(settled_support.get("success", false))
 			or settled_support.get("keys", []).size() < 2
 			or not _support_is_ready(runtime, settled_support.get("keys", []))
 		):
-			player.global_position = safe_player_position
-			player.velocity = Vector3.ZERO
+			_restore_probe_player(player, safe_player_position)
 			continue
 		result["target"] = {
 			"key": settled_key,
@@ -462,9 +539,131 @@ static func _scan_current_boundary_target(
 		}
 		return result
 
-	player.global_position = safe_player_position
-	player.velocity = Vector3.ZERO
+	_restore_probe_player(player, safe_player_position)
 	return result
+
+
+static func _collision_seam_probes(
+	body: StaticBody3D,
+	shape: ConcavePolygonShape3D,
+	cell_min: Vector3,
+	cell_max: Vector3
+) -> Array[Vector3]:
+	var side_seeds := {
+		"xmin": {},
+		"xmax": {},
+		"zmin": {},
+		"zmax": {},
+	}
+	var faces: PackedVector3Array = shape.get_faces()
+	for index in range(0, faces.size(), 3):
+		if index + 2 >= faces.size():
+			break
+		var a: Vector3 = body.global_transform * faces[index]
+		var b: Vector3 = body.global_transform * faces[index + 1]
+		var c: Vector3 = body.global_transform * faces[index + 2]
+		var centroid: Vector3 = (a + b + c) / 3.0
+		var samples: Array[Vector3] = [
+			a,
+			b,
+			c,
+			centroid,
+			(a + b) * 0.5,
+			(b + c) * 0.5,
+			(c + a) * 0.5,
+		]
+		for sample in samples:
+			_register_seam_probe_seeds(
+				side_seeds,
+				sample,
+				cell_min,
+				cell_max
+			)
+
+	var probes: Array[Vector3] = []
+	for side_name in ["xmin", "xmax", "zmin", "zmax"]:
+		var seeds_variant: Variant = side_seeds.get(side_name, {})
+		if not seeds_variant is Dictionary:
+			continue
+		var seeds: Dictionary = seeds_variant
+		var ordered_keys: Array = seeds.keys()
+		ordered_keys.sort()
+		var accepted: int = 0
+		for raw_key in ordered_keys:
+			if accepted >= MAX_SEAM_PROBES_PER_SIDE:
+				break
+			var probe_variant: Variant = seeds.get(raw_key, null)
+			if probe_variant is Vector3:
+				probes.append(probe_variant)
+				accepted += 1
+	return probes
+
+
+static func _register_seam_probe_seeds(
+	side_seeds: Dictionary,
+	sample: Vector3,
+	cell_min: Vector3,
+	cell_max: Vector3
+) -> void:
+	if absf(sample.x - cell_min.x) <= SEAM_GEOMETRY_BAND:
+		for offset in SEAM_TANGENTIAL_OFFSETS:
+			var z: float = clampf(
+				sample.z + offset,
+				cell_min.z + BOUNDARY_INSET,
+				cell_max.z - BOUNDARY_INSET
+			)
+			_store_side_probe(
+				side_seeds["xmin"],
+				z,
+				Vector3(cell_min.x + BOUNDARY_INSET, 0.0, z)
+			)
+	if absf(sample.x - cell_max.x) <= SEAM_GEOMETRY_BAND:
+		for offset in SEAM_TANGENTIAL_OFFSETS:
+			var z: float = clampf(
+				sample.z + offset,
+				cell_min.z + BOUNDARY_INSET,
+				cell_max.z - BOUNDARY_INSET
+			)
+			_store_side_probe(
+				side_seeds["xmax"],
+				z,
+				Vector3(cell_max.x - BOUNDARY_INSET, 0.0, z)
+			)
+	if absf(sample.z - cell_min.z) <= SEAM_GEOMETRY_BAND:
+		for offset in SEAM_TANGENTIAL_OFFSETS:
+			var x: float = clampf(
+				sample.x + offset,
+				cell_min.x + BOUNDARY_INSET,
+				cell_max.x - BOUNDARY_INSET
+			)
+			_store_side_probe(
+				side_seeds["zmin"],
+				x,
+				Vector3(x, 0.0, cell_min.z + BOUNDARY_INSET)
+			)
+	if absf(sample.z - cell_max.z) <= SEAM_GEOMETRY_BAND:
+		for offset in SEAM_TANGENTIAL_OFFSETS:
+			var x: float = clampf(
+				sample.x + offset,
+				cell_min.x + BOUNDARY_INSET,
+				cell_max.x - BOUNDARY_INSET
+			)
+			_store_side_probe(
+				side_seeds["zmax"],
+				x,
+				Vector3(x, 0.0, cell_max.z - BOUNDARY_INSET)
+			)
+
+
+static func _store_side_probe(
+	seeds: Dictionary,
+	tangential_coordinate: float,
+	probe: Vector3
+) -> void:
+	var quantized: int = roundi(tangential_coordinate / SEAM_QUANTIZATION)
+	var key: String = str(quantized)
+	if not seeds.has(key):
+		seeds[key] = probe
 
 
 static func _first_floor_hit(
@@ -509,7 +708,10 @@ static func _first_floor_hit(
 		var hit_key: String = str(collider.get_meta("cell_address", ""))
 		if hit_key.is_empty() or handoff_keys.has(hit_key):
 			continue
-		if not runtime.collision_nodes.has(hit_key) or runtime.collision_nodes.get(hit_key) != collider:
+		if (
+			not runtime.collision_nodes.has(hit_key)
+			or runtime.collision_nodes.get(hit_key) != collider
+		):
 			continue
 		var floor_dot: float = normal_variant.dot(Vector3.UP)
 		if floor_dot + 0.0001 < minimum_floor_dot:
@@ -539,7 +741,10 @@ static func _add_physics_candidate(
 	if position.y >= 0.0 or position.y <= -95.0:
 		return
 	var support: Dictionary = _support_keys_for_player(runtime, player, position)
-	if not bool(support.get("success", false)) or support.get("keys", []).size() < 2:
+	if (
+		not bool(support.get("success", false))
+		or support.get("keys", []).size() < 2
+	):
 		return
 	if not _support_is_ready(runtime, support.get("keys", [])):
 		return
@@ -577,7 +782,13 @@ static func _next_exploration_position(
 			+ runtime.streamer.cell_size * 0.5
 		)
 		var distance: float = center.distance_squared_to(anchor_position)
-		if distance > best_distance or (is_equal_approx(distance, best_distance) and (best_key.is_empty() or key < best_key)):
+		if (
+			distance > best_distance
+			or (
+				is_equal_approx(distance, best_distance)
+				and (best_key.is_empty() or key < best_key)
+			)
+		):
 			best_distance = distance
 			best_key = key
 			best_position = center
@@ -590,7 +801,11 @@ static func _support_keys_for_player(runtime, player, position: Vector3) -> Dict
 		return support_result
 	var bounds_variant: Variant = support_result.get("bounds", null)
 	if not bounds_variant is AABB:
-		return {"success": false, "keys": [], "diagnostics": ["support bounds missing AABB"]}
+		return {
+			"success": false,
+			"keys": [],
+			"diagnostics": ["support bounds missing AABB"],
+		}
 	var bounds: AABB = bounds_variant
 	var cell_size: Vector3 = runtime.streamer.cell_size
 	var maximum: Vector3 = bounds.end - Vector3.ONE * 0.0001
@@ -623,7 +838,12 @@ static func _support_is_ready(runtime, keys: Array) -> bool:
 
 
 static func _record_is_gameplay_ready(runtime, record, key: String) -> bool:
-	if runtime == null or record == null or bool(record.release_pending) or str(record.state) == "failed":
+	if (
+		runtime == null
+		or record == null
+		or bool(record.release_pending)
+		or str(record.state) == "failed"
+	):
 		return false
 	if record.source_fingerprint.is_empty() or record.provenance_fingerprint.is_empty():
 		return false
@@ -631,6 +851,11 @@ static func _record_is_gameplay_ready(runtime, record, key: String) -> bool:
 		if not bool(record.readiness.get(tier, false)):
 			return false
 	return runtime.render_nodes.has(key) and runtime.collision_nodes.has(key)
+
+
+static func _restore_probe_player(player, position: Vector3) -> void:
+	player.global_position = position
+	player.velocity = Vector3.ZERO
 
 
 static func _cell_key(coordinate: Vector3i) -> String:
@@ -656,7 +881,9 @@ static func _candidate(failures: Array[String]) -> Dictionary:
 	var context = WorldGenerationContext.new(TEST_SEED)
 	var context_failures: Array[String] = context.validate()
 	if not context_failures.is_empty():
-		failures.append("deep Continue fixture world context is invalid: %s" % [context_failures])
+		failures.append(
+			"deep Continue fixture world context is invalid: %s" % [context_failures]
+		)
 		return {}
 	return {
 		"world_context": context,
