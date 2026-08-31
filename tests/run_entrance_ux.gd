@@ -3,6 +3,8 @@ extends SceneTree
 const GAME_SCENE_PATH := "res://app/game/game.tscn"
 const TEST_SLOT := "user://entrance_ux_continue.json"
 const NaturalEntranceRouteTests := preload("res://tests/geometry/test_natural_entrance_route.gd")
+const ProductionSurfaceEntranceCompositionTests := preload("res://tests/geometry/test_production_surface_entrance_composition.gd")
+const LiveSurfaceEntrancePhysicsTests := preload("res://tests/geometry/test_live_surface_entrance_physics.gd")
 const GameSaveSlotService := preload("res://gameplay/persistence/game_save_slot_service.gd")
 
 
@@ -13,13 +15,14 @@ func _init() -> void:
 func _run() -> void:
 	_cleanup_slot()
 	var failures: Array[String] = NaturalEntranceRouteTests.run()
+	failures.append_array(ProductionSurfaceEntranceCompositionTests.run())
 	var live_new: Dictionary = await _run_live_new_game(failures)
 	if not live_new.is_empty():
 		await _run_live_continue(live_new, failures)
 	_cleanup_slot()
 	if failures.is_empty():
 		print("[ENTRANCE UX VALIDATION] PASS")
-		print("  deterministic selection / viable fallback / generic bootstrap / single NEW surface start / Continue preservation / runtime backtrack passed")
+		print("  deterministic selection / production render+collision opening / real Player traversal+backtrack / single NEW surface start / Continue opening stability passed")
 		quit(0)
 		return
 	printerr("[ENTRANCE UX VALIDATION] FAIL — %d failure(s)" % failures.size())
@@ -105,6 +108,16 @@ func _run_live_new_game(failures: Array[String]) -> Dictionary:
 	else:
 		failures.append("live/new route/Game spawn values are malformed")
 
+	# ENTRANCE-SURFACE-002: prove the accepted semantic route is physically
+	# composed into the real production terrain and is traversable by the actual
+	# CharacterBody3D under normal Player input in both directions.
+	var physical_result: Dictionary = await LiveSurfaceEntrancePhysicsTests.run_new(
+		self,
+		game,
+		route,
+		failures
+	)
+
 	# Build the Continue candidate exclusively through the production SAVE/slot
 	# path. Move first so the resumed position cannot accidentally equal the
 	# entrance-relative NEW spawn and mask a post-start relocation regression.
@@ -149,6 +162,7 @@ func _run_live_new_game(failures: Array[String]) -> Dictionary:
 		"expected_resume": expected_resume,
 		"entrance_id": entrance_id,
 		"selection_fingerprint": str(route.get("selection_fingerprint", "")),
+		"surface_plan_fingerprint": str(physical_result.get("plan_fingerprint", "")),
 		"recommended_spawn_xz": route.get("recommended_spawn_xz", Vector3.ZERO),
 	}
 	_teardown_game(game)
@@ -215,6 +229,13 @@ func _run_live_continue(live_new: Dictionary, failures: Array[String]) -> void:
 		if recommended_variant is Vector3 and committed_spawn_variant is Vector3:
 			if committed_spawn_variant.is_equal_approx(recommended_variant):
 				failures.append("live/continue route guidance replaced durable resume with NEW entrance approach spawn")
+		await LiveSurfaceEntrancePhysicsTests.verify_continue(
+			self,
+			resumed,
+			route,
+			str(live_new.get("surface_plan_fingerprint", "")),
+			failures
+		)
 
 	_teardown_game(resumed)
 	await process_frame
