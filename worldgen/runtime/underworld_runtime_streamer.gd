@@ -22,11 +22,15 @@ var collision_release_radius: int = 2
 var max_active_voxel_workers: int = 2
 var world_id: String = ""
 var generator_manifest_id: String = ""
+# Runtime-only current relevance. Fully retired cells are erased; deterministic
+# generation/persistence remains the authority for reconstructing them later.
 var records: Dictionary = {}
 var executor = null
 var stale_result_count: int = 0
 var released_count: int = 0
 var queued_count: int = 0
+var last_observer_record_scan_count: int = 0
+var _next_generation_token: int = 1
 
 
 func _init(world_id_value: String = "", manifest_id_value: String = "", executor_value = null) -> void:
@@ -36,7 +40,7 @@ func _init(world_id_value: String = "", manifest_id_value: String = "", executor
 
 
 func demand_cell(address, source: String, tiers: Array, source_fingerprint: String = "", provenance_fingerprint: String = ""):
-	var record = _record(address)
+	var record = _ensure_record(address)
 	var identity_changed: bool = (not source_fingerprint.is_empty() and not record.source_fingerprint.is_empty() and source_fingerprint != record.source_fingerprint) or (not provenance_fingerprint.is_empty() and not record.provenance_fingerprint.is_empty() and provenance_fingerprint != record.provenance_fingerprint)
 	if identity_changed:
 		_invalidate_generation(record)
@@ -46,7 +50,10 @@ func demand_cell(address, source: String, tiers: Array, source_fingerprint: Stri
 		if not TIERS.has(tier_name):
 			continue
 		lease[tier_name] = int(lease.get(tier_name, 0)) + 1
-	record.demands[source] = lease
+	if lease.is_empty():
+		record.demands.erase(source)
+	else:
+		record.demands[source] = lease
 	record.release_pending = false
 	if not source_fingerprint.is_empty():
 		record.source_fingerprint = source_fingerprint
@@ -59,19 +66,34 @@ func demand_cell(address, source: String, tiers: Array, source_fingerprint: Stri
 
 
 func set_demand(address, source: String, tiers: Array, source_fingerprint: String = "", provenance_fingerprint: String = ""):
-	var record = _record(address)
-	var identity_changed: bool = (not source_fingerprint.is_empty() and not record.source_fingerprint.is_empty() and source_fingerprint != record.source_fingerprint) or (not provenance_fingerprint.is_empty() and not record.provenance_fingerprint.is_empty() and provenance_fingerprint != record.provenance_fingerprint)
-	if identity_changed:
-		_invalidate_generation(record)
+	# Normalize the desired lease before acquiring runtime ownership. An empty
+	# desired state is a release/no-op and must never recreate an evicted record.
 	var lease: Dictionary = {}
 	for tier in tiers:
 		var tier_name := str(tier)
 		if TIERS.has(tier_name):
 			lease[tier_name] = 1
+	var record = _lookup_record(address)
 	if lease.is_empty():
-		record.demands.erase(source)
-	else:
-		record.demands[source] = lease
+		if record == null:
+			return null
+		if record.demands.has(source):
+			record.demands.erase(source)
+			_retire_undemanded_tiers(record)
+		if record.demands.is_empty():
+			record.release_pending = true
+			record.state = "release_pending"
+			release_cell(record.cell_address)
+			return record
+		record.release_pending = false
+		_queue_if_needed(record)
+		return record
+	if record == null:
+		record = _ensure_record(address)
+	var identity_changed: bool = (not source_fingerprint.is_empty() and not record.source_fingerprint.is_empty() and source_fingerprint != record.source_fingerprint) or (not provenance_fingerprint.is_empty() and not record.provenance_fingerprint.is_empty() and provenance_fingerprint != record.provenance_fingerprint)
+	if identity_changed:
+		_invalidate_generation(record)
+	record.demands[source] = lease
 	record.release_pending = false
 	if not source_fingerprint.is_empty():
 		record.source_fingerprint = source_fingerprint
@@ -86,8 +108,10 @@ func set_demand(address, source: String, tiers: Array, source_fingerprint: Strin
 
 
 func release_demand(address, source: String, tiers: Array = []) -> bool:
-	var record = _record(address)
-	if not record.demands.has(source):
+	# Release is deliberately non-creating. A stale/duplicate release for an
+	# already-evicted cell must not manufacture historical runtime state.
+	var record = _lookup_record(address)
+	if record == null or not record.demands.has(source):
 		return false
 	var lease: Dictionary = record.demands[source]
 	if tiers.is_empty():
@@ -105,10 +129,11 @@ func release_demand(address, source: String, tiers: Array = []) -> bool:
 	if record.demands.is_empty():
 		record.release_pending = true
 		record.state = "release_pending"
-		record.queued.clear()
-	else:
-		record.release_pending = false
-		_queue_if_needed(record)
+		# Generation invalidation above makes old work stale. Retire immediately;
+		# tier_retired signals synchronously dispose realized Nodes/RIDs.
+		return release_cell(record.cell_address)
+	record.release_pending = false
+	_queue_if_needed(record)
 	return true
 
 
@@ -127,11 +152,17 @@ func update_observer(position: Vector3, source: String = "player") -> void:
 			for z in range(center.z - definition_activate_radius, center.z + definition_activate_radius + 1):
 				var coordinate := Vector3i(x, y, z)
 				var distance := _cell_distance(center, coordinate)
-				var record = records.get(Address.new(coordinate).canonical_text())
+				var address := Address.new(coordinate)
+				var record = records.get(address.canonical_text())
 				var tiers: Array[String] = _observer_tiers(record, distance)
-				set_demand(Address.new(coordinate), source, tiers)
-	for record in records.values():
-		if not record.demands.has(source):
+				set_demand(address, source, tiers)
+
+	# records is a bounded current-relevance table. Duplicate the current values
+	# because release may evict entries synchronously during this pass.
+	var current_records: Array = records.values().duplicate()
+	last_observer_record_scan_count = current_records.size()
+	for record in current_records:
+		if record == null or not records.has(record.key) or not record.demands.has(source):
 			continue
 		var distance := _cell_distance(center, record.cell_address.coordinate)
 		var release_tiers: Array[String] = []
@@ -151,7 +182,12 @@ func accept_result(result) -> bool:
 	if result == null or not (result is Result):
 		stale_result_count += 1
 		return false
-	var record = _record(result.cell_address)
+	# Result acceptance is deliberately non-creating. Late work for an evicted
+	# incarnation is stale and cannot resurrect the record table.
+	var record = _lookup_record(result.cell_address)
+	if record == null:
+		stale_result_count += 1
+		return false
 	if result.world_id.is_empty() or result.generator_manifest_id.is_empty() or result.source_fingerprint.is_empty() or result.provenance_fingerprint.is_empty():
 		stale_result_count += 1
 		return false
@@ -167,10 +203,10 @@ func accept_result(result) -> bool:
 	if record.demands.is_empty() or record.demand_count(result.tier) <= 0:
 		stale_result_count += 1
 		return false
-	if not record.source_fingerprint.is_empty() and result.source_fingerprint != record.source_fingerprint:
+	if result.source_fingerprint != record.source_fingerprint:
 		stale_result_count += 1
 		return false
-	if not record.provenance_fingerprint.is_empty() and result.provenance_fingerprint != record.provenance_fingerprint:
+	if result.provenance_fingerprint != record.provenance_fingerprint:
 		stale_result_count += 1
 		return false
 	if not TIERS.has(result.tier):
@@ -191,16 +227,21 @@ func accept_result(result) -> bool:
 	if result.tier == "collision":
 		record.collision_handle = result.payload
 	_update_state(record)
+	# Frontier scheduling: accepting one dependency exposes only the newly-ready
+	# next tier(s), rather than retaining blocked jobs in a historical backlog.
+	_queue_if_needed(record)
 	return true
 
 
 func release_cell(address) -> bool:
-	var record = _record(address)
+	# Release is deliberately non-creating.
+	var record = _lookup_record(address)
+	if record == null:
+		return false
 	if not record.demands.is_empty():
 		return false
-	if _record_is_fully_dormant(record):
-		return true
-	record.generation += 1
+	_advance_generation(record)
+	_cancel_record_work(record)
 	_emit_realized_tier_retirements(record, true)
 	record.release_pending = false
 	record.runtime_handle = null
@@ -209,6 +250,9 @@ func release_cell(address) -> bool:
 	record.queued.clear()
 	record.state = "dormant"
 	released_count += 1
+	# The record has no durable authority. Remove it so ordinary work remains
+	# proportional to current relevance; deterministic truth reconstructs it.
+	records.erase(record.key)
 	return true
 
 
@@ -216,7 +260,8 @@ func reconfigure(world_id_value: String, manifest_id_value: String) -> void:
 	world_id = world_id_value
 	generator_manifest_id = manifest_id_value
 	for record in records.values():
-		record.generation += 1
+		_advance_generation(record)
+		_cancel_record_work(record)
 		_emit_realized_tier_retirements(record, true)
 		record.runtime_handle = null
 		record.collision_handle = null
@@ -225,6 +270,11 @@ func reconfigure(world_id_value: String, manifest_id_value: String) -> void:
 		record.release_pending = false
 		record.state = "requested" if not record.demands.is_empty() else "dormant"
 		_queue_if_needed(record)
+	# Defensive cleanup for any record that was already fully unowned.
+	for key in current_record_keys():
+		var record = records.get(key, null)
+		if record != null and record.demands.is_empty():
+			release_cell(record.cell_address)
 
 
 func observer_cell(position: Vector3) -> Vector3i:
@@ -232,22 +282,71 @@ func observer_cell(position: Vector3) -> Vector3i:
 
 
 func active_owner_count() -> int:
-	var count := 0
-	for record in records.values():
-		if not record.demands.is_empty() or record.state != "dormant":
-			count += 1
-	return count
+	# records contains only current-relevance ownership after dormant eviction.
+	return records.size()
 
 
-func _record(address):
+func current_record_keys() -> Array[String]:
+	var result: Array[String] = []
+	for raw_key in records.keys():
+		result.append(str(raw_key))
+	result.sort()
+	return result
+
+
+func current_record_addresses() -> Array:
+	var result: Array = []
+	for key in current_record_keys():
+		var record = records.get(key, null)
+		if record != null:
+			result.append(record.cell_address)
+	return result
+
+
+func release_pending_record_keys() -> Array[String]:
+	var result: Array[String] = []
+	for key in current_record_keys():
+		var record = records.get(key, null)
+		if record != null and record.release_pending:
+			result.append(key)
+	return result
+
+
+func _ensure_record(address):
+	if address == null:
+		return null
 	var key: String = address.canonical_text()
 	if not records.has(key):
-		records[key] = Record.new(address)
+		var record = Record.new(address)
+		record.generation = _allocate_generation_token()
+		records[key] = record
 	return records[key]
 
 
+func _lookup_record(address):
+	if address == null:
+		return null
+	return records.get(address.canonical_text(), null)
+
+
+func _allocate_generation_token() -> int:
+	var token: int = _next_generation_token
+	_next_generation_token += 1
+	if _next_generation_token <= 0:
+		# Runtime sessions will never realistically approach int64 exhaustion, but
+		# fail closed instead of silently reusing an old token after overflow.
+		push_error("Underworld runtime generation token allocator overflowed")
+		_next_generation_token = 1
+	return token
+
+
+func _advance_generation(record) -> void:
+	record.generation = _allocate_generation_token()
+
+
 func _invalidate_generation(record) -> void:
-	record.generation += 1
+	_advance_generation(record)
+	_cancel_record_work(record)
 	_emit_realized_tier_retirements(record, false)
 	record.readiness = _empty_readiness()
 	record.queued.clear()
@@ -266,11 +365,10 @@ func _retire_undemanded_tiers(record) -> void:
 			retired.append(tier)
 	if retired.is_empty():
 		return
-	# Generation is cell-scoped. Advancing it once invalidates every in-flight
-	# request from the old tier set, including a retired tier that is renewed
-	# before its prior async result returns. Any still-demanded unready tier is
-	# requeued below with the new generation.
-	record.generation += 1
+	# Generation is cell-scoped. A new opaque incarnation token invalidates all
+	# in-flight work without retaining per-address tombstones after eviction.
+	_advance_generation(record)
+	_cancel_record_work(record)
 	record.queued.clear()
 	for tier in retired:
 		var was_realized: bool = bool(record.readiness.get(tier, false)) or (tier == "render" and record.runtime_handle != null) or (tier == "collision" and record.collision_handle != null)
@@ -285,22 +383,16 @@ func _retire_undemanded_tiers(record) -> void:
 	_queue_if_needed(record)
 
 
+func _cancel_record_work(record) -> void:
+	if executor != null and executor.has_method("cancel_record"):
+		executor.call("cancel_record", record.key)
+
+
 func _emit_realized_tier_retirements(record, emit_even_if_not_ready: bool) -> void:
 	for tier in ["render", "collision"]:
 		var realized: bool = bool(record.readiness.get(tier, false)) or (tier == "render" and record.runtime_handle != null) or (tier == "collision" and record.collision_handle != null)
 		if realized or emit_even_if_not_ready:
 			tier_retired.emit(record.cell_address, tier)
-
-
-func _record_is_fully_dormant(record) -> bool:
-	if record.state != "dormant" or record.release_pending or not record.queued.is_empty():
-		return false
-	if record.runtime_handle != null or record.collision_handle != null:
-		return false
-	for tier in TIERS:
-		if bool(record.readiness.get(tier, false)):
-			return false
-	return true
 
 
 func _empty_readiness() -> Dictionary:
@@ -315,14 +407,34 @@ func _queue_if_needed(record) -> void:
 	# binds authoritative source/provenance identity. Never queue unbound work.
 	if record.source_fingerprint.is_empty() or record.provenance_fingerprint.is_empty():
 		return
+	if executor == null or not executor.has_method("submit"):
+		return
 	var request := Request.new(record.cell_address, record.generation, tiers, record.source_fingerprint, record.provenance_fingerprint, world_id, generator_manifest_id)
 	for tier in tiers:
 		if record.readiness.get(tier, false) or record.queued.get(tier, false):
 			continue
+		if not _tier_dependencies_ready(record, tier):
+			continue
+		var submit_result: Variant = executor.call("submit", request, tier)
+		if submit_result is bool and not bool(submit_result):
+			continue
 		record.queued[tier] = true
 		queued_count += 1
-		if executor != null and executor.has_method("submit"):
-			executor.submit(request, tier)
+
+
+func _tier_dependencies_ready(record, tier: String) -> bool:
+	match tier:
+		"definition":
+			return true
+		"fragment_plan":
+			return bool(record.readiness.get("definition", false))
+		"voxel_geometry":
+			return bool(record.readiness.get("definition", false)) and bool(record.readiness.get("fragment_plan", false))
+		"render", "collision":
+			return bool(record.readiness.get("voxel_geometry", false))
+		"simulation":
+			return false
+	return false
 
 
 func _update_state(record) -> void:
