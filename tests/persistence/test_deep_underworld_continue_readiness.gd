@@ -12,11 +12,13 @@ const PlayerSupportBounds := preload("res://gameplay/player/player_collision_sup
 
 const TEST_SEED: int = 2174242
 const FLOOR_CLEARANCE: float = 0.04
-const FLOOR_INTERIOR_INSET: float = 0.08
+const BOUNDARY_INSET: float = 0.10
 const MAX_SEARCH_HOPS: int = 4
 const UPDATES_PER_HOP: int = 18
 const SCAN_INTERVAL: int = 6
 const MAX_PHYSICS_CANDIDATES: int = 48
+const MAX_RAY_HITS_PER_PROBE: int = 8
+const PROBE_FRACTIONS: Array[float] = [0.18, 0.34, 0.50, 0.66, 0.82]
 
 
 static func run_runtime(tree: SceneTree) -> Array[String]:
@@ -261,7 +263,11 @@ static func _find_observer_boundary_target(
 	var observer_position: Vector3 = anchor_position
 	var visited_observer_keys: Dictionary = {}
 	var scanned_ready_cells: int = 0
-	var scanned_floor_triangles: int = 0
+	var scanned_raycasts: int = 0
+	var scanned_hits: int = 0
+	var scanned_floor_hits: int = 0
+	var scanned_multicell_hits: int = 0
+	var scanned_physics_attempts: int = 0
 
 	for _hop in range(MAX_SEARCH_HOPS):
 		var observer_coordinate: Vector3i = runtime.streamer.observer_cell(observer_position)
@@ -279,7 +285,11 @@ static func _find_observer_boundary_target(
 				safe_player_position
 			)
 			scanned_ready_cells += int(scan.get("ready_cells", 0))
-			scanned_floor_triangles += int(scan.get("floor_triangles", 0))
+			scanned_raycasts += int(scan.get("raycasts", 0))
+			scanned_hits += int(scan.get("hits", 0))
+			scanned_floor_hits += int(scan.get("floor_hits", 0))
+			scanned_multicell_hits += int(scan.get("multicell_hits", 0))
+			scanned_physics_attempts += int(scan.get("physics_attempts", 0))
 			var target_variant: Variant = scan.get("target", null)
 			if target_variant is Dictionary and not target_variant.is_empty():
 				return target_variant
@@ -295,9 +305,13 @@ static func _find_observer_boundary_target(
 		observer_position = next_position_variant
 
 	failures.append(
-		"deep boundary search exhausted bounded observer exploration: ready_cell_scans=%d floor_triangles=%d records=%d collisions=%d" % [
+		"deep boundary search exhausted bounded physics exploration: ready_cell_scans=%d raycasts=%d hits=%d floor_hits=%d multicell_hits=%d physics_attempts=%d records=%d collisions=%d" % [
 			scanned_ready_cells,
-			scanned_floor_triangles,
+			scanned_raycasts,
+			scanned_hits,
+			scanned_floor_hits,
+			scanned_multicell_hits,
+			scanned_physics_attempts,
 			runtime.streamer.records.size(),
 			runtime.collision_nodes.size(),
 		]
@@ -312,9 +326,23 @@ static func _scan_current_boundary_target(
 	handoff_keys: Dictionary,
 	safe_player_position: Vector3
 ) -> Dictionary:
+	var result := {
+		"target": {},
+		"ready_cells": 0,
+		"raycasts": 0,
+		"hits": 0,
+		"floor_hits": 0,
+		"multicell_hits": 0,
+		"physics_attempts": 0,
+	}
+	if runtime == null or not runtime.is_inside_tree():
+		return result
+	var world: World3D = runtime.get_world_3d()
+	if world == null:
+		return result
+	var cell_size: Vector3 = runtime.streamer.cell_size
+	var minimum_floor_dot: float = cos(float(player.floor_max_angle))
 	var candidates: Array[Dictionary] = []
-	var ready_cells: int = 0
-	var floor_triangles: int = 0
 	var keys: Array = runtime.streamer.records.keys()
 	keys.sort()
 	for raw_key in keys:
@@ -325,72 +353,52 @@ static func _scan_current_boundary_target(
 		if record == null or record.cell_address == null:
 			continue
 		var coordinate: Vector3i = record.cell_address.coordinate
-		# #394 later removes the legacy global fall threshold. Until then, allow
-		# generated y=-3 geometry but retain only exact Player roots above -95.
+		# #394 later removes the legacy global fall threshold. Until then, keep
+		# the physically validated candidate above the old -100 defeat boundary.
 		if coordinate.y >= 0 or coordinate.y < -3:
 			continue
 		if not _record_is_gameplay_ready(runtime, record, key):
 			continue
-		ready_cells += 1
-		var body_variant: Variant = runtime.collision_nodes.get(key, null)
-		if not body_variant is StaticBody3D:
+		result["ready_cells"] = int(result["ready_cells"]) + 1
+		var cell_min: Vector3 = Vector3(coordinate) * cell_size
+		var cell_max: Vector3 = cell_min + cell_size
+		var top_y: float = minf(cell_max.y + 0.5, -0.05)
+		var bottom_y: float = maxf(cell_min.y - 0.5, -95.0)
+		if top_y <= bottom_y:
 			continue
-		var collider_variant: Variant = body_variant.get_node_or_null("CollisionShape3D")
-		if not collider_variant is CollisionShape3D:
-			continue
-		var shape_variant: Variant = collider_variant.shape
-		if not shape_variant is ConcavePolygonShape3D:
-			continue
-		var faces: PackedVector3Array = shape_variant.get_faces()
-		for index in range(0, faces.size(), 3):
-			if index + 2 >= faces.size():
-				break
-			var a: Vector3 = body_variant.global_transform * faces[index]
-			var b: Vector3 = body_variant.global_transform * faces[index + 1]
-			var c: Vector3 = body_variant.global_transform * faces[index + 2]
-			var normal: Vector3 = (b - a).cross(c - a)
-			if normal.length_squared() <= 0.000001:
-				continue
-			normal = normal.normalized()
-			var vertical_alignment: float = absf(normal.y)
-			if vertical_alignment < 0.55:
-				continue
-			floor_triangles += 1
-			var centroid: Vector3 = (a + b + c) / 3.0
-			var edge_ab: Vector3 = (a + b) * 0.5
-			var edge_bc: Vector3 = (b + c) * 0.5
-			var edge_ca: Vector3 = (c + a) * 0.5
-			var samples: Array[Vector3] = [
-				centroid,
-				_inset_toward(a, centroid),
-				_inset_toward(b, centroid),
-				_inset_toward(c, centroid),
-				_inset_toward(edge_ab, centroid),
-				_inset_toward(edge_bc, centroid),
-				_inset_toward(edge_ca, centroid),
-			]
-			for sample in samples:
-				var candidate: Vector3 = sample + Vector3.UP * FLOOR_CLEARANCE
-				if candidate.y >= 0.0 or candidate.y <= -95.0:
-					continue
-				var support: Dictionary = _support_keys_for_player(runtime, player, candidate)
-				if not bool(support.get("success", false)) or support.get("keys", []).size() < 2:
-					continue
-				if not _support_is_ready(runtime, support.get("keys", [])):
-					continue
-				var nearest_plane: float = _nearest_cell_plane_distance(candidate, runtime.streamer.cell_size)
-				candidates.append({
-					"position": candidate,
-					"normal_y": vertical_alignment,
-					"plane_distance": nearest_plane,
-					"source_key": key,
-				})
+
+		for fraction in PROBE_FRACTIONS:
+			var z: float = lerpf(cell_min.z, cell_max.z, fraction)
+			var x_probe: Vector3 = Vector3(cell_max.x - BOUNDARY_INSET, top_y, z)
+			var x_hit: Dictionary = _first_floor_hit(
+				world,
+				player,
+				runtime,
+				handoff_keys,
+				x_probe,
+				bottom_y,
+				minimum_floor_dot,
+				result
+			)
+			_add_physics_candidate(runtime, player, x_hit, candidates, result)
+
+			var x: float = lerpf(cell_min.x, cell_max.x, fraction)
+			var z_probe: Vector3 = Vector3(x, top_y, cell_max.z - BOUNDARY_INSET)
+			var z_hit: Dictionary = _first_floor_hit(
+				world,
+				player,
+				runtime,
+				handoff_keys,
+				z_probe,
+				bottom_y,
+				minimum_floor_dot,
+				result
+			)
+			_add_physics_candidate(runtime, player, z_hit, candidates, result)
 
 	candidates.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
-		if not is_equal_approx(float(left["normal_y"]), float(right["normal_y"])):
-			return float(left["normal_y"]) > float(right["normal_y"])
-		if not is_equal_approx(float(left["plane_distance"]), float(right["plane_distance"])):
-			return float(left["plane_distance"]) < float(right["plane_distance"])
+		if not is_equal_approx(float(left["floor_dot"]), float(right["floor_dot"])):
+			return float(left["floor_dot"]) > float(right["floor_dot"])
 		var lp: Vector3 = left["position"]
 		var rp: Vector3 = right["position"]
 		if not is_equal_approx(lp.y, rp.y):
@@ -405,13 +413,16 @@ static func _scan_current_boundary_target(
 		if tested >= MAX_PHYSICS_CANDIDATES:
 			break
 		tested += 1
+		result["physics_attempts"] = int(result["physics_attempts"]) + 1
 		var floor_position: Vector3 = entry["position"]
 		player.global_position = floor_position
 		player.velocity = Vector3.ZERO
 		for _frame in range(3):
 			await tree.physics_frame
 		if player.has_method("is_defeated") and bool(player.call("is_defeated")):
-			return {"target": {}, "ready_cells": ready_cells, "floor_triangles": floor_triangles}
+			player.global_position = safe_player_position
+			player.velocity = Vector3.ZERO
+			continue
 		var settled: Vector3 = player.global_position
 		if Vector2(settled.x, settled.z).distance_to(Vector2(floor_position.x, floor_position.z)) > 0.05:
 			player.global_position = safe_player_position
@@ -443,20 +454,97 @@ static func _scan_current_boundary_target(
 			player.global_position = safe_player_position
 			player.velocity = Vector3.ZERO
 			continue
-		return {
-			"target": {
-				"key": settled_key,
-				"position": settled,
-				"source": settled_record.source_fingerprint,
-				"provenance": settled_record.provenance_fingerprint,
-			},
-			"ready_cells": ready_cells,
-			"floor_triangles": floor_triangles,
+		result["target"] = {
+			"key": settled_key,
+			"position": settled,
+			"source": settled_record.source_fingerprint,
+			"provenance": settled_record.provenance_fingerprint,
 		}
+		return result
 
 	player.global_position = safe_player_position
 	player.velocity = Vector3.ZERO
-	return {"target": {}, "ready_cells": ready_cells, "floor_triangles": floor_triangles}
+	return result
+
+
+static func _first_floor_hit(
+	world: World3D,
+	player,
+	runtime,
+	handoff_keys: Dictionary,
+	ray_start: Vector3,
+	bottom_y: float,
+	minimum_floor_dot: float,
+	counters: Dictionary
+) -> Dictionary:
+	var current_y: float = ray_start.y
+	for _attempt in range(MAX_RAY_HITS_PER_PROBE):
+		if current_y <= bottom_y:
+			break
+		counters["raycasts"] = int(counters["raycasts"]) + 1
+		var query := PhysicsRayQueryParameters3D.create(
+			Vector3(ray_start.x, current_y, ray_start.z),
+			Vector3(ray_start.x, bottom_y, ray_start.z)
+		)
+		query.collision_mask = 1
+		query.collide_with_areas = false
+		query.collide_with_bodies = true
+		query.exclude = [player.get_rid()]
+		var hit: Dictionary = world.direct_space_state.intersect_ray(query)
+		if hit.is_empty():
+			break
+		counters["hits"] = int(counters["hits"]) + 1
+		var position_variant: Variant = hit.get("position", null)
+		var normal_variant: Variant = hit.get("normal", null)
+		var collider_variant: Variant = hit.get("collider", null)
+		if not position_variant is Vector3:
+			break
+		var hit_position: Vector3 = position_variant
+		current_y = hit_position.y - 0.08
+		if not normal_variant is Vector3 or not collider_variant is StaticBody3D:
+			continue
+		var collider: StaticBody3D = collider_variant
+		if collider.get_parent() != runtime:
+			continue
+		var hit_key: String = str(collider.get_meta("cell_address", ""))
+		if hit_key.is_empty() or handoff_keys.has(hit_key):
+			continue
+		if not runtime.collision_nodes.has(hit_key) or runtime.collision_nodes.get(hit_key) != collider:
+			continue
+		var floor_dot: float = normal_variant.dot(Vector3.UP)
+		if floor_dot + 0.0001 < minimum_floor_dot:
+			continue
+		counters["floor_hits"] = int(counters["floor_hits"]) + 1
+		return {
+			"position": hit_position + Vector3.UP * FLOOR_CLEARANCE,
+			"floor_dot": floor_dot,
+			"hit_key": hit_key,
+		}
+	return {}
+
+
+static func _add_physics_candidate(
+	runtime,
+	player,
+	hit: Dictionary,
+	candidates: Array[Dictionary],
+	counters: Dictionary
+) -> void:
+	if hit.is_empty():
+		return
+	var position_variant: Variant = hit.get("position", null)
+	if not position_variant is Vector3:
+		return
+	var position: Vector3 = position_variant
+	if position.y >= 0.0 or position.y <= -95.0:
+		return
+	var support: Dictionary = _support_keys_for_player(runtime, player, position)
+	if not bool(support.get("success", false)) or support.get("keys", []).size() < 2:
+		return
+	if not _support_is_ready(runtime, support.get("keys", [])):
+		return
+	counters["multicell_hits"] = int(counters["multicell_hits"]) + 1
+	candidates.append(hit)
 
 
 static func _next_exploration_position(
@@ -494,27 +582,6 @@ static func _next_exploration_position(
 			best_key = key
 			best_position = center
 	return best_position
-
-
-static func _inset_toward(point: Vector3, centroid: Vector3) -> Vector3:
-	var delta: Vector3 = centroid - point
-	var distance: float = delta.length()
-	if distance <= 0.000001:
-		return point
-	return point + delta / distance * minf(FLOOR_INTERIOR_INSET, distance * 0.45)
-
-
-static func _nearest_cell_plane_distance(point: Vector3, cell_size: Vector3) -> float:
-	var local_x: float = fposmod(point.x, cell_size.x)
-	var local_y: float = fposmod(point.y, cell_size.y)
-	var local_z: float = fposmod(point.z, cell_size.z)
-	return minf(
-		minf(local_x, cell_size.x - local_x),
-		minf(
-			minf(local_y, cell_size.y - local_y),
-			minf(local_z, cell_size.z - local_z)
-		)
-	)
 
 
 static func _support_keys_for_player(runtime, player, position: Vector3) -> Dictionary:
