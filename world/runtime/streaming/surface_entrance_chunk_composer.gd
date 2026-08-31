@@ -38,7 +38,7 @@ static func validate_route(route: Dictionary) -> Array[String]:
 		failures.append("surface entrance route requires numeric clearance radius")
 	else:
 		var clearance: float = float(clearance_variant)
-		if not is_finite(clearance) or clearance < 0.0:
+		if not _finite_float(clearance) or clearance < 0.0:
 			failures.append("surface entrance clearance radius must be finite and >= 0")
 	var anchor_variant: Variant = route.get("underground_anchor", null)
 	if not anchor_variant is Vector3 or not _finite_vector3(anchor_variant):
@@ -63,7 +63,7 @@ static func compose(
 	if resolution < 2:
 		failures.append("surface entrance composition requires resolution >= 2")
 	var chunk_size: float = float(world_settings.chunk_size) if world_settings != null else 0.0
-	if not is_finite(chunk_size) or chunk_size <= 0.0:
+	if not _finite_float(chunk_size) or chunk_size <= 0.0:
 		failures.append("surface entrance composition requires finite positive chunk_size")
 	if not failures.is_empty():
 		return _failure(failures)
@@ -315,5 +315,9 @@ static func _contains_xz(bounds: AABB, point: Vector3) -> bool:
 	)
 
 
+static func _finite_float(value: float) -> bool:
+	return not is_nan(value) and not is_inf(value)
+
+
 static func _finite_vector3(value: Vector3) -> bool:
-	return is_finite(value.x) and is_finite(value.y) and is_finite(value.z)
+	return _finite_float(value.x) and _finite_float(value.y) and _finite_float(value.z)
