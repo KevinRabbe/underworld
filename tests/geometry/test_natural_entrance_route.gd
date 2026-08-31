@@ -1,8 +1,8 @@
 extends RefCounted
 
 const GAME_SCENE_PATH := "res://app/game/game.tscn"
+const GAME_SCRIPT_PATH := "res://app/game/game.gd"
 const Selector := preload("res://worldgen/surface/natural_entrance_route_selector.gd")
-const GeneratedBootstrap := preload("res://worldgen/runtime/generated_entrance_bootstrap_adapter.gd")
 const Controller := preload("res://worldgen/runtime/underworld_cave_runtime_controller.gd")
 const WorldId := preload("res://worldgen/identity/world_id.gd")
 const Manifest := preload("res://worldgen/versioning/generator_manifest.gd")
@@ -35,10 +35,18 @@ static func _test_game_scene_composition(failures: Array[String]) -> void:
 	_expect(failures, "production Game scene instantiates", game != null)
 	if game == null:
 		return
+	var script = game.get_script()
+	_expect(
+		failures,
+		"production scene uses canonical app/game/game.gd authority",
+		script != null and str(script.resource_path) == GAME_SCRIPT_PATH
+	)
 	_expect(failures, "production Game exposes natural route readiness", game.has_method("natural_entrance_route_ready"))
 	_expect(failures, "production Game exposes value-copy selected route", game.has_method("selected_entrance_route_snapshot"))
 	_expect(failures, "production Game exposes initial surface bootstrap count", game.has_method("initial_surface_bootstrap_count"))
 	_expect(failures, "production Game has no post-ready route initializer child", game.get_node_or_null("NaturalEntranceRoute") == null)
+	_expect(failures, "superseded Game subclass is absent", not FileAccess.file_exists("res://app/game/natural_entrance_game.gd"))
+	_expect(failures, "superseded bootstrap adapter is absent", not FileAccess.file_exists("res://worldgen/runtime/generated_entrance_bootstrap_adapter.gd"))
 	game.free()
 
 
@@ -79,13 +87,8 @@ static func _test_viable_candidate_policy(failures: Array[String]) -> void:
 
 
 static func _test_generic_bootstrap_authority(failures: Array[String]) -> void:
-	var adapter_source := FileAccess.get_file_as_string("res://worldgen/runtime/generated_entrance_bootstrap_adapter.gd")
 	var runtime_source := FileAccess.get_file_as_string("res://worldgen/runtime/underworld_cave_runtime_controller.gd")
-	_expect(
-		failures,
-		"production adapter calls generic generated entrance bootstrap",
-		adapter_source.contains("bootstrap_generated_entrance") and not adapter_source.contains("call(\"bootstrap_fixture\"")
-	)
+	var game_source := FileAccess.get_file_as_string(GAME_SCRIPT_PATH)
 	_expect(
 		failures,
 		"cave runtime exposes generic generated entrance core",
@@ -95,6 +98,16 @@ static func _test_generic_bootstrap_authority(failures: Array[String]) -> void:
 		failures,
 		"legacy fixture bootstrap delegates to generated core",
 		runtime_source.contains("return bootstrap_generated_entrance(world_seed, region, entrance_id)")
+	)
+	_expect(
+		failures,
+		"canonical Game calls generic generated entrance core directly",
+		game_source.contains("underworld_runtime.bootstrap_generated_entrance(")
+	)
+	_expect(
+		failures,
+		"canonical Game does not route ordinary composition through fixture bootstrap",
+		not game_source.contains("GeneratedEntranceBootstrapAdapter")
 	)
 
 
@@ -212,8 +225,7 @@ static func _test_generated_runtime_route(world_seed: int, failures: Array[Strin
 		WorldId.from_seed(world_seed).value(),
 		Manifest.foundation_default().manifest_id()
 	)
-	var diagnostics: Array[String] = GeneratedBootstrap.bootstrap(
-		controller,
+	var diagnostics: Array[String] = controller.bootstrap_generated_entrance(
 		world_seed,
 		region,
 		entrance_id
