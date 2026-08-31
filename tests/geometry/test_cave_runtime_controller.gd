@@ -64,12 +64,11 @@ static func _test_tier_retirement_and_replacement(failures: Array[String]) -> vo
 	_expect(failures, "render tier retirement clears readiness handle and node", record.demand_count("render") == 0 and not record.readiness["render"] and record.runtime_handle == null and not controller.render_nodes.has(key) and first_render.get_parent() == null)
 	_expect(failures, "collision remains independently realized", record.readiness["collision"] and controller.collision_nodes.get(key) == first_collision)
 
-	var queued_before: int = controller.streamer.queued_count
 	controller.streamer.demand_cell(address, "source:a", ["render"])
 	var renewed_generation: int = record.generation
-	_expect(failures, "renewed render queues once", record.queued.get("render", false) and controller.streamer.queued_count == queued_before + 1)
+	_expect(failures, "renewed render demand is singular before realization", record.demand_count("render") == 1 and not record.readiness["render"])
 	controller.streamer.set_demand(address, "source:a", ["definition", "fragment_plan", "voxel_geometry", "render", "collision"])
-	_expect(failures, "idempotent demand refresh does not double queue render", controller.streamer.queued_count == queued_before + 1 and record.generation == renewed_generation)
+	_expect(failures, "idempotent demand refresh preserves generation and singular render demand", record.generation == renewed_generation and record.demand_count("render") == 1 and record.demand_count("collision") == 1)
 	_expect(failures, "renewed render realizes", controller.accept_mesh_data(mesh_data) and record.readiness["render"])
 	var renewed_render = controller.render_nodes[key]
 	_expect(failures, "second accepted render replaces rather than orphans", controller.accept_mesh_data(mesh_data) and controller.render_nodes.size() == 1 and controller.get_child_count() == 2 and renewed_render.get_parent() == null)
@@ -77,12 +76,12 @@ static func _test_tier_retirement_and_replacement(failures: Array[String]) -> vo
 	controller.streamer.release_demand(address, "source:a", ["collision"])
 	_expect(failures, "collision retirement removes physics body and handle", record.demand_count("collision") == 0 and not record.readiness["collision"] and record.collision_handle == null and not controller.collision_nodes.has(key) and first_collision.get_parent() == null)
 
-	controller.streamer.release_demand(address, "source:a")
-	_expect(failures, "whole demand release removes remaining render", controller.render_nodes.is_empty() and controller.collision_nodes.is_empty() and controller.get_child_count() == 0 and record.state == "release_pending")
 	var released_before: int = controller.streamer.released_count
-	_expect(failures, "whole cell release succeeds", controller.streamer.release_cell(address) and record.state == "dormant")
+	controller.streamer.release_demand(address, "source:a")
+	_expect(failures, "whole demand release retires realizations and evicts record", controller.render_nodes.is_empty() and controller.collision_nodes.is_empty() and controller.get_child_count() == 0 and record.state == "dormant" and not controller.streamer.records.has(key) and controller.streamer.released_count == released_before + 1)
 	var generation_after_release: int = record.generation
-	_expect(failures, "repeated whole cell release is idempotent", controller.streamer.release_cell(address) and record.generation == generation_after_release and controller.streamer.released_count == released_before + 1)
+	var count_after_release: int = controller.streamer.records.size()
+	_expect(failures, "stale whole-cell release is non-creating", not controller.streamer.release_cell(address) and record.generation == generation_after_release and controller.streamer.records.size() == count_after_release and controller.streamer.released_count == released_before + 1)
 
 	record = controller.streamer.set_demand(address, "source:c", ["render", "collision"], "source:reconfigure", "provenance:reconfigure")
 	var reconfigure_mesh = _mesh_data(address, "mesh:reconfigure")
@@ -245,18 +244,13 @@ static func _test_production_observer_execution_and_reentry(failures: Array[Stri
 	var released_record = controller.streamer.records.get(target_key, null)
 	_expect(
 		failures,
-		"outside observer cell settles dormant after bounded release",
-		released_record != null and released_record.state == "dormant" and released_record.demands.is_empty()
+		"outside observer cell is evicted after bounded release",
+		released_record == null and target_record.state == "dormant" and target_record.generation > first_generation
 	)
 	_expect(
 		failures,
 		"released observer cell retires render and collision nodes",
 		not controller.render_nodes.has(target_key) and not controller.collision_nodes.has(target_key)
-	)
-	_expect(
-		failures,
-		"released observer cell advances generation tombstone",
-		released_record != null and released_record.generation > first_generation
 	)
 
 	for _step in range(24):
@@ -268,6 +262,11 @@ static func _test_production_observer_execution_and_reentry(failures: Array[Stri
 		returned_record != null
 		and returned_record.source_fingerprint == first_source
 		and returned_record.provenance_fingerprint == first_provenance
+	)
+	_expect(
+		failures,
+		"returning observer cell gets a new incarnation token",
+		returned_record != null and returned_record.generation > first_generation
 	)
 	_expect(
 		failures,
