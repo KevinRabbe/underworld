@@ -2,19 +2,21 @@
 
 ## Status
 
-This document defines how deterministic world generation, stable identity, streaming ownership and persistence compatibility are validated without requiring manual exploration of every change.
+This document defines how deterministic world generation, stable identity, world-domain transitions, streaming ownership and persistence compatibility are validated without requiring manual exploration of every change.
 
 The validation responsibilities are **LOCKED at the architectural level**. Exact test framework, command-line wrapper and CI provider remain implementation choices.
 
 Core principle:
 
-> **Anything that claims to be deterministic world truth must be testable as data. Human playtesting is reserved for feel, readability, pacing and fun — not for discovering basic generation corruption.**
+> **Anything that claims to be deterministic or durable world truth must be testable as data. Human playtesting is reserved for feel, readability, pacing and fun — not basic generation, identity, transition or persistence corruption.**
+
+World-domain authority: `20_world/WORLD_DOMAINS_AND_TRANSITIONS.md` / ADR-001.
 
 ---
 
 ## 1. What the harness must prove
 
-The harness exists to answer several different questions. They must not be collapsed into one giant "world generated successfully" test.
+Separate these questions rather than hiding them behind one giant “world generated successfully” test.
 
 ### Contract determinism
 
@@ -26,15 +28,26 @@ same canonical inputs
 ### Structural validity
 
 ```text
-generated graph/data obeys invariants
+generated domain data obeys invariants
 ```
 
 ### Scheduling independence
 
 ```text
 load order / worker order / neighbor request order
-    -> same world truth
+    -> same deterministic truth
 ```
+
+### World-domain transition correctness
+
+```text
+source gateway
+    -> bounded destination preparation
+    -> destination readiness
+    -> atomic active-domain commit
+```
+
+Failure must remain fail-closed and must not leave mixed/duplicated authoritative domain state.
 
 ### Compatibility safety
 
@@ -55,117 +68,109 @@ streaming/caches may appear/disappear
 ```text
 engine/library/refactor change
     -> intentional deterministic change is explicit
-       accidental deterministic drift fails loudly
+       accidental drift fails loudly
 ```
 
 ---
 
 ## 2. Test layers
 
-Use several layers because a failure is much easier to diagnose when the smallest broken contract is already known.
-
 ```text
 L0  deterministic primitive tests
-L1  stable address / ID tests
-L2  generator-stage tests
+L1  stable address / StableId tests
+L2  domain generator-stage tests
 L3  graph/world-definition invariant tests
 L4  batch seed/property tests
 L5  scheduling/parallel-order tests
 L6  persistence/migration tests
-L7  streaming-lifetime simulation tests
+L7  runtime streaming + world-domain transition simulation
 L8  engine/noise compatibility fingerprints
 L9  milestone runtime/playtests
 ```
 
-`L0` through `L8` should be automatable/headless. `L9` is intentionally human-facing and infrequent.
+`L0` through `L8` should be automatable/headless. `L9` is deliberately human-facing and infrequent.
 
 ---
 
 ## 3. L0 — deterministic primitive contract tests
 
-Before persistent world generation depends on the project-owned seed/RNG contract, freeze hard-coded test vectors.
-
-Tests cover conceptually:
+Before persistent generation depends on a project-owned seed/RNG contract, freeze hard-coded vectors for:
 
 ```text
 canonical StableAddress encoding
 seed-domain encoding
 seed derivation/hash mixing
-stateless deterministic value generation
-project-owned PRNG sequence, if used
+stateless deterministic values / project PRNG sequence
 canonical endpoint ordering
 canonical integer serialization
 ```
 
-Example fixture shape:
+The expected outputs are part of compatibility. Do not update vectors merely to make a refactor pass.
 
-```text
-input:
-  world_seed = 123456789
-  domain = UG_PRIMARY_TOPOLOGY rev 1
-  address = region(4,-2)/network(slot-3)
-  subkey = "existence"
-
-expected derived bits/value:
-  0x...
-```
-
-The expected output is committed as a constant produced by the chosen frozen contract.
-
-### Rule
-
-Do not update expected vectors merely to make a refactor pass.
-
-If the primitive algorithm intentionally changes, that is a seed-contract/domain revision decision and must be reflected in versioning documentation first.
+An intentional primitive change requires an explicit seed-contract/domain revision decision first.
 
 ---
 
 ## 4. L1 — stable address and ID tests
 
-Tests defined by `STABLE_PROCEDURAL_IDS.md` must include:
+At minimum prove:
 
-1. same semantic candidate address produces the same StableId repeatedly;
+1. same semantic candidate address -> same StableId;
 2. array/dictionary order does not affect identity;
-3. rejected sibling candidates do not rename other candidate IDs;
-4. runtime MultiMesh indexes can be reordered without changing StableIds;
-5. negative global candidate coordinates encode canonically;
-6. undirected endpoints A-B and B-A produce the same connector identity;
-7. cross-region canonical ownership resolves identically from either side;
-8. child IDs derive from stable parent + fixed local candidate key;
-9. duplicate StableIds inside one compatible world-definition scope are a hard failure.
+3. rejected siblings do not rename accepted siblings;
+4. transient runtime instance/MultiMesh indexes may change without changing StableIds;
+5. negative domain-local/global candidate coordinates encode canonically where supported;
+6. undirected A-B/B-A endpoints canonicalize;
+7. Underworld cross-region ownership resolves identically from either side;
+8. child IDs derive from stable parent + fixed local key;
+9. duplicate StableIds inside one compatible definition scope are a hard failure.
 
-Readable debug StableAddresses should be emitted alongside IDs on failure.
+Readable StableAddresses accompany identity failures.
+
+### Gateway identity is separate
+
+Cross-domain `WorldGatewayDefinition` identity answers which transition mapping this is. It must not be fabricated from:
+
+- Player/world coordinates;
+- nearest entry site;
+- runtime Node identity;
+- Y sign;
+- Overworld/Underworld coordinate conversion.
+
+Gateway source/destination identity gets its own contract tests when implemented.
 
 ---
 
 ## 5. L2 — deterministic generator-stage tests
 
-Every deterministic pipeline stage defined in `GENERATION_PIPELINE_INTERFACES.md` needs a data-only test entry point.
+Every current deterministic stage needs a data-only test entry point.
 
-Conceptually:
+For the Underworld, authority is `20_world/UNDERWORLD_GENERATION_PIPELINE.md`:
 
 ```text
-StageInput + WorldGenerationContext
+StageInput + UnderworldGenerationContext
     -> StageResult
     -> canonical serialization
     -> fingerprint
 ```
 
-Initial stage coverage:
+Coverage includes conceptually:
 
 ```text
-macro underground-region plan
+macro Underworld region planning
 primary topology
-entrance selection/integration descriptors
+domain-local entry-site selection/attachment
 secondary connectivity
 special-location hook reservation
-finalized region definition
+region finalization
 base geometry description
 ```
 
+Historical surface-integration descriptors/entrance fields may remain in legacy generator fixtures where compatibility requires them, but the validation harness does **not** treat physical surface opening integration as current cross-domain architecture.
+
 ### Stage fingerprint rule
 
-Each result has canonical sorted serialization that excludes:
+Canonical fingerprints exclude:
 
 ```text
 wall-clock timing
@@ -173,767 +178,637 @@ pointer/object addresses
 thread/task IDs
 non-semantic dictionary ordering
 runtime Node identity
-transient diagnostic ordering unless canonicalized
+transient diagnostics unless canonicalized
+active runtime-domain state
 ```
 
-The fingerprint represents deterministic semantic output only.
-
-### Why stage fingerprints matter
-
-If a final world fingerprint changes, stage fingerprints show whether drift began in:
-
-```text
-seed/address layer
-primary topology
-entrances
-connectivity
-geometry
-```
-
-instead of forcing us to inspect a rendered cave manually.
+If a final fingerprint changes, stage fingerprints identify where drift began.
 
 ---
 
 ## 6. L3 — graph/world-definition invariant validators
 
-A generated result can be deterministic and still be invalid. Determinism and validity are separate checks.
+Determinism and validity are separate.
 
-### Required graph invariants
+### Required Underworld graph invariants
 
-At minimum validate:
+Validate at least:
 
 ```text
 all referenced node IDs exist or are valid explicit external references
-all primary edges reference valid endpoints
-all secondary edges reference valid canonical endpoints
-no duplicate stable IDs
+all edges reference valid endpoints
+no duplicate StableIds
 network ownership is canonical
-cross-region edges have one owner
-external references point to the expected owner region
-entrances reference valid connected topology
-required entrance path is traversably connected to its target node
-node/profile weights are finite and normalized/tolerant as specified
-positions/bounds contain no NaN/Inf
-radii/widths/clearances are positive where required
-finalized definitions contain no transient candidate objects
+Underworld cross-region edges have one canonical owner
+external references point to expected owner region
+entry sites reference valid connected topology
+entry paths are traversably connected to target topology
+profile weights are finite/normalized as specified
+positions/bounds are finite and domain-local
+positive dimensions/clearances where required
+finalized definitions contain no transient candidates/runtime Nodes
 ```
 
-### Topology sanity metrics
+Do **not** require an Underworld graph object to carry a valid Overworld coordinate.
 
-Collect, but do not necessarily hard-fail on every numeric range initially:
+### Topology metrics
+
+Collect useful distributions such as:
 
 ```text
-node count
-edge count
-connected component count
-cycle rank / loop count
+node/edge counts
+connected components
+cycle rank / loops
 dead-end fraction
-branching distribution
+branching
 vertical span
-network diameter / approximate travel distance
-entrance count
-entrance-to-entrance path distances
+network diameter
+entry-site count/path distances
 secondary-connector fraction
 profile-weight distribution
 ```
 
-These metrics allow us to detect generator collapse statistically before subjective playtesting.
+Statistics detect collapse without forcing every region into one template.
 
 ---
 
-## 7. Entrance validation
+## 7. Underworld entry-site validation
 
-Because entrances connect surface generation and underground definitions, they need dedicated validation.
+Current entry-site validation is domain-local.
 
-For every entrance:
+For each entry site prove:
 
 ```text
-surface position resolves to valid deterministic surface reference data
-entrance integration descriptor has valid bounds
-connected underground node exists
-entrance route reaches its connected topology
-entrance does not reference runtime-only state
+stable candidate identity is canonical
+owning region/network/node exists
+Underworld-local anchor/clearance is finite and valid
+entry route reaches connected topology
+site contains no runtime-only state
 canonical owner/address is stable
 ```
 
-Regional entrance-count expectations are **distribution rules**, not universal hard assertions.
+Regional site-count goals are distribution rules, not universal hard assertions.
 
-The design target of roughly 1–3 entrances where appropriate should therefore be tested statistically over a corpus rather than forcing every region to satisfy `1 <= count <= 3`.
+### Legacy entrance compatibility
 
-Rare valid zero-entrance or unusual systems must remain possible where generation rules allow them.
+Historical accepted `EntranceDefinition`, surface-reference and `ug.entrance.*` fixtures may remain regression evidence for the generator contract that produced them.
+
+Validation distinguishes:
+
+```text
+legacy deterministic compatibility
+!=
+current cross-domain gateway authority
+```
+
+Do not rename/repurpose old persistent seed domains simply to match new terminology.
 
 ---
 
-## 8. Depth-profile validation
+## 8. Gateway mapping validation
 
-Shallow/mid/deep are continuous generation grammars.
-
-Tests should verify:
+When gateway definitions exist, validate independently of cave topology generation:
 
 ```text
-profile weights are deterministic
-weights remain valid/normalized within defined tolerance
-profile sampling changes smoothly enough across intended transitions
-local exceptions are possible
-changing geometry-only domains does not alter profile/topology fingerprints
+gateway StableId/semantic identity is stable
+source domain + source site identity valid
+destination domain + destination site identity valid
+pair/return policy deterministic where specified
+mapping does not depend on coordinate conversion
+mapping contains no runtime Node authority
 ```
 
-Batch metrics should compare structural tendencies rather than hard templates.
-
-Examples:
-
-```text
-shallow-biased corpus tends toward smaller/local networks
-mid-biased corpus tends toward more loops/regional joining
-deep-biased corpus permits larger vertical/network spans
-```
-
-Exact target ranges remain tuning data and can evolve without changing this architecture.
+Changing Underworld generation should not silently rename unrelated Overworld gateways; changing Overworld terrain should not silently reseed unrelated Underworld topology unless an explicit compatible contract says so.
 
 ---
 
-## 9. Secondary connectivity validation
+## 9. Depth-profile validation
 
-The ~10% Souls-style connectivity philosophy must not become an unbounded random-tunnel pass.
+Shallow/mid/deep are **Underworld-local** generation grammars.
+
+Tests verify:
+
+```text
+profile weights deterministic
+weights valid/normalized
+profile changes spatially as intended inside Underworld
+local exceptions possible
+geometry-only revisions do not alter promised topology/profile fingerprints
+```
+
+Batch metrics test tendencies rather than literal templates.
+
+No validation invariant defines Underworld depth as `surface_height - shared_world_y`.
+
+---
+
+## 10. Secondary connectivity validation
 
 Validate:
 
 ```text
-accepted connector ID is stable
-A-B equals B-A for undirected candidates
-owner is canonical across region order
-no duplicate connector for same canonical candidate
-connectors do not reference missing endpoints
-connectivity caps are respected
-accepted connector improves/changes graph according to defined acceptance diagnostics
-rejected candidate cannot perturb unrelated accepted identities/randomness
+accepted connector identity stable
+A-B == B-A for undirected candidates
+owner canonical across Underworld region order
+no duplicate connector
+endpoints exist
+connectivity caps respected
+accepted connector has defined topology benefit/diagnostic
+rejected candidate cannot perturb unrelated identities/randomness
 ```
 
-Batch statistics should track:
-
-```text
-secondary edges / total edges
-loop-rank increase
-connector lengths
-cross-region connector frequency
-regions with zero deliberate connectors
-regions with unusually high connectivity
-```
-
-A statistical alert is preferable to encoding "10%" as a literal required edge percentage.
+Track statistical connector frequency/length/loop effect without turning “~10% Souls-style connectivity” into a literal edge-percentage invariant.
 
 ---
 
-## 10. L4 — batch-seed/property test campaigns
+## 11. L4 — batch-seed/property campaigns
 
-The harness must generate many worlds/regions automatically.
+Use two corpus types.
 
-### Two corpus types
+### Fixed regression corpus
 
-#### Fixed regression corpus
-
-A committed list of seeds/region addresses selected to cover:
+Committed cases cover ordinary and difficult deterministic scenarios:
 
 ```text
-ordinary cases
-negative coordinates
+negative addresses
 region boundaries
-very shallow/deep profile mixes
-cross-region connectors
-rare entrance layouts
-previously failing seeds
+shallow/mid/deep mixes
+Underworld cross-region connectors
+rare entry-site layouts
+previous failures
+legacy compatibility fixtures where supported
 ```
 
-These are stable over time and useful for deterministic regression fingerprints.
+### Campaign corpus
 
-#### Campaign corpus
+Large deterministic pseudo-random cases derive from an explicit campaign seed, never wall-clock randomness.
 
-A much larger deterministic pseudo-random test corpus derived from a **test campaign seed**, not from wall-clock randomness.
-
-Example concept:
-
-```text
-campaign_seed = 20260827
-regions = 10_000
-```
-
-The campaign itself must be reproducible.
-
-If campaign entry `7314` fails, we can reproduce exactly that same seed/address.
-
-### Rule
-
-Never report only:
-
-```text
-random seed failed
-```
-
-Report enough to recreate the exact case.
+Failures report enough data to reproduce exact campaign index/address.
 
 ---
 
-## 11. Failure reproduction record
+## 12. Failure reproduction record
 
-Every deterministic-generation failure should emit a compact reproduction record conceptually containing:
+Every hard deterministic failure reports conceptually:
 
 ```text
 validation code / reason
-world seed
-WorldId where relevant
-GeneratorManifest ID / contract revisions
+root world seed / WorldId
+owning domain
+generator manifest / revisions
 seed schema/domain revisions
-stage name + stage revision
+stage name/revision
 region/network/candidate StableAddress
-StableId(s) involved
-neighbor dependency addresses where relevant
-expected fingerprint/value
-actual fingerprint/value
-campaign seed + campaign index if applicable
+StableId(s)
+neighbor dependencies
+expected vs actual fingerprint/value
+campaign seed + index if applicable
 ```
 
-Optional diagnostics may include:
+World-domain transition failures additionally report:
 
 ```text
-canonical stage JSON/text dump
-small graph summary
-metrics
+source domain
+source gateway identity
+destination domain
+destination site identity
+transition phase
+readiness state
 ```
 
-The output should be copyable into a single-case test command later.
+No human should need to search the rendered world to reproduce a deterministic failure.
 
 ---
 
-## 12. Failure shrinking / minimization — DIRECTIONAL
+## 13. Failure shrinking — DIRECTIONAL
 
-For complex property failures, the harness should try to isolate the smallest useful reproduction where practical.
-
-Examples:
+Prefer isolating:
 
 ```text
-whole world failed
-    -> identify region
-    -> identify network
-    -> identify stage
-    -> identify candidate/edge
+world -> domain -> region -> network -> stage -> candidate/edge/site
 ```
 
-This does not require a sophisticated property-testing framework initially.
+Transition failures shrink by phase:
 
-The architecture requirement is simply that stages and addresses are separable enough that we do not need to launch the complete game to diagnose one bad connector.
+```text
+request -> destination definition -> geometry -> collision/readiness -> commit/rollback
+```
+
+A sophisticated property framework is optional; separable contracts are not.
 
 ---
 
-## 13. L5 — scheduling/order independence tests
+## 14. L5 — scheduling/order independence
 
-The same deterministic request set must be executed under different legal schedules.
-
-Examples:
+Execute the same deterministic request sets under legal alternate schedules:
 
 ```text
-regions ascending
-regions descending
-randomized deterministic order
-neighbors first
-owner region first
-owner region last
-single worker
-multiple workers where test environment permits
+ascending/descending region order
+deterministically shuffled order
+neighbors first/last
+owner first/last
+single/multiple workers
+warm/cold cache variants
 ```
 
-Final canonical fingerprints must match.
-
-### Important distinction
-
-Completion timing may differ.
-
-```text
-A ready before B
-```
-
-is allowed.
-
-World truth differing because A completed before B is a hard failure.
+Completion timing may differ; deterministic truth may not.
 
 ---
 
-## 14. Async stale-result tests
+## 15. Async stale-result tests
 
-Streaming/service tests should simulate:
+Simulate:
 
 ```text
 request A starts
-interest in A disappears
-request token changes / cell unloads
+interest disappears / generation token advances
 old result A returns
 ```
 
-Expected behavior:
+Expected:
 
 ```text
-stale result does not resurrect runtime owner
-stale result does not overwrite newer incompatible request
-compatible deterministic result may enter disposable cache if policy permits
-no durable delta is lost/changed
+stale result cannot resurrect a runtime owner
+stale result cannot overwrite a newer incompatible request
+compatible result may enter disposable cache if policy permits
+no durable delta changes
 ```
 
-This can be tested with fake/deterministic jobs before full 3D runtime content exists.
+This contract applies independently inside Overworld and Underworld streaming.
 
 ---
 
-## 15. L6 — persistence and migration tests
+## 16. L6 — persistence and migration tests
 
-Persistence tests are data tests, not playtests.
-
-### Modern save round-trip
+### Modern round-trip
 
 ```text
-construct deterministic header + deltas
+construct deterministic header + gameplay/delta state
 serialize
 load
 validate compatibility
 compare canonical semantic state
 ```
 
-### Manifest compatibility classification
+### Domain-qualified Player location
 
-Fixtures cover:
+Current target persistence must prove:
 
 ```text
-EXACT
-SUPPORTED_LEGACY
-MIGRATION_REQUIRED
-INCOMPATIBLE
-UNKNOWN/CORRUPT
+PlayerWorldLocation
+- active_domain
+- domain_local_transform
 ```
 
-No test may allow an incompatible manifest to silently fall back to current generator defaults.
+Tests cover:
 
-### Prototype-v2 migration fixtures
+- Overworld save -> Continue reconstructs Overworld without requiring Underworld runtime;
+- Underworld save -> Continue reconstructs Underworld directly;
+- exact durable transform preserved after required local collision/readiness is prepared;
+- no domain inference from Y sign/nearest entrance;
+- legacy schema without domain information follows an explicit migration/compatibility decision rather than guessing.
 
-At minimum:
+### Manifest compatibility
+
+Fixtures cover `EXACT`, `SUPPORTED_LEGACY`, `MIGRATION_REQUIRED`, `INCOMPATIBLE`, and corrupt/unknown states.
+
+### Prototype legacy fixtures
+
+Preserve explicit migration tests for historical generated-object IDs/save schemas while those paths remain supported. Failed migration never destroys the only valid old save.
+
+---
+
+## 17. Persistent delta composition tests
+
+Generated base truth and durable deltas remain separate.
+
+Test examples:
 
 ```text
-empty world modifications
-harvested trees
-harvested rocks
-collected branches
-collected loose stones
-negative chunk coordinates
-multiple destroyed objects in one chunk
-wood/stone/tool/hotbar state
+base generated object + destroyed delta -> runtime omits it
+base collapse + cleared delta -> cleared representation
+base deposit + depletion/partial state -> expected representation
+unload/reload -> same composed state
+cache eviction -> same state
+regeneration -> delta still targets same StableId
+```
+
+Each delta belongs to explicit world/domain context where spatial interpretation requires it.
+
+---
+
+## 18. L7 — domain-local streaming simulation
+
+Test each domain's runtime lifetime independently with fake observers/services.
+
+For Underworld:
+
+```text
+observer moves across many runtime cells
+-> demand follows current relevance
+-> released cells become dormant/evicted according to policy
+-> re-entry reconstructs canonical representation
 ```
 
 Assert:
 
-```text
-legacy accepted-index resolves to expected candidate address
-modern StableId is correct
-resources/tools remain correct
-unresolved legacy IDs are quarantined/reported
-new save round-trips
-old input fixture remains untouched if migration fails
-```
+- collision requested before Player enters newly required geometry;
+- runtime cost/index iteration is bounded by current relevant/resident demand rather than total exploration history;
+- one live owner per runtime address;
+- stale results cannot resurrect released owners;
+- unload does not delete durable `WorldDeltaStore` state;
+- caches can be discarded without changing deterministic truth.
+
+Exact radii/budgets are injected configuration, not hard-coded architecture constants.
 
 ---
 
-## 16. Persistent delta composition tests
+## 19. L7 — explicit world-domain transition simulation
 
-Generated base truth and player deltas are separate.
-
-Tests should cover:
+Replace the old continuous-surface-to-cave fake-observer route with the actual architecture:
 
 ```text
-base object exists + destroyed delta -> runtime view omits it
-base collapse exists + cleared delta -> cleared representation
-base deposit exists + partial state -> expected modified representation
-unload/reload -> same composed state
-cache eviction -> same composed state
-regenerate base from seed -> same delta still targets same StableId
+OVERWORLD active
+-> source gateway accepted
+-> transition/loading state
+-> bounded UNDERWORLD destination preparation
+-> required destination render/collision readiness
+-> atomic active_domain = UNDERWORLD commit
+-> source runtime released according to lifecycle policy
 ```
 
-Later terrain/building systems extend this suite rather than changing the ownership model.
+Also test paired return.
+
+Required assertions:
+
+- gateway mapping resolves deterministic destination identity;
+- no coordinate conversion is used as transition authority;
+- Player input/physics cannot resume before destination safety gate;
+- failure before commit leaves/returns to coherent source state;
+- failure cannot leave two active authoritative domains or duplicate Player/runtime authority;
+- inactive full-domain streaming does not continue indefinitely;
+- direct Underworld Continue reconstructs Underworld without pretending a gateway traversal occurred;
+- warm return/re-entry does not duplicate runtime Nodes/caches.
+
+A loading screen is valid presentation. Validation measures correctness and bounded work; it does not require seamless geometry.
 
 ---
 
-## 17. L7 — streaming-lifetime simulation tests
+## 20. Cache correctness
 
-Before relying on rendered scenes, test the streaming coordinator with a fake observer and fake runtime owners/services.
-
-Example path:
+Deliberately destroy caches under equivalent generation/composition:
 
 ```text
-surface position
--> approach entrance
--> cross entrance
--> descend
--> backtrack
--> return to surface
+warm/cold definition cache
+warm/cold geometry cache
+forced eviction
+leave/re-enter domain/cells
 ```
 
-Assert demand/lifetime transitions such as:
-
-```text
-surface + first underground cells overlap near entrance
-collision requested before traversal into newly required geometry
-far surface demand releases deep underground
-backtracking can reuse cached geometry if still retained
-one runtime owner per cell/chunk
-unloading cell does not remove WorldDeltaStore state
-```
-
-Exact distance thresholds are configuration/tuning and should be injected into tests rather than hard-coded into architecture tests.
+Canonical truth and composed durable state remain equal. Performance may differ; semantics may not.
 
 ---
 
-## 18. Cache correctness tests
+## 21. L8 — engine/noise compatibility fingerprints
 
-Because caches are disposable, tests should deliberately destroy them.
-
-Run equivalent generation/composition with:
-
-```text
-warm definition cache
-cold definition cache
-warm geometry cache
-cold geometry cache
-forced eviction between requests
-```
-
-Canonical world truth and final composed state must remain equal.
-
-Performance may differ; semantics may not.
-
----
-
-## 19. L8 — engine/noise compatibility fingerprints
-
-The project may depend on Godot/FastNoiseLite or other engine algorithms whose output can change between versions.
-
-Maintain representative fingerprints for persistent engine-dependent generation inputs/outputs.
+Maintain representative fingerprints for persistent engine/library-dependent generation inputs/outputs.
 
 Examples:
 
 ```text
-surface height samples at fixed world coordinates
-moisture/forest/rock fields
-legacy-v2 decoration candidate output used by migration
-future persistent noise fields used by Underworld generation, if any
+Overworld surface field samples
+legacy generator outputs required for migration
+persistent Underworld noise/geometry fields if engine-dependent
 ```
 
-### Engine upgrade rule
-
-Before upgrading an engine/library that participates in persistent generation:
-
-1. run compatibility fingerprints;
-2. if unchanged, treat as deterministic-compatible evidence;
-3. if changed, classify the affected generator contracts deliberately;
-4. do not update goldens silently and call the upgrade harmless.
+Engine upgrades must classify deterministic drift explicitly rather than silently updating goldens.
 
 ---
 
-## 20. Golden fingerprints versus property assertions
+## 22. Golden fingerprints vs property assertions
 
-Use both.
+Use frozen goldens for compatibility-critical primitives/fixtures and property assertions for large generated populations.
 
-### Golden/frozen fingerprints
-
-Best for:
-
-```text
-seed/RNG primitive contracts
-known stable IDs
-fixed representative stage results
-engine/noise compatibility
-migration fixtures
-```
-
-### Property/invariant assertions
-
-Best for:
-
-```text
-thousands of generated seeds
-valid references
-bounded connectivity
-finite geometry values
-canonical ownership
-statistical distributions
-```
-
-Do not create a giant golden file for every generated world. That becomes brittle and hides which semantic rule matters.
+Do not create giant opaque golden worlds that hide which contract matters.
 
 ---
 
-## 21. Expected-change workflow
+## 23. Expected-change workflow
 
-Sometimes a generator change is intentional.
+For intentional generator changes:
 
-The workflow is:
+1. identify affected domain/stage/profile contract;
+2. update architecture/version decision first if compatibility changes;
+3. revise the appropriate explicit contract/domain revision;
+4. produce before/after fingerprints/metrics;
+5. prove unrelated domains/stages remain stable where promised;
+6. update only affected goldens;
+7. retain a regression for the motivating requirement/bug.
 
-```text
-1. identify affected generation domain/stage/profile contract
-2. update architecture/version decision first if compatibility changes
-3. increment the appropriate explicit revision(s)
-4. generate before/after fingerprints and metrics
-5. review that unrelated domains/stages remain stable where promised
-6. update only the goldens that belong to the intentionally changed contract
-7. add/retain a regression test for the previous bug or design requirement
-```
-
-Do not mass-regenerate all expected outputs without examining which contracts changed.
+Never repurpose an existing persistent seed-domain ID to mean a new gateway/world-domain decision.
 
 ---
 
-## 22. CI / execution tiers — DIRECTIONAL
-
-Use different test budgets so validation remains practical.
+## 24. CI / execution tiers — DIRECTIONAL
 
 ### Fast gate
 
-Runs on normal development/PR work.
-
-Conceptually:
-
 ```text
 primitive vectors
-stable-ID tests
+StableId tests
 small fixed stage corpus
 graph invariants
-modern save round-trip
-small legacy migration fixtures
+persistence round-trip
+small migration fixtures
 small scheduling-order corpus
+world-domain transition contract smoke when affected
 ```
 
-Target: seconds to a few minutes once implemented.
-
 ### Full deterministic suite
-
-Runs before architecture/generator merges/releases or manually as needed.
-
-Conceptually:
 
 ```text
 larger fixed corpus
 hundreds/thousands of regions
 parallel-order variants
-streaming fake-observer scenarios
+domain-local streaming simulations
+world-domain transition/rollback/readiness scenarios
 engine/noise fingerprints
-all migration fixtures
+all supported migration fixtures
 ```
 
 ### Stress/campaign suite
 
-Potentially larger local/nightly/manual run:
-
 ```text
-10k+ regions/world cases
+large generated-world corpus
 rare-topology search
+long exploration/re-entry history
+mixed runtime/persistence load
 memory/performance telemetry
-long streaming simulated traversal
 ```
 
-Exact cadence depends on available CI/runtime resources.
+Exact cadence follows available CI resources.
 
 ---
 
-## 23. Performance telemetry is separate from correctness
+## 25. Performance telemetry is separate from correctness
 
-The harness should record useful performance metrics such as:
+Useful metrics include:
 
 ```text
 stage generation time
-node/edge counts
+node/edge/site counts
 geometry-description size
-cache hit rate in streaming simulation
-peak queued requests
+active/resident/dormant record counts
+cache hit rate
+peak queued work
+worst main-thread publication/hitch
+gateway cold/warm transition time
 ```
 
-Early in development these are observational, not strict pass/fail budgets unless a clear regression threshold is established.
-
-A slow valid seed is different from a structurally invalid seed.
-
-Do not hide correctness failures inside performance reports.
+Hardware-sensitive budgets require evidence. Correctness failures are never hidden inside performance reports.
 
 ---
 
-## 24. Test code must not change generator behavior
+## 26. Test code must not change production semantics
 
-Avoid generator branches such as:
+No generator/runtime branch such as:
 
 ```text
 if testing:
-    use simpler topology
+    use simpler topology or fake gateway
 ```
 
-The harness calls the same deterministic generation code used by the game.
-
-Debug serialization/diagnostics may be enabled for tests, but semantic output must be the same.
+The harness calls production deterministic/runtime authorities. Test-only diagnostics/fixtures may expose inputs and inspect outputs without becoming product behavior.
 
 ---
 
-## 25. Headless execution — LOCKED DIRECTION
+## 27. Headless execution — LOCKED DIRECTION
 
-The deterministic architecture must be runnable without rendering or manual input.
+Deterministic architecture must run without rendering/manual input where the contract is data/runtime-lifecycle testable.
 
-Godot headless execution is the likely first implementation path, but the architecture does not depend on a particular third-party test framework.
-
-A future command should support concepts like:
+A future/current runner may support:
 
 ```text
-run all fast tests
-run fixed seed corpus
-run campaign with N cases
-reproduce one world/region/stage failure
-run migration fixtures
-print canonical fingerprint/metrics
+fast contracts
+fixed seed corpus
+campaign N cases
+single failure reproduction
+migration fixtures
+world-domain transition scenarios
+canonical fingerprint/metrics
 ```
 
-Exact CLI syntax is an implementation decision.
+CLI syntax is implementation detail.
 
 ---
 
-## 26. Test fixture ownership
+## 28. Test fixture ownership
 
-Test fixtures belong in version control when they define compatibility promises.
-
-Examples:
+Version-control fixtures define compatibility promises, including:
 
 ```text
 seed/RNG vectors
-fixed StableAddress -> StableId vectors
-representative generator manifests
-prototype-v2 save fixtures
-fixed regression seed corpus
-engine/noise compatibility fingerprints
+StableAddress -> StableId vectors
+generator manifests
+legacy save fixtures
+fixed regression corpus
+engine/noise fingerprints
 ```
 
-Large disposable campaign outputs do not belong in the repository unless they become a named regression fixture.
-
-When a previously failing campaign case is important, promote its seed/address into the fixed regression corpus.
+Large disposable campaign outputs stay out of the repository unless promoted to named regressions.
 
 ---
 
-## 27. Diagnostic severity
-
-Classify failures so large campaigns remain useful.
+## 29. Diagnostic severity
 
 Conceptually:
 
 ```text
 FATAL
-    broken reference, duplicate ID, NaN, incompatible save interpreted as current, determinism mismatch
+    broken reference, duplicate ID, NaN/Inf, determinism mismatch,
+    incompatible save interpreted as current, incoherent active-domain commit
 
 ERROR
-    violated generator invariant / unreachable required entrance / ownership contradiction
+    generator/runtime invariant violation, missing required entry topology,
+    gateway mapping/readiness/rollback contradiction
 
 WARNING / STATISTICAL ALERT
-    unusual but possibly valid topology distribution, outlier connector length, extreme node count
+    unusual but potentially valid topology distribution or performance outlier
 
 INFO
-    performance/metric observation
+    metrics/telemetry
 ```
 
-Warnings should not become a reason to make the generator uniform merely to silence statistics.
+Warnings must not force the generator into uniformity merely to silence statistics.
 
 ---
 
-## 28. Initial validation report
+## 30. Validation report
 
-A batch run should summarize conceptually:
+A batch report summarizes:
 
 ```text
-cases executed
-cases passed/failed
-first failure reproduction command/data
-seed/stage fingerprint mismatches
+cases executed/pass/fail
+first failure reproduction data
+fingerprint mismatches
 invariant counts
 metric distributions
 outliers/warnings
 execution time
 ```
 
-When failures exist, prioritize deterministic reproduction information over pretty reports.
+Prioritize deterministic reproduction information over pretty reports.
 
 ---
 
-## 29. Architecture-cycle implementation order
+## 31. Architecture-cycle implementation rule
 
-When we begin foundational code, the validation infrastructure should grow alongside it rather than being postponed until the cave generator is finished.
+Validation grows with the architecture. Do not leave stable identity, generator stages, world-domain transitions or persistence migrations several milestones ahead of their mechanical proofs.
 
-Recommended order:
-
-```text
-1. canonical StableAddress/StableId primitives + tests
-2. seed-domain registry/deriver + frozen vectors
-3. generator manifest primitives + tests
-4. pure graph data classes + invariant validator
-5. deterministic stage interface skeleton + fingerprint serializer
-6. first primary-topology implementation + batch tests
-7. entrances/connectivity + their validators
-8. geometry description + finite/bounds/fingerprint tests
-9. streaming services/coordinator + fake-observer lifetime tests
-10. modern persistence + v2 migration fixtures
-```
-
-The exact commit breakdown may differ, but validation should not lag several milestones behind world generation.
+New work extends the existing validation ownership structure rather than creating competing test-only gameplay/generator authorities.
 
 ---
 
-## 30. What automated tests do not replace
+## 32. What automated tests do not replace
 
-Automated validation cannot answer:
+Automation cannot answer whether mining is satisfying, combat is readable, caves feel mysterious, transitions feel polished, or traversal pacing is fun.
 
-```text
-is mining satisfying?
-is combat readable/fun?
-do caves feel mysterious rather than annoying?
-is traversal too slow?
-does a huge cavern feel impressive?
-is the ~10% connectivity noticeable in a good way?
-```
-
-Those remain milestone playtest questions.
-
-The harness exists so a human playtest is not wasted discovering:
-
-```text
-entrance references a missing node
-seed changes when worker order changes
-old save destroys the wrong tree
-cave graph contains NaN coordinates
-streaming unload deleted durable state
-```
+Those remain milestone human tests after correctness is mechanically established.
 
 ---
 
-## 31. Validation invariants — LOCKED
+## 33. Validation invariants — LOCKED
 
-1. Every persistent deterministic primitive has fixed reproducibility tests before release use.
+1. Persistent deterministic primitives have fixed reproducibility tests before release use.
 2. Every deterministic generation stage is independently callable/fingerprintable as data.
 3. Determinism tests vary legal execution/load/scheduling order.
-4. Structural validity is tested separately from determinism.
+4. Structural validity is separate from determinism.
 5. Stable IDs are checked for uniqueness/canonical ownership.
-6. Save compatibility is classified explicitly and migration paths have fixtures.
-7. Caches/runtime lifetime may be destroyed/reordered in tests without changing durable truth.
-8. Engine/noise upgrades cannot silently alter persistent generation fingerprints.
-9. Batch campaigns are reproducible from a campaign seed/index.
-10. Every hard failure provides enough information to reproduce the case without manually searching the world.
-11. Statistical generator targets are validated as distributions rather than forcing every region into the same template.
-12. Human playtesting is reserved for experiential quality after automated correctness checks pass.
+6. Overworld/Underworld domain identity is explicit in tests; no coordinate-sign inference.
+7. Cross-domain gateways are validated as semantic mappings, not mesh/coordinate continuity.
+8. Destination safety/readiness is proved before transition control release.
+9. Transition failure/rollback cannot leave mixed authoritative state.
+10. Save compatibility is explicit and migrations have fixtures.
+11. Caches/runtime lifetime may be destroyed/reordered without changing durable truth.
+12. Inactive/historical runtime state cannot make ordinary update work grow without bound.
+13. Engine/noise upgrades cannot silently change persistent fingerprints.
+14. Batch campaigns are reproducible.
+15. Every hard failure provides exact reproduction data.
+16. Statistical generator targets are distributions, not universal templates.
+17. Human playtesting is reserved for experiential quality after automated correctness checks.
 
 ---
 
-## 32. Intentionally open implementation choices
+## 34. Intentionally open implementation choices
 
-- exact Godot test runner / third-party framework;
+- exact test runner/framework;
 - exact CLI syntax;
-- exact canonical fingerprint algorithm/encoding;
-- exact fixed regression corpus size;
-- exact CI provider and job cadence;
-- exact stress-campaign case count;
-- exact metric thresholds and performance budgets;
-- exact graph-visualization/debug artifact format;
-- whether failure shrinking becomes automated beyond stage/address isolation.
+- canonical fingerprint encoding;
+- fixed corpus size;
+- CI provider/cadence;
+- stress campaign size;
+- measured performance budgets;
+- debug visualization format;
+- automated shrinking sophistication.
 
-These choices can evolve without weakening the requirement that deterministic world architecture is mechanically testable and reproducible.
+These may evolve without weakening deterministic, domain, transition, persistence or runtime-lifetime correctness.
