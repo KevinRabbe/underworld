@@ -65,6 +65,9 @@ class FakeGame:
 	var underworld_runtime := FakeRuntime.new()
 	var encounter_controller := FakeEncounter.new()
 	var survival = null
+	var world_delta_truth: Dictionary = {
+		"depleted_resources": ["sid1:resource:accepted-world-truth"],
+	}
 
 	func _init() -> void:
 		add_child(underworld_runtime)
@@ -104,6 +107,7 @@ static func _test_reconstructive_objective_chain(failures: Array[String]) -> voi
 	var initial_inventory: String = inventory.canonical_json()
 	var initial_equipment: String = equipment.canonical_json()
 	var initial_route: Dictionary = game.route.duplicate(true)
+	var initial_world_truth: String = JSON.stringify(game.world_delta_truth)
 	var objective: Dictionary = model.sample(game, player, inventory, equipment)
 	_expect(failures, "UX initial objective derives gather state", _objective_is(objective, "gather_surface_materials"))
 	_expect(failures, "UX recipe-derived initial wood requirement is 8", int(objective.get("wood_required", 0)) == 8)
@@ -111,6 +115,7 @@ static func _test_reconstructive_objective_chain(failures: Array[String]) -> voi
 	_expect(failures, "UX objective sampling does not mutate inventory", inventory.canonical_json() == initial_inventory)
 	_expect(failures, "UX objective sampling does not mutate equipment", equipment.canonical_json() == initial_equipment)
 	_expect(failures, "UX objective sampling does not mutate selected route", game.route == initial_route)
+	_expect(failures, "UX objective sampling does not mutate WorldDelta truth", JSON.stringify(game.world_delta_truth) == initial_world_truth)
 
 	_add_stack(failures, inventory, fixture["wood"], 8, "UX fixture wood")
 	_add_stack(failures, inventory, fixture["stone"], 7, "UX fixture stone")
@@ -127,11 +132,29 @@ static func _test_reconstructive_objective_chain(failures: Array[String]) -> voi
 	_expect(failures, "accepted stone tool equipment advances to natural route", _objective_is(objective, "reach_natural_cave"))
 	_expect(failures, "natural route guidance uses finite distance", is_equal_approx(float(objective.get("distance", -1.0)), 40.0))
 	_expect(failures, "natural route guidance never exposes raw entrance identity", not JSON.stringify(objective).contains("sid1:must-never-render"))
+	_expect(failures, "route guidance sampling cannot alter route readiness", game.route_ready)
 
 	game.underworld_runtime.in_cave = true
 	objective = model.sample(game, player, inventory, equipment)
 	_expect(failures, "accepted cave presence advances to iron mining", _objective_is(objective, "mine_iron"))
 	_expect(failures, "iron objective uses authored recipe requirement", int(objective.get("iron_required", 0)) == 4)
+
+	var rejected_resource_result: Dictionary = {
+		"success": false,
+		"event": {"type": "resource.mined", "duplicate": false},
+	}
+	_expect(failures, "RESOURCE rejected fixture is actually rejected", not bool(rejected_resource_result.get("success", true)))
+	objective = model.sample(game, player, inventory, equipment)
+	_expect(failures, "rejected RESOURCE result without authoritative iron cannot advance objective", _objective_is(objective, "mine_iron") and inventory.quantity_of("item.resource.iron_chunk") == 0)
+
+	var duplicate_resource_result: Dictionary = {
+		"success": true,
+		"event": {"type": "resource.mined", "duplicate": true},
+	}
+	_expect(failures, "RESOURCE duplicate fixture is marked duplicate", bool(duplicate_resource_result.get("event", {}).get("duplicate", false)))
+	objective = model.sample(game, player, inventory, equipment)
+	_expect(failures, "duplicate RESOURCE result without authoritative iron cannot advance objective", _objective_is(objective, "mine_iron") and inventory.quantity_of("item.resource.iron_chunk") == 0)
+	_expect(failures, "RESOURCE result-only observations cannot mutate WorldDelta truth", JSON.stringify(game.world_delta_truth) == initial_world_truth)
 
 	_add_stack(failures, inventory, fixture["iron"], 4, "UX fixture iron")
 	_add_instance(failures, inventory, fixture["sword"], "UX inventory-only sword")
@@ -144,18 +167,33 @@ static func _test_reconstructive_objective_chain(failures: Array[String]) -> voi
 	_expect(failures, "equipped production sword advances to Burrower defeat", _objective_is(objective, "defeat_burrower"))
 
 	game.encounter_controller.pending_count = 1
+	var pending_before: int = game.encounter_controller.pending_count
 	objective = model.sample(game, player, inventory, equipment)
-	_expect(failures, "enemy reward pending does not count as collected", _objective_is(objective, "collect_burrower_reward"))
+	_expect(failures, "enemy death/pending reward does not count as collected", _objective_is(objective, "collect_burrower_reward"))
+	_expect(failures, "objective sampling cannot consume pending loot", game.encounter_controller.pending_count == pending_before)
+
+	_add_stack(failures, inventory, fixture["chitin"], 1, "UX pre-existing reward inventory")
+	objective = model.sample(game, player, inventory, equipment)
+	_expect(failures, "capacity-blocked unresolved reward stays collect objective even with older chitin", _objective_is(objective, "collect_burrower_reward") and game.encounter_controller.pending_count == 1)
 
 	game.encounter_controller.pending_count = 0
-	_add_stack(failures, inventory, fixture["chitin"], 1, "UX fixture collected reward")
 	objective = model.sample(game, player, inventory, equipment)
-	_expect(failures, "accepted reward inventory advances to Save and Continue", _objective_is(objective, "save_quit_continue"))
-	_expect(failures, "failed or not-yet-completed Save cannot mark route complete", not bool(objective.get("complete", true)))
+	_expect(failures, "successful accepted reward resolution advances to Save and Continue", _objective_is(objective, "save_quit_continue"))
+	_expect(failures, "not-yet-completed Save cannot mark route complete", not bool(objective.get("complete", true)))
+
+	var failed_save_result: Dictionary = {
+		"success": false,
+		"diagnostics": ["simulated SAVE failure"],
+	}
+	_expect(failures, "SAVE failure fixture is actually failed", not bool(failed_save_result.get("success", true)))
+	objective = model.sample(game, player, inventory, equipment)
+	_expect(failures, "failed SAVE result cannot complete final guidance", _objective_is(objective, "save_quit_continue") and not bool(objective.get("complete", true)))
 
 	game.mode = &"continue"
 	objective = model.sample(game, player, inventory, equipment)
 	_expect(failures, "Continue reconstructs complete state without UX flag", _objective_is(objective, "m3_route_complete") and bool(objective.get("complete", false)))
+	_expect(failures, "complete-state reconstruction leaves pending loot unchanged", game.encounter_controller.pending_count == 0)
+	_expect(failures, "full objective route leaves WorldDelta truth unchanged", JSON.stringify(game.world_delta_truth) == initial_world_truth)
 	_cleanup_fixture(fixture)
 
 
@@ -172,6 +210,8 @@ static func _test_route_failure_is_visible_and_safe(failures: Array[String]) -> 
 	_equip(failures, equipment, fixture["equip_source"], fixture["pickaxe"], SLOT_PICKAXE, "UX failure equip pickaxe")
 	var inventory_before: String = inventory.canonical_json()
 	var equipment_before: String = equipment.canonical_json()
+	var world_before: String = JSON.stringify(game.world_delta_truth)
+	var pending_before: int = game.encounter_controller.pending_count
 	game.route_ready = false
 	var objective: Dictionary = GameplayObjectiveReadModel.new().sample(
 		game,
@@ -182,6 +222,8 @@ static func _test_route_failure_is_visible_and_safe(failures: Array[String]) -> 
 	_expect(failures, "unready route fails visibly instead of inventing guidance", not bool(objective.get("success", true)) and objective.get("diagnostics", []).size() > 0)
 	_expect(failures, "unready route sampling cannot alter inventory", inventory.canonical_json() == inventory_before)
 	_expect(failures, "unready route sampling cannot alter equipment", equipment.canonical_json() == equipment_before)
+	_expect(failures, "unready route sampling cannot alter WorldDelta truth", JSON.stringify(game.world_delta_truth) == world_before)
+	_expect(failures, "unready route sampling cannot alter pending loot", game.encounter_controller.pending_count == pending_before)
 
 	game.route_ready = true
 	game.route["surface_world_position"] = Vector3(INF, 0.0, 0.0)
@@ -197,6 +239,10 @@ static func _test_hud_renders_guidance_without_debug_authority(failures: Array[S
 	var game: FakeGame = fixture["game"]
 	var hud := GameplayHud.new()
 	game.add_child(hud)
+	var inventory_before: String = fixture["inventory"].canonical_json()
+	var equipment_before: String = fixture["equipment"].canonical_json()
+	var world_before: String = JSON.stringify(game.world_delta_truth)
+	var pending_before: int = game.encounter_controller.pending_count
 	var configure_failures: Array[String] = hud.configure(
 		fixture["player"],
 		fixture["inventory"],
@@ -208,6 +254,10 @@ static func _test_hud_renders_guidance_without_debug_authority(failures: Array[S
 	_expect(failures, "GameplayHUD renders current objective without DebugHUD", str(snapshot.get("objective", "")).begins_with("Objective: Gather resources"))
 	_expect(failures, "GameplayHUD objective snapshot exposes semantic objective id", str(snapshot.get("objective_model", {}).get("objective_id", "")) == "gather_surface_materials")
 	_expect(failures, "GameplayHUD objective controls remain mouse passthrough", hud.controls_are_mouse_passthrough())
+	_expect(failures, "GameplayHUD rendering cannot mutate inventory", fixture["inventory"].canonical_json() == inventory_before)
+	_expect(failures, "GameplayHUD rendering cannot mutate equipment", fixture["equipment"].canonical_json() == equipment_before)
+	_expect(failures, "GameplayHUD rendering cannot mutate WorldDelta truth", JSON.stringify(game.world_delta_truth) == world_before)
+	_expect(failures, "GameplayHUD rendering cannot mutate pending loot", game.encounter_controller.pending_count == pending_before)
 	_cleanup_fixture(fixture)
 
 
