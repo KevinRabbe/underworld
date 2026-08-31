@@ -1,33 +1,47 @@
 # Underworld — Technical Architecture
 
-This document defines the architecture that should exist before substantial Underworld generation code is added. Exact class names may change; the separation of responsibilities should not change casually.
+This document defines the architecture that should exist before substantial procedural-world generation and composition code is expanded. Exact class names may change; the separation of responsibilities should not change casually.
+
+The world-domain relationship is governed by `20_world/WORLD_DOMAINS_AND_TRANSITIONS.md` and ADR-001. This document uses that two-domain model.
 
 ## 1. Core separation — LOCKED
 
 The project must separate these concepts:
 
-1. **World definition** — deterministic data describing what exists.
-2. **Topology** — graph relationships between underground regions, networks, chambers, tunnels and entrances.
-3. **Geometry description** — shapes/paths/volumes derived from topology.
-4. **Runtime representation** — Godot nodes, meshes, collision, AI and audio currently instantiated.
-5. **Persistent deltas** — player-caused changes to the deterministic world.
+1. **Root world identity** — one durable world/save identity and deterministic root seed/manifest scope.
+2. **Domain definition** — deterministic data describing what exists inside one procedural domain.
+3. **Topology** — graph relationships between Underworld regions, networks, chambers, tunnels and domain-local entry sites.
+4. **Geometry description** — shapes/paths/volumes derived from accepted topology or other domain definition data.
+5. **Runtime representation** — Godot nodes, meshes, collision, AI and audio currently instantiated.
+6. **Persistent deltas** — player/world changes relative to deterministic base truth.
+7. **World-domain/gateway state** — explicit active domain plus deterministic source-gateway/destination-anchor mapping and transition lifecycle.
 
-Do not collapse these into one generator that creates scene nodes directly.
+Do not collapse these into one generator that creates scene nodes directly. Do not make either procedural generator own cross-domain transition state.
 
-## 2. One world coordinate system — LOCKED
+## 2. Domain-local coordinate systems — LOCKED
 
-All generated definitions use global 3D world coordinates.
+`OVERWORLD` and `UNDERWORLD` are independent procedural coordinate spaces.
 
-Surface and underground may use different spatial indexing/streaming grids internally, but all definitions must map losslessly into the same X/Y/Z world space.
+Generated positions/bounds are interpreted together with their owning domain:
+
+```text
+DomainPosition = domain + local_transform
+```
+
+An Underworld position does not need to map losslessly to an Overworld X/Y/Z value, and Underworld depth is not defined as `surface_height - shared_world_y`.
+
+Within the Underworld, topology, geometry, runtime cells and physics still use a coherent 3D coordinate system. Different domains may use different spatial indexing, scale, origin and streaming policy.
+
+Cross-domain travel resolves through deterministic gateway/source/destination identity rather than coordinate conversion.
 
 ## 3. Deterministic staged generation — LOCKED
 
-Persistent generation uses the architecture in `DETERMINISTIC_SEED_DOMAINS.md`.
+Persistent generation uses `DETERMINISTIC_SEED_DOMAINS.md`.
 
 Randomness is derived conceptually from:
 
 ```text
-world seed
+root world seed
 + seed-schema version
 + immutable named domain ID
 + explicit domain revision
@@ -47,39 +61,48 @@ Requirements:
 - topology and detailed geometry randomness are separate compatibility domains;
 - generated IDs must not depend on RNG state or accepted-array ordering;
 - cross-region candidates use canonical ownership/addressing before seed derivation;
-- persistent generation uses a project-owned/frozen deterministic RNG/value contract with hard-coded compatibility test vectors before production saves depend on it.
+- persistent generation uses a project-owned/frozen deterministic RNG/value contract with hard-coded compatibility vectors before production saves depend on it;
+- adding explicit world domains must not repurpose an already-persisted seed-domain identifier to mean something different.
 
-The global generator version is a compatibility manifest and is **not** automatically mixed into every seed. Local domain revisions allow one generation subsystem to change without automatically reshuffling unrelated systems.
+The generator manifest is a compatibility contract and is **not** automatically mixed into every seed. Local domain revisions allow one generation subsystem to change without automatically reshuffling unrelated systems.
 
-## 4. World-definition data model — DIRECTIONAL
+## 4. Root world and domain-definition model — DIRECTIONAL
 
 The architecture should support data similar to:
 
 ### `WorldDefinition`
 
-- world seed;
-- schema version;
-- generator version/manifest reference;
+- root world seed;
+- world ID;
+- save/world schema version;
+- generator manifest reference;
 - seed-schema version;
-- references/addresses for macro surface and underground regions.
+- addresses/references for Overworld and Underworld definition domains;
+- no requirement to materialize either complete domain eagerly.
+
+### `UnderworldDefinitionIndex`
+
+- owning root `WorldId` / manifest identity;
+- Underworld-domain generation configuration;
+- macro-region addressing configuration;
+- optional generated-region cache/index metadata.
 
 ### `UndergroundRegionDefinition`
 
 - stable region ID;
 - semantic stable address;
-- world-space bounds/anchor;
+- **Underworld-local** bounds/anchor;
 - dominant depth profile(s);
 - network references;
+- domain-local entry-site references;
 - high-level special-location references.
-
-A cached derived seed may be stored for convenience, but semantic identity/address + domain contract remains the source of truth.
 
 ### `CaveNetworkDefinition`
 
 - stable network ID;
 - graph node IDs;
 - graph edge IDs;
-- entrance IDs;
+- entry-site IDs;
 - topology metrics useful for validation/connectivity passes.
 
 ### `CaveNodeDefinition`
@@ -89,7 +112,7 @@ Represents an abstract chamber/junction/major volume before final mesh construct
 Potential fields:
 
 - stable ID;
-- world position;
+- Underworld-local position;
 - approximate bounds/radius;
 - depth/profile blend;
 - semantic type/tags;
@@ -103,25 +126,31 @@ Potential fields:
 
 - stable ID;
 - endpoints;
-- connection class: primary, proximity connection, deliberate topology loop, vertical transition, entrance path, etc.;
+- connection class: primary, proximity connection, deliberate topology loop, vertical transition, entry path, etc.;
 - path/control information;
 - width/verticality tendencies;
 - optional cached deterministic local values derived from its stable address/domains.
 
-### `EntranceDefinition`
+### `UnderworldEntrySiteDefinition`
 
-- stable ID;
-- surface world position;
-- connected network/node;
-- connection depth;
-- entrance/descent profile;
-- optional cached deterministic local values derived from its stable address/domains.
+A deterministic **Underworld-domain** arrival/exit/topology attachment candidate.
 
-The exact GDScript resource/class layout is **OPEN** until implementation planning, but the graph/data split is locked.
+Potential fields:
+
+- stable ID / stable address;
+- owning region/network/node;
+- Underworld-local anchor/transform;
+- entry/arrival profile;
+- clearance/geometry requirements local to the Underworld;
+- optional semantic tags used by gateway matching/policy.
+
+It does **not** own an Overworld position or require a physical surface opening. A `WorldGatewayDefinition` outside the Underworld generator maps a source gateway in one domain to a destination entry/arrival identity in another domain.
+
+The current codebase may retain historical `EntranceDefinition` names/types for generator compatibility. During migration, treat those as legacy/internal Underworld entry-site data unless an owning contract explicitly says otherwise; do not continue their old shared-coordinate meaning as new architecture.
 
 ## 5. Depth profiles — LOCKED ARCHITECTURAL INTERFACE
 
-Shallow, mid and deep must be expressible as independent generation profiles rather than one generator full of scattered depth conditionals.
+Shallow, mid and deep are Underworld-local generation profiles rather than scattered shared-world-Y conditionals.
 
 A profile should eventually control distributions such as:
 
@@ -132,22 +161,24 @@ A profile should eventually control distributions such as:
 - network size;
 - loop/connectivity tendency;
 - water/geology tendencies;
-- entrance tendency;
+- entry-site tendency;
 - structure/resource/ecology hooks.
 
-Profiles may blend spatially. A cave may transition continuously across depths.
+Profiles may blend spatially inside the Underworld domain. A cave may transition continuously across local depth grammar.
 
-Random variation used by these profiles must come from stable-address seed domains rather than shared RNG state.
+A deterministic Overworld reference may only become an input for a specific future design feature through an explicit gateway/world-coordination contract; it is not a required depth formula.
+
+Random variation used by profiles must come from stable-address seed domains rather than shared RNG state.
 
 ## 6. Secondary connectivity pass — LOCKED
 
 Primary cave topology is generated first.
 
-A separate analysis pass may then propose and score additional connections between existing graph components/branches.
+A separate analysis pass may propose and score additional connections between existing graph components/branches.
 
 This system must be able to:
 
-- identify close physical approaches;
+- identify close Underworld-local physical approaches;
 - identify larger useful loop opportunities;
 - reject redundant connections;
 - cap connectivity to avoid spaghetti graphs;
@@ -160,17 +191,19 @@ Do not bake the ~10% connectivity philosophy into random tunnel generation alone
 
 ## 7. Geometry generation — LOCKED DIRECTION
 
-Initial Underworld geometry should be chamber/tunnel based, not unrestricted destructible voxel terrain.
+Initial Underworld geometry is chamber/tunnel based, not unrestricted destructible voxel terrain.
 
-Geometry generation consumes graph definitions and produces streamable geometry descriptions/runtime meshes.
+Geometry generation consumes accepted Underworld graph definitions and produces streamable **domain-local** geometry descriptions/runtime meshes.
 
 Structural cave geometry and locally modifiable/excavatable material must be distinguishable at the data level.
 
 Geometry randomness is separated from topology randomness so future remeshing/tunnel-shape changes do not automatically reshuffle graph connectivity.
 
+An entry site may have local cave-mouth/shaft/arrival geometry. Cross-domain mesh continuity is never a geometry-generation invariant.
+
 ## 8. Runtime streaming tiers — LOCKED
 
-Runtime systems should support progressively more expensive representations:
+Each procedural domain owns its own runtime demand and representation tiers. Underworld runtime systems should support progressively more expensive representations:
 
 1. deterministic definition exists only as data/address;
 2. geometry description available/cached;
@@ -179,45 +212,78 @@ Runtime systems should support progressively more expensive representations:
 5. creatures/interactables actively simulated nearby;
 6. local audio active only when relevant.
 
-The exact distance thresholds are **OPEN** and should be measured later.
+Exact thresholds are **OPEN** and should be measured.
 
-No design should require all underground networks to exist as live Godot nodes simultaneously.
+No design should require all underground networks to exist as live Godot nodes simultaneously. An inactive domain must not remain fully streamed merely because the other domain is active.
+
+During a gateway transition, bounded destination preparation may run while source state is retained for rollback; `STREAMING_OWNERSHIP.md` owns the runtime lifetime rules.
 
 ## 9. Stable procedural identities — LOCKED
 
-Persistent procedural objects use the architecture in `STABLE_PROCEDURAL_IDS.md`.
+Persistent procedural objects use `STABLE_PROCEDURAL_IDS.md`.
 
 Identity derives from stable candidate/generation addresses, not accepted-array indexes, runtime nodes, runtime positions or RNG-call order.
 
-Conceptual hierarchy:
+Conceptual hierarchy inside the Underworld:
 
-`world / region / network / node-or-edge / local-object-key`
+```text
+underworld / region / network / node-or-edge / local-object-key
+```
 
 A generator density change must not silently rename unrelated persistent objects.
 
-This rule also applies to surface procedural objects. Existing prototype index-based IDs must be migrated before incompatible generator tuning makes the legacy mapping unsafe.
+The same identity discipline applies to Overworld procedural objects. Existing prototype index-based IDs must be migrated before incompatible generator tuning makes the legacy mapping unsafe.
+
+Gateway identity is a separate cross-domain semantic identity and must not be fabricated from coordinate conversion or runtime Node identity.
 
 ## 10. Persistence model — LOCKED
 
-Untouched procedural world data is regenerated from seed and compatible generation contracts.
+Untouched procedural world data is regenerated from the root world identity plus compatible domain generation contracts.
 
-Save data stores deltas such as:
+Save data stores durable state such as:
 
+- `active_domain`;
+- Player domain-local transform/state;
 - removed/harvested stable object IDs;
-- player inventory/state;
-- built structures;
+- inventory/progression;
+- player-built structures;
 - modifiable-terrain deltas;
 - cleared collapses/changed structures;
 - boss/special-location state;
+- gateway/transition state only where durability actually requires it;
 - other explicit player/world-state changes.
 
 Do not save complete untouched cave networks/chunks merely because they were visited.
 
-Save migrations must be versioned and testable.
+Save migrations must be versioned and testable. Legacy saves without explicit domain state must follow an explicit compatibility/migration policy; domain must not be inferred from Y sign or nearest entrance.
 
-The persistence/versioning document will define how generator-version manifests, seed-schema versions and per-domain revisions interact with old worlds.
+`PERSISTENCE_AND_VERSIONING.md` owns the detailed compatibility contract.
 
-## 11. Threading boundary — LOCKED DIRECTION
+## 11. World-domain / gateway ownership — LOCKED
+
+Neither `OverworldGenerator` nor `UnderworldGenerator` owns cross-domain travel.
+
+Conceptually:
+
+```text
+source domain runtime
+    -> WorldGatewayDefinition / GatewayService
+    -> WorldTransitionService
+    -> destination domain preparation/readiness
+    -> atomic active-domain commit
+```
+
+The gateway layer owns:
+
+- source gateway identity;
+- destination domain;
+- destination entry/arrival identity;
+- paired/asymmetric return policy where applicable;
+- transition lifecycle and failure handling.
+
+The destination generator/streamer only answers domain-local definition/readiness requests. It does not know the source domain's coordinates.
+
+## 12. Threading boundary — LOCKED DIRECTION
 
 Pure deterministic generation/data work may run on worker threads.
 
@@ -225,21 +291,30 @@ Godot scene-tree mutation, node creation and physics-server-facing scene setup m
 
 No shared mutable generation RNG crosses worker boundaries. Each generation task derives local randomness from stable addresses/domains.
 
-The existing surface prototype already follows the general data-worker/runtime-main-thread split; the Underworld architecture should preserve and formalize it.
+Transition scheduling may request worker-safe destination generation, but active-domain commit and scene/runtime ownership changes remain explicit runtime lifecycle operations.
 
-## 12. Validation hooks — LOCKED
+## 13. Validation hooks — LOCKED
 
 Every generated graph/data object should expose enough information for headless validation without rendering.
 
 A failing generation test must be reproducible from at least:
 
-- world seed;
+- root world seed / `WorldId`;
+- owning world domain;
 - seed-schema version;
-- generator version/manifest;
+- generator manifest;
 - relevant seed domain/revision where applicable;
 - region/network/object stable ID/address;
 - validation failure reason.
 
+Cross-domain tests additionally report source gateway identity, destination domain and destination anchor identity without assuming coordinate parity.
+
 Canonical generation fingerprints and fixed seed/RNG test vectors are part of the compatibility suite.
 
 Architecture is incomplete if correctness can only be checked by manually walking through the rendered world.
+
+## 14. Supersession note
+
+Earlier revisions of this document locked one shared global surface/Underworld coordinate system and gave `EntranceDefinition` a physical surface position. Those clauses are superseded by ADR-001 and the 2026-08-31 two-domain decision.
+
+Still-valid portions—pure deterministic data, stable identity, staged generation, topology/geometry separation, runtime tiers, worker/main-thread boundaries and delta persistence—remain governing architecture.

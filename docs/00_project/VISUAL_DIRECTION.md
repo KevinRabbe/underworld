@@ -1,386 +1,402 @@
 # Underworld Visual Direction
 
-Status: **LOCKED visual family; production details remain adjustable**
+Status: **LOCKED visual family and production philosophy; production details remain adjustable**
 
-This document records the current visual target for Underworld. It guides future art, presentation, UI, VFX and asset decisions without making presentation assets part of world, gameplay or persistence identity.
+Underworld targets a stylized dark-fantasy 3D survival presentation that looks substantially richer than the raw geometry cost would suggest. The project deliberately prioritizes strong silhouettes, reusable geometry, materials, shaders, lighting, atmosphere and controlled VFX over brute-force geometric detail.
 
-The project is deliberately using cheap prototype geometry while core systems are still being proven. Prototype appearance is not the final art target.
+Prototype geometry remains valid while systems are changing. Final architecture/layout/interaction can be stable before final art is produced.
 
-## Visual thesis
+## 1. Visual thesis
 
-Underworld should read as a **stylized dark-fantasy 3D survival game** with:
-
-- low-to-mid-poly environment geometry with strong readable silhouettes;
+Underworld should read as:
+- low-to-mid-poly environment geometry with strong silhouettes;
 - believable but stylized PBR materials;
-- substantially higher detail on the player, important creatures, weapons, armor and bosses;
-- atmospheric lighting, fog and VFX carrying a large share of perceived quality;
-- modular/reusable asset families rather than unique high-cost assets everywhere;
-- a grounded surface world contrasted by stronger visual identities underground.
+- higher detail on player, important creatures, weapons, armor and bosses;
+- atmosphere, fog, lighting and VFX carrying a large share of perceived quality;
+- modular/reusable asset families rather than one-off assets everywhere;
+- a grounded Overworld contrasted with stronger visual identities in the Underworld.
 
-The target is not photorealism, Minecraft-style block geometry, retro PS1 rendering, or heavily cartoon-proportioned fantasy. Those may be useful experimental presentation modes later, but they are not the current production target.
+The target is not photorealism, voxel/block rendering, retro PS1 rendering or heavily cartoon-proportioned fantasy.
 
-## Core principles
+## 2. Perceptual complexity over invisible complexity
 
-### 1. Readability before raw detail
+Spend art and runtime complexity on cues the player actually perceives.
 
-Large shapes and silhouettes should communicate first. Fine detail supports the shape instead of compensating for an unreadable base model.
+A simple asset can read as much richer when it has the correct:
+1. silhouette;
+2. large structural proportions;
+3. material response;
+4. normal/AO detail;
+5. lighting/shadow response;
+6. motion where appropriate;
+7. atmospheric integration;
+8. controlled surface variation.
+
+Do not model detail merely because it can be modeled.
+
+Model geometry when it materially affects:
+- silhouette;
+- interaction;
+- collision;
+- close-range readability;
+- animation/deformation.
+
+Prefer shaders/materials/decals/masks/VFX for detail that does not need unique geometry.
+
+## 3. Readability before raw detail
 
 Preferred hierarchy:
 
 ```text
-large form
-  -> medium silhouette/detail
-      -> material/detail normal/decal
+large form / silhouette
+-> medium structural detail
+-> material / normal / decal detail
 ```
 
-A rock, weapon, creature or building should remain recognizable at gameplay camera distance before small surface detail is considered.
+A rock, tree, building, weapon or creature should remain recognizable at gameplay camera distance before fine surface detail is added.
 
-### 2. Detail budget follows importance and camera distance
+Shaders cannot rescue a fundamentally bad silhouette.
 
-Not every asset family needs the same geometric or texture density.
+## 4. Detail follows importance and distance
 
-Indicative relative targets:
+Indicative relative detail priority:
 
-| Asset family | Relative detail target |
+| Asset family | Relative detail |
 | --- | --- |
-| distant terrain / background forms | low |
-| generic rocks, grass and clutter | low to mid |
-| common vegetation / buildings | mid |
+| distant terrain/horizon | low |
+| generic rocks/grass/clutter | low-mid |
+| common vegetation/buildings | mid |
 | common creatures | mid |
-| important enemies | mid to high |
-| player character | high |
-| equipped weapons and armor | high |
-| bosses / hero assets | high |
+| important enemies | mid-high |
+| player | high |
+| equipped weapons/armor | high |
+| bosses/hero assets | high |
 
-These are relative priorities, not final polygon or texture budgets.
+These are priorities, not final polygon budgets.
 
-### 3. Presentation is replaceable
-
-Visual assets must remain downstream of authoritative world/gameplay state.
+## 5. Presentation is replaceable
 
 Changing a mesh, shader, material, texture, VFX package, LOD, color grade or rendering technique must not silently change:
-
 - world seed identity;
 - procedural StableIds;
-- semantic authored content identity;
+- semantic content identity;
 - durable player/world state;
 - gameplay rules;
 - logical building/item identity.
 
-See the project content and persistence architecture for the owning identity rules:
-- [`../10_architecture/CONTENT_ARCHITECTURE.md`](../10_architecture/CONTENT_ARCHITECTURE.md)
-- [`../PERSISTENCE_AND_VERSIONING.md`](../PERSISTENCE_AND_VERSIONING.md)
-- [`GLOSSARY.md`](GLOSSARY.md)
+Presentation consumes authoritative state; it does not define it.
 
-## Surface world
+## 6. Overworld direction
 
-The surface should feel comparatively familiar, grounded and readable so entering the Underworld creates a meaningful contrast.
+The Overworld should feel familiar, grounded and readable so the Underworld creates meaningful contrast.
 
-General direction:
-- natural/desaturated greens rather than constant saturated fantasy color;
-- gray/brown exposed stone and soil;
-- dark coniferous/temperate forest families where appropriate;
-- fog/haze used for depth and atmosphere;
-- believable daylight/overcast lighting rather than permanently dramatic colored lighting;
-- timber, rough stone, iron and weathered materials for grounded settlements/ruins;
-- occasional stronger color from biome accents, flowers, ores, magic, corruption or seasonal/environmental variation.
+Direction:
+- natural/desaturated greens;
+- gray/brown stone and soil;
+- temperate/coniferous forest families where appropriate;
+- daylight/overcast lighting that can be beautiful rather than permanently dramatic;
+- haze/fog for depth;
+- timber, rough stone and iron for grounded structures;
+- stronger color reserved for biome accents, unusual resources, magic/corruption and special events.
 
-The surface should not be uniformly bleak. Calm, beautiful and recognizable places make dangerous underground transitions more effective.
+The Overworld should not be uniformly bleak.
 
-## Underworld regions
+## 7. Underworld direction
 
-Underground areas should carry stronger visual identities than the surface. The generator provides space and world structure; presentation/content determines the visual vocabulary layered onto that space.
+The Underworld is a separate procedural world domain and may use more aggressive atmosphere, scale and regional identity.
 
-Potential visual families may include:
-- dry stone/limestone caverns;
-- wet caves and underground rivers;
-- fungal or bioluminescent regions;
+Possible visual families include:
+- dry limestone/stone caverns;
+- wet caves and underground water;
+- fungal/bioluminescent regions;
 - crystal/mineral caverns;
-- collapsed mines or excavated spaces;
-- buried ruins and ancient architecture;
-- root-infested caves under forests;
+- collapsed mines;
+- buried ruins;
+- root-infested regions;
 - volcanic/deep-hot regions;
-- enormous dark abyssal chambers;
-- special corrupted, magical or civilization-specific locations.
+- enormous abyssal chambers;
+- unusual corrupted/magical/artificial spaces.
 
-These examples are direction, not a locked biome list.
+These examples are not a locked biome list.
 
-A cave region should not become visually distinct by changing deterministic topology identity. Visual/content selection remains a downstream concern unless an owning world/content contract explicitly says otherwise.
+## 8. Lighting and color language
 
-## Lighting and color language
+Lighting is a major quality multiplier.
 
-Lighting is one of the primary quality multipliers for the chosen geometry style.
-
-The project should use controlled contrast and color intentionally rather than filling every scene with unrelated saturated lights.
-
-Useful recurring language may include:
+Possible recurring language:
 
 | Source / meaning | Direction |
 | --- | --- |
 | neutral cave ambient | cool gray / blue-gray |
-| fire / torch / settlement | warm orange / yellow |
+| fire / settlement | warm orange / yellow |
 | fungus / spores | cyan / green family |
 | crystals / unusual minerals | blue / violet family |
-| corruption / high danger | restrained red / magenta family |
-| ancient sacred/artificial spaces | pale gold / warm white family |
+| corruption / danger | restrained red / magenta |
+| ancient sacred/artificial | pale gold / warm white |
 
-Exact hues are not locked.
+Exact values remain adjustable.
 
-Color can support navigation and environmental storytelling. A distant warm light can imply construction or safety; a strange cold glow can imply unusual natural content; a dangerous color accent can communicate risk before UI text is required.
+Color should support navigation/readability rather than producing constant MMO-style visual noise.
 
-## Environment geometry
+## 9. Environment geometry
 
-Environment assets should favor:
-- large readable planes and facets;
+Favor:
+- large readable planes/forms;
 - imperfect natural silhouettes;
-- controlled geometric density;
-- tiling/reusable material systems;
-- normal maps, decals and masks for smaller detail;
-- reusable variants rather than dozens of nearly identical unique meshes.
+- controlled geometry density;
+- tiling/reusable materials;
+- normal maps, decals and masks for small detail;
+- modular families and variants;
+- LOD/instancing-friendly topology where practical.
 
-The target is **stylized low-to-mid-poly**, not visibly crude triangles everywhere.
+Procedural terrain/cave geometry may stay economical if downstream presentation can create richness without rewriting world truth.
 
-Procedural cave and terrain geometry may remain relatively economical as long as presentation can layer materials, decals, props, vegetation, lighting and effects without rewriting world truth.
+## 10. Vegetation strategy
 
-## Characters
+Vegetation is a primary example of perceptual optimization.
 
-Characters are allowed to be substantially more detailed than the environment.
+The project does **not** need botanically modeled trees with enormous leaf counts.
 
-The eventual player target is **higher-detail stylized realism**:
-- believable human proportions;
-- recognizable face/head forms;
-- modeled hands/fingers where camera distance justifies them;
-- layered clothing and armor;
-- clear belts, straps, pouches and equipment silhouettes;
-- better deformation around shoulders, elbows, hips and knees;
-- distinct leather, textile, wood and metal material response;
-- reusable modular equipment;
-- higher-quality reusable locomotion/combat animation than the current procedural posing.
+A convincing tree may use:
+- simple/moderate trunk and main-branch geometry;
+- a small number of readable branch forms;
+- coarse foliage-volume/cluster meshes;
+- leaf/foliage shaders providing breakup;
+- modified normals/light response;
+- fake translucency/transmission where useful;
+- wind deformation;
+- per-instance scale/rotation/tint variation;
+- multiple LOD tiers;
+- far forest proxies/impostors.
 
-The target is still stylized enough to be feasible for a small production pipeline. Full photorealistic character requirements are not assumed.
+The silhouette and canopy mass distribution matter more than individual modeled leaves.
 
-The current box mannequin remains a valid rig/gameplay test representation until replacing it produces more value than continuing systems work.
+A manageable tree archetype library should be multiplied by procedural/presentation variation instead of hundreds of unique tree meshes.
 
-## Creatures and bosses
+Large-scale forest/clearing distribution must be proven before expensive vegetation content production.
 
-Common creatures can use mid-detail assets with strong silhouettes and readable attack poses.
+## 11. Tree LOD direction
 
-Bosses and important enemies may receive player-character-level or greater presentation attention because they are focal assets and are observed at close range.
+Indicative representation tiers:
 
-Creature detail must not make combat cues harder to read. Animation timing, silhouette and pose clarity take priority over surface ornament.
+```text
+close
+- full trunk/branch/foliage clusters
+- best wind/material/shadow response
 
-## Weapons, armor and tools
+medium
+- reduced branch/foliage complexity
+- cheaper wind/shadows
 
-Equipped assets sit close to the camera and deserve higher detail than generic environment props.
+far
+- highly simplified canopy/trunk representation
 
-Direction:
-- strong recognizable silhouettes;
-- slightly exaggerated thickness/major shapes where needed for third-person readability;
-- believable construction and material response;
-- modular attachment/equipment compatibility;
-- clear differences between wood, stone, leather, bronze/iron/steel-like metals and special materials;
-- detail through normal maps, trims and material variation rather than extreme mesh density everywhere.
+horizon
+- impostor / billboard / forest-mass proxy
+```
 
-Weapons should not become cartoonishly oversized, but strict real-world proportions may be adjusted where gameplay readability benefits.
+Exact distances depend on profiling.
 
-## Buildings and architecture
+The same logical vegetation instance may use different representations without changing world identity.
 
-Architecture should use modular kits and readable chunky construction.
+## 12. Modular architecture/building presentation
 
-A structure family may use reusable parts such as:
-- straight/broken walls;
-- corners;
-- arches/doorways/windows;
-- floors and stairs;
-- beams and supports;
-- roof pieces;
-- columns;
-- debris/trim variants.
+Building geometry should be designed as reusable modular kits aligned with the logical building system.
 
-Modular composition is preferred over making every structure a unique one-off asset.
+Families may share:
+- walls/half walls;
+- floors/half floors;
+- beams/posts;
+- braces;
+- stairs;
+- roof families;
+- arches;
+- rails;
+- doors/windows;
+- trims/debris.
 
-Player-built structures must also remain compatible with the logical building-piece architecture: presentation detail may improve substantially later without changing logical snap/placement identity.
+The logical grid/socket contract defines compatibility. Art may extend beyond logical bounds where safe so structures do not look like sterile cubes.
 
-## Materials and texturing
+A single gameplay-compatible wall geometry may support multiple later visual/material treatments without requiring new placement logic.
 
-The default direction is **stylized PBR**, not totally flat unlit color and not high-cost photogrammetric realism.
+## 13. Shape variation before texture explosion
 
-Use physically sensible material response where it helps readability:
-- appropriate roughness ranges;
+For early building/environment content, prioritize new silhouettes/shapes before dozens of material recolors.
+
+Example:
+- several useful beam lengths and roof joins create new architecture;
+- six slightly different brown wall textures do not create equivalent gameplay possibility.
+
+Visual/style families can multiply later behind stable geometry/content contracts.
+
+## 14. Materials and texturing
+
+Default direction: stylized PBR.
+
+Use:
+- sensible roughness;
 - restrained metallic values;
-- useful normal/detail maps;
-- AO/detail where appropriate;
-- stylized albedo and controlled palettes;
+- normal/detail maps;
+- AO where useful;
+- stylized albedo/palette;
 - wetness/moss/dirt/mineral masks;
-- decals and trim sheets;
+- trim sheets;
+- decals;
 - reusable tiling material families.
 
-Avoid making the game dependent on thousands of unique high-resolution texture sets.
+Avoid dependence on thousands of unique high-resolution texture sets.
 
-A reusable rock material family, for example, may combine:
+A reusable rock material may combine:
 
 ```text
 base rock
 + hue/value variation
 + roughness variation
 + wetness
-+ moss/dirt mask
-+ mineral vein mask
++ moss/dirt
++ mineral mask
 + decals
 ```
 
-This should allow many procedural/reused forms to remain visually related without each requiring a unique texture package.
+## 15. Characters
 
-## Vegetation
+Characters may use substantially more detail than generic environment assets.
 
-Prototype cone trees and simple ground objects are distribution tests, not art targets.
+Long-term direction:
+- believable proportions;
+- recognizable head/face forms;
+- useful hand/finger detail when visible;
+- layered clothing/armor;
+- readable belts/straps/equipment silhouettes;
+- good shoulder/elbow/hip/knee deformation;
+- distinct leather/textile/wood/metal response;
+- modular equipment;
+- reusable locomotion/combat animation.
 
-Future vegetation should favor a manageable archetype library plus procedural variation:
-- several tree forms per appropriate biome rather than hundreds of unique trees;
-- scale/rotation/tint variation;
-- canopy/trunk/dead variants;
-- reusable bushes, grass, ferns, mushrooms, flowers, branches and rocks;
-- LOD/impostor strategies when profiling shows they are needed.
+The target remains stylized enough for a small production pipeline.
 
-Large-scale forest/clearing distribution should be proven before expensive vegetation content is produced.
+## 16. Creatures and bosses
 
-## Animation
+Common creatures can remain mid-detail if silhouette and attack poses are strong.
 
-Animation should prioritize readable intent and weight over trying to imitate raw mocap everywhere.
+Bosses/important enemies may receive hero-level attention.
 
-Combat actions benefit from clear phases:
+Animation timing, silhouette and telegraph readability take priority over ornament.
+
+## 17. Weapons, armor and tools
+
+Equipped assets deserve more detail because they are close to the camera.
+
+Direction:
+- strong silhouettes;
+- believable construction;
+- readable material response;
+- modular attachment/equipment compatibility;
+- normal/trim/material detail instead of extreme mesh density.
+
+## 18. Animation
+
+Animation should prioritize readable intent and weight.
+
+Combat actions benefit from:
 
 ```text
 anticipation -> action/contact -> recovery
 ```
 
-Parry, dodge, heavy attack, hit reactions and creature telegraphs should communicate clearly at gameplay camera distance.
+Gameplay timing remains authoritative in gameplay contracts; presentation satisfies semantic action roles.
 
-Gameplay timing remains owned by gameplay action contracts. Presentation animation should satisfy semantic/action roles rather than becoming the source of combat authority.
+## 19. VFX
 
-## VFX
+VFX should answer:
+- what happened;
+- where;
+- how important it was.
 
-VFX should be stylized but restrained.
+Useful restrained families include impacts, trails, dust/debris, fire/smoke, cave mist, water effects, spores and unusual mineral/magic effects.
 
-Useful families include:
-- weapon trails;
-- impact sparks/dust/debris;
-- torch smoke/fire;
-- cave mist;
-- water droplets/splash;
-- spores;
-- subtle magical/mineral effects;
-- material-specific hit feedback.
+## 20. UI
 
-Effects should primarily answer **what happened, where, and how important was it?** Avoid constant MMORPG-style rainbow noise that hides combat or environment readability.
+UI direction remains minimal dark medieval/survival rather than a permanently crowded MMO HUD.
 
-## UI
+Use reusable theme/9-slice/skin architecture and shared layout primitives. Information-dense screens such as inventory, crafting and especially a future large building catalog may use stronger hierarchy/search/filter structures.
 
-The current direction is a minimal dark medieval/survival interface rather than a permanently crowded MMO HUD.
+## 21. Alternate visual treatments
 
-Possible language:
-- dark/charcoal translucent panels;
-- warm off-white readable text;
-- restrained iron/bronze-like accents;
-- clear icons;
-- limited persistent HUD clutter;
-- stronger structure in inventory/crafting/building screens where information density requires it.
+Shaders/post-process may substantially alter perceived style without changing logical geometry.
 
-Exact typography, icon set, layout and accessibility options are future UI work.
-
-## Shaders and alternate visual treatments
-
-Shaders can change the perceived art style dramatically without changing logical geometry.
-
-Possible shader/post-process treatments include:
-- flat or banded/cel lighting;
-- color quantization/posterization;
-- pixelation or low-resolution presentation;
+Possible future treatments include:
+- cel/banded lighting;
+- quantization/posterization;
+- pixelation;
 - dithering;
-- vertex/normal stylization;
+- stylized normals;
 - outlines;
-- texture filtering changes;
-- color grading;
-- stylized shadow response.
+- alternate filtering/color grading.
 
-However, shaders do not generally turn a smooth silhouette into genuinely block/voxel geometry.
+True silhouette changes still require alternate geometry/renderer representation.
 
-A true blocky or alternate silhouette requires a different mesh/renderer representation. The project architecture should permit alternate presentations to consume the same authoritative world/gameplay data where technically compatible.
+## 22. Prototype-art policy
 
-Therefore:
-
-```text
-same logical world
-      |
-      +--> stylized smooth/PBR presentation
-      +--> cel/pixel shader treatment
-      +--> future alternate geometry renderer
-```
-
-The current production target remains stylized dark-fantasy PBR; alternate renderers are optional future experiments, not current scope.
-
-## Prototype-art policy
-
-Cheap primitives are acceptable when their purpose is to validate:
+Cheap primitives are acceptable when validating:
 - world distribution;
 - gameplay scale;
 - collision/streaming;
-- animation/rig contracts;
+- rig/animation contracts;
 - equipment sockets;
 - building placement;
 - procedural generation;
 - performance architecture.
 
-Do not replace a useful placeholder merely because it is ugly if the underlying system is still changing rapidly.
+Do not replace a useful placeholder merely because it looks unfinished while its underlying system is unstable.
 
-Conversely, once a system is stable enough for meaningful visual evaluation, presentation work should progressively replace placeholders behind the same logical contracts.
+Once a system is stable enough for meaningful visual evaluation, improve presentation behind the same logical contracts.
 
-## Production-efficiency rules
+## 23. Production-efficiency rules
 
 Prefer:
 - reusable modular kits;
+- shared geometry families;
 - material families;
 - trim sheets/decals/masks;
-- asset variants;
-- LODs/instancing/batching where measured useful;
-- high detail where the camera/player attention justifies it.
+- procedural/per-instance variation;
+- shaders that create perceived richness;
+- LOD/instancing/batching;
+- hero detail only where attention/camera distance justifies it.
 
 Avoid:
 - unique hero-level asset cost for generic clutter;
-- presentation file paths becoming gameplay identity;
-- final-art production before scale/distribution/contracts are stable;
-- visual complexity that destroys gameplay readability;
-- art changes that require rewriting deterministic world generation.
+- gameplay identity tied to presentation paths;
+- final-art production before scale/contracts are stable;
+- geometry detail that provides little visible benefit;
+- art decisions that force deterministic world-generation rewrites.
 
-## Intentionally adjustable decisions
+## 24. Intentionally adjustable decisions
 
-This document does **not** lock:
-- exact color palette values;
-- exact polygon/triangle budgets;
-- exact texture resolutions;
-- exact asset counts per biome;
+Not locked:
+- exact palettes;
+- polygon budgets;
+- texture resolutions;
+- asset counts per biome;
 - final shader stack;
-- final renderer features;
-- final LOD distances;
-- final lighting performance budgets;
-- final UI typography/layout;
-- final character topology/face system;
-- final animation production method;
-- final vegetation technology.
+- renderer feature selection;
+- LOD distances;
+- lighting budgets;
+- final vegetation technology;
+- final character topology;
+- animation production method.
 
-Those require later profiling, art tests and production experience.
+These require tests and profiling.
 
 ## Locked direction summary
 
-Unless explicitly superseded by a later project/art decision:
-
-1. Underworld targets stylized dark-fantasy 3D.
-2. Environment geometry stays comparatively economical and readable.
-3. Player, bosses, important creatures, weapons and armor may use substantially higher detail.
-4. Stylized PBR materials, atmosphere, lighting and restrained VFX are major quality pillars.
-5. Surface presentation remains more grounded; underground regions may use stronger controlled visual identities.
-6. Modular/reusable assets are preferred over one-off production everywhere.
-7. Prototype primitives remain valid until replacing them materially helps evaluation or production.
-8. Visual assets and render techniques never become world/gameplay/persistence identity.
-9. Shader treatments may change perceived style; true silhouette changes require alternate geometry/renderer representation.
-10. Final technical budgets remain open until measured and profiled.
+1. Stylized dark-fantasy 3D remains the target.
+2. Environment geometry remains comparatively economical with strong silhouettes.
+3. Perceived richness should come heavily from materials, shaders, lighting, atmosphere and VFX.
+4. Trees/vegetation use reusable archetypes, foliage clusters, shader variation and LOD rather than brute-force leaf geometry.
+5. Player/hero assets may use substantially more detail than generic environment assets.
+6. Modular geometry/content is preferred over one-off asset production.
+7. Shape vocabulary is generally more valuable early than cosmetic duplication.
+8. Prototype geometry remains valid until replacing it materially improves evaluation.
+9. Presentation never becomes authoritative gameplay/world/persistence identity.
+10. Final technical budgets remain profile-driven.

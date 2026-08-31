@@ -1,12 +1,10 @@
 # Underworld Documentation Architecture
 
-Status: **LOCKED organization contract**
+Status: **LOCKED organization and authority contract**
 
-The documentation tree is part of the project architecture. It must remain navigable as the game grows from prototype systems into many content families.
+The documentation tree is part of project architecture. It must remain navigable as the project grows from prototype systems into large content/runtime families.
 
-## Numbered top-level sections
-
-Numeric prefixes are **documentation ordering markers only**. They are not game versions, content IDs, save IDs, runtime IDs, or code namespaces.
+## Top-level organization
 
 ```text
 docs/
@@ -19,115 +17,214 @@ docs/
 └─ 60_validation/
 ```
 
-The gaps between numbers are intentional. New top-level sections may be inserted later without renaming the whole tree.
+Numeric prefixes are reading/organization markers only. They are not game versions, save IDs, content IDs or namespaces.
 
 ## Section responsibilities
 
 ### `00_project`
-Project-wide intent and governance:
-- game pillars
-- development rules
-- decision log
-- glossary
-- documentation architecture
+Project-wide intent/governance:
+- game pillars;
+- decision index;
+- ADRs for substantial cross-system decisions;
+- milestones/history;
+- master roadmap;
+- visual direction;
+- glossary/documentation rules.
 
 ### `10_architecture`
-System boundaries and dependency direction:
-- content architecture
-- runtime ownership
-- persistence architecture
-- registry/resolution architecture
-- cross-system dependency rules
+System ownership/dependency boundaries:
+- content architecture;
+- runtime ownership;
+- persistence boundaries;
+- system ownership maps;
+- performance/scalability;
+- presentation boundaries.
 
-Architecture documents answer: **How is the system divided and who owns what?**
+Answers: **who owns what, and what may depend on what?**
 
 ### `20_world`
-World-specific architecture and design:
-- surface / Underworld relationship
-- deterministic generation
-- graph topology
-- streaming
-- persistence of world deltas
-- terrain rules
+World-specific architecture/design:
+- Overworld/Underworld relationship;
+- deterministic generation;
+- topology;
+- gateways/transitions;
+- streaming-facing world contracts;
+- terrain/world-delta rules.
 
 ### `30_gameplay`
 Runtime gameplay contracts:
-- character
-- combat
-- survival
-- crafting
-- building
-- harvesting
+- character/combat;
+- survival;
+- crafting;
+- building;
+- harvesting/resources;
+- other player/simulation systems.
 
 ### `40_content`
-Definition contracts and taxonomies:
-- content IDs
-- categories
-- capabilities
-- references
-- rulebooks for items, creatures, structures, attacks, animations, audio, VFX, etc.
+Definition/rulebook contracts:
+- semantic IDs;
+- categories/capabilities;
+- references;
+- valid item/creature/build/attack/audio/VFX/etc. families.
 
-Rulebooks answer: **What makes one member of this content family valid?**
+Answers: **what makes one member of this content family valid?**
 
 ### `50_authoring`
 Human workflows:
-- adding a weapon
-- adding a creature
-- adding an animation set
-- adding a structure
-- validation commands and expected feedback
+- adding content;
+- asset-authoring procedures;
+- validation commands/expected feedback.
 
-Authoring documents answer: **How do I create another valid piece of content?**
+Answers: **how do I create another valid member?**
 
 ### `60_validation`
-Machine-enforced contracts:
-- content validation
-- worldgen validation
-- combat validation
-- migration fixtures
-- dependency/reference checks
+Machine-enforced validation ownership:
+- content validation;
+- deterministic/worldgen validation;
+- migration fixtures;
+- runtime/scale contracts;
+- dependency/reference checks.
 
-Validation documents answer: **How do we prove the architecture and content contracts still hold?**
+Answers: **how do we prove the contract still holds?**
 
-## Architecture vs rulebook vs authoring guide
+---
 
-These are deliberately separate document types.
+# Decision authority and supersession
 
-An architecture document defines ownership and dependency direction.
-A rulebook defines validity for a content family.
-An authoring guide gives the concrete creation workflow.
-A validation document defines executable checks.
+## Chronological history
 
-Do not collapse all four into one giant document.
+`docs/DECISION_LOG.md` preserves historical decision chronology. Do not delete or silently edit old decisions merely because architecture changed later.
 
-## Migration of existing flat documents
+## Decision index
 
-Existing root-level documents under `docs/` remain authoritative until explicitly migrated. This architecture cycle establishes the destination structure first.
+`docs/00_project/DECISION_INDEX.md` is the current navigation/status layer. It tells workers whether a historical decision remains active, has been superseded, is recorded history or remains open.
 
-Migration rules:
-1. move documents only in documentation-only changes;
-2. update repository references in the same change;
-3. preserve history and meaning;
-4. do not rewrite design merely to fit a folder name;
-5. avoid mass renames while active implementation branches depend on old paths.
+The index cannot invent supersession by itself; it must point to an explicit later decision/ADR.
 
-New documentation should use the numbered architecture unless there is a strong compatibility reason not to.
+## ADRs
 
-## Naming rules
+A dedicated ADR is appropriate when a change has substantial cross-system consequences, explicit alternatives/trade-offs or a meaningful migration/supersession story.
 
-- Folder numbers organize reading order only.
-- File names remain semantic and descriptive.
-- Game content uses semantic IDs such as `item.weapon.iron_sword`; documentation numbers never enter those IDs.
-- Avoid dates/version numbers in permanent architecture filenames unless the document is explicitly historical.
+An **ACTIVE later ADR may supersede specifically named historical locked clauses** while preserving the old text as history.
 
-## Scaling rule
+Required ADR properties:
+- date/status;
+- normative new decision;
+- rationale/trade-off;
+- exact old clauses/decisions superseded;
+- affected owning contracts;
+- migration/compatibility consequences where relevant.
 
-Before a content family becomes large, it should have:
-1. architecture placement;
+The current example is:
+- [`ADR-001_TWO_WORLD_DOMAINS.md`](ADR-001_TWO_WORLD_DOMAINS.md)
+
+which supersedes specifically named one-continuous-world assumptions from the 2026-08-27 history.
+
+### Authority order for a changed rule
+
+For one explicitly superseded topic, read in this order:
+
+```text
+latest explicit ACTIVE decision / ADR
+        |
+        v
+current owning architecture contract
+        |
+        v
+DECISION_INDEX current status
+        |
+        v
+older DECISION_LOG entry as historical rationale
+```
+
+For untouched topics, the older locked decision remains active.
+
+Never use a stale historical `LOCKED` label to override a later explicit supersession.
+
+---
+
+# Document-type boundaries
+
+An **architecture document** defines ownership/invariants/dependency direction.
+
+A **rulebook** defines validity for one semantic content family.
+
+An **authoring guide** defines concrete human workflow.
+
+A **validation document** defines executable proof/ownership of checks.
+
+A **roadmap** defines sequencing/dependencies/integration gates but does not silently rewrite architecture.
+
+A **task/issue** defines current execution state and acceptance work; completed task text is not automatically permanent architecture.
+
+Do not collapse all of these into one giant document.
+
+---
+
+# Current-versus-historical conflicts
+
+When a newer decision changes architecture:
+1. preserve old history;
+2. create the explicit replacement decision/ADR;
+3. update the owning normative contracts;
+4. update `DECISION_INDEX.md`;
+5. update routing/ownership indexes affected by the change;
+6. mark obsolete task cards not-planned/superseded where necessary;
+7. retain historical milestone evidence unless the new decision explicitly invalidates the result itself.
+
+A historical implementation can remain accepted evidence even if the final product architecture later uses a different composition boundary.
+
+Example: a traversable continuous cave prototype remains evidence that Underworld topology/geometry/streaming worked, even if later world travel uses an explicit loading gateway.
+
+---
+
+# Existing flat root docs
+
+Root-level documents under `docs/` remain authoritative until explicitly superseded/migrated.
+
+When a root contract is replaced by a numbered destination:
+- leave an explicit compatibility/supersession stub at the old path when other docs/code/tasks may still link to it;
+- point to the new authoritative file;
+- preserve historical text through Git history rather than maintaining two competing active copies.
+
+This is the migration pattern used for the generation-pipeline contract after ADR-001.
+
+---
+
+# Naming rules
+
+- numeric folder prefixes never enter semantic game IDs;
+- filenames should describe their semantic purpose;
+- avoid dates/version numbers in permanent architecture filenames except explicit historical records;
+- ADR numbers are stable governance identifiers, not game/content versions;
+- semantic content IDs remain forms such as `item.weapon.iron_sword` independent of documentation paths.
+
+---
+
+# Scaling rule for large families
+
+Before a content/system family becomes large, establish where applicable:
+1. architecture ownership;
 2. stable identity rules;
-3. category/capability rules where applicable;
-4. a rulebook;
-5. an authoring workflow;
-6. validation coverage.
+3. category/capability rules;
+4. rulebook/schema;
+5. authoring workflow;
+6. validation coverage;
+7. scale-envelope/performance expectations.
 
-The purpose is to make future growth primarily an authoring problem rather than repeated infrastructure rewrites.
+The goal is to make later growth primarily an authoring/content problem rather than repeated infrastructure rewrites.
+
+This is especially important for future 1000+ building-piece catalogs, world populations and multiplayer-scale runtime systems.
+
+---
+
+# Maintenance rule
+
+Documentation must not knowingly present contradictory rules as simultaneously current.
+
+Before freezing a major architecture documentation candidate:
+- search affected ownership contracts for old locked assumptions;
+- explicitly supersede or repair contradictions;
+- keep historical evidence identifiable as historical;
+- ensure task boards/roadmaps point to current authority;
+- require independent review for substantial cross-system changes.
