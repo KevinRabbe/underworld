@@ -8,8 +8,11 @@ const ItemContainerState := preload("res://gameplay/items/inventory/item_contain
 const EquipmentHotbarState := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
 const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
 const GameSaveSlotService := preload("res://gameplay/persistence/game_save_slot_service.gd")
+const PlayerSupportBounds := preload("res://gameplay/player/player_collision_support_bounds.gd")
 
 const TEST_SEED: int = 2174242
+const BOUNDARY_INSET: float = 0.10
+const FLOOR_CLEARANCE: float = 0.04
 
 
 static func run_runtime(tree: SceneTree) -> Array[String]:
@@ -24,7 +27,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		return failures
 
 	# Start from a normal detached Continue, then use the production observer path
-	# to reach a real cell that was not part of the entrance handoff.
+	# to reach a real, physically standable near-boundary cell outside the finite
+	# entrance handoff. This is not a synthetic floor/fixture injection.
 	var game: Node = packed.instantiate()
 	game.set("enable_debug_hud", false)
 	if not bool(game.call("prepare_continue", candidate)):
@@ -40,9 +44,9 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		_free_attached(game)
 		_cleanup_slot()
 		return failures
-	var target: Dictionary = _find_observer_target(runtime)
+	var target: Dictionary = await _find_observer_boundary_target(runtime, player, tree)
 	if target.is_empty():
-		failures.append("production observer path did not realize an underground cell outside entrance handoff")
+		failures.append("production observer path did not find a standable near-boundary underground target outside entrance handoff")
 		_free_attached(game)
 		_cleanup_slot()
 		return failures
@@ -51,8 +55,20 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var target_source: String = str(target["source"])
 	var target_provenance: String = str(target["provenance"])
 	player.global_position = target_position
-	for _step in range(4):
+	player.velocity = Vector3.ZERO
+	for _step in range(12):
 		runtime.update_player_position(target_position)
+
+	var initial_support: Dictionary = _support_keys_for_player(runtime, player, target_position)
+	if not bool(initial_support.get("success", false)):
+		failures.append("deep observer target support query failed: %s" % [initial_support.get("diagnostics", [])])
+	elif initial_support.get("keys", []).size() < 2:
+		failures.append("deep observer target does not cross a runtime cell boundary")
+	else:
+		for key in initial_support.get("keys", []):
+			var support_record = runtime.streamer.records.get(str(key), null)
+			if not _record_is_gameplay_ready(runtime, support_record, str(key)):
+				failures.append("deep observer target support cell is not gameplay-ready before SAVE: %s" % str(key))
 
 	# Real production snapshot -> durable slot -> detached load.
 	var request_variant: Variant = game.call("build_save_request")
@@ -97,7 +113,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 
 	# Recreate the real Game. The scene child readiness gate runs before Game._ready
 	# and must hold the entire Game subtree before the restored Player can receive
-	# a physics/process frame at the deep position.
+	# a physics/process frame at the deep exact position.
 	var resumed: Node = packed.instantiate()
 	resumed.set("enable_debug_hud", false)
 	if not bool(resumed.call("prepare_continue", loaded_candidate)):
@@ -121,8 +137,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	if not bool(gate.call("is_holding")):
 		failures.append("deep Continue readiness gate was not holding restored Player startup")
 
-	# Resolve synchronously in the test instead of waiting a frame. Production uses
-	# the gate's deferred call while the Game subtree remains processing-disabled.
+	# Resolve synchronously in the test instead of waiting an idle frame. Production
+	# uses the deferred call while the Game subtree remains processing-disabled.
 	var readiness_variant: Variant = gate.call("resolve_now")
 	if not readiness_variant is Array or not readiness_variant.is_empty():
 		failures.append("deep Continue local reconstruction failed: %s" % [readiness_variant])
@@ -131,18 +147,40 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	if not bool(gate.call("resume_ready")):
 		failures.append("deep Continue readiness gate did not report resolved state")
 	if str(gate.call("resume_cell_key")) != target_key:
-		failures.append("deep Continue reconstructed a different runtime cell than the saved position")
+		failures.append("deep Continue reconstructed a different containing runtime cell than the saved position")
+	var resumed_support_variant: Variant = gate.call("resume_support_cell_keys")
+	if not resumed_support_variant is Array or resumed_support_variant.size() < 2:
+		failures.append("deep Continue gate did not require the multi-cell Player support envelope")
+	else:
+		for raw_key in resumed_support_variant:
+			var key: String = str(raw_key)
+			var support_record = resumed_runtime.streamer.records.get(key, null)
+			if not _record_is_gameplay_ready(resumed_runtime, support_record, key):
+				failures.append("deep Continue released Game before required support cell readiness: %s" % key)
 	if not resumed_player.global_position.is_equal_approx(target_position):
 		failures.append("deep Continue relocated Player while reconstructing local cave")
 
 	var resumed_record = resumed_runtime.streamer.records.get(target_key, null)
 	if not _record_is_gameplay_ready(resumed_runtime, resumed_record, target_key):
-		failures.append("deep Continue released Player before saved cell render/collision readiness")
+		failures.append("deep Continue released Player before saved containing-cell render/collision readiness")
 	elif (
 		resumed_record.source_fingerprint != target_source
 		or resumed_record.provenance_fingerprint != target_provenance
 	):
 		failures.append("deep Continue rebuilt saved cell with different canonical source/provenance")
+
+	# Exercise actual SceneTree physics after release; direct _physics_process calls
+	# are not accepted evidence for collision-safe Continue.
+	var first_physics_position: Vector3 = resumed_player.global_position
+	for _frame in range(6):
+		await tree.physics_frame
+	if resumed_player.has_method("is_defeated") and bool(resumed_player.call("is_defeated")):
+		failures.append("deep Continue first real physics frames triggered Player defeat")
+	var after_physics: Vector3 = resumed_player.global_position
+	if Vector2(after_physics.x, after_physics.z).distance_to(Vector2(first_physics_position.x, first_physics_position.z)) > 0.05:
+		failures.append("deep Continue first physics frames horizontally relocated Player")
+	if absf(after_physics.y - first_physics_position.y) > 0.35:
+		failures.append("deep Continue first physics frames fell/teleported Player despite support readiness")
 
 	# Deliberately backtrack to the generated entrance and return to the saved cell.
 	# This verifies that reconstruction did not create a one-way/stale runtime state.
@@ -162,11 +200,13 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 				+ resumed_runtime.streamer.cell_size * 0.5
 			)
 			resumed_player.global_position = entrance_position
+			resumed_player.velocity = Vector3.ZERO
 			for _step in range(8):
 				resumed_runtime.update_player_position(entrance_position)
 			if not resumed_runtime.gate_is_open(entrance_id):
 				failures.append("deep Continue backtrack did not restore traversable entrance readiness")
 			resumed_player.global_position = target_position
+			resumed_player.velocity = Vector3.ZERO
 			for _step in range(24):
 				resumed_runtime.update_player_position(target_position)
 			var returned_record = resumed_runtime.streamer.records.get(target_key, null)
@@ -185,7 +225,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	return failures
 
 
-static func _find_observer_target(runtime) -> Dictionary:
+static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> Dictionary:
 	if runtime == null or runtime.streamer == null or runtime.entrance_plans.is_empty():
 		return {}
 	var entrance_ids: Array = runtime.entrance_plans.keys()
@@ -206,28 +246,160 @@ static func _find_observer_target(runtime) -> Dictionary:
 		Vector3(anchor_address.coordinate) * runtime.streamer.cell_size
 		+ runtime.streamer.cell_size * 0.5
 	)
-	for _step in range(32):
+	for _step in range(48):
 		runtime.update_player_position(anchor_position)
-		var keys: Array = runtime.streamer.records.keys()
-		keys.sort()
-		for raw_key in keys:
-			var key: String = str(raw_key)
-			if handoff_keys.has(key):
+	await tree.physics_frame
+
+	var cell_size: Vector3 = runtime.streamer.cell_size
+	var keys: Array = runtime.streamer.records.keys()
+	keys.sort()
+	for raw_key in keys:
+		var key: String = str(raw_key)
+		if handoff_keys.has(key):
+			continue
+		var record = runtime.streamer.records.get(key, null)
+		if record == null or record.cell_address == null:
+			continue
+		var coordinate: Vector3i = record.cell_address.coordinate
+		# Keep this proof above the legacy pre-#394 global fall threshold while it
+		# exercises #372. #394 later removes Y as cross-domain validity authority.
+		if coordinate.y >= 0 or coordinate.y < -2:
+			continue
+		if not _record_is_gameplay_ready(runtime, record, key):
+			continue
+		for axis in [Vector3i(1, 0, 0), Vector3i(0, 0, 1)]:
+			var neighbor_coordinate: Vector3i = coordinate + axis
+			var neighbor_key: String = "gcell1:r1:x%d:y%d:z%d" % [
+				neighbor_coordinate.x,
+				neighbor_coordinate.y,
+				neighbor_coordinate.z,
+			]
+			if handoff_keys.has(neighbor_key):
 				continue
-			var record = runtime.streamer.records.get(key, null)
-			if record == null or record.cell_address == null:
+			var neighbor = runtime.streamer.records.get(neighbor_key, null)
+			if not _record_is_gameplay_ready(runtime, neighbor, neighbor_key):
 				continue
-			if int(record.cell_address.coordinate.y) >= 0:
+			var probe := Vector3(
+				(float(coordinate.x) + 0.5) * cell_size.x,
+				(float(coordinate.y) + 0.5) * cell_size.y,
+				(float(coordinate.z) + 0.5) * cell_size.z
+			)
+			if axis.x != 0:
+				probe.x = float(coordinate.x + 1) * cell_size.x - BOUNDARY_INSET
+			else:
+				probe.z = float(coordinate.z + 1) * cell_size.z - BOUNDARY_INSET
+			var floor_position_variant: Variant = _generated_floor_position(runtime, coordinate, probe)
+			if not floor_position_variant is Vector3:
 				continue
-			if not _record_is_gameplay_ready(runtime, record, key):
+			var floor_position: Vector3 = floor_position_variant
+			var support: Dictionary = _support_keys_for_player(runtime, player, floor_position)
+			if not bool(support.get("success", false)) or support.get("keys", []).size() < 2:
+				continue
+			var all_ready: bool = true
+			for support_key in support.get("keys", []):
+				var support_record = runtime.streamer.records.get(str(support_key), null)
+				if not _record_is_gameplay_ready(runtime, support_record, str(support_key)):
+					all_ready = false
+					break
+			if not all_ready:
+				continue
+
+			# Prove this is a real standable generated point before saving it. Let the
+			# actual Player physics settle for a few frames, then retain that exact
+			# settled position (X/Z remain deliberately near the cell face).
+			player.global_position = floor_position
+			player.velocity = Vector3.ZERO
+			var before: Vector3 = floor_position
+			for _frame in range(3):
+				await tree.physics_frame
+			if player.has_method("is_defeated") and bool(player.call("is_defeated")):
+				return {}
+			var settled: Vector3 = player.global_position
+			if Vector2(settled.x, settled.z).distance_to(Vector2(before.x, before.z)) > 0.05:
+				continue
+			if absf(settled.y - before.y) > 0.30:
+				continue
+			for _step in range(12):
+				runtime.update_player_position(settled)
+			var settled_key: String = runtime.streamer.records.get(key, record).cell_address.canonical_text()
+			var settled_record = runtime.streamer.records.get(settled_key, null)
+			if not _record_is_gameplay_ready(runtime, settled_record, settled_key):
 				continue
 			return {
-				"key": key,
-				"position": Vector3(record.cell_address.coordinate) * runtime.streamer.cell_size + runtime.streamer.cell_size * 0.5,
-				"source": record.source_fingerprint,
-				"provenance": record.provenance_fingerprint,
+				"key": settled_key,
+				"position": settled,
+				"source": settled_record.source_fingerprint,
+				"provenance": settled_record.provenance_fingerprint,
 			}
 	return {}
+
+
+static func _generated_floor_position(runtime, coordinate: Vector3i, probe: Vector3) -> Variant:
+	if runtime == null or not runtime.is_inside_tree():
+		return null
+	var world := runtime.get_world_3d()
+	if world == null:
+		return null
+	var cell_size: Vector3 = runtime.streamer.cell_size
+	var ray_from := Vector3(
+		probe.x,
+		float(coordinate.y + 1) * cell_size.y - 0.25,
+		probe.z
+	)
+	var ray_to := Vector3(
+		probe.x,
+		float(coordinate.y) * cell_size.y + 0.25,
+		probe.z
+	)
+	var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to)
+	query.collision_mask = 1
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+	var hit: Dictionary = world.direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return null
+	var normal_variant: Variant = hit.get("normal", null)
+	var position_variant: Variant = hit.get("position", null)
+	var collider_variant: Variant = hit.get("collider", null)
+	if not normal_variant is Vector3 or not position_variant is Vector3:
+		return null
+	if normal_variant.dot(Vector3.UP) < 0.55:
+		return null
+	if collider_variant == null or not collider_variant is Node or collider_variant.get_parent() != runtime:
+		return null
+	var position: Vector3 = position_variant + Vector3.UP * FLOOR_CLEARANCE
+	if position.y >= 0.0 or position.y <= -95.0:
+		return null
+	return position
+
+
+static func _support_keys_for_player(runtime, player, position: Vector3) -> Dictionary:
+	var support_result: Dictionary = PlayerSupportBounds.bounds_at(player, position)
+	if not bool(support_result.get("success", false)):
+		return support_result
+	var bounds_variant: Variant = support_result.get("bounds", null)
+	if not bounds_variant is AABB:
+		return {"success": false, "keys": [], "diagnostics": ["support bounds missing AABB"]}
+	var bounds: AABB = bounds_variant
+	var cell_size: Vector3 = runtime.streamer.cell_size
+	var maximum: Vector3 = bounds.end - Vector3.ONE * 0.0001
+	var minimum_coordinate := Vector3i(
+		floori(bounds.position.x / cell_size.x),
+		floori(bounds.position.y / cell_size.y),
+		floori(bounds.position.z / cell_size.z)
+	)
+	var maximum_coordinate := Vector3i(
+		floori(maximum.x / cell_size.x),
+		floori(maximum.y / cell_size.y),
+		floori(maximum.z / cell_size.z)
+	)
+	var keys: Array[String] = []
+	for x in range(minimum_coordinate.x, maximum_coordinate.x + 1):
+		for y in range(minimum_coordinate.y, maximum_coordinate.y + 1):
+			for z in range(minimum_coordinate.z, maximum_coordinate.z + 1):
+				keys.append("gcell1:r1:x%d:y%d:z%d" % [x, y, z])
+	keys.sort()
+	return {"success": true, "keys": keys, "diagnostics": []}
 
 
 static func _record_is_gameplay_ready(runtime, record, key: String) -> bool:
