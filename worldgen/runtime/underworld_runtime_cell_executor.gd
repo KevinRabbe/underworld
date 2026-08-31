@@ -23,6 +23,7 @@ var observer_position: Vector3 = Vector3.ZERO
 var _jobs: Array[Dictionary] = []
 var _job_keys: Dictionary = {}
 var _mesh_cache: Dictionary = {}
+var last_pump_candidate_count: int = 0
 
 
 func configure(streamer_value, definition_service_value, controller_value) -> Array[String]:
@@ -32,6 +33,7 @@ func configure(streamer_value, definition_service_value, controller_value) -> Ar
 	_jobs.clear()
 	_job_keys.clear()
 	_mesh_cache.clear()
+	last_pump_candidate_count = 0
 	var failures: Array[String] = []
 	if streamer == null:
 		failures.append("Runtime cell executor requires UnderworldRuntimeStreamer")
@@ -42,16 +44,19 @@ func configure(streamer_value, definition_service_value, controller_value) -> Ar
 	return failures
 
 
-func submit(request, tier: String) -> void:
+func submit(request, tier: String) -> bool:
 	if request == null or streamer == null or definition_service == null or controller == null:
-		return
+		return false
 	if not TIER_PRIORITY.has(tier):
-		return
+		return false
+	if not _job_is_current(request, tier):
+		return false
 	var key := _job_key(request, tier)
 	if _job_keys.has(key):
-		return
+		return true
 	_jobs.append({"request": request, "tier": tier, "key": key})
 	_job_keys[key] = true
+	return true
 
 
 func set_observer_position(position: Vector3) -> void:
@@ -61,6 +66,10 @@ func set_observer_position(position: Vector3) -> void:
 func pump(max_expensive_jobs: int = 1, max_total_jobs: int = 16) -> int:
 	if streamer == null or definition_service == null or controller == null:
 		return 0
+	# Drop retired/replaced incarnations before ordering so selection cost follows
+	# current relevance instead of travel history.
+	_prune_stale_jobs()
+	last_pump_candidate_count = _jobs.size()
 	_jobs.sort_custom(Callable(self, "_job_less"))
 	var processed := 0
 	var expensive := 0
@@ -72,6 +81,8 @@ func pump(max_expensive_jobs: int = 1, max_total_jobs: int = 16) -> int:
 		if not _job_is_current(request, tier):
 			_remove_job(index)
 			continue
+		# Streamer frontier scheduling should queue only dependency-ready work. Keep
+		# this check fail-closed as a defensive invariant.
 		if not _dependencies_ready(request, tier):
 			index += 1
 			continue
@@ -90,18 +101,40 @@ func pump(max_expensive_jobs: int = 1, max_total_jobs: int = 16) -> int:
 	return processed
 
 
+func cancel_record(record_key: String) -> void:
+	if record_key.is_empty():
+		return
+	for index in range(_jobs.size() - 1, -1, -1):
+		var request = _jobs[index].get("request", null)
+		if request == null or request.cell_address == null:
+			_remove_job(index)
+			continue
+		if request.cell_address.canonical_text() == record_key:
+			_remove_job(index)
+	var prefix := record_key + "|"
+	for raw_key in _mesh_cache.keys().duplicate():
+		var key := str(raw_key)
+		if key.begins_with(prefix):
+			_mesh_cache.erase(raw_key)
+
+
 func prune_runtime_cache() -> void:
 	if streamer == null:
 		_mesh_cache.clear()
 		return
 	for key in _mesh_cache.keys().duplicate():
-		var record = streamer.records.get(str(key).get_slice("|", 0), null)
+		var record_key: String = str(key).get_slice("|", 0)
+		var record = streamer.records.get(record_key, null)
 		if record == null or record.release_pending or record.demand_count("voxel_geometry") <= 0:
 			_mesh_cache.erase(key)
 
 
 func queued_job_count() -> int:
 	return _jobs.size()
+
+
+func mesh_cache_count() -> int:
+	return _mesh_cache.size()
 
 
 func _execute_job(request, tier: String) -> bool:
@@ -243,10 +276,20 @@ func _accept_failure(request, tier: String, diagnostics: Array) -> void:
 
 
 func _settle_release_pending_cells() -> void:
-	for record in streamer.records.values():
+	if streamer == null or not streamer.has_method("release_pending_record_keys"):
+		return
+	for key in streamer.release_pending_record_keys():
+		var record = streamer.records.get(key, null)
 		if record == null or not record.release_pending or not record.demands.is_empty():
 			continue
 		streamer.release_cell(record.cell_address)
+
+
+func _prune_stale_jobs() -> void:
+	for index in range(_jobs.size() - 1, -1, -1):
+		var job: Dictionary = _jobs[index]
+		if not _job_is_current(job.get("request", null), str(job.get("tier", ""))):
+			_remove_job(index)
 
 
 func _job_less(a: Dictionary, b: Dictionary) -> bool:
@@ -264,8 +307,8 @@ func _job_less(a: Dictionary, b: Dictionary) -> bool:
 
 
 func _distance_to_observer(address) -> float:
-	var cell_size: Vector3 = streamer.cell_size if streamer != null else Vector3(32, 32, 32)
-	var center := Vector3(address.coordinate) * cell_size + cell_size * 0.5
+	var current_cell_size: Vector3 = streamer.cell_size if streamer != null else Vector3(32, 32, 32)
+	var center: Vector3 = Vector3(address.coordinate) * current_cell_size + current_cell_size * 0.5
 	return center.distance_squared_to(observer_position)
 
 
