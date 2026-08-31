@@ -1,163 +1,182 @@
 # Underworld — Persistence and Generator Versioning Architecture
 
-## Status
+Status: **LOCKED architecture; updated for explicit world domains**
 
-This document defines how saves reference deterministic generated world truth, how player-caused deltas survive streaming, and how generator changes are classified/migrated without silently applying old state to the wrong world objects.
+This document defines how saves reference deterministic generated truth, how durable deltas survive streaming, how Player location is represented across independent world domains, and how generator changes are classified/migrated safely.
 
-The compatibility boundaries are **LOCKED at the architectural level**. Exact file format, compression and long-term legacy-support policy remain implementation/product decisions.
+Related current architecture:
+- [`00_project/ADR-001_TWO_WORLD_DOMAINS.md`](00_project/ADR-001_TWO_WORLD_DOMAINS.md)
+- [`20_world/WORLD_DOMAINS_AND_TRANSITIONS.md`](20_world/WORLD_DOMAINS_AND_TRANSITIONS.md)
+- [`STREAMING_OWNERSHIP.md`](STREAMING_OWNERSHIP.md)
 
 Core rule:
 
-> **A save stores player/world-state deltas against an explicitly identified deterministic generation contract. It never silently assumes that today's generator is equivalent to the generator that created the save.**
+> **A save stores compact durable semantic state against explicitly identified deterministic generation contracts. Runtime Nodes/caches are reconstructed, not persisted as world truth.**
 
 ---
 
-## 1. What is saved versus regenerated — LOCKED
+## 1. Root world and domain identity — LOCKED
 
-### Regenerated from deterministic world contracts
-
-```text
-untouched surface terrain
-untouched cave topology
-untouched cave base geometry
-untouched procedural object placement
-untouched entrances
-untouched special-location hooks
-other untouched deterministic world definitions
-```
-
-### Saved as durable player/world state
-
-```text
-player inventory/progression state
-harvested/removed generated object IDs
-partial persistent object state where required
-cleared collapses/changed special locations
-terrain/deformation deltas
-player-built structures
-other explicit player-caused or persistent simulation state
-```
-
-Do not serialize entire visited cave networks merely because the player loaded them once.
-
----
-
-## 2. Logical persistence owner — `WorldDeltaStore`
-
-`WorldDeltaStore` is the single logical authority for persistent generated-world modifications.
-
-Conceptual responsibilities:
-
-```text
-load/validate save payload
-expose read-only bounded delta views
-apply explicit world-state mutations
-track dirty shards/categories
-serialize atomically/safely
-run schema/generator migrations
-quarantine unresolved references
-```
-
-Runtime chunks/cells may cache/query deltas but do not own durable state.
-
----
-
-## 3. Version concepts must remain separate
-
-Do not overload one integer called `version` to mean everything.
-
-### 3.1 `save_schema_version`
-
-Describes the serialized save layout.
-
-Examples of changes:
-
-```text
-rename JSON fields
-split one state map into two
-change how tools/inventory are represented
-add physical save shards/indexes
-```
-
-A save-schema migration can occur without changing the generated world.
-
-### 3.2 `seed_schema_version`
-
-Defined in `DETERMINISTIC_SEED_DOMAINS.md`.
-
-Describes the fundamental canonical seed-derivation encoding/hash contract.
-
-Changes should be rare and are major world-generation compatibility events.
-
-### 3.3 `stable_address_schema_version`
-
-Describes the canonical persistent stable-address/ID encoding semantics where a version distinction is required.
-
-A readable StableId format may evolve without changing semantic identity if migration is lossless; an incompatible semantic address change is a generator compatibility boundary.
-
-### 3.4 `generator_manifest`
-
-Identifies the complete deterministic generation contract for one world.
-
-It is not merely a random salt.
-
-The manifest pins the revisions/configuration required to reproduce world truth.
-
----
-
-## 4. `GeneratorManifest` — LOCKED DIRECTION
-
-Conceptual content:
-
-```text
-GeneratorManifest
-- manifest_schema_version
-- manifest_id / canonical fingerprint
-- seed_schema_version
-- stable_address_schema_version
-- stage revisions
-- seed-domain IDs + revisions used by persistent generation
-- depth/profile/config revisions
-- surface generation contract revision(s)
-- Underworld generation contract revision(s)
-- persistent noise/algorithm/config revision references
-- other deterministic-generation dependencies required for reproduction
-```
-
-### Important rule
-
-The manifest must pin generation **configuration**, not only code labels.
-
-An old world must not silently read today's mutable default generation settings if those settings changed.
-
-Generation parameters/profiles must therefore be either:
-
-1. embedded/snapshotted into the world's immutable generation manifest/config package; or
-2. referenced by an immutable versioned config asset/package that remains reproducible.
-
-Exact storage choice remains open.
-
----
-
-## 5. Manifest identity
-
-A manifest should have a canonical fingerprint/ID derived from its canonical serialized contract description.
+One save/world owns one root identity, but contains independent procedural domains.
 
 Conceptually:
 
 ```text
-manifest_id = fingerprint(canonical GeneratorManifest)
+RootWorld
+- world_id
+- root seed
+- pinned generator manifest/package
+- OVERWORLD domain contract/state
+- UNDERWORLD domain contract/state
 ```
 
-This allows caches, saves and diagnostics to state exactly which deterministic contract they expect.
+`OVERWORLD` and `UNDERWORLD` positions are domain-local. Numeric coordinates are meaningless without the owning domain.
 
-Do not derive world randomness directly from `manifest_id`; domain isolation rules still apply.
+No save/migration code may infer that identical XYZ coordinates in different domains refer to the same physical place.
 
 ---
 
-## 6. World metadata
+## 2. Domain-qualified Player location — LOCKED
 
-Every modern save/world should record enough immutable metadata to identify its generated baseline.
+A durable Player location is conceptually:
+
+```text
+PlayerWorldLocation
+- active_domain
+- domain_local_transform
+```
+
+The saved domain is authoritative.
+
+Saving in the Underworld does not require an equivalent Overworld position. Saving in the Overworld does not require an equivalent Underworld position.
+
+A gateway/paired-return reference is saved only when gameplay semantics require it; it is never reconstructed by nearest-coordinate guessing.
+
+### Continue
+
+Continue conceptually performs:
+
+```text
+read save + active_domain
+-> validate pinned domain generator contract
+-> reconstruct required deterministic domain truth
+-> apply durable domain/player deltas
+-> prepare bounded render/collision support around exact saved transform
+-> instantiate/activate Player
+-> release physics/control only after local safety readiness
+```
+
+Loading an Underworld save must not require first constructing the Overworld runtime.
+
+---
+
+## 3. Saved versus regenerated — LOCKED
+
+### Regenerated from pinned deterministic contracts
+
+```text
+untouched Overworld terrain/placements
+untouched Underworld topology/base geometry
+untouched deterministic gateway/source/destination sites
+untouched procedural structures/objects
+special-location hooks
+other deterministic definitions
+```
+
+### Saved durable state
+
+```text
+Player inventory/equipment/progression
+Player active domain + exact domain-local transform
+harvested/removed generated StableIds
+persistent resource/object state
+WorldDelta terrain/material changes
+player-built structures
+special-location mutable state
+required gateway/transition semantic state
+other explicit persistent simulation state
+```
+
+Do not serialize entire visited regions/networks/cell scenes merely because they were loaded.
+
+---
+
+## 4. `WorldDeltaStore` ownership
+
+`WorldDeltaStore` or the accepted equivalent is the logical authority for persistent generated-world modifications.
+
+Responsibilities include:
+- load/validate durable world state;
+- expose bounded read-only delta views;
+- apply explicit durable mutations;
+- track dirty categories/shards;
+- serialize safely/atomically;
+- run migrations;
+- quarantine unresolved references.
+
+Runtime chunks/cells may cache/query deltas but never own them durably.
+
+Domain should be part of spatial/state ownership wherever an identity alone does not already unambiguously encode it.
+
+---
+
+## 5. Version concepts remain separate — LOCKED
+
+Do not overload one `version` integer.
+
+Keep separately identifiable:
+- `save_schema_version` — serialized layout;
+- `seed_schema_version` — canonical seed derivation;
+- stable-address/StableId schema semantics;
+- generator stage revisions;
+- named seed-domain revisions;
+- domain generator configuration revisions;
+- root `GeneratorManifest`/manifest package identity.
+
+A save-schema migration need not change generated worlds. A generator change need not imply a save-layout change.
+
+---
+
+## 6. Generator manifest — LOCKED DIRECTION
+
+The root world pins enough immutable configuration to reproduce deterministic truth.
+
+Conceptually:
+
+```text
+GeneratorManifest
+- manifest schema/id/fingerprint
+- seed schema
+- stable-address schema
+- Overworld stage/domain revisions
+- Underworld stage/domain revisions
+- persistent noise/algorithm revisions
+- profile/config revisions
+- gateway-linking revision/config where deterministic
+```
+
+The manifest must pin generation configuration, not merely code labels.
+
+Old worlds must not silently read today's mutable defaults if those defaults changed.
+
+Manifest identity is compatibility/cache identity, not a universal RNG salt.
+
+---
+
+## 7. Domain generator isolation
+
+A compatible/disjoint change in one domain must not automatically reshuffle the other domain.
+
+Examples:
+- changing an Overworld tree-shape seed domain should not move Underworld cave networks;
+- changing Underworld mesh extraction should not move Overworld gateways unless the semantic gateway-link contract itself changed;
+- presentation changes never revise deterministic world identity.
+
+Root manifest changes may reference updated component revisions while preserving unaffected domains byte-for-byte.
+
+---
+
+## 8. Modern save header direction
 
 Conceptually:
 
@@ -167,486 +186,320 @@ WorldSaveHeader
 - world_seed
 - world_id
 - generator_manifest_id
-- generator manifest/config snapshot or resolvable reference
-- creation metadata if useful (non-generation)
+- manifest/config snapshot or immutable reference
 ```
 
-Creation timestamp may be stored for UI but is never generation entropy.
+Player section conceptually includes:
+
+```text
+player
+- active_domain
+- domain_local_transform
+- inventory/equipment/progression
+- other accepted durable player state
+```
+
+Exact physical JSON/binary layout is not locked.
 
 ---
 
-## 7. Delta categories
+## 9. Durable delta categories
 
-The physical format may change, but conceptually separate state by semantics.
-
-### Generated-object deltas
+### Generated-object state
 
 ```text
 destroyed_objects : Set<StableId>
 object_state       : Map<StableId, state>
 ```
 
-Examples:
-
-```text
-harvested tree/rock
-partially mined persistent deposit
-opened/changed generated container
-```
-
-### Special-location deltas
+### Special-location state
 
 ```text
 special_location_state : Map<StableId, state>
 ```
 
-### Terrain/material deltas
-
-Spatially addressable modifications relative to deterministic base geometry/surface.
-
-Exact representation is open.
+### Terrain/material changes
+Domain-qualified spatial modifications against deterministic base geometry.
 
 ### Player-created objects
+Player-built pieces are a distinct identity family; they are not procedural candidate StableAddresses.
 
-Player-built objects are not procedural candidate identities.
+A placed building record persists compact semantic identity/state such as:
+- build instance ID;
+- piece definition ID;
+- domain-local transform;
+- mutable durability/permissions/customization state;
+- logical connection data only where required.
 
-They need a separate persistent user-created identity scheme (save-scoped ID/UUID/monotonic identity or equivalent) when the building system is designed.
-
-Do not pretend a player-created wall has a procedural `StableAddress` merely because it exists in the world.
+Render batches, runtime Nodes and LODs are not saved identity.
 
 ---
 
-## 8. Logical store may be physically sharded — DIRECTIONAL
+## 10. Logical store may be physically sharded
 
-The current prototype uses one small JSON file. That is acceptable now.
-
-A long-lived world may eventually need physical sharding/indexing such as:
+A small prototype may use one file. Long-lived worlds may use:
 
 ```text
-save header/index
+header/index
 player state
-region/cell delta shards
+Overworld region delta shards
+Underworld region/cell delta shards
 construction shards
 special-state shards
 ```
 
-The architecture should expose one logical `WorldDeltaStore` regardless of physical layout.
-
-Runtime systems should not know/care whether data came from one JSON file or 500 region shards.
+Runtime callers should see one logical persistence API regardless of physical sharding.
 
 ---
 
-## 9. Spatial delta queries
+## 11. Bounded spatial queries — LOCKED DIRECTION
 
-As modifications grow, runtime streaming should not scan the complete world save for every cell.
+As worlds grow, runtime streaming must not scan the complete save for every active cell.
 
-The store should eventually support conceptually:
+Conceptually:
 
 ```text
-query(bounds, stable IDs/categories)
-    -> read-only WorldDeltaView
+WorldDeltaStore.query(domain, bounds, identities/categories)
+    -> WorldDeltaView
 ```
 
-The exact spatial index is open.
+Runtime cost should follow current relevance, not total accumulated world history.
 
-Generated-object StableIds can additionally map to owning region/candidate address for efficient lookup through central metadata/indexing.
+This is required for large player constructions, harvested worlds and long Underworld exploration histories.
 
 ---
 
-## 10. Compatibility states — LOCKED
+## 12. Compatibility classification — LOCKED
 
-Opening a save must classify generation compatibility explicitly.
-
-Conceptual states:
+Loading classifies generation compatibility explicitly:
 
 ```text
 EXACT
-    current implementation can reproduce the pinned manifest exactly
-
 SUPPORTED_LEGACY
-    old manifest remains intentionally supported/reproducible
-
 MIGRATION_REQUIRED
-    deterministic/explicit migration path exists
-
 INCOMPATIBLE
-    no safe automatic mapping exists
-
 UNKNOWN/CORRUPT
-    header/manifest/state cannot be trusted
 ```
 
-Never treat `INCOMPATIBLE` or unknown as `EXACT` by silently running the newest generator.
+Never silently interpret `INCOMPATIBLE`/unknown state under today's generator.
+
+Compatible refactors require unchanged deterministic vectors/fingerprints/StableIds for the affected contract.
 
 ---
 
-## 11. Compatible refactors
+## 13. Intentional generator changes
 
-A code refactor that provably preserves deterministic outputs does not need a generation revision change.
+Local changes revise only the contracts they actually alter.
 
-Requirements:
+A fundamental change such as:
+- seed-schema replacement;
+- stable candidate lattice change;
+- topology identity rewrite;
+- gateway-link identity change;
+- obsolete algorithm becoming unreproducible
 
-```text
-seed/RNG test vectors unchanged
-representative stage/world fingerprints unchanged
-stable IDs unchanged
-migration fixtures unchanged
-```
+creates an explicit compatibility boundary.
 
-If output changes unexpectedly, the tests should expose that before release.
+Possible policy:
+- retain legacy generator;
+- deterministic migration;
+- selective regeneration with mapped deltas;
+- require a new world / mark incompatible.
 
----
-
-## 12. Intentional local generator changes
-
-Example:
-
-```text
-tree shape distribution changes
-```
-
-Possible contract changes:
-
-```text
-SURFACE_TREE_SHAPE domain revision increments
-relevant stage/config revision increments if required
-new GeneratorManifest produced for new worlds/upgraded worlds
-```
-
-Unrelated cave topology domain revisions remain untouched.
-
-Whether old worlds adopt the local change automatically is a compatibility-policy decision, not a side effect of launching a new game binary.
+Arbitrary future generators are not promised perfect migration; incompatibility must simply be explicit and safe.
 
 ---
 
-## 13. Fundamental generator changes
+## 14. Migration pipeline — LOCKED
 
-Examples:
-
-```text
-stable candidate lattice semantics change
-node-address lineage semantics change
-seed-schema algorithm replaced
-old noise algorithm no longer reproducible
-major cave topology rewrite invalidates existing persistent references
-```
-
-These create a significant compatibility boundary.
-
-Available strategies may include:
+Conceptually:
 
 ```text
-retain legacy generator contract for existing worlds
-explicit deterministic world migration
-explicit selective regeneration with mapped deltas
-require new world / mark incompatible
-```
-
-The architecture does not promise that arbitrary future world generators can transform every old save perfectly.
-
-It does promise that incompatibility is explicit rather than silent corruption.
-
----
-
-## 14. Migration pipeline — LOCKED DIRECTION
-
-Migration is staged and transactional conceptually:
-
-```text
-1. parse/validate old save envelope
+1. parse/validate old envelope
 2. identify old save schema + generator contract
-3. migrate serialized schema to a readable canonical intermediate
-4. resolve generation compatibility
-5. run required stable-ID/world-delta migration adapters
+3. migrate serialization to canonical intermediate
+4. classify generation compatibility
+5. run explicit identity/domain/delta migration adapters
 6. validate migrated references/state
-7. serialize a new save under the new schema/manifest
-8. only then replace/activate the upgraded save
+7. write new save atomically
+8. activate only after success
 ```
 
-Do not partially mutate the only known-good save in place while migration is still running.
+Never partially mutate the only valid save while migration is incomplete.
 
 ---
 
-## 15. Prototype v2 save migration — LOCKED IMPLEMENTATION ORDER
+## 15. One-world -> two-domain migration direction
 
-Current prototype saves contain conceptually:
+The 2026-08-31 ADR changes the meaning of player/world coordinates at the domain boundary.
+
+Migration must therefore be explicit when older saves encode one global Player position.
+
+Rules:
+- never guess domain from numeric Y alone;
+- use trustworthy accepted semantic/runtime history available in the old save/schema where possible;
+- prototype/unsupported saves may be declared incompatible if no safe deterministic mapping exists;
+- where old accepted Underworld position data is known to represent a real Underworld runtime position, migrate it into `active_domain=UNDERWORLD` + unchanged Underworld-local transform only through a versioned tested adapter;
+- Overworld saves become `active_domain=OVERWORLD` with their Overworld-local transform;
+- physical entrance cutout data is not required as durable gateway identity;
+- gateway pairing/source/destination identity is migrated only from explicit semantic evidence, never nearest-coordinate inference.
+
+Before public/stable release, this migration policy must be covered by fixtures for every supported old schema.
+
+---
+
+## 16. Existing prototype-v2 migration
+
+Historical `version=2` surface IDs such as:
 
 ```text
-version = 2
-world_seed
-destroyed_objects = [chunk_x:chunk_z:type:accepted_index]
-wood
-stone
-stone_axe
-stone_pickaxe
-selected_slot
+chunk_x:chunk_z:type:accepted_index
 ```
 
-They have no generator manifest.
+remain a known legacy contract.
 
-Treat `version=2` as a known explicit legacy contract, not as "whatever the current generator does."
+Before incompatible surface candidate tuning, map these through the frozen legacy generator to modern semantic addresses/StableIds. Unresolvable IDs are diagnostic/quarantined, not assigned to a nearby object.
 
-### Safer migration sequence
-
-Before incompatible surface generation changes:
-
-1. freeze/reference the current legacy-v2 surface decoration/pickup generation behavior;
-2. regenerate referenced legacy candidate sets;
-3. map accepted indexes to semantic candidate addresses;
-4. assign modern StableIds;
-5. write a new save schema/header with an explicit generation contract;
-6. initially preserve legacy surface generation output where necessary so the migrated IDs still refer to the same world objects;
-7. only later introduce new surface seed-domain generation as an explicit generator-contract change/migration/new-world policy.
-
-This avoids successfully converting an old ID only to immediately generate a different candidate population underneath it.
-
-### Underworld generation
-
-The new Underworld generator has no old production topology to preserve and can adopt the stable-ID/seed-domain architecture from its first implementation.
+The two-domain decision does not make unsafe legacy identity guessing acceptable.
 
 ---
 
-## 16. Unresolved references
+## 17. Position is not generic identity recovery — LOCKED
 
-If a migration or compatible load expects a stable generated object that cannot be resolved:
+Never recover StableIds/gateway identity by "closest object" as a generic fallback.
 
-```text
-do not apply the delta to a nearby/different object
-do not guess by nearest position
-record diagnostic/quarantined unresolved state
-```
+Position may participate only in an explicitly designed/tested migration for a specific old contract.
 
-For a supposedly exact-compatible manifest, unresolved IDs indicate a generator/persistence bug and should be loud in tests/logs.
-
----
-
-## 17. Position is not a migration fallback by default
-
-Nearest-world-position matching is dangerous because a different generated object can occupy a similar coordinate.
-
-A migration may use position as one piece of explicit migration evidence only when the migration algorithm is specifically designed/tested for that object type.
-
-Never silently use "closest object" as a generic StableId recovery method.
+Different domains make nearest-position guessing even less meaningful because their coordinates are independent.
 
 ---
 
 ## 18. Terrain/deformation compatibility
 
-Terrain modifications are particularly sensitive because they are spatial changes against a deterministic base surface/geometry.
+Terrain/material deltas are spatial changes against deterministic base geometry and must carry enough domain/base-contract context to reject incompatible application.
 
-The future terrain-delta format should retain enough ownership/base-contract context to detect when the underlying base geometry is incompatible.
-
-Conceptually a shard may be associated with:
+Conceptually:
 
 ```text
-world/generator manifest
+domain
+world/manifest identity
 surface/geometry cell address
-base geometry fingerprint/revision where useful
+base geometry revision/fingerprint where useful
 ```
 
-Exact deformation representation remains open.
+Do not apply old excavation bytes to unrelated regenerated geometry.
 
-Do not blindly apply old excavation bytes to an unrelated newly generated cave mesh.
+Overworld excavation never implicitly modifies Underworld geometry merely because numeric coordinates overlap.
 
 ---
 
 ## 19. Cache versioning
 
-Caches are disposable but must not serve data produced by the wrong generation contract.
+Caches are disposable but cannot serve the wrong deterministic contract.
 
-Cache keys/headers include enough contract identity such as:
+Keys/headers include sufficient identity, e.g.:
 
 ```text
 WorldId
-GeneratorManifest ID
-stage revision
+WorldDomain
+GeneratorManifest/domain revision
 region/cell address
 dependency fingerprint
 ```
 
-If incompatible/missing, discard and regenerate cache data.
-
-No migration is required for disposable caches unless doing so is a performance optimization.
+Incompatible cache data is discarded/regenerated.
 
 ---
 
 ## 20. Save write safety — LOCKED DIRECTION
 
-A save operation should not destroy the previous valid save if serialization fails halfway.
+A failed save must not destroy the previous valid save.
 
-For a simple single-file implementation, prefer conceptually:
+Simple single-file direction:
 
 ```text
 serialize new payload
-write temporary file
-flush/close
-validate enough metadata/checksum if used
-atomically/safer replace active save
+-> write temporary
+-> flush/close
+-> validate required envelope/checksum
+-> safely replace active save
 ```
 
-For future multi-file sharding, use an indexed generation/transaction scheme rather than leaving a header pointing to half-written shards.
-
-Exact platform API is implementation detail.
+Future sharded storage uses indexed/transactional commit semantics.
 
 ---
 
-## 21. Save migrations require fixtures
+## 21. Migration fixtures
 
-Every supported migration path needs known fixture saves checked into test data or generated reproducibly.
+Every supported migration path needs deterministic fixtures.
 
-For prototype v2, fixtures should cover at least:
+For domain migration include at least:
+- Overworld save/Continue;
+- Underworld save/Continue;
+- exact domain-local position preservation;
+- near-boundary Underworld position requiring bounded collision support;
+- world deltas in both domains;
+- unresolved/invalid gateway reference;
+- paired gateway state where durable semantics require it.
 
-```text
-no modifications
-harvested trees/rocks
-collected branches/stones
-different/negative chunk coordinates
-crafted tool/player resource state
-multiple destroyed objects in one chunk
-```
-
-Migration test asserts:
-
-```text
-old state parsed correctly
-expected modern StableIds produced
-player resources/tools preserved
-no wrong-object deltas introduced
-new save round-trips
-```
+A successful migration must never create two active Player states or silently relocate to an unrelated gateway.
 
 ---
 
-## 22. Generator manifest validation
+## 22. Exploration state is not generation state
 
-On world load, validate conceptually:
+Future map discovery, known gateways, fog-of-war and markers are player metadata/deltas.
 
-```text
-manifest schema supported
-seed schema supported
-required stage revisions available
-required seed-domain revisions available
-required generation config/profile snapshot resolvable
-required persistent algorithm contracts available
-manifest canonical fingerprint matches contents
-```
-
-Missing required generation contracts do not silently fall back to current defaults.
+They do not become deterministic generator input merely because they reference world sites.
 
 ---
 
-## 23. Development versus released-world policy
-
-During early prototype development we may intentionally stop supporting obsolete experimental manifests.
-
-That is acceptable if explicit.
-
-Architecture still requires:
-
-```text
-identify old contract
-state incompatibility/migration decision
-never silently reinterpret deltas
-```
-
-Before public/stable releases, support windows and migration guarantees should become a product policy.
-
----
-
-## 24. Exploration state is not generation state
-
-If the game later stores:
-
-```text
-map discovery
-fog of war
-known entrances
-player markers
-```
-
-those are player-state deltas/metadata.
-
-They do not belong in deterministic cave-generation definitions simply because they reference generated locations.
-
----
-
-## 25. Runtime modification flow
+## 23. Runtime modification flow
 
 Conceptually:
 
 ```text
 player action
-    |
-    v
-runtime validates gameplay action
-    |
-    v
-WorldDeltaStore.apply(delta keyed by StableId/spatial address)
-    |
-    +--> mark relevant state dirty
-    +--> notify/rebuild affected live runtime representation
-    |
-    v
-save transaction later/immediately as policy requires
+-> gameplay validates
+-> durable semantic delta committed
+-> relevant runtime representation notified/rebuilt
+-> save transaction according to policy
 ```
 
-The runtime cell does not become the authoritative save owner.
+The runtime chunk/cell/Node never becomes the save authority.
 
 ---
 
-## 26. Persistence invariants
+## 24. Persistence invariants
 
-1. Save schema version and generator contract are separately identifiable.
-2. Old deltas are never interpreted under an unknown/incompatible generator silently.
-3. Untouched deterministic definitions are regenerated rather than serialized as visited world blobs.
-4. Persistent generated-object deltas use StableIds.
-5. Runtime/cell indexes never enter durable identity.
-6. Player-created persistent objects use a separate identity category.
-7. Cache eviction/deletion cannot remove durable state.
-8. Migration writes do not destroy the only valid old save before success.
-9. Exact-compatible worlds reproduce required generation fingerprints.
-10. Unresolved IDs are diagnostic/quarantined, not reassigned to a guessed object.
-
----
-
-## 27. Initial modern save shape — DIRECTIONAL
-
-Conceptual readable prototype form only:
-
-```text
-{
-  "save_schema_version": 3,
-  "world": {
-    "world_seed": 123456,
-    "world_id": "...",
-    "generator_manifest_id": "...",
-    "generator_manifest": { ... }
-  },
-  "player": { ... },
-  "deltas": {
-    "destroyed_objects": ["StableId", ...],
-    "object_state": { ... },
-    "special_location_state": { ... },
-    "terrain_delta_index": { ... },
-    "player_created_objects": { ... }
-  }
-}
-```
-
-Do not treat this exact JSON shape as locked. It illustrates the separation of concerns.
+1. Save schema and generator contracts are separately identifiable.
+2. Player location is always domain-qualified in modern architecture.
+3. Overworld and Underworld transforms are domain-local and never implicitly converted.
+4. Continue reconstructs the saved active domain directly.
+5. Player physics/control waits for required local destination collision readiness.
+6. Untouched deterministic truth regenerates rather than serializing visited runtime scenes.
+7. Generated-object deltas use stable semantic identity.
+8. Player-created objects use their own persistent identity family.
+9. Runtime/cell/instance indexes never enter durable identity.
+10. Cache eviction cannot erase durable state.
+11. Old/incompatible deltas are never silently interpreted under a different generator.
+12. Migration failures preserve the previous good save.
+13. Unresolved references are diagnostic/quarantined, not guessed.
+14. Cross-domain gateway identity is semantic, not nearest-coordinate reconstruction.
+15. Overworld changes never implicitly mutate Underworld state merely because coordinates overlap numerically.
 
 ---
 
-## 28. What remains intentionally open
+## 25. Intentionally open
 
-- exact JSON/binary/database save format;
-- whether/how saves physically shard by region/cell;
-- compression/checksum strategy;
-- exact stable player-created-object ID format;
-- exact terrain/deformation delta format;
-- exact long-term legacy generator retention policy;
-- exact autosave cadence/backups UI;
-- exact manifest canonical serialization format;
-- whether some compatible cosmetic generator revisions are adopted by old worlds automatically.
+- exact save file/database format;
+- physical sharding/index strategy;
+- compression/checksums/backups;
+- exact user-created build-instance ID format;
+- exact terrain deformation representation;
+- long-term legacy generator support window;
+- autosave policy/UI;
+- manifest canonical serialization;
+- final gateway-state persistence fields beyond active domain + Player transform.
 
-These can change without weakening the locked rule that deltas are always interpreted against an explicit deterministic generation contract.
+These may evolve without weakening the locked domain-qualified persistence and explicit compatibility rules.

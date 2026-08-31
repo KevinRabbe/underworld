@@ -1,231 +1,260 @@
 # Underworld Cross-System Ownership and Dependency Map
 
-Status: **architecture index; authoritative contracts remain the linked documents**
+Status: **architecture routing index; linked contracts remain authoritative**
 
-This document is a compact routing map for workers deciding **which subsystem owns a concern** and **which identities may cross a boundary**. It summarizes existing architecture; it does not redefine generator, runtime, persistence, gameplay, or content contracts.
+This map tells workers which subsystem owns a concern and which identities may cross a boundary. It does not replace the linked architecture documents.
 
-If this map conflicts with a linked authoritative contract, the authoritative contract wins and this map must be corrected.
+Current world-domain authority:
+- [`../00_project/ADR-001_TWO_WORLD_DOMAINS.md`](../00_project/ADR-001_TWO_WORLD_DOMAINS.md)
+- [`../20_world/WORLD_DOMAINS_AND_TRANSITIONS.md`](../20_world/WORLD_DOMAINS_AND_TRANSITIONS.md)
 
-## Reading the dependency arrows
-
-In the diagrams below:
-
-```text
-A -> B
-```
-
-means **B may consume A's public contract/data**. It does not grant B ownership of A's state or identity.
-
-The broad direction is:
+## Dependency direction
 
 ```text
-project/core contracts
+core identity / deterministic primitives
         |
-        +-> deterministic world definition/generation
-        |       -> geometry description + partitioning
-        |               -> runtime streaming/realization
-        |                       -> presentation adapters/assets
+        +-> Overworld deterministic generation
         |
-        +-> authored content definitions
-        |       -> gameplay/simulation
-        |               -> runtime instances / presentation state
+        +-> Underworld deterministic generation
+        |       -> geometry descriptions
+        |       -> Underworld runtime streaming
         |
-        +-> persistence schemas + WorldDeltaStore
-                -> runtime/gameplay restoration and composition
+        +-> gateway/site definitions
+                -> WorldDomainCoordinator / TransitionService
 
-developer tooling + validation -> may inspect/call project contracts
-production runtime             -X-> must not depend on tools/tests
+content definitions -> gameplay/simulation -> runtime presentation
+
+persistence / WorldDeltaStore
+        -> restoration/composition of domain-local runtime state
+
+presentation/UI/audio
+        <- read-only semantic gameplay/domain state
+
+tools/tests
+        -> may inspect public contracts
+production runtime
+        -X-> must not depend on tools/tests
 ```
 
-Persistent deltas overlay runtime realization; they do **not** become inputs that redefine deterministic base world truth.
+Generated base truth is not rewritten by player deltas. Runtime realization is not durable identity.
 
-## Layer ownership matrix
+---
 
-| Layer | Owns | May depend on / consume | Must not own | Allowed identity/reference types | Authority |
-| --- | --- | --- | --- | --- | --- |
-| **Deterministic world definition / generation** | Reproducible world plans, topology, entrances, generated definitions, deterministic stage results, stable procedural addresses/IDs, generation fingerprints/provenance | Project/core pure primitives, immutable generation context, generator manifest/config, named seed domains, explicit upstream/neighbor stage views | SceneTree lifetime, live Nodes, player state, save mutations, active AI/audio, presentation assets, runtime load state | `WorldId`, `StableAddress`, `StableId`, generator manifest ID, seed-domain IDs/revisions, stage fingerprints/provenance | [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md), [Stable Procedural IDs](../STABLE_PROCEDURAL_IDS.md), [Deterministic Seed Domains](../DETERMINISTIC_SEED_DOMAINS.md), [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md) |
-| **Geometry description + partitioning** | Pure deterministic geometry descriptions, bounded geometry-cell addresses/plans, cell-local fragments, clipping/continuation metadata, derived geometry fingerprints | Finalized deterministic world definitions and their exact compatible generation identity/provenance | New cave topology, new gameplay StableIds for fragments, runtime Nodes/MeshInstance3D lifetime, player deltas | Source procedural `StableId` references, geometry-cell address, derived fragment identity, compatible generation provenance/fingerprints | [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md), [Streaming Ownership](../STREAMING_OWNERSHIP.md), [Stable Procedural IDs](../STABLE_PROCEDURAL_IDS.md) |
-| **Runtime streaming / realization** | Which representations are live, runtime-cell/chunk lifetime, render/collision realization, request priority/lifecycle, transient source-ID-to-instance mappings | Deterministic definitions, geometry descriptions, read-only/bounded persistent delta views, narrow gameplay interfaces, runtime configuration | Authoritative cave topology, durable save ownership, semantic content identity, generator decisions | Runtime-cell/chunk address or transient owner key; source `StableId` references; semantic content IDs as references; transient Node/resource handles only locally | [Streaming Ownership](../STREAMING_OWNERSHIP.md), [Repository Structure](REPOSITORY_STRUCTURE.md) |
-| **Persistence / durable deltas** | Save envelope/schema, generator compatibility metadata, durable generated-world modifications, migration/quarantine of unresolved references | Stable generated identities, semantic content IDs where appropriate, explicit world/generator compatibility contracts | Live runtime-cell lifetime, complete visited-world snapshots as authority, guessed nearest-object identity, scene paths/Node instance IDs as persistent identity | `WorldId`, procedural `StableId`, semantic content ID, generator manifest ID, save-scoped player-created identity, spatial delta indexes where specified | [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md), [Map Data Serialization Contract](../MAP_DATA_SERIALIZATION_CONTRACT.md), [Stable Procedural IDs](../STABLE_PROCEDURAL_IDS.md) |
-| **Authored content definitions** | Semantic descriptions of items, creatures, attacks, structures, profiles, categories/capabilities and typed content references | Project/content schemas, other approved semantic definitions, validated asset roles/references | Scene-tree lifetime, live player/AI state, deterministic generated-instance identity, central runtime managers | **Semantic content IDs** such as `item.weapon.iron_sword`; category/capability schema IDs; typed asset roles | [Content Architecture](CONTENT_ARCHITECTURE.md), [Content Registry](CONTENT_REGISTRY.md), [Dependency Rules](DEPENDENCY_RULES.md) |
-| **Gameplay / simulation** | Runtime rules and state transitions: player/actors, combat, interaction, inventory/equipment, harvesting, crafting, building, survival, creature behavior | Core primitives, authored definitions, runtime-world interfaces, bounded persistence operations/views where required | Procedural generator algorithms, presentation asset-path semantics, durable world-state storage implementation, content-definition special cases in central managers | Semantic content IDs, source procedural `StableId` references for generated objects, runtime actor/component identity internally | [Dependency Rules](DEPENDENCY_RULES.md), [Repository Structure](REPOSITORY_STRUCTURE.md), [Content Architecture](CONTENT_ARCHITECTURE.md) |
-| **Presentation / audio / VFX** | Replaceable visuals, rigs, animation libraries/adapters, materials, textures, audio, VFX, UI presentation and concrete visual scenes | Semantic roles/content references and observable gameplay/world state through adapters | Gameplay rules, persistent identity, deterministic world truth, generator acceptance decisions | Asset/resource/scene paths as **replaceable implementation references**, semantic presentation roles/IDs; never file paths as authoritative game identity | [Repository Structure](REPOSITORY_STRUCTURE.md), [Dependency Rules](DEPENDENCY_RULES.md), [Content Architecture](CONTENT_ARCHITECTURE.md) |
-| **Developer tooling / validation** | Inspectors, exporters, validators, test runners, fixtures, diagnostics, reproducibility tools, CI orchestration | Public/pure project APIs and test-only helpers/fixtures | Production runtime behavior, authoritative gameplay/world ownership, hidden alternate generation behavior | May display/compare all canonical identities and fingerprints; tooling-local IDs are never game identity | [Repository Structure](REPOSITORY_STRUCTURE.md), [Documentation Architecture](../00_project/DOCUMENTATION_ARCHITECTURE.md) |
+## Ownership matrix
 
-## Identity ownership examples
+| Layer | Owns | May consume | Must not own | Authority |
+| --- | --- | --- | --- | --- |
+| **Core identity/determinism** | `WorldId`, StableAddress/StableId primitives, seed derivation, canonical hashing/version primitives | none/upstream platform primitives | gameplay/runtime/presentation state | `STABLE_PROCEDURAL_IDS.md`, `DETERMINISTIC_SEED_DOMAINS.md` |
+| **Overworld deterministic generation** | reproducible surface terrain/biomes/placements/source gateway sites | core deterministic primitives, immutable Overworld config | Underworld topology/runtime, player deltas | world/content contracts; roadmap WORLD-OW lane |
+| **Underworld deterministic generation** | regions/networks/nodes/edges, Underworld entry/exit sites, hooks, deterministic geometry descriptions/provenance | core deterministic primitives, immutable Underworld config, explicit neighbor stage views | Overworld terrain/runtime, gateway transition lifecycle, player deltas | [`../20_world/UNDERWORLD_GENERATION_PIPELINE.md`](../20_world/UNDERWORLD_GENERATION_PIPELINE.md) |
+| **Gateway linking / world-domain coordination** | deterministic source->destination gateway relationship, active-domain transition lifecycle, fail-closed commit/readiness handoff | semantic source/destination sites, domain readiness APIs, persistence location state | terrain/topology algorithms, SAVE codec, Player gameplay rules, UI rendering | [`../20_world/WORLD_DOMAINS_AND_TRANSITIONS.md`](../20_world/WORLD_DOMAINS_AND_TRANSITIONS.md), [`../STREAMING_OWNERSHIP.md`](../STREAMING_OWNERSHIP.md) |
+| **Runtime streaming/realization** | which domain-local representations are live; cell/chunk lifetime; request priority; render/collision realization | deterministic definitions/geometry, bounded delta views, domain-local observer state | generator decisions, durable state, cross-domain gateway identity | [`../STREAMING_OWNERSHIP.md`](../STREAMING_OWNERSHIP.md) |
+| **Persistence / durable deltas** | save envelope/schema, active domain + domain-local Player transform, generator compatibility, durable world changes, migration/quarantine | stable generated/content/build identities and generator contracts | runtime Node/cell lifetime, guessed coordinate identity | [`../PERSISTENCE_AND_VERSIONING.md`](../PERSISTENCE_AND_VERSIONING.md), `MAP_DATA_SERIALIZATION_CONTRACT.md` |
+| **Authored content** | semantic item/creature/attack/build-piece/profile definitions and typed references | content schemas and approved semantic definitions | runtime instance identity, deterministic generated-instance identity | `CONTENT_ARCHITECTURE.md`, `CONTENT_REGISTRY.md` |
+| **Gameplay/simulation** | Player/combat/inventory/equipment/harvest/crafting/building/resource/creature rules and transitions | semantic content, domain/runtime query interfaces, persistence operations where allowed | procedural algorithms, persistence storage internals, presentation asset identity | `DEPENDENCY_RULES.md`, gameplay docs |
+| **Presentation/UI/audio/VFX** | replaceable visual/audio/UI rendering and interaction presentation | observable semantic gameplay state, `active_domain`, presentation metadata/roles | gameplay truth, generator truth, persistence identity, gateway commit authority | presentation/UI contracts, `PRESENTATION_BOUNDARY.md` |
+| **Tools/validation** | inspectors, validators, fixtures, reproducibility/profiling harnesses, CI | public/pure contracts | production gameplay/world authority | `60_validation/**`, tooling docs |
 
-### Procedural `StableId`
+---
 
-**Owned/defined by:** deterministic world identity architecture.
+## Critical identity distinctions
 
-It answers **which generated world candidate/object/location is this?** It may be referenced by persistence, runtime, gameplay, tooling and diagnostics, but those consumers do not redefine it.
+### Root world identity
+`WorldId` scopes one save/world and may contain both domains.
 
-Do not replace it with:
+It does **not** imply that the domains share coordinate space.
+
+### World domain
+`OVERWORLD` / `UNDERWORLD` qualifies domain-local spatial state.
+
+A durable Player transform is meaningless without its owning domain.
+
+### Procedural StableId
+Answers **which deterministic generated candidate/object/site is this?**
+
+Never replace with:
 - runtime Node instance ID;
-- array/index position;
-- geometry-cell address;
-- semantic content ID;
-- file path.
-
-Authority: [Stable Procedural IDs](../STABLE_PROCEDURAL_IDS.md).
+- array position;
+- cell index;
+- file path;
+- semantic content ID.
 
 ### Semantic content ID
+Answers **what authored game concept is this?**
 
-**Owned/defined by:** authored content architecture.
-
-It answers **what game concept/type/definition is this?** A generated object may therefore have both a semantic content ID and a procedural StableId.
-
-Example:
+One generated resource can have both:
 
 ```text
-content_id      = item.resource.copper_ore
-stable_world_id = <procedural generated-instance StableId>
+content_id = item.resource.iron_chunk / resource definition
+stable_id  = deterministic generated-instance/site identity
 ```
 
-Do not collapse those two identities.
+Those identities must remain separate.
 
-Authority: [Content Architecture](CONTENT_ARCHITECTURE.md).
+### Gateway identity
+Answers **which semantic cross-domain connection is this?**
 
-### Geometry-cell address
+Conceptually references:
+- source domain/site identity;
+- destination domain/site identity;
+- pair/directionality policy.
 
-**Owned by:** deterministic geometry partitioning policy.
+It is not `source_position -> destination_position` coordinate conversion.
 
-It identifies a bounded geometry-work/cache partition. It does not become the persistent identity of the cave network, tunnel, chamber or generated object inside it.
+### Geometry/runtime-cell address
+Identifies a bounded work/lifetime partition. It is not the persistent identity of the cave network/tunnel/object inside it.
 
-A source descriptor may contribute fragments to several geometry cells while retaining one source procedural StableId.
+### Build instance identity
+Player-created structures use their own persistent identity family + semantic piece-definition ID + domain-local transform.
 
-Authority: [Streaming Ownership](../STREAMING_OWNERSHIP.md) and the accepted geometry partition contract.
-
-### Runtime-cell identity
-
-**Owned by:** runtime streaming/lifetime management.
-
-It identifies a currently demand-managed live spatial owner. Runtime and geometry grids may initially align, but architecture does not require them to remain identical.
-
-A runtime-cell address is not a durable gameplay identity and must not replace source StableIds in save data.
-
-Authority: [Streaming Ownership](../STREAMING_OWNERSHIP.md).
+They are not procedural StableAddresses and not runtime render-batch indexes.
 
 ### Generator provenance
-
-**Owned by:** deterministic generation pipeline/output contracts.
-
-Provenance binds generated data to the world/generator/stage/region and the required upstream fingerprints. Downstream deterministic consumers validate compatible provenance; they do not mint substitute provenance from runtime state.
-
-Persistence and caches may retain the generation contract identity needed to reject incompatible data, but the runtime loading order does not define provenance.
-
-Authority: [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md) and [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md).
+Binds deterministic output to exact world/domain/manifest/stage/source fingerprints. Runtime load order does not mint substitute provenance.
 
 ### Persistent delta
+Owned by persistence/WorldDelta. Runtime cells may apply/query it but unload cannot delete it.
 
-**Owned by:** the logical `WorldDeltaStore` / persistence layer.
+### Asset/scene path
+Answers where a replaceable implementation asset currently lives. Never use it as durable gameplay/world identity.
 
-A runtime cell may query or apply a delta to its live representation, but unloading that cell cannot delete durable state. Likewise, deterministic generation does not inspect player deltas when deciding what untouched world truth exists.
+---
 
-Authority: [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md) and [Streaming Ownership](../STREAMING_OWNERSHIP.md).
+## Easy ownership mistakes
 
-### Scene / prefab / resource path
+### Wrong: Underworld generator chooses Overworld terrain opening
 
-**Owned by:** the system or presentation/content asset package that contains the file.
-
-A path answers **where is this implementation/asset currently stored?** It does not answer which content concept or generated world object it is.
-
-Use semantic content IDs and validated asset roles across durable/cross-system boundaries. Presentation adapters may resolve those roles to concrete `.tscn`, mesh, animation, audio or resource paths.
-
-Authority: [Repository Structure](REPOSITORY_STRUCTURE.md), [Dependency Rules](DEPENDENCY_RULES.md), [Content Architecture](CONTENT_ARCHITECTURE.md).
-
-## Ownership boundaries that are easy to cross accidentally
-
-### Base world truth vs runtime realization
+Correct:
 
 ```text
-deterministic definition -> runtime representation
+Overworld generator -> source gateway site
+Underworld generator -> destination entry site
+Gateway linker       -> semantic connection
 ```
 
-Runtime decides **when/how expensively** something is represented. It does not decide **whether the deterministic cave/entrance/object exists**.
+### Wrong: streamer decides active world by checking Player Y
 
-### Base world truth vs durable delta
+Correct:
 
 ```text
-base truth + durable delta -> current realized world state
+WorldDomainCoordinator owns active_domain
+Domain streamer consumes only its domain-local observer/demand
 ```
 
-The delta records persistent change relative to the reproducible baseline. The delta does not rewrite the generator contract.
+### Wrong: UI decides the transition is complete because cave mesh is visible
 
-### Geometry partition vs persistent object ownership
+Correct:
 
 ```text
-one source StableId
-    -> fragment in geometry cell A
-    -> fragment in geometry cell B
+TransitionService commits active_domain after destination readiness
+UI/audio observe committed domain semantic
 ```
 
-Cell-local fragments are derived work units. Crossing a cell boundary does not create another persistent gameplay object.
+### Wrong: Save stores one global position and guesses which domain it belongs to
 
-### Authored definition vs runtime instance
+Correct:
 
 ```text
-semantic definition -> factory/system -> runtime instance
+active_domain + domain_local_transform
 ```
 
-The definition survives scene/package reorganization. The runtime instance is temporary and may be destroyed/recreated.
+### Wrong: runtime cell owns mined/harvested/built persistence
 
-### Filesystem ownership vs semantic identity
+Correct:
 
-The repository path expresses which system or content family maintains a file. It is not a save ID, content ID, StableId or runtime identity.
+```text
+WorldDelta / build persistence owns durable semantic state
+cell loads -> query/apply
+cell unloads -> durable state remains
+```
 
-Authority: [Repository Structure](REPOSITORY_STRUCTURE.md).
+### Wrong: render batching merges building identity
 
-## `owner` and `contributor` are context-qualified terms
+Correct:
 
-Do not treat the words `owner` or `contributor` as one global identity concept.
+```text
+many logical BuildInstances
+-> one/more optimized render/collision representations
+```
 
-Examples:
+Logical pieces remain independently addressable where gameplay needs them.
 
-- a macro region may canonically **own** a cross-region generated edge while another region stores an external reference;
-- a source geometry descriptor retains its canonical generated identity while several geometry cells receive **contributing fragments**;
-- a runtime cell **owns the lifetime** of its live Nodes/resources but does not own the source world truth or durable delta;
-- a repository folder expresses **filesystem/system ownership**, not semantic identity.
+---
 
-When writing a task, diagnostic or contract, qualify the term: `edge owner region`, `geometry-cell contributor`, `runtime lifetime owner`, `persistence owner`, etc.
+## Where should a new feature live?
 
-## Where should this new feature live?
+Ask in order:
 
-Before claiming or creating implementation work, ask in this order:
+1. **Does it decide reproducible Overworld truth?** -> Overworld deterministic generation.
+2. **Does it decide reproducible Underworld topology/sites/geometry?** -> Underworld generation.
+3. **Does it map a source gateway to another domain or commit active-domain travel?** -> gateway/world-domain coordination.
+4. **Does it decide which local representation is resident/rendered/collidable now?** -> domain runtime streamer.
+5. **Must it survive unload/restart because world/player state changed?** -> persistence/WorldDelta/build state.
+6. **Is it a reusable authored concept?** -> content definition architecture.
+7. **Is it a gameplay rule/state transition?** -> owning gameplay subsystem.
+8. **Is it replaceable visuals/audio/UI?** -> presentation.
+9. **Is it only inspection/testing/profiling/migration tooling?** -> tools/tests.
+10. **Would the proposed change require another layer to own state it currently only references?** -> stop; this is an architecture decision/review first.
 
-1. **Does it decide reproducible world truth from deterministic inputs?**
-   - Start in `worldgen/` and the deterministic generation contracts.
-2. **Does it convert accepted world truth into pure geometry work/cache data?**
-   - Use the geometry-description/partition boundary; do not invent gameplay identity there.
-3. **Does it decide what is loaded, rendered, collided or simulated right now?**
-   - Start in `world/` runtime/streaming ownership.
-4. **Must the result survive unload/restart because the player/world changed?**
-   - The durable state belongs to persistence/`WorldDeltaStore`, not the runtime cell.
-5. **Is it a reusable authored game concept or parameter set?**
-   - Put semantic definition data under the content architecture; runtime systems consume it.
-6. **Is it a gameplay rule/state transition?**
-   - Put it in the owning gameplay domain, depending on semantic definitions rather than concrete presentation paths.
-7. **Is it replaceable art/audio/animation/UI or an adapter to those assets?**
-   - Put it under presentation ownership.
-8. **Is it only for inspection, migration, validation or development?**
-   - Put it under `tools/`, `tests/` or validation/docs. Production code must not depend upward on it.
-9. **Does the proposed change need a different layer to own something it currently only references?**
-   - Stop and review the authoritative contracts before coding; that is an architecture change, not ordinary implementation.
+---
+
+## Cross-domain runtime sequence
+
+```text
+Overworld gateway interaction
+        |
+        v
+Gateway / WorldDomainCoordinator
+  validate source/destination
+        |
+        v
+request Underworld readiness
+        |
+        v
+UnderworldRuntimeStreamer
+  definition/geometry/render/collision
+        |
+        v
+bounded safety-ready signal
+        |
+        v
+WorldDomainCoordinator commits UNDERWORLD
+        |
+        v
+Player physics/control resumes
+```
+
+Neither UI nor the Underworld streamer commits the cross-domain state by itself.
+
+---
+
+## Performance ownership
+
+Performance does not create a separate gameplay authority.
+
+The scheduler/streamers own bounded runtime work. Profiling/QA prove:
+- work follows active/relevant populations;
+- stale results cannot resurrect state;
+- worker throughput cannot create unbounded main-thread publication bursts;
+- historical exploration/build counts do not become per-frame scan counts;
+- cross-domain loading waits only for the bounded destination safety set.
+
+See `PERFORMANCE_AND_SCALABILITY.md` and project scale card #369.
+
+---
 
 ## Authoritative reference set
 
-Use this map as a routing index, then read the relevant source contract:
+- [`../00_project/ADR-001_TWO_WORLD_DOMAINS.md`](../00_project/ADR-001_TWO_WORLD_DOMAINS.md)
+- [`../20_world/WORLD_DOMAINS_AND_TRANSITIONS.md`](../20_world/WORLD_DOMAINS_AND_TRANSITIONS.md)
+- [`../20_world/UNDERWORLD_GENERATION_PIPELINE.md`](../20_world/UNDERWORLD_GENERATION_PIPELINE.md)
+- [`../STREAMING_OWNERSHIP.md`](../STREAMING_OWNERSHIP.md)
+- [`../PERSISTENCE_AND_VERSIONING.md`](../PERSISTENCE_AND_VERSIONING.md)
+- [`../STABLE_PROCEDURAL_IDS.md`](../STABLE_PROCEDURAL_IDS.md)
+- [`../DETERMINISTIC_SEED_DOMAINS.md`](../DETERMINISTIC_SEED_DOMAINS.md)
+- [`CONTENT_ARCHITECTURE.md`](CONTENT_ARCHITECTURE.md)
+- [`CONTENT_REGISTRY.md`](CONTENT_REGISTRY.md)
+- [`DEPENDENCY_RULES.md`](DEPENDENCY_RULES.md)
+- [`REPOSITORY_STRUCTURE.md`](REPOSITORY_STRUCTURE.md)
 
-- [Documentation Architecture](../00_project/DOCUMENTATION_ARCHITECTURE.md)
-- [Repository Structure](REPOSITORY_STRUCTURE.md)
-- [Dependency Rules](DEPENDENCY_RULES.md)
-- [Content Architecture](CONTENT_ARCHITECTURE.md)
-- [Content Registry](CONTENT_REGISTRY.md)
-- [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md)
-- [Stable Procedural IDs](../STABLE_PROCEDURAL_IDS.md)
-- [Deterministic Seed Domains](../DETERMINISTIC_SEED_DOMAINS.md)
-- [Streaming Ownership](../STREAMING_OWNERSHIP.md)
-- [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md)
-- [Map Data Serialization Contract](../MAP_DATA_SERIALIZATION_CONTRACT.md)
-
-This index should change when ownership contracts change; it must not become a competing source of architecture.
+This file is a routing index. If it conflicts with an owning contract, fix this map rather than treating it as a competing source of truth.

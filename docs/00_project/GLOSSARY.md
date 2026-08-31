@@ -2,257 +2,429 @@
 
 Status: **Canonical terminology index**
 
-This document is a review/task-claim aid, not a second architecture specification. It summarizes existing project terms and points to the contract that owns each meaning.
+This document summarizes project terms and points to the owning contracts. It does not create competing architecture.
 
-If this glossary conflicts with an authoritative linked contract, **the authoritative contract wins** and the glossary should be corrected.
+If this glossary conflicts with an authoritative linked contract, the authoritative contract wins and this glossary must be corrected.
+
+Current world-domain authority:
+- [`ADR-001_TWO_WORLD_DOMAINS.md`](ADR-001_TWO_WORLD_DOMAINS.md)
+- [`../20_world/WORLD_DOMAINS_AND_TRANSITIONS.md`](../20_world/WORLD_DOMAINS_AND_TRANSITIONS.md)
 
 ## Identity at a glance
 
 | Question | Canonical identity |
 | --- | --- |
-| Which seeded world is this? | `WorldId` |
-| Which exact deterministic generation contract produced it? | `GeneratorManifest` / manifest ID |
-| Which procedural candidate/location is this? | `StableAddress` / `StableId` |
-| What authored kind of game content is this? | semantic content ID |
-| Which bounded geometry partition is this? | geometry-cell address |
-| Which live runtime partition currently owns representation? | runtime-cell identity/address |
+| Which seeded root world/save scope? | `WorldId` |
+| Which procedural runtime space? | `WorldDomain` (`OVERWORLD` / `UNDERWORLD`) |
+| Which exact deterministic contract? | `GeneratorManifest` / manifest identity |
+| Which generated candidate/site/object? | `StableAddress` / `StableId` |
+| Which authored kind of content? | semantic content ID |
+| Which cross-domain connection? | `WorldGatewayDefinition` / gateway StableId |
+| Which Underworld destination/source site? | `UnderworldEntrySiteDefinition` / site StableId |
+| Which bounded geometry partition? | geometry-cell address |
+| Which live lifetime partition? | runtime-cell/chunk address |
+| Which player-created building piece instance? | build-instance identity |
 
 These identities are deliberately separate.
 
-## Canonical terms
+---
 
-### Authored definition
-A stable data description of one authored game concept, identified by a **semantic content ID** and resolved to its current data/assets. Definitions do not own scene-tree lifetime or runtime simulation.
+## WorldId
 
-**Not:** a generated-world instance, a live `Node`, a file path, or a procedural `StableId`.
+Stable identity of one root seeded world/save scope.
 
-Authority: [Content Architecture](../10_architecture/CONTENT_ARCHITECTURE.md), [Content Registry](../10_architecture/CONTENT_REGISTRY.md).
+A `WorldId` may contain both Overworld and Underworld domains. It does **not** imply shared domain coordinates.
 
-### Base world truth / deterministic base truth
-The untouched procedural baseline reproduced from the world seed plus the pinned compatible generation contract. Examples include untouched cave topology, entrances, base geometry, procedural placement, and special-location hooks.
+**Not:** save-slot ID, world domain, procedural object ID, generator-manifest ID.
 
-It may be cached, evicted, and regenerated. The cache is not authoritative state.
+Authority: [`../PERSISTENCE_AND_VERSIONING.md`](../PERSISTENCE_AND_VERSIONING.md).
 
-**Not:** a visited-map snapshot, runtime scene state, or a player/world delta.
+## WorldDomain
 
-Authority: [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md), [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md).
+Explicit procedural/runtime space qualifier.
 
-### Cave network
-A persistent topology component/identity inside the Underworld graph. Networks contain/own topological nodes and edges according to the generation contracts.
+Current domains:
 
-A network may cross multiple geometry/runtime cells, and a cell may contain fragments from more than one network.
+```text
+OVERWORLD
+UNDERWORLD
+```
 
-**Not:** a geometry cell, runtime cell, floor, loaded scene, or streaming ownership unit.
+Positions, spatial addresses and Player transforms are interpreted inside their owning domain.
 
-Authority: [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md), [Streaming Ownership](../STREAMING_OWNERSHIP.md).
+**Not:** biome, cave depth class, SceneTree path or loading state.
 
-### Entrance
-A deterministic world-definition object selected against already-generated cave topology to connect surface space with the Underworld. Surface integration is exposed as pure `SurfaceEntranceIntegrationDescriptor` data describing opening/clearance and connection requirements.
+Authority: [`ADR-001`](ADR-001_TWO_WORLD_DOMAINS.md), [`WORLD_DOMAINS_AND_TRANSITIONS`](../20_world/WORLD_DOMAINS_AND_TRANSITIONS.md).
 
-**Not:** a random hole placed independently of topology, a teleport requirement, a mesh, or a live portal `Node`.
+## Domain-local transform
 
-Authority: [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md), [Streaming Ownership](../STREAMING_OWNERSHIP.md).
+A spatial transform meaningful only together with its `WorldDomain`.
 
-### Fragment / geometry fragment
-A cell-local pure-data contribution produced when one source geometry descriptor overlaps one geometry cell. A cross-cell chamber/tunnel therefore yields multiple fragments that retain reference to the same source procedural identity.
+Modern durable Player position is conceptually:
 
-Fragment identity (for example `gfrag1`) is partition/processing identity; it does **not** create a new persistent gameplay `StableId` for each cell crossing.
+```text
+active_domain + domain_local_transform
+```
 
-**Not:** a new cave network, new procedural object, runtime mesh instance, or durable save object.
+An Overworld XYZ value does not automatically correspond to the same Underworld XYZ value.
 
-Authority: [Streaming Ownership](../STREAMING_OWNERSHIP.md), [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md). Executable contract: [`geometry_cell_fragment.gd`](../../worldgen/geometry/geometry_cell_fragment.gd).
+**Not:** global cross-domain coordinate or gateway identity.
 
-### Generation stage
-One deterministic pure-data transformation in the world-generation pipeline. A stage consumes an immutable context and typed inputs and produces a result/diagnostics/fingerprint without depending on SceneTree state, player state, wall-clock time, shared mutable RNG, or worker completion order.
+Authority: [`../PERSISTENCE_AND_VERSIONING.md`](../PERSISTENCE_AND_VERSIONING.md).
 
-**Not:** a streaming tier, loading phase, gameplay state, or arbitrary sequence of runtime callbacks.
+## World gateway
 
-Authority: [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md).
+A deterministic semantic connection between a source site in one domain and a destination site in another domain (or potentially within a domain where later design permits).
 
-### Generator manifest
-The canonical identity/description of the **complete deterministic generation contract** needed to reproduce world truth: seed schema, stable-address schema, stage revisions, seed-domain revisions, profile/config revisions, and other pinned deterministic dependencies.
+Conceptually:
 
-The manifest is a compatibility contract, **not a universal random salt**. The same `WorldId` may be associated with a different manifest when generation contracts change.
+```text
+WorldGatewayDefinition
+- stable gateway identity
+- source domain/site
+- destination domain/site
+- directionality/pair semantics
+- transition policy
+```
 
-Authority: [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md), [Deterministic Seed Domains](../DETERMINISTIC_SEED_DOMAINS.md).
+A gateway is resolved by semantic identity, not coordinate conversion.
 
-### Geometry cell
-A bounded 3D partition used for deterministic base-geometry planning/generation/cache work. It has its own spatial address (currently a `gcell1` contract) and may contain fragments from several source networks/regions.
+**Not:** a mesh, loading-screen animation, collision hole, runtime portal Node or nearest-coordinate relationship.
 
-Geometry cells are allowed to share an initial grid with runtime cells for convenience, but the architecture does not equate them.
+Authority: [`../20_world/WORLD_DOMAINS_AND_TRANSITIONS.md`](../20_world/WORLD_DOMAINS_AND_TRANSITIONS.md).
 
-**Not:** a macro region, a cave network, a gameplay `StableId`, or the authoritative lifetime owner of live Nodes.
+## Overworld gateway/source site
 
-Authority: [Streaming Ownership](../STREAMING_OWNERSHIP.md). Executable address contract: [`geometry_cell_address.gd`](../../worldgen/geometry/geometry_cell_address.gd).
+A deterministic/authored Overworld-local place capable of owning or referencing a gateway.
 
-### Macro region
-The deterministic Underworld **generation/ownership partition** used to plan regional tendencies, candidate slots, topology dependencies, entrances, connectivity, and special-location hooks.
+Presentation might be a modeled cave mouth, mine entrance, crypt, fissure or portal.
 
-Macro-region boundaries organize deterministic generation; they do not imply hard gameplay floors or runtime loading boundaries.
+It does not require the actual Underworld mesh behind it.
 
-**Not:** a runtime cell, geometry cell, cave network, or shallow/mid/deep floor.
+**Not:** Underworld destination coordinate or physical cross-domain tunnel.
 
-Authority: [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md), [Streaming Ownership](../STREAMING_OWNERSHIP.md).
+Authority: [`../20_world/WORLD_DOMAINS_AND_TRANSITIONS.md`](../20_world/WORLD_DOMAINS_AND_TRANSITIONS.md).
 
-### Owner / contributor
-These words are contract-scoped and must be qualified when ambiguity is possible.
+## Underworld entry/exit site
 
-For **geometry fragments**, one intersected cell is the canonical owner for a source descriptor and other intersected cells are contributors carrying cell-local fragments/continuation data. That ownership prevents duplicate source ownership; it does not manufacture new gameplay StableIds.
+A deterministic Underworld-local topology/site object suitable as a gateway destination/source.
 
-Other contracts also use ownership (for example canonical cross-region edge owner or live runtime owner). Do not assume those meanings are interchangeable merely because the word `owner` is reused.
+Conceptually owns:
+- StableId/address;
+- owning region/network/node relationship;
+- domain-local arrival anchor;
+- safe-arrival/clearance metadata;
+- semantic site/depth/family tags.
 
-Authority: [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md), [Streaming Ownership](../STREAMING_OWNERSHIP.md).
+**Not:** Overworld terrain cutout, source cave-mouth mesh or shared-space coordinate.
 
-### Player/world delta / durable delta
-Persisted state that changes or supplements deterministic base truth: destroyed/harvested generated objects, persistent object state, changed special locations, terrain modifications, player-created objects, and other explicit durable state.
+Authority: [`../20_world/UNDERWORLD_GENERATION_PIPELINE.md`](../20_world/UNDERWORLD_GENERATION_PIPELINE.md).
 
-Generated-object deltas normally reference procedural `StableId`s; player-created objects use their own persistent identity category.
+## Historical entrance / physical integration descriptor
 
-**Not:** untouched procedural world truth, a disposable cache entry, or runtime-cell-owned state.
+Older accepted generation/runtime contracts may contain `EntranceDefinition` and `SurfaceEntranceIntegrationDescriptor` concepts from the pre-ADR one-continuous-world architecture.
 
-Authority: [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md), [Map Data Serialization Contract](../MAP_DATA_SERIALIZATION_CONTRACT.md), [Streaming Ownership](../STREAMING_OWNERSHIP.md).
+Those records remain historical/legacy compatibility data where needed. Their physical surface-cutout fields are **not current cross-domain authority**.
 
-### Provenance / generation provenance
-Canonical ancestry metadata attached to deterministic stage results so consumers can verify that inputs belong to the expected world/generator/stage/region and exact upstream fingerprint set.
+Useful semantic entrance identity may be migrated/adapted to gateway/source/destination site contracts through explicit versioned composition.
 
-Current provenance binds at least `WorldId`, generator-manifest ID, stage identity/revision, optional region identity/address, and source-stage fingerprints.
+**Not:** permission to reintroduce mandatory physical surface/cave continuity.
 
-A `StableId` alone is not provenance: the same semantic procedural address can exist under more than one world/generation context.
+Authority: [`ADR-001`](ADR-001_TWO_WORLD_DOMAINS.md), legacy Git history, current generation migration guidance.
 
-Authority: [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md), [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md). Executable contract: [`generation_provenance.gd`](../../worldgen/pipeline/generation_provenance.gd).
+---
 
-### Reserved site / special-location hook
-A deterministic topology/world-definition reservation that preserves a stable anchor and required bounds/clearance for later authored or gameplay content such as deposits, structures, boss spaces, complexes, or collapses.
+## Authored definition
 
-The reservation says **where/what space is reserved**, not which final boss/resource/structure instance is already spawned there.
+Stable semantic description of one authored game concept, identified by a semantic content ID and resolved to current rules/assets.
 
-**Not:** runtime content activation or progression-dependent spawning performed by topology generation.
+**Not:** generated-world instance, runtime Node, file path or procedural StableId.
 
-Authority: [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md).
+Authority: content architecture/registry.
 
-### Runtime cell
-A 3D **lifetime/LOD partition for live Underworld representation**. Runtime cells own current live representations such as runtime roots, meshes, collision bodies, and local proxies, while referencing canonical source identities.
+## Semantic content ID
 
-Runtime cells may unload safely because deterministic definitions and durable deltas are owned elsewhere.
+Answers **what authored kind of thing is this?**
 
-**Not:** deterministic world truth, a geometry cell by definition, persistent save ownership, or a cave network.
+Examples:
 
-Authority: [Streaming Ownership](../STREAMING_OWNERSHIP.md).
+```text
+item.weapon.iron_sword
+creature.underworld.burrower
+```
 
-### Runtime realization / runtime instance
-A temporary live representation produced from deterministic definitions, authored definitions/assets, and applicable deltas. Runtime systems/scene trees own its lifetime.
+A generated object can carry both semantic content ID and procedural StableId.
 
-Examples include live meshes, collision, interactable proxies, creature instances, audio players, and other active engine objects.
+**Not:** identity of a specific generated location/instance.
 
-**Not:** semantic content identity, procedural world identity, durable delta ownership, or the authoritative definition itself.
+## StableAddress
 
-Authority: [Content Architecture](../10_architecture/CONTENT_ARCHITECTURE.md), [Streaming Ownership](../STREAMING_OWNERSHIP.md).
+Canonical deterministic semantic address for a procedural candidate/location/lineage.
 
-### Seed domain / generation domain
-A named, revisioned semantic source of deterministic randomness. A derived seed is a pure function of root world seed, seed-schema version, domain identity/revision, stable semantic address, and optional subkey.
+Candidate slots exist before acceptance so rejection/array compaction cannot rename later identities.
 
-Domains isolate unrelated random decisions so adding/changing one subsystem does not consume a shared RNG stream and reshuffle unrelated generation.
+It is also the anchor for named-domain seed derivation.
 
-**Not:** a global mutable RNG, arbitrary salt, stage revision, or generator-manifest ID.
+**Not:** content ID, runtime Node path, array index, float position or proof of generator provenance.
 
-Authority: [Deterministic Seed Domains](../DETERMINISTIC_SEED_DOMAINS.md).
+Authority: `STABLE_PROCEDURAL_IDS.md`, `DETERMINISTIC_SEED_DOMAINS.md`.
 
-### Semantic content ID
-The stable authored identity answering **what kind of thing is this?** Examples include `item.weapon.iron_sword` or `creature.underworld.burrower`.
+## StableId
 
-It resolves through content architecture/registry rules and remains independent of file paths and runtime Node identity.
+Persistent procedural ID derived from canonical StableAddress semantics.
 
-**Not:** the identity of a specific generated instance/location. That is procedural `StableAddress`/`StableId` territory.
+Answers **which deterministic generated candidate/site/object is this?**
 
-Authority: [Content Architecture](../10_architecture/CONTENT_ARCHITECTURE.md), [Content Registry](../10_architecture/CONTENT_REGISTRY.md).
+**Not:** content ID, build-instance ID, runtime Node ID, geometry fragment or asset path.
 
-### StableAddress
-A canonical, readable, deterministic **semantic address for a procedural candidate/location/lineage**. Candidate slots are addressable before acceptance so rejected siblings and array compaction do not renumber later identities.
+## Generator manifest
 
-The address is semantic rather than runtime-order based and is also the anchor used by deterministic seed derivation.
+Canonical identity/description of the deterministic generation contracts required to reproduce world truth.
 
-**Not:** a semantic content ID, runtime Node path/instance ID, array index, or proof that data came from a particular world seed/manifest.
+May include separately identifiable Overworld, Underworld and gateway-link stage/domain/config revisions.
 
-Authority: [Deterministic Seed Domains](../DETERMINISTIC_SEED_DOMAINS.md), [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md). Executable contract: [`stable_address.gd`](../../worldgen/identity/stable_address.gd).
+**Not:** universal RNG salt.
 
-### StableId
-The canonical persistent procedural identifier derived from a `StableAddress` (current namespace `sid1`). It answers **which generated procedural candidate/location is this?** and is used for graph/object references and durable generated-object deltas.
+Authority: `PERSISTENCE_AND_VERSIONING.md`.
 
-Because procedural addresses are semantic and seed-independent, a `StableId` by itself does not prove world/generator provenance.
+## Seed domain
 
-**Not:** a semantic content ID, player-created-object ID, runtime Node ID, geometry-fragment ID, or file path.
+Named, revisioned semantic source of deterministic randomness.
 
-Authority: [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md), [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md). Executable contract: [`stable_id.gd`](../../worldgen/identity/stable_id.gd).
+A domain ID/name never changes semantic meaning after persistent use. Legacy physical-entrance domains remain reserved rather than being repurposed for new gateway linking.
 
-### Streaming tier / runtime representation tier
-A level of **current representation cost/availability**, not existence. The streaming architecture currently describes tiers from deterministic definition/cache state through geometry, render, collision, nearby simulation/interactables, and local audio.
+**Not:** shared mutable world RNG, ad-hoc salt, stage revision or manifest ID.
 
-Different tiers may use different activation radii and release hysteresis. Dropping a tier must not delete deterministic truth or durable deltas.
+Authority: `DETERMINISTIC_SEED_DOMAINS.md`.
 
-**Not:** a generation stage, cave depth profile, world version, or gameplay progression tier.
+## Generation provenance
 
-Authority: [Streaming Ownership](../STREAMING_OWNERSHIP.md).
+Canonical ancestry metadata proving deterministic stage data belongs to the expected root world/domain/generator/stage/source fingerprint set.
 
-### WorldId
-The stable identity of the seeded world under the current world-ID contract (currently derived canonically from the root world seed and represented in the `wid1` namespace).
+StableId alone is not provenance.
 
-`WorldId` identifies the world, while the generator manifest identifies the exact deterministic generation contract used to interpret/reproduce that world. Caches and provenance commonly need both.
+**Not:** runtime load order or Node ancestry.
 
-**Not:** save-slot identity, semantic content identity, procedural object identity, or generator-manifest identity.
+## Base world truth
 
-Authority: [Persistence and Versioning](../PERSISTENCE_AND_VERSIONING.md), [Generation Pipeline Interfaces](../GENERATION_PIPELINE_INTERFACES.md). Executable contract: [`world_id.gd`](../../worldgen/identity/world_id.gd).
+Untouched deterministic procedural baseline regenerated from root world identity + pinned compatible domain contracts.
+
+Examples:
+- Overworld terrain/placements;
+- Underworld topology/base geometry;
+- deterministic source/destination sites;
+- special-location hooks.
+
+**Not:** visited runtime scene snapshot or player-caused delta.
+
+---
+
+## Macro region
+
+Deterministic Underworld generation/ownership partition used for regional planning, topology dependencies, candidate slots, sites/connectivity/hooks.
+
+**Not:** runtime cell, geometry cell, cave network or mandatory gameplay floor.
+
+## Cave network
+
+Persistent topology component inside the Underworld graph.
+
+May cross many geometry/runtime cells.
+
+**Not:** runtime cell, level/floor, loaded scene or world domain.
+
+## Geometry cell
+
+Bounded deterministic Underworld geometry work/cache partition.
+
+One semantic source descriptor may contribute fragments to several cells.
+
+**Not:** cave network identity, gameplay StableId or runtime lifetime owner.
+
+## Geometry fragment
+
+Cell-local pure-data contribution created when one source topology/geometry descriptor intersects a geometry cell.
+
+Fragment identity is processing/partition identity and does not create a new persistent gameplay object for every cell crossing.
+
+## Runtime cell
+
+3D lifetime/LOD partition for live Underworld representation.
+
+May own current Nodes/mesh/collision/proxies while referencing canonical source identity.
+
+It unloads safely because deterministic truth and durable deltas live elsewhere.
+
+**Not:** persistent topology or SAVE owner.
+
+## Streaming tier
+
+Level of current representation cost/readiness, such as:
+
+```text
+definition -> geometry -> render -> collision -> simulation -> local presentation
+```
+
+Dropping a tier cannot delete deterministic truth or durable state.
+
+**Not:** generation stage, cave depth profile or progression tier.
+
+---
+
+## WorldDomainCoordinator / WorldTransitionService
+
+Runtime owner of active-domain transition lifecycle.
+
+Responsibilities conceptually include:
+- validate gateway transition request;
+- resolve destination identity;
+- request destination runtime readiness;
+- commit active-domain change atomically/fail-closed;
+- release Player control only after required destination safety;
+- coordinate source runtime release.
+
+**Not:** topology generator, SAVE codec, UI loading overlay or domain streamer.
+
+Authority: `STREAMING_OWNERSHIP.md` and `WORLD_DOMAINS_AND_TRANSITIONS.md`.
+
+## Runtime realization / runtime instance
+
+Disposable live engine representation produced from deterministic/authored truth + applicable deltas.
+
+Examples: meshes, collisions, interactable proxies, creature Nodes, lights/audio/VFX.
+
+**Not:** persistent semantic identity.
+
+## Player/world delta / durable delta
+
+Persistent change supplementing deterministic base truth.
+
+Examples:
+- harvested/generated objects;
+- mined resource state;
+- special-location changes;
+- terrain modifications;
+- player-created structures.
+
+Runtime unload does not erase it.
+
+Authority: `PERSISTENCE_AND_VERSIONING.md` / WorldDeltaStore.
+
+---
+
+## BuildPieceDefinition
+
+Authored semantic definition of a reusable player-buildable piece.
+
+Owns logical placement/snap/support/resource/presentation references according to building architecture.
+
+**Not:** one placed wall/beam, runtime Node or mesh identity.
+
+Authority: `../30_gameplay/BUILDING_SYSTEM.md`.
+
+## BuildInstance
+
+One persistent player-created placement of a BuildPieceDefinition.
+
+Conceptually carries:
+- build-instance ID;
+- piece-definition ID;
+- owning domain;
+- domain-local transform;
+- mutable durable state where required.
+
+Its render/collision representation may be batched/instanced without erasing logical identity.
+
+**Not:** procedural StableId or render-batch index.
+
+## Snap socket
+
+Authored logical placement relationship/anchor on a building piece.
+
+Snapping is assistance. Validity does not require every placement to use a socket; free placement/overlap/terrain embedding may be intentionally legal.
+
+**Not:** arbitrary mesh vertex or hard global grid identity.
+
+## Structural support graph
+
+Gameplay graph representing supported relationships between placed building pieces/valid anchors.
+
+Support is cached/event-driven and material-sensitive; it is not full finite-element simulation.
+
+**Not:** mesh overlap test or per-frame global recomputation.
+
+---
+
+## Presentation ID / asset path
+
+Presentation roles/paths identify replaceable current art/audio/UI implementation.
+
+They never become authoritative generated/gameplay/persistence identity.
+
+## `active_domain`
+
+Authoritative coarse semantic indicating the committed current world domain.
+
+UI/audio may consume it read-only.
+
+**Not:** inferred from Player Y, cave-cell AABB, render visibility or camera state.
+
+---
 
 ## Commonly confused boundaries
 
-### StableId vs semantic content ID
+### WorldId vs WorldDomain
 
 ```text
-semantic content ID -> what authored kind is it?
-StableId           -> which generated procedural instance/location is it?
+WorldId      -> which root seeded world/save scope?
+WorldDomain  -> which independent procedural/runtime space inside it?
 ```
 
-A generated copper deposit may legitimately carry both a content ID describing copper-deposit rules and a procedural StableId identifying that specific generated deposit. Never collapse the two identity systems.
+### Gateway vs entry site
+
+```text
+entry/source site -> one deterministic place inside one domain
+gateway           -> semantic connection between source and destination sites
+```
+
+### StableId vs content ID
+
+```text
+StableId   -> which generated candidate/instance/site?
+content ID -> what authored kind of thing?
+```
 
 ### Geometry cell vs runtime cell
 
 ```text
-geometry cell -> bounded deterministic geometry planning/cache partition
-runtime cell  -> live representation lifetime/LOD partition
+geometry cell -> deterministic work/cache partition
+runtime cell  -> current live lifetime/LOD partition
 ```
 
-They may share coordinates/grid dimensions in an implementation, but code must not require permanent one-to-one equivalence.
-
-### Deterministic base truth vs durable delta
+### Base truth vs durable delta
 
 ```text
-base truth -> regenerate from seed + pinned generation contract
-delta      -> save persistent change/state against that baseline
+base truth -> regenerate from pinned contracts
+delta      -> save persistent change against baseline
 ```
 
-Deleting a deterministic cache is allowed; deleting a durable delta loses player/world state.
+### BuildInstance vs render batch
 
-### Manifest revision vs seed-domain behavior
+```text
+BuildInstance -> logical persistent player-created piece
+render batch  -> disposable optimized presentation of many pieces
+```
 
-A generator manifest pins the full generation contract, including non-random algorithm/config/stage changes. Seed-domain revisions control isolated deterministic randomness behavior for named decisions.
+---
 
-Changing manifest identity does **not** imply every domain seed must change, and manifest ID must not be mixed into all randomness as a universal salt.
+## Adding terminology
 
-### Filesystem ownership vs semantic identity
+Add a term only after its meaning exists in an owning architecture/rulebook/interface/executable contract.
 
-Repository paths define **code/document ownership and dependency boundaries**. They do not define persistent game identity.
+For each term:
+1. state narrow meaning;
+2. state likely **not this** confusion;
+3. link authority;
+4. if sources conflict, fix the owning contract first.
 
-A content definition may move files without changing its semantic content ID. Procedural StableIds come from StableAddresses, not source paths. Runtime scene paths/Node IDs are likewise not durable semantic identity.
-
-Authority: [Repository Structure](../10_architecture/REPOSITORY_STRUCTURE.md), [Content Architecture](../10_architecture/CONTENT_ARCHITECTURE.md), [Documentation Architecture](DOCUMENTATION_ARCHITECTURE.md).
-
-## Adding a future glossary term
-
-Add a term here only after its meaning exists in an authoritative architecture, rulebook, interface contract, or executable contract.
-
-For every new entry:
-1. state the narrow project meaning;
-2. state the most likely **not this** confusion;
-3. link the authoritative source;
-4. if existing sources conflict, report/fix the conflict at its owning contract first instead of silently choosing a new meaning in the glossary.
-
-The glossary indexes architecture; it does not create architecture.
+The glossary indexes architecture; it does not invent it.

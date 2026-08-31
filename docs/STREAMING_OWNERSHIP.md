@@ -1,207 +1,160 @@
 # Underworld — Streaming Ownership and Runtime Lifetime Architecture
 
-## Status
+Status: **LOCKED architecture; superseded one-world assumptions removed**
 
-This document defines who owns deterministic world definitions, geometry descriptions, runtime cells, collision, simulation and audio as the player moves through one continuous surface/Underworld world.
+This document defines runtime ownership, streaming lifetime, cache lifetime, destination readiness and bounded work for the Overworld and Underworld procedural domains.
 
-The responsibility boundaries are **LOCKED at the architectural level**. Exact cell sizes, cache budgets and Godot class names remain tuning/implementation choices.
+The cross-domain decision is governed by [`00_project/ADR-001_TWO_WORLD_DOMAINS.md`](00_project/ADR-001_TWO_WORLD_DOMAINS.md) and [`20_world/WORLD_DOMAINS_AND_TRANSITIONS.md`](20_world/WORLD_DOMAINS_AND_TRANSITIONS.md).
 
-Core principle:
+Core principles:
 
-> **Streaming decides which representations of the world are currently expensive/live. It does not decide what the deterministic world contains.**
+> **Streaming decides which representations of deterministic world truth are currently expensive/live. It does not decide what world truth contains.**
+
+> **Overworld and Underworld are independent runtime domains. Cross-domain travel is a lifecycle transition, not a requirement for one shared coordinate space.**
 
 ---
 
-## 1. One world, not surface mode versus cave mode — LOCKED
+## 1. World domains — LOCKED
 
-Surface and Underworld share one global world coordinate system.
-
-Streaming must therefore not be built around a hard state such as:
+The runtime recognizes explicit world-domain identity:
 
 ```text
-current_world = SURFACE
+WorldDomain
+├─ OVERWORLD
+└─ UNDERWORLD
 ```
 
-or:
+Positions, cell addresses and streaming demand are interpreted inside their owning domain.
 
-```text
-current_world = UNDERGROUND
-```
+A coordinate in `OVERWORLD` has no required geometric relationship to the numerically identical coordinate in `UNDERWORLD`.
 
-because near a cave mouth the player may need:
+Therefore this architecture does **not** require:
+- one global surface/Underworld coordinate space;
+- surface and Underworld runtime to be resident simultaneously;
+- physical collision continuity through an entrance;
+- Underworld geometry to appear behind an Overworld cave mouth;
+- a surface streamer to query cave runtime Nodes;
+- a cave streamer to keep surface terrain alive while the player is underground.
 
-```text
-surface render/collision
-+ entrance geometry
-+ nearby underground render/collision
-```
-
-at the same time.
-
-Deep underground, surface runtime content can usually be released because it is not relevant, but this is a streaming-demand decision rather than a separate world instance.
+A transition implementation may temporarily keep both domains resident for caching or presentation, but that is an optimization, not world identity.
 
 ---
 
 ## 2. Ownership layers
 
-Use distinct owners for distinct lifetimes.
+Use separate owners for separate lifetimes.
 
 ```text
-WorldDefinitionService
-    owns/accesses deterministic finalized definitions
+RootWorld / Save Identity
+        |
+        +-----------------------------+
+        |                             |
+        v                             v
+OverworldDefinition             UnderworldDefinition
+Services                        Services
+        |                             |
+        v                             v
+OverworldStreamer               UnderworldRuntimeStreamer
+        |                             |
+        +-------------+---------------+
+                      |
+                      v
+             WorldDomainCoordinator
+             / WorldTransitionService
+                      |
+                      v
+                 Player domain
 
-GeometryDescriptionService/Cache
-    owns evictable pure base-geometry descriptions
-
-WorldStreamingCoordinator
-    computes runtime demand from observer(s)
-
-SurfaceRuntimeStreamer
-    owns live surface chunk/runtime representation
-
-UnderworldRuntimeStreamer
-    owns live 3D underground runtime cells
-
-WorldDeltaStore
-    owns persistent player-caused world changes
-
-Simulation/Audio activation layers
-    own expensive nearby runtime behavior
+WorldDeltaStore / persistence
+    owns durable domain-qualified changes
 ```
 
-Do not make one chunk/node object own all of these responsibilities.
+The exact class names may evolve. The ownership boundaries may not collapse merely for convenience.
+
+### WorldDomainCoordinator / transition owner
+Owns:
+- current/committed active domain;
+- transition lifecycle;
+- source/destination gateway resolution;
+- destination-readiness handoff;
+- atomic/fail-closed transition commit;
+- domain-level presentation semantic for UI/audio;
+- source-runtime release policy after successful commit.
+
+Does not own:
+- Overworld terrain generation;
+- Underworld topology;
+- cell generation algorithms;
+- Inventory/WorldDelta/SAVE content;
+- gateway selection policy that belongs to deterministic world definition.
 
 ---
 
-## 3. `WorldDefinitionService`
+## 3. Domain definition services
 
-### Responsibility
+Each domain may use separate definition services/caches if that keeps responsibilities clear.
 
-Provide deterministic finalized world-definition data by stable address/region and coordinate with the pure generation pipeline when data is not already cached.
-
-Conceptual API:
+Conceptually:
 
 ```text
-request_region_definition(region_address, priority)
-get_region_definition_if_ready(region_address)
-request_entrance_descriptors(world_bounds, priority)
-query_definition_objects(world_bounds / stable IDs)
+OverworldDefinitionService
+- surface terrain/biome/object definitions
+- Overworld gateway/source-site definitions
+
+UnderworldDefinitionService
+- finalized macro-region/network/node/edge definitions
+- Underworld gateway destination/entry-site definitions
+- special-location hooks
 ```
 
-### Owns
+Shared infrastructure such as StableId factories, generator manifests, cache primitives or schedulers may be reused without making one domain generator own the other.
 
-```text
-immutable finalized UndergroundRegionDefinition cache
-world/region address index
-surface entrance-integration descriptor index/cache
-in-flight deterministic definition-generation requests
-```
-
-### Does not own
-
-```text
-runtime Nodes
-rendered meshes
-physics bodies
-AI
-save deltas
-player progression
-```
-
-### Cache rule
-
-Finalized definitions are deterministic and regenerable. The in-memory cache may evict them when not pinned/recently useful.
-
-Evicting a definition cache entry does not destroy world state.
+Definitions are deterministic/regenerable and are not runtime Nodes.
 
 ---
 
-## 4. Definition cache versus save data
+## 4. Cache versus durable state — LOCKED
 
-A deterministic definition cache is disposable.
-
-```text
-cache deleted -> regenerate from seed/contracts
-```
-
-A persistent world delta is not disposable.
+A definition or geometry cache is disposable:
 
 ```text
-delta deleted -> player state lost
+cache evicted -> regenerate from seed + pinned contracts
 ```
 
-These must never share ownership merely because both refer to a region/object.
+Durable state is not disposable:
 
-The `WorldDeltaStore` is described further in persistence architecture, but streaming always treats it as an external durable state source.
+```text
+WorldDelta / player-created structure / inventory / persistent resource state
+-> survives runtime unload
+```
+
+Runtime cells/chunks may query bounded delta views. They never become the durable persistence owner.
 
 ---
 
-## 5. `GeometryDescriptionService`
+## 5. Overworld runtime ownership
 
-### Responsibility
+The Overworld streamer owns only live Overworld representations required around active/relevant observers.
 
-Produce/cache pure `BaseGeometryDescription` data for bounded geometry cells/world bounds from finalized definitions.
+Typical responsibilities:
+- terrain chunks/meshes;
+- local collision;
+- nearby procedural vegetation/object presentation;
+- nearby interactable proxies;
+- local simulation activation;
+- Overworld gateway/source-site presentation.
 
-Conceptual API:
+Persistent object state is keyed by semantic identity through persistence/WorldDelta authority.
 
-```text
-request_geometry(cell_address, quality/profile, priority)
-get_geometry_if_ready(cell_address)
-release_geometry_interest(cell_address)
-```
+Unloading an Overworld chunk cannot lose harvested objects, buildings or other durable changes.
 
-### Owns
-
-```text
-in-flight pure geometry-generation jobs
-evictable geometry-description cache
-geometry fingerprints/diagnostics
-```
-
-### Does not own
-
-```text
-runtime MeshInstance3D nodes
-CollisionShape3D nodes
-persistent player modifications
-AI/audio
-```
-
-A geometry description is intermediate deterministic data, not a scene.
+The Overworld may use predominantly X/Z chunking/LOD where appropriate. It does not inherit Underworld 3D cell requirements merely because both domains belong to one save.
 
 ---
 
-## 6. Geometry cells versus macro regions versus networks
+## 6. Underworld runtime ownership
 
-These are separate partitions.
-
-```text
-Macro region
-    deterministic generation/ownership partition
-
-Cave network
-    topology component/identity
-
-Geometry cell
-    bounded base-geometry generation/cache partition
-
-Runtime streaming cell
-    lifetime/LOD partition for live runtime representation
-```
-
-Geometry and runtime cells may use the same spatial grid initially if that is practical, but the architecture must not require that forever.
-
-One cave network may cross many cells.
-
-One cell may contain fragments from several networks/regions.
-
-A tunnel fragment does not get a new persistent gameplay identity just because it crosses a cell boundary.
-
----
-
-## 7. Underground runtime cells — DIRECTIONAL
-
-The Underworld should use a 3D runtime spatial index because different caves can occupy the same X/Z at different Y/depths.
+`UnderworldRuntimeStreamer` owns the live representation/lifecycle of bounded Underworld 3D cells.
 
 Conceptually:
 
@@ -209,469 +162,337 @@ Conceptually:
 UnderworldRuntimeCellAddress(x, y, z)
 ```
 
-Exact dimensions are open.
+A runtime cell may own:
+- current live Node root;
+- mesh/render resources;
+- collision resources;
+- currently relevant interactable/resource proxies;
+- runtime references to canonical source identity;
+- readiness/request-generation state.
 
-A 2D surface chunk grid remains suitable for surface terrain, while both systems still resolve to one global 3D world space.
+It does **not** own:
+- authoritative cave graph/topology;
+- permanent generated identity;
+- durable resource depletion;
+- player construction persistence;
+- SAVE state.
 
----
-
-## 8. `WorldStreamingCoordinator`
-
-### Responsibility
-
-Observe one or more runtime observers (initially the player/camera) and translate world position/context into demand sets for representations.
-
-Conceptual demand classes:
-
-```text
-definition demand
-geometry-description demand
-render demand
-collision demand
-simulation/interactable demand
-audio demand
-entrance/prefetch demand
-```
-
-The coordinator does not generate caves itself.
-
-### Initial observer inputs
-
-```text
-player world position
-camera world position/frustum where useful
-movement direction/velocity for prefetch
-nearby entrance/portal relevance
-environment/depth context
-```
-
-Exact heuristics remain open.
+When a cell becomes irrelevant, its live representation may disappear completely and be reconstructed later.
 
 ---
 
-## 9. Runtime representation tiers — LOCKED
+## 7. Geometry regions, networks, cells and runtime cells are separate
 
-A location/object may exist at progressively more expensive tiers:
+Do not collapse these concepts:
 
 ```text
-T0  address/world definition not currently cached
-T1  finalized deterministic definition cached
-T2  base geometry description cached
+Macro region
+    generation/ownership partition
+
+Cave network
+    stable topology component
+
+Geometry cell
+    bounded deterministic geometry partition
+
+Runtime cell
+    live representation / LOD / collision lifetime partition
+```
+
+They may share a grid initially where useful but architecture must not depend on permanent equivalence.
+
+A network can span many runtime cells. A cell boundary never creates a new persistent tunnel/chamber identity by itself.
+
+---
+
+## 8. Runtime representation tiers — LOCKED
+
+A location can progress through increasingly expensive representations:
+
+```text
+T0  no cached definition
+T1  deterministic definition cached
+T2  geometry/mesh data prepared
 T3  render representation active
-T4  collision representation active
-T5  nearby interactables/creatures simulation active
-T6  local audio active when relevant
+T4  collision active
+T5  interactable/simulation active
+T6  local audio/VFX active
 ```
 
-These tiers are not required to activate at identical radii.
+These tiers may have different activation/release distances and policies.
 
-Typical direction:
+Exact radii are profiling data, not architecture constants.
 
-```text
-render radius      > collision radius >= simulation radius
-```
+The important rule is:
 
-Audio uses its own finite relevance/occlusion logic rather than simply matching render distance.
-
-Exact thresholds are open and must be profiled.
+> **A semantic object may exist without a full runtime representation.**
 
 ---
 
-## 10. Hysteresis / release margins — LOCKED DIRECTION
+## 9. Bounded relevance — LOCKED
 
-Streaming activation and release thresholds should not be identical.
+Runtime cost should primarily follow the **currently demanded/relevant set**, not total world history.
 
-Example concept:
+Forbidden scale pattern:
 
 ```text
-activate collision at R
-release collision at R + margin
+every frame:
+    for every cell ever visited:
+        update/release/check something
 ```
 
-This prevents cells/bodies from repeatedly loading/unloading when the player hovers near a boundary.
+Preferred patterns:
+- explicit active/demand membership;
+- bounded spatial indices;
+- event-driven dirty sets;
+- dormant-record eviction where stale-result safety permits;
+- local queues;
+- bounded cache pruning;
+- sleeping/deactivation.
 
-The existing surface prototype already uses this idea for nearby world-object physics; the generalized architecture should preserve it.
+A player exploring for hundreds of hours must not turn every later frame into work over all previously visited cells.
+
+This is a direct requirement of [`10_architecture/PERFORMANCE_AND_SCALABILITY.md`](10_architecture/PERFORMANCE_AND_SCALABILITY.md) and project scale authority #369.
 
 ---
 
-## 11. Surface runtime ownership
+## 10. Hysteresis and release margins — LOCKED DIRECTION
 
-`SurfaceRuntimeStreamer` owns live surface chunk representation.
-
-Conceptually:
-
-```text
-surface mesh/runtime chunk
-surface collision tier
-surface decoration render proxies
-nearby surface interactable/physics proxies
-```
-
-Persistent object state remains referenced by stable ID through `WorldDeltaStore`.
-
-Surface chunk unload must not lose harvested/building/modification state.
-
----
-
-## 12. Underworld runtime ownership
-
-`UnderworldRuntimeStreamer` owns live underground runtime cells.
-
-A runtime cell conceptually owns only its current live representation:
-
-```text
-runtime Node root
-mesh instances
-collision bodies
-local static/interactable proxies registered for activation
-runtime references to source stable IDs
-```
-
-It does **not** own the authoritative deterministic cave graph or durable save state.
-
-When the cell unloads, its Nodes can disappear safely.
-
----
-
-## 13. Runtime cell state machine — DIRECTIONAL
-
-A runtime cell should have an explicit lifecycle rather than ad-hoc booleans spread across managers.
-
-Conceptually:
-
-```text
-UNREQUESTED
-    -> DEFINITION_PENDING/READY
-    -> GEOMETRY_PENDING/READY
-    -> RENDER_ACTIVE
-    -> COLLISION_ACTIVE
-    -> SIMULATION_ACTIVE
-```
-
-and downgrade in reverse as demand disappears.
-
-Audio may be an orthogonal activation flag/tier because it depends on source relevance/occlusion rather than only cell distance.
-
-Implementation may compress states, but ownership/transitions should remain explicit.
-
----
-
-## 14. Main-thread versus worker boundary
-
-### Worker-safe/pure-data direction
-
-```text
-deterministic region generation
-stage validation/fingerprinting
-entrance descriptor generation
-base geometry-description generation
-mesh vertex/index array preparation where safely isolated
-```
-
-### Main-thread/runtime boundary
-
-```text
-scene-tree Node creation/removal
-MeshInstance3D/scene ownership changes
-physics body/shape scene setup
-runtime registration with interaction/simulation systems
-other Godot APIs not explicitly guaranteed worker-safe
-```
-
-The project should remain conservative: if Godot's thread-safety guarantee is unclear, keep engine object mutation on the main thread and move computational data preparation to workers.
-
----
-
-## 15. In-flight request ownership and stale-result protection — LOCKED
-
-Streaming requests can become obsolete while a worker task is running.
+Activation and release thresholds should not be identical.
 
 Example:
 
 ```text
-player approaches cell A
--> geometry task A starts
-player turns around
--> cell A no longer wanted
+activate render/collision at R
+release at R + margin
 ```
 
-The architecture must support cancelling/discarding stale work without corrupting state.
+This prevents boundary thrashing.
 
-Every asynchronous request should conceptually have:
+Exact distances and time-based retention are tuned by profiling.
+
+---
+
+## 11. Worker/main-thread boundary — LOCKED DIRECTION
+
+Move computational pure-data work away from the main thread where safe.
+
+Worker-safe direction:
+- deterministic definition generation;
+- topology stages;
+- geometry/SDF calculations;
+- vertex/index preparation;
+- placement planning;
+- fingerprints/validation;
+- other engine-independent calculations.
+
+Main-thread/runtime boundary:
+- SceneTree mutation;
+- live Node creation/removal;
+- APIs Godot does not guarantee worker-safe;
+- final render/collision publication where required by engine ownership.
+
+### Publication budget
+Completing work off-thread is insufficient if many results are committed to the SceneTree in one frame.
+
+The runtime scheduler must support bounded publication, conceptually:
+
+```text
+worker results ready
+      |
+      v
+commit/publication queue
+      |
+      v
+fixed/controlled per-frame publication budget
+```
+
+Generation spikes must not simply become publication spikes.
+
+---
+
+## 12. In-flight request identity and stale-result rejection — LOCKED
+
+Every asynchronous/requested result must carry enough identity to prove it still belongs to the current demand and deterministic source.
+
+Conceptually:
 
 ```text
 request key
-source world/generator identity
-cell/region address
-requested tier/quality
+world/domain identity
+generator manifest identity
+region/cell address
+source/provenance identity
+requested tier
 request generation/token
 ```
 
-When a worker result returns, the main thread applies it only if the current owner still wants that matching request/token.
+When a result returns, apply it only if current ownership still accepts that exact request/source generation.
 
-A stale result may be cached if useful and compatible, but it must not resurrect an unloaded runtime cell by accident.
+A stale result may be placed in a compatible disposable cache if useful, but it must never resurrect an unwanted runtime cell or overwrite newer authority.
 
----
-
-## 16. No task-order world mutation
-
-Worker completion order must not decide deterministic world truth.
-
-```text
-A finishes before B
-```
-
-versus:
-
-```text
-B finishes before A
-```
-
-may change which result becomes available first, but never:
-
-```text
-which cave exists
-which connector is accepted
-which stable ID is assigned
-```
-
-The pure generation architecture guarantees the data result; the streaming coordinator only decides when to display/simulate it.
+Evicting a dormant record must not weaken stale-result rejection. Tombstone/request-generation semantics may be maintained separately from heavy runtime record residency where needed.
 
 ---
 
-## 17. Request priorities — DIRECTIONAL
+## 13. Priority scheduling — LOCKED DIRECTION
 
-The scheduler should prioritize work by immediate gameplay need.
+Prefer work that blocks immediate safe play.
 
-Conceptual priority order:
+Conceptual priority order inside a domain:
+1. collision/readiness immediately required around Player;
+2. visible/soon-visible geometry;
+3. movement-direction prefetch;
+4. nearby interactable/simulation needs;
+5. farther render LOD;
+6. speculative/background cache work.
 
-```text
-1. missing collision/simulation data immediately around player
-2. visible/soon-visible geometry
-3. entrance transition prefetch
-4. movement-direction prefetch
-5. farther render geometry
-6. speculative/background definition/cache work
-```
+Cross-domain transition temporarily raises destination-entry readiness above ordinary background work.
 
-Exact scoring is open.
-
-Do not allow large distant definition jobs to starve collision/geometry required around the player.
+No large distant generation job may starve the bounded destination/collision work needed to restore control.
 
 ---
 
-## 18. Entrance transition streaming — LOCKED DIRECTION
+## 14. Cross-domain gateway transition — LOCKED
 
-Entrances are where surface and Underworld representations overlap.
-
-When an entrance becomes relevant, the coordinator should prefetch enough underground data/geometry before the player crosses the threshold that the entrance does not reveal an empty void/pop-in.
+A gateway is a semantic transition between independent domain runtimes.
 
 Conceptually:
 
 ```text
-player approaches entrance
-    |
-    +--> surface remains active
-    +--> entrance descriptor already integrated
-    +--> connected underground definition pinned/requested
-    +--> first underground geometry cells prefetched
-    +--> collision ready before traversal
+OVERWORLD
+  gateway interaction
+        |
+        v
+WorldTransitionService
+  validate source + destination identity
+  enter transition/loading presentation
+  request/prepare destination
+  wait for required local readiness
+        |
+        v
+UNDERWORLD
+  commit active domain
+  place Player at destination-local anchor
+  release Player control
+  release source runtime when policy allows
 ```
 
-When the player moves deep enough underground, distant surface runtime content can release normally.
+Return uses the same contract in reverse or an explicitly paired/asymmetric gateway.
 
-There is no teleport/load-screen requirement in the architecture.
+### Destination readiness
+Player physics/process must not resume until the bounded collision/render support required at the destination is ready.
+
+For Underworld Continue/transition positions near cell boundaries, readiness is based on the Player's required local collision-support envelope, not merely the cell containing the Player origin unless one-cell sufficiency is formally guaranteed.
+
+### Failure
+A failed destination preparation cannot leave two authoritative active Player states or a half-committed domain transition.
+
+The source/previous stable route remains authoritative until transition commit, or the application must have an explicit safe rollback/failure state.
 
 ---
 
-## 19. Surface entrance integration query path
+## 15. Loading screens are valid
 
-Surface chunk geometry/build needs entrance descriptors that overlap its bounds.
+This architecture does not require hidden streaming across a cave mouth.
 
-Conceptual dependency:
+Valid V1:
 
 ```text
-SurfaceChunkRequest
-      |
-      v
-WorldDefinitionService.request_entrance_descriptors(surface_bounds)
-      |
-      +-- may schedule pure underground region definition generation
-      |
-      v
-SurfaceEntranceIntegrationDescriptor[]
-      |
-      v
-surface geometry/build
+interact
+-> fade/loading
+-> source runtime may release
+-> destination prepares
+-> destination commits
+-> fade in
 ```
 
-This dependency must not require underground runtime cells to exist.
+A later tunnel/elevator/animation may hide the exact same lifecycle.
 
-### Deadlock prevention
+Do not increase streaming/system coupling solely to remove a loading screen unless profiling/user experience proves the value.
 
-The surface streamer does not synchronously ask a live underground Node for entrance data.
-
-Both surface and underground streaming depend on the shared pure `WorldDefinitionService`.
+A loading screen is also not permission for unbounded work. Total latency, memory and worst main-thread hitch remain performance contracts.
 
 ---
 
-## 20. Cross-region definition pinning
+## 16. Domain-local audio / presentation
 
-Some operations such as secondary connectivity or geometry near a region boundary require neighboring definitions.
+`active_domain` is the authoritative coarse semantic for Overworld versus Underworld presentation.
 
-The scheduler may temporarily pin dependency definitions while a stage/geometry request uses them.
+Audio/UI must not infer it from:
+- global Y;
+- render visibility;
+- cell AABB membership;
+- camera depth;
+- arbitrary mesh presence.
 
-After dependent work completes and no runtime/request interest remains, those immutable definitions may become evictable.
+Within a domain, local biome/room/cave semantics may refine ambience and presentation.
 
-Reference/pin counts are cache-lifetime mechanics, not persistent ownership.
-
----
-
-## 21. Geometry-description cache lifecycle
-
-Geometry descriptions are usually more expensive than topology definitions but cheaper than full runtime representation.
-
-Directional cache policy:
-
-```text
-keep nearby/recent geometry descriptions
-release runtime Nodes first
-retain geometry briefly for fast backtracking
-then evict geometry under memory pressure
-regenerate later if necessary
-```
-
-Exact memory budget/LRU policy remains open.
-
-This is especially useful in caves where the player may reverse direction frequently.
+No inactive distant domain requires active audio players merely because its deterministic definitions exist.
 
 ---
 
-## 22. Runtime mesh/collision lifetime
+## 17. Persistent deltas and bounded views — LOCKED
 
-Runtime render and collision resources belong to their live cell/chunk owner.
-
-When demand drops:
-
-```text
-simulation deactivates
-collision can release
-render can release later
-runtime cell root can be destroyed
-```
-
-The underlying deterministic definition and persistent deltas remain unaffected.
-
----
-
-## 23. Persistent deltas are not cell-owned — LOCKED
-
-A runtime cell may query/apply deltas for objects/material inside its bounds, but the cell is not their durable owner.
-
-Wrong:
-
-```text
-cell unloads -> destroyed-tree list disappears
-```
-
-Correct:
-
-```text
-WorldDeltaStore owns destroyed stable ID
-cell loads -> queries delta -> omits/changes runtime representation
-cell unloads -> durable delta remains
-```
-
-The same rule applies later to:
-
-```text
-cleared rubble
-mined deposits
-terrain modifications
-player structures
-special-location state
-```
-
----
-
-## 24. Delta query views — DIRECTIONAL
-
-Runtime/base-geometry composition should request a bounded/read-only `WorldDeltaView` rather than hand every cell the complete save dictionary.
+Runtime systems query bounded/read-only views of durable changes.
 
 Conceptually:
 
 ```text
-WorldDeltaStore.query(bounds, relevant stable IDs/categories)
+WorldDeltaStore.query(domain, bounds, identities/categories)
     -> WorldDeltaView
 ```
 
-Exact indexing belongs to persistence implementation.
+Examples:
+- harvested trees;
+- mined deposits;
+- cleared rubble;
+- terrain changes;
+- player structures;
+- special-location state.
 
-This becomes important as worlds accumulate many modifications over hundreds of hours.
+Whole-save scans on every runtime cell update are not acceptable at scale.
 
 ---
 
-## 25. Simulation activation
+## 18. Buildings and runtime streaming
 
-Creatures/interactables should not exist as fully active simulation throughout all generated caves.
+Placed buildings remain semantic/persistent instances independent of render/collision batching.
 
-The streaming coordinator or a dedicated `SimulationActivationManager` controls nearby activation.
+Streaming may:
+- instance repeated meshes;
+- combine compatible static render clusters;
+- use LOD/proxies;
+- activate collision/interactables only when relevant;
+- spatially shard large structures.
 
-Conceptually:
+These optimizations must not erase logical piece identity needed for damage, deconstruction, support, upgrades, permissions or persistence.
+
+Large player towns are expected scale cases, not unsupported accidents.
+
+---
+
+## 19. Memory-pressure behavior
+
+Prefer evicting reconstructable expensive layers according to relevance:
 
 ```text
-far deterministic/content definition
-    -> no active AI
-near enough
-    -> spawn/restore runtime simulation representation
-leave area
-    -> deactivate/store required persistent state
+inactive runtime Nodes / expensive presentation
+-> far geometry caches
+-> far deterministic definition caches
 ```
 
-Exact creature persistence/ecology rules are intentionally not designed in this architecture cycle.
+Durable persistence state is never discarded merely as cache pressure relief.
 
-The locked requirement is that distant Underworld content cannot require live AI Nodes merely to exist.
-
----
-
-## 26. Audio activation
-
-Audio has a separate local activation path.
-
-Requirements already locked by world design:
-
-- finite 3D relevance;
-- solid rock/occlusion or an efficient approximation;
-- shafts/tunnels/entrances may permit farther propagation;
-- deep hidden content must not leak audio to the surface through arbitrary rock.
-
-Streaming implication:
-
-> Far/inactive creatures/locations do not need active audio sources/processors.
-
-An audio source definition may exist without a live `AudioStreamPlayer3D` until relevant.
+Exact budgets belong to profiling/configuration.
 
 ---
 
-## 27. Visibility/occlusion can reduce demand, but not define truth
+## 20. Multiple observers / multiplayer direction
 
-Deep underground, there is usually no reason to render the surface above solid rock.
+A domain streamer should be able to union demand from multiple observers later.
 
-Likewise, a nearby cave cell behind thick structural rock may not need the same render priority as an open connected chamber.
-
-Visibility/portal/occlusion heuristics may reduce runtime demand later.
-
-However they are optimizations only.
-
-They must never decide whether the cave/entrance itself exists.
-
----
-
-## 28. Multiple observers — future-compatible direction
-
-Initial implementation can use one player/camera observer.
-
-The coordinator interface should not make it impossible to union demand from multiple observers later:
+Conceptually:
 
 ```text
 observer A demand
@@ -679,119 +500,47 @@ UNION
 observer B demand
 ```
 
-This can support future multiplayer/debug cameras without redesigning all ownership.
+World domain is itself an interest-management boundary. Players in different domains do not automatically need each other's live domain-local AI/render/collision/audio state.
 
-No multiplayer implementation is required now.
-
----
-
-## 29. Memory-pressure behavior
-
-When memory pressure requires eviction, prefer dropping the most reconstructable/expensive runtime layers first according to current need.
-
-Conceptually:
-
-```text
-inactive runtime Nodes -> evict
-far geometry descriptions -> evict
-far finalized definitions -> evict later
-persistent deltas -> NEVER evicted as disposable cache
-```
-
-Exact budgets are profiling decisions.
+No multiplayer implementation is required by this document.
 
 ---
 
-## 30. Runtime ownership invariants
+## 21. Runtime ownership invariants
 
-The runtime architecture should enforce:
+Unless explicitly superseded:
 
-1. one live runtime owner per surface chunk address;
-2. one live runtime owner per underground runtime-cell address;
-3. stale async results cannot create duplicate owners;
-4. live runtime fragments reference canonical source stable IDs;
-5. unloading a cell cannot delete durable world deltas;
-6. deleting caches cannot change generated world truth;
-7. entrance overlap can keep surface + underground live simultaneously;
-8. collision is ready before allowing traversal into newly relevant geometry;
-9. no far cave requires live AI/audio merely to exist;
-10. surface/underground streaming use shared world-definition truth rather than querying each other's scene Nodes.
-
----
-
-## 31. Automated streaming tests
-
-Most streaming correctness can be tested without a human playtest using a fake observer and fake builders.
-
-Required test directions:
-
-```text
-move observer across surface chunk boundaries
--> expected surface demand/retention
-
-approach an entrance
--> surface remains demanded
--> connected underground definition/geometry prefetched
--> collision requested before crossing
-
-move deep underground
--> local underground cells active
--> distant surface released
-
-reverse direction rapidly
--> no duplicate runtime owners
--> stale job result discarded/does not resurrect cell
-
-force cache eviction
--> regeneration fingerprint matches
--> deltas remain intact
-
-cross region boundary underground
--> no duplicate cross-region edge/runtime ownership
-
-oscillate on tier radius boundary
--> hysteresis prevents thrashing
-```
-
-The harness does not need real production meshes to validate ownership/state transitions.
+1. Overworld and Underworld are independent runtime coordinate/residency domains.
+2. The active domain is explicit semantic state, not inferred from geometry.
+3. Cross-domain travel is owned by a transition/gateway lifecycle, not by either domain generator.
+4. `UnderworldRuntimeStreamer` remains internal Underworld demand/lifecycle authority.
+5. Runtime cost follows current relevance/residency, not total explored history.
+6. Stale asynchronous results cannot resurrect released runtime state.
+7. Worker completion order never changes deterministic world truth.
+8. SceneTree publication is bounded independently of worker throughput.
+9. Runtime cache eviction cannot delete durable deltas.
+10. Domain unload cannot erase player buildings/resources/other persistent state.
+11. Player control resumes only after the bounded destination collision support required for safety is ready.
+12. A loading screen is valid presentation and does not change gateway/world identity.
+13. Surface runtime does not require physical Underworld opening data merely to support an Underworld gateway.
+14. Underworld depth/topology remains domain-local and does not require Overworld surface coordinates.
+15. Presentation/batching/LOD may change freely without redefining semantic world identity.
 
 ---
 
-## 32. Initial implementation shape — DIRECTIONAL
+## Intentionally adjustable decisions
 
-Conceptual modules:
+Open/tunable:
+- exact cell/chunk sizes;
+- render/collision/simulation radii;
+- hysteresis margins;
+- cache memory budgets;
+- number of worker tasks;
+- per-frame publication budgets;
+- gateway preloading strategy;
+- whether source/destination temporarily overlap in memory;
+- exact loading-screen presentation;
+- exact server/multiplayer observer union;
+- exact LOD/proxy technologies.
 
-```text
-world/streaming/
-    world_streaming_coordinator.gd
-    world_definition_service.gd
-    geometry_description_service.gd
-    surface_runtime_streamer.gd
-    underworld_runtime_streamer.gd
-    runtime_cell.gd
-    streaming_request.gd
-
-world/persistence/
-    world_delta_store.gd   # later implementation
-```
-
-Exact names/folders are open.
-
-The key rule is to preserve ownership boundaries rather than creating a single `WorldManager` that owns generation, saves, meshes, AI and audio simultaneously.
-
----
-
-## 33. What remains intentionally open
-
-- surface and underground render/collision/simulation radii;
-- exact 3D runtime-cell dimensions;
-- whether geometry cells initially equal runtime cells;
-- cache sizes/LRU policy;
-- task priority formula;
-- exact prefetch distances/timing;
-- detailed cave occlusion/portal optimization;
-- creature simulation persistence model;
-- exact audio occlusion implementation;
-- exact terrain-delta spatial index/composition path.
-
-These parameters can be measured later without changing the ownership architecture.
+These values must come from real profiling and player experience rather than invented universal constants.

@@ -1,22 +1,30 @@
 # Underworld Documentation
 
-This directory is the project design and architecture reference. Use this page to find the contract that owns a decision; linked documents remain authoritative and this index does not redefine them.
+This directory is the project design and architecture reference. Use this page to find the contract that owns a decision; this index does not redefine those contracts.
 
 ## Decision status and authority
 
-Important rules use three states:
+Important rules use these states:
 
-- **LOCKED** — implementation follows the rule unless it is deliberately revised.
-- **DIRECTIONAL** — strong current direction; exact parameters may still change.
-- **OPEN** — intentionally undecided; do not hard-code a permanent answer by accident.
+- **LOCKED** — implementation follows the rule unless deliberately superseded.
+- **DIRECTIONAL** — strong current direction; exact parameters remain tunable.
+- **OPEN** — intentionally undecided.
+- **SUPERSEDED** — historical rule replaced by a later explicit decision/ADR.
 
 When sources disagree, use this order:
 
-1. the latest explicit decision in [`DECISION_LOG.md`](DECISION_LOG.md);
-2. locked rules in the relevant design document;
-3. architecture specifications;
+1. the latest explicit decision/ADR and its named supersessions;
+2. the current owning architecture/design contract;
+3. supporting architecture/index documents;
 4. existing implementation;
 5. old prototype behavior.
+
+Historical text remains history; it does not defeat a later explicit ADR that names the clause it replaces.
+
+Current cross-domain supersession authority:
+- [`00_project/ADR-001_TWO_WORLD_DOMAINS.md`](00_project/ADR-001_TWO_WORLD_DOMAINS.md)
+- [`20_world/WORLD_DOMAINS_AND_TRANSITIONS.md`](20_world/WORLD_DOMAINS_AND_TRANSITIONS.md)
+- [`00_project/DECISION_INDEX.md`](00_project/DECISION_INDEX.md)
 
 Existing code is not automatically the design.
 
@@ -26,137 +34,130 @@ The organization contract is [`00_project/DOCUMENTATION_ARCHITECTURE.md`](00_pro
 
 | Section | Responsibility | Current state |
 | --- | --- | --- |
-| [`00_project/`](00_project/) | Project intent, governance, glossary, decisions, milestones and visual direction | Active |
-| [`10_architecture/`](10_architecture/) | System boundaries, repository/content architecture and dependency direction | Active |
-| `20_world/` | World-specific generation, streaming, terrain and world-delta design | Planned; authoritative world contracts still live at `docs/` root |
-| [`30_gameplay/`](30_gameplay/) | Building and item/inventory/crafting architecture, with root-level gameplay contracts still active where not migrated | Active |
+| [`00_project/`](00_project/) | Project intent, governance, decisions/ADRs, milestones, glossary, roadmap and visual direction | Active |
+| [`10_architecture/`](10_architecture/) | Cross-system boundaries, repository/content architecture, dependency direction and scalability | Active |
+| [`20_world/`](20_world/) | World-domain relationship and domain-specific procedural-generation architecture | Active |
+| [`30_gameplay/`](30_gameplay/) | Gameplay-system architecture such as Building and item/inventory/crafting | Active |
 | [`40_content/`](40_content/) | Content IDs, categories, capabilities, references and family rulebooks | Active |
-| [`50_authoring/`](50_authoring/) | Human workflows for creating valid authored content and gameplay systems | Active |
-| [`60_validation/`](60_validation/) | Machine-enforced contracts, reproducibility evidence and operational validation guidance | Active |
+| [`50_authoring/`](50_authoring/) | Human workflows for creating valid authored content and systems | Active |
+| [`60_validation/`](60_validation/) | Machine-enforced contracts, reproducibility evidence and validation guidance | Active |
 
-The numeric prefixes are reading-order markers only. They are not game versions, content IDs, save IDs, runtime IDs or code namespaces.
+Root-level documents remain authoritative where the staged documentation migration has not replaced them. The numeric prefixes are reading-order markers, not runtime/version namespaces.
 
 ## Start here by concern
 
 ### Project governance and intent
 
-- [`GAME_PILLARS.md`](GAME_PILLARS.md) — what Underworld is and what it should not drift into.
-- [`DEVELOPMENT_RULEBOOK.md`](DEVELOPMENT_RULEBOOK.md) — architecture-first development and feature-scope rules.
-- [`DECISION_LOG.md`](DECISION_LOG.md) — chronological architectural/project decisions and revisions.
-- [`00_project/DECISION_INDEX.md`](00_project/DECISION_INDEX.md) — current decision/topic routing into owning contracts and historical checkpoints.
-- [`00_project/MILESTONES.md`](00_project/MILESTONES.md) — accepted project milestone structure and completion criteria.
-- [`00_project/VISUAL_DIRECTION.md`](00_project/VISUAL_DIRECTION.md) — visual-direction principles and replaceable presentation expectations.
-- [`00_project/DOCUMENTATION_ARCHITECTURE.md`](00_project/DOCUMENTATION_ARCHITECTURE.md) — documentation ownership, document types and migration rules.
-- [`00_project/GLOSSARY.md`](00_project/GLOSSARY.md) — canonical project terminology and links to owning contracts.
-- [`10_architecture/SYSTEM_OWNERSHIP_MAP.md`](10_architecture/SYSTEM_OWNERSHIP_MAP.md) — cross-system ownership, identity boundaries and dependency routing.
+- [`GAME_PILLARS.md`](GAME_PILLARS.md) — high-level product identity and development principles.
+- [`DECISION_LOG.md`](DECISION_LOG.md) — append-only chronological decision history, including the 2026-08-31 two-domain supersession.
+- [`00_project/ADR-001_TWO_WORLD_DOMAINS.md`](00_project/ADR-001_TWO_WORLD_DOMAINS.md) — explicit architecture supersession from one continuous world to independent procedural domains.
+- [`00_project/DECISION_INDEX.md`](00_project/DECISION_INDEX.md) — current-vs-superseded decision routing.
+- [`00_project/MASTER_ROADMAP.md`](00_project/MASTER_ROADMAP.md) — multi-lane long-horizon roadmap.
+- [`00_project/MILESTONES.md`](00_project/MILESTONES.md) — accepted milestone history/criteria.
+- [`00_project/VISUAL_DIRECTION.md`](00_project/VISUAL_DIRECTION.md) — visual-production principles.
+- [`00_project/GLOSSARY.md`](00_project/GLOSSARY.md) — canonical terminology and owning links.
+- [`00_project/DOCUMENTATION_ARCHITECTURE.md`](00_project/DOCUMENTATION_ARCHITECTURE.md) — document ownership/migration rules.
+
+### World domains and procedural generation
+
+Read these in order when changing world architecture:
+
+1. [`20_world/WORLD_DOMAINS_AND_TRANSITIONS.md`](20_world/WORLD_DOMAINS_AND_TRANSITIONS.md) — **Overworld/Underworld relationship and gateway authority**.
+2. [`WORLD_ARCHITECTURE.md`](WORLD_ARCHITECTURE.md) — world-design rules using domain-local coordinates/depth.
+3. [`20_world/UNDERWORLD_GENERATION_PIPELINE.md`](20_world/UNDERWORLD_GENERATION_PIPELINE.md) — normative Underworld-local generation pipeline.
+4. [`UNDERWORLD_GRAPH_SCHEMA.md`](UNDERWORLD_GRAPH_SCHEMA.md) — pure region/network/node/edge/entry-site schema.
+5. [`STABLE_PROCEDURAL_IDS.md`](STABLE_PROCEDURAL_IDS.md) — `WorldId`, `StableAddress` and procedural `StableId`.
+6. [`DETERMINISTIC_SEED_DOMAINS.md`](DETERMINISTIC_SEED_DOMAINS.md) — deterministic randomness and compatibility.
+7. [`STREAMING_OWNERSHIP.md`](STREAMING_OWNERSHIP.md) — domain-local runtime demand, caches, tiers, async lifetime and transition readiness.
+8. [`PERSISTENCE_AND_VERSIONING.md`](PERSISTENCE_AND_VERSIONING.md) — active-domain/domain-local Player location plus generator/delta compatibility.
+
+[`GENERATION_PIPELINE_INTERFACES.md`](GENERATION_PIPELINE_INTERFACES.md) remains a compatibility/navigation stub for the superseded root pipeline and points at the current Underworld contract. Do not revive its old physical surface-opening model.
 
 ### Core architecture and dependency direction
 
-- [`10_architecture/REPOSITORY_STRUCTURE.md`](10_architecture/REPOSITORY_STRUCTURE.md) — repository ownership, file placement, PackedScene placement and dependency direction by root.
-- [`10_architecture/DEPENDENCY_RULES.md`](10_architecture/DEPENDENCY_RULES.md) — allowed/forbidden dependencies between definitions, runtime systems and assets.
-- [`10_architecture/CONTENT_ARCHITECTURE.md`](10_architecture/CONTENT_ARCHITECTURE.md) — semantic definitions, categories/capabilities, assets and runtime separation.
-- [`10_architecture/CONTENT_REGISTRY.md`](10_architecture/CONTENT_REGISTRY.md) — semantic content-ID resolution boundary.
-- [`10_architecture/PRESENTATION_BOUNDARY.md`](10_architecture/PRESENTATION_BOUNDARY.md) — replaceable visual/animation realization boundary and gameplay/presentation authority split.
-- [`TECHNICAL_ARCHITECTURE.md`](TECHNICAL_ARCHITECTURE.md) — existing root-level system architecture; remains authoritative until explicitly migrated.
-
-### World and deterministic generation
-
-- [`WORLD_ARCHITECTURE.md`](WORLD_ARCHITECTURE.md) — surface/Underworld relationship, depth, topology, entrances and world rules.
-- [`UNDERWORLD_GRAPH_SCHEMA.md`](UNDERWORLD_GRAPH_SCHEMA.md) — pure-data region/network/node/edge/entrance graph schema.
-- [`STABLE_PROCEDURAL_IDS.md`](STABLE_PROCEDURAL_IDS.md) — `WorldId`, `StableAddress` and procedural `StableId` architecture.
-- [`DETERMINISTIC_SEED_DOMAINS.md`](DETERMINISTIC_SEED_DOMAINS.md) — named/revisioned deterministic randomness and parallel-safe seed derivation.
-- [`GENERATION_PIPELINE_INTERFACES.md`](GENERATION_PIPELINE_INTERFACES.md) — pure-data stage contracts from macro planning through geometry/runtime handoff.
-- [`STREAMING_OWNERSHIP.md`](STREAMING_OWNERSHIP.md) — definition/cache/runtime ownership, runtime tiers and async lifetime boundaries.
-- [`MINING_AND_RESOURCES.md`](MINING_AND_RESOURCES.md) — harvesting versus large-deposit excavation design.
+- [`TECHNICAL_ARCHITECTURE.md`](TECHNICAL_ARCHITECTURE.md) — root/domain definition, topology/geometry/runtime/delta/gateway separation.
+- [`10_architecture/SYSTEM_OWNERSHIP_MAP.md`](10_architecture/SYSTEM_OWNERSHIP_MAP.md) — cross-system routing including explicit gateway/world-domain ownership.
+- [`10_architecture/PERFORMANCE_AND_SCALABILITY.md`](10_architecture/PERFORMANCE_AND_SCALABILITY.md) — bounded work and canonical-state/runtime-representation separation.
+- [`10_architecture/REPOSITORY_STRUCTURE.md`](10_architecture/REPOSITORY_STRUCTURE.md) — repository ownership and dependency direction by root.
+- [`10_architecture/DEPENDENCY_RULES.md`](10_architecture/DEPENDENCY_RULES.md) — allowed/forbidden system dependencies.
+- [`10_architecture/CONTENT_ARCHITECTURE.md`](10_architecture/CONTENT_ARCHITECTURE.md) — semantic definitions and runtime/presentation separation.
+- [`10_architecture/PRESENTATION_BOUNDARY.md`](10_architecture/PRESENTATION_BOUNDARY.md) — replaceable presentation boundary.
 
 ### Persistence and serialization
 
-- [`PERSISTENCE_AND_VERSIONING.md`](PERSISTENCE_AND_VERSIONING.md) — deterministic baseline versus durable deltas, generator manifests and compatibility.
-- [`MAP_DATA_SERIALIZATION_CONTRACT.md`](MAP_DATA_SERIALIZATION_CONTRACT.md) — current executable generated-world save envelope.
-- [`STABLE_PROCEDURAL_IDS.md`](STABLE_PROCEDURAL_IDS.md) — generated-instance identity used by persistence.
-- [`50_authoring/PERSISTENCE_VERSIONING_CHECKLIST.md`](50_authoring/PERSISTENCE_VERSIONING_CHECKLIST.md) — implementation/authoring checklist for persistence-sensitive changes.
+- [`PERSISTENCE_AND_VERSIONING.md`](PERSISTENCE_AND_VERSIONING.md) — deterministic baseline vs durable deltas, generator manifests, explicit world-domain Player location and migration policy.
+- [`MAP_DATA_SERIALIZATION_CONTRACT.md`](MAP_DATA_SERIALIZATION_CONTRACT.md) — current executable generated-world delta envelope; it does not itself own integrated Player-domain save state.
+- [`50_authoring/PERSISTENCE_VERSIONING_CHECKLIST.md`](50_authoring/PERSISTENCE_VERSIONING_CHECKLIST.md) — implementation checklist for persistence-sensitive changes.
 
 ### Gameplay
 
-- [`30_gameplay/BUILDING_SYSTEM.md`](30_gameplay/BUILDING_SYSTEM.md) — building architecture, definition/runtime separation and placement/ownership boundaries.
-- [`30_gameplay/ITEM_INVENTORY_CRAFTING.md`](30_gameplay/ITEM_INVENTORY_CRAFTING.md) — item, inventory and crafting architecture and ownership boundaries.
-- [`PROTOTYPE_CHARACTER.md`](PROTOTYPE_CHARACTER.md) — current replaceable character/movement/defense prototype contract.
-- [`PLAYER_ATTACK_CONTRACT.md`](PLAYER_ATTACK_CONTRACT.md) — player melee ownership and execution boundaries.
-- [`PLAYER_INPUT_BUFFER.md`](PLAYER_INPUT_BUFFER.md) — combat-intent buffering contract.
-- [`GAME_PILLARS.md`](GAME_PILLARS.md) — design-direction context before changing gameplay rules.
-- [`10_architecture/DEPENDENCY_RULES.md`](10_architecture/DEPENDENCY_RULES.md) — check before introducing gameplay/content/presentation coupling.
+- [`30_gameplay/BUILDING_SYSTEM.md`](30_gameplay/BUILDING_SYSTEM.md) — scalable declarative construction, grid + semantic sockets, free placement, overlap and structural-support architecture.
+- [`30_gameplay/ITEM_INVENTORY_CRAFTING.md`](30_gameplay/ITEM_INVENTORY_CRAFTING.md) — item/inventory/crafting ownership.
+- [`MINING_AND_RESOURCES.md`](MINING_AND_RESOURCES.md) — harvesting vs large-deposit excavation design.
+- [`PROTOTYPE_CHARACTER.md`](PROTOTYPE_CHARACTER.md), [`PLAYER_ATTACK_CONTRACT.md`](PLAYER_ATTACK_CONTRACT.md), [`PLAYER_INPUT_BUFFER.md`](PLAYER_INPUT_BUFFER.md) — current Player/combat contracts.
 
-### Content definitions
+### Content and authoring
 
-- [`40_content/CONTENT_IDS.md`](40_content/CONTENT_IDS.md) — stable semantic content identity.
-- [`40_content/CONTENT_CATEGORIES.md`](40_content/CONTENT_CATEGORIES.md) — hierarchical classification rules.
-- [`40_content/CONTENT_CAPABILITIES.md`](40_content/CONTENT_CAPABILITIES.md) — behavioral composition contracts.
-- [`40_content/CONTENT_REFERENCES.md`](40_content/CONTENT_REFERENCES.md) — typed semantic references and cycle rules.
-- [`40_content/CONTENT_FAMILIES.md`](40_content/CONTENT_FAMILIES.md) — major scalable content families.
-- [`40_content/CONTENT_RULEBOOK.md`](40_content/CONTENT_RULEBOOK.md) — shared family-rulebook requirements.
-- [`40_content/ITEM_RULEBOOK.md`](40_content/ITEM_RULEBOOK.md) — accepted base item-definition/rulebook contract.
-- [`40_content/RESOURCE_RULEBOOK.md`](40_content/RESOURCE_RULEBOOK.md) — accepted authored underground resource/deposit definition and yield contract.
-- [`40_content/RULEBOOK_TEMPLATE.md`](40_content/RULEBOOK_TEMPLATE.md) — reusable rulebook structure.
-
-Animation and rig content specifications live under [`40_content/animations/`](40_content/animations/) and their authoring guides live in `50_authoring/`.
-
-### Authoring
-
-- [`50_authoring/AUTHORING_CONTRACT.md`](50_authoring/AUTHORING_CONTRACT.md) — general content-authoring workflow.
-- [`50_authoring/FILE_PLACEMENT_GUIDE.md`](50_authoring/FILE_PLACEMENT_GUIDE.md) — practical placement guide for definitions, runtime code, scenes, assets, tools and tests.
-- [`50_authoring/ADDING_GAMEPLAY_SYSTEM.md`](50_authoring/ADDING_GAMEPLAY_SYSTEM.md) — architecture-first workflow for adding a gameplay system without breaking ownership boundaries.
-- [`50_authoring/ADDING_RIG_PROFILE.md`](50_authoring/ADDING_RIG_PROFILE.md) — rig-profile authoring/import workflow.
-- [`50_authoring/ADDING_ANIMATION_SET.md`](50_authoring/ADDING_ANIMATION_SET.md) — semantic animation-set authoring workflow.
-- [`50_authoring/PERSISTENCE_VERSIONING_CHECKLIST.md`](50_authoring/PERSISTENCE_VERSIONING_CHECKLIST.md) — checklist for save/schema/identity-sensitive work.
+- [`40_content/CONTENT_IDS.md`](40_content/CONTENT_IDS.md)
+- [`40_content/CONTENT_CATEGORIES.md`](40_content/CONTENT_CATEGORIES.md)
+- [`40_content/CONTENT_CAPABILITIES.md`](40_content/CONTENT_CAPABILITIES.md)
+- [`40_content/CONTENT_REFERENCES.md`](40_content/CONTENT_REFERENCES.md)
+- [`40_content/CONTENT_FAMILIES.md`](40_content/CONTENT_FAMILIES.md)
+- [`40_content/CONTENT_RULEBOOK.md`](40_content/CONTENT_RULEBOOK.md)
+- [`50_authoring/AUTHORING_CONTRACT.md`](50_authoring/AUTHORING_CONTRACT.md)
+- [`50_authoring/FILE_PLACEMENT_GUIDE.md`](50_authoring/FILE_PLACEMENT_GUIDE.md)
+- [`50_authoring/ADDING_GAMEPLAY_SYSTEM.md`](50_authoring/ADDING_GAMEPLAY_SYSTEM.md)
 
 ### Validation and operations
 
-- [`VALIDATION_HARNESS.md`](VALIDATION_HARNESS.md) — deterministic primitives, stage fingerprints, campaigns and validation architecture.
-- [`60_validation/VALIDATION_MATRIX.md`](60_validation/VALIDATION_MATRIX.md) — current validation ownership and expected evidence by change class.
-- [`60_validation/CONTENT_VALIDATION.md`](60_validation/CONTENT_VALIDATION.md) — content validation architecture.
-- [`60_validation/DETERMINISTIC_FIXTURE_CATALOG.md`](60_validation/DETERMINISTIC_FIXTURE_CATALOG.md) — deterministic fixture/reproducibility catalog and selector history.
+- [`VALIDATION_HARNESS.md`](VALIDATION_HARNESS.md) — deterministic primitives, fingerprints and campaign architecture.
+- [`60_validation/VALIDATION_MATRIX.md`](60_validation/VALIDATION_MATRIX.md) — validation ownership/evidence by change class.
+- [`60_validation/DETERMINISTIC_FIXTURE_CATALOG.md`](60_validation/DETERMINISTIC_FIXTURE_CATALOG.md) — deterministic fixture/reproducibility catalog.
 - [`60_validation/REPOSITORY_LAYOUT_VALIDATION.md`](60_validation/REPOSITORY_LAYOUT_VALIDATION.md) — repository/path ownership validation.
-- [`60_validation/MAIN_MERGE_GATE.md`](60_validation/MAIN_MERGE_GATE.md) — operational PM/merge-governance contract. Its presence documents the required process; it does not by itself prove repository-side protection is active.
-
-This README remains a navigation page rather than a second validation matrix or test-suite index.
+- [`60_validation/MAIN_MERGE_GATE.md`](60_validation/MAIN_MERGE_GATE.md) — PM/merge-governance contract.
 
 ## I need to change X — where do I look first?
 
-| Change | Look here first | Then check |
+| Change | Primary authority | Then check |
 | --- | --- | --- |
-| Deterministic worldgen, topology, entrances or cave definitions | [`GENERATION_PIPELINE_INTERFACES.md`](GENERATION_PIPELINE_INTERFACES.md) | [`STABLE_PROCEDURAL_IDS.md`](STABLE_PROCEDURAL_IDS.md), [`DETERMINISTIC_SEED_DOMAINS.md`](DETERMINISTIC_SEED_DOMAINS.md), [`WORLD_ARCHITECTURE.md`](WORLD_ARCHITECTURE.md) |
-| Geometry/runtime cells, streaming or loaded world representation | [`STREAMING_OWNERSHIP.md`](STREAMING_OWNERSHIP.md) | [`10_architecture/REPOSITORY_STRUCTURE.md`](10_architecture/REPOSITORY_STRUCTURE.md), [`GENERATION_PIPELINE_INTERFACES.md`](GENERATION_PIPELINE_INTERFACES.md) |
-| Save data, durable world changes or generator compatibility | [`PERSISTENCE_AND_VERSIONING.md`](PERSISTENCE_AND_VERSIONING.md) | [`MAP_DATA_SERIALIZATION_CONTRACT.md`](MAP_DATA_SERIALIZATION_CONTRACT.md), [`50_authoring/PERSISTENCE_VERSIONING_CHECKLIST.md`](50_authoring/PERSISTENCE_VERSIONING_CHECKLIST.md) |
-| Building rules or structure authoring/runtime ownership | [`30_gameplay/BUILDING_SYSTEM.md`](30_gameplay/BUILDING_SYSTEM.md) | [`10_architecture/DEPENDENCY_RULES.md`](10_architecture/DEPENDENCY_RULES.md), applicable content rulebook |
-| Items, inventory or crafting | [`30_gameplay/ITEM_INVENTORY_CRAFTING.md`](30_gameplay/ITEM_INVENTORY_CRAFTING.md) | [`40_content/ITEM_RULEBOOK.md`](40_content/ITEM_RULEBOOK.md), [`50_authoring/AUTHORING_CONTRACT.md`](50_authoring/AUTHORING_CONTRACT.md) |
-| Player/combat/gameplay behavior | Relevant gameplay contract, e.g. [`PLAYER_ATTACK_CONTRACT.md`](PLAYER_ATTACK_CONTRACT.md) | [`GAME_PILLARS.md`](GAME_PILLARS.md), [`10_architecture/DEPENDENCY_RULES.md`](10_architecture/DEPENDENCY_RULES.md) |
-| New gameplay system | [`50_authoring/ADDING_GAMEPLAY_SYSTEM.md`](50_authoring/ADDING_GAMEPLAY_SYSTEM.md) | [`10_architecture/SYSTEM_OWNERSHIP_MAP.md`](10_architecture/SYSTEM_OWNERSHIP_MAP.md), [`10_architecture/DEPENDENCY_RULES.md`](10_architecture/DEPENDENCY_RULES.md) |
-| New item, creature, attack, structure or other authored definition | [`10_architecture/CONTENT_ARCHITECTURE.md`](10_architecture/CONTENT_ARCHITECTURE.md) | [`40_content/CONTENT_IDS.md`](40_content/CONTENT_IDS.md), applicable family rulebook, [`50_authoring/AUTHORING_CONTRACT.md`](50_authoring/AUTHORING_CONTRACT.md) |
-| New/changed asset, scene, animation or file location | [`10_architecture/REPOSITORY_STRUCTURE.md`](10_architecture/REPOSITORY_STRUCTURE.md) | [`10_architecture/PRESENTATION_BOUNDARY.md`](10_architecture/PRESENTATION_BOUNDARY.md), [`50_authoring/FILE_PLACEMENT_GUIDE.md`](50_authoring/FILE_PLACEMENT_GUIDE.md) |
-| Authoring another valid content member | [`50_authoring/AUTHORING_CONTRACT.md`](50_authoring/AUTHORING_CONTRACT.md) | Applicable rulebook and specialized guide |
-| Tests, validation or CI evidence | [`60_validation/VALIDATION_MATRIX.md`](60_validation/VALIDATION_MATRIX.md) | [`VALIDATION_HARNESS.md`](VALIDATION_HARNESS.md), owning subsystem contract and actual workflow/runner |
-| Merge/review governance | [`60_validation/MAIN_MERGE_GATE.md`](60_validation/MAIN_MERGE_GATE.md) | Actual repository settings/status checks and PM board state |
-| Project/documentation governance | [`00_project/DOCUMENTATION_ARCHITECTURE.md`](00_project/DOCUMENTATION_ARCHITECTURE.md) | [`00_project/DECISION_INDEX.md`](00_project/DECISION_INDEX.md), [`DEVELOPMENT_RULEBOOK.md`](DEVELOPMENT_RULEBOOK.md), [`DECISION_LOG.md`](DECISION_LOG.md) |
+| Overworld ↔ Underworld transition/domain identity | [`20_world/WORLD_DOMAINS_AND_TRANSITIONS.md`](20_world/WORLD_DOMAINS_AND_TRANSITIONS.md) | ADR-001, `STREAMING_OWNERSHIP`, persistence |
+| Underworld topology/depth/entry sites | [`20_world/UNDERWORLD_GENERATION_PIPELINE.md`](20_world/UNDERWORLD_GENERATION_PIPELINE.md) | graph schema, StableId, seed domains |
+| Overworld generation | Owning Overworld contract/card | world-domain contract, StableId/seed-domain rules |
+| Runtime cells/streaming/readiness | [`STREAMING_OWNERSHIP.md`](STREAMING_OWNERSHIP.md) | performance/scalability, domain contract |
+| Save data / world deltas / generator compatibility | [`PERSISTENCE_AND_VERSIONING.md`](PERSISTENCE_AND_VERSIONING.md) | serialization contract, migration checklist |
+| Building | [`30_gameplay/BUILDING_SYSTEM.md`](30_gameplay/BUILDING_SYSTEM.md) | dependency rules, content contracts, performance |
+| Items/inventory/crafting | [`30_gameplay/ITEM_INVENTORY_CRAFTING.md`](30_gameplay/ITEM_INVENTORY_CRAFTING.md) | content rulebooks, authoring contract |
+| New gameplay system | [`50_authoring/ADDING_GAMEPLAY_SYSTEM.md`](50_authoring/ADDING_GAMEPLAY_SYSTEM.md) | system ownership map, dependency rules |
+| New/changed asset or presentation | [`10_architecture/PRESENTATION_BOUNDARY.md`](10_architecture/PRESENTATION_BOUNDARY.md) | visual direction, repository structure |
+| Tests/CI evidence | [`60_validation/VALIDATION_MATRIX.md`](60_validation/VALIDATION_MATRIX.md) | validation harness, owning subsystem contract |
+| Merge/review governance | [`60_validation/MAIN_MERGE_GATE.md`](60_validation/MAIN_MERGE_GATE.md) | live PM board/repository state |
 
-## Root-level documents are still authoritative
+## Two-domain guardrail
 
-The numbered hierarchy is the destination architecture, but migration is staged. Existing root-level documents remain authoritative until an explicit documentation-only migration moves/replaces them and updates references in the same change.
+Do **not** introduce a new requirement that:
 
-Therefore:
+- Overworld and Underworld share XYZ coordinates;
+- Underworld depth is derived from Overworld Y/surface height;
+- a surface chunk must load/query Underworld definitions to cut a physical cross-domain hole;
+- both complete domains must be resident/rendered near a gateway;
+- active domain is inferred from Y sign, AABB membership, rendered cave geometry or camera depth.
 
-- do not assume a root-level document is deprecated because a numbered destination section exists;
-- do not move active contracts as part of unrelated implementation work;
-- keep using existing paths until a reviewed migration changes them;
-- if documents conflict, resolve the conflict in the owning authoritative contract rather than silently choosing whichever file looks newer.
+If a feature genuinely needs to revise one of those rules, it is an architecture change and requires a new explicit decision/ADR rather than an implementation shortcut.
+
+## Root-level documents and migration
+
+The numbered hierarchy is the destination architecture, but documentation migration remains staged. Root-level documents are authoritative until explicitly replaced/migrated and references are updated.
+
+Never choose between conflicting documents by filename age. Resolve the conflict through the current decision/ADR + owning contract and update indexes in the same governance change.
 
 ## Change rule
 
-A locked rule may change, but only deliberately:
+A locked rule may change deliberately:
 
-1. state why the existing rule is insufficient;
+1. state why the current rule is insufficient;
 2. define the replacement;
-3. update the owning document;
-4. record the decision in [`DECISION_LOG.md`](DECISION_LOG.md);
+3. record an explicit decision/ADR and exact supersession when needed;
+4. update owning contracts and indexes;
 5. then change implementation.
 
-Keep this README concise. Detailed rules belong in the owning architecture, rulebook, authoring or validation document.
+Keep this README a navigation page rather than a second architecture specification.
