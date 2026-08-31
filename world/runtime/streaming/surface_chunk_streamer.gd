@@ -5,6 +5,7 @@ const TerrainChunkScript := preload("res://world/terrain_chunk.gd")
 const PickupGeneratorScript := preload("res://worldgen/surface/pickup_generator.gd")
 const StableIdScript := preload("res://worldgen/identity/stable_id.gd")
 const WorldDeltaStoreScript := preload("res://worldgen/persistence/world_delta_store.gd")
+const SurfaceEntranceChunkComposerScript := preload("res://world/runtime/streaming/surface_entrance_chunk_composer.gd")
 
 var settings
 var main_generator
@@ -31,6 +32,12 @@ var world_object_update_timer: float = 0.0
 # surface-domain lookup cache used while realizing/reloading chunks.
 var destroyed_object_ids: Dictionary = {}
 var _world_delta_store = WorldDeltaStoreScript.new()
+
+# ENTRANCE-SURFACE-002 consumes the already-selected route as immutable input.
+# It never selects topology or persists suppression as WorldDelta destruction.
+var _selected_entrance_route: Dictionary = {}
+var _entrance_surface_snapshots: Dictionary = {}
+var _entrance_surface_diagnostics: Array[String] = []
 
 # Terrain + pickup transform data is generated on one background worker.
 # Scene-tree, meshes, and physics remain main-thread only.
@@ -59,8 +66,32 @@ func bind_world_delta_store(store) -> bool:
 	return true
 
 
+func bind_selected_entrance_route(route: Dictionary) -> Array[String]:
+	var failures: Array[String] = SurfaceEntranceChunkComposerScript.validate_route(route)
+	if not failures.is_empty():
+		return failures
+	_selected_entrance_route = route.duplicate(true)
+	_selected_entrance_route.make_read_only()
+	_entrance_surface_snapshots.clear()
+	_entrance_surface_diagnostics.clear()
+	return []
+
+
+func entrance_surface_composition_diagnostics() -> Array[String]:
+	return _entrance_surface_diagnostics.duplicate()
+
+
+func get_entrance_surface_composition_snapshot(coord: Vector2i) -> Dictionary:
+	var snapshot_variant: Variant = _entrance_surface_snapshots.get(coord, {})
+	if not snapshot_variant is Dictionary:
+		return {}
+	return snapshot_variant.duplicate(true)
+
+
 func configure(world_settings) -> void:
 	settings = world_settings
+	_entrance_surface_snapshots.clear()
+	_entrance_surface_diagnostics.clear()
 
 	main_generator = TerrainGeneratorScript.new()
 	main_generator.configure(settings)
@@ -395,6 +426,7 @@ func _update_desired_chunks(center: Vector2i) -> void:
 		if not _is_within_square_radius(coord, center, retention_radius):
 			chunks[coord].queue_free()
 			chunks.erase(coord)
+			_entrance_surface_snapshots.erase(coord)
 
 	_rebuild_generation_queue(center)
 	_update_collision_radius(center)
@@ -506,6 +538,31 @@ func _build_chunk_from_data(coord: Vector2i, data: Dictionary, data_ms: float) -
 		return
 
 	var build_started_usec: int = Time.get_ticks_usec()
+	var build_data: Dictionary = data
+	var realization_destroyed: Dictionary = _destroyed_object_lookup()
+	if not _selected_entrance_route.is_empty():
+		var composition: Dictionary = SurfaceEntranceChunkComposerScript.compose(
+			coord,
+			data,
+			settings,
+			_selected_entrance_route,
+			realization_destroyed
+		)
+		if not bool(composition.get("success", false)):
+			_entrance_surface_diagnostics.clear()
+			for diagnostic in composition.get("diagnostics", []):
+				_entrance_surface_diagnostics.append(str(diagnostic))
+			_entrance_surface_diagnostics.sort()
+			push_error("Surface entrance composition failed for %s: %s" % [coord, _entrance_surface_diagnostics])
+			return
+		build_data = composition.get("data", data)
+		realization_destroyed = composition.get("realization_destroyed_objects", realization_destroyed)
+		var snapshot_variant: Variant = composition.get("snapshot", {})
+		if snapshot_variant is Dictionary and not snapshot_variant.is_empty():
+			_entrance_surface_snapshots[coord] = snapshot_variant.duplicate(true)
+		else:
+			_entrance_surface_snapshots.erase(coord)
+
 	var chunk = TerrainChunkScript.new()
 	chunk.position = Vector3(
 		float(coord.x) * settings.chunk_size,
@@ -516,11 +573,11 @@ func _build_chunk_from_data(coord: Vector2i, data: Dictionary, data_ms: float) -
 	var needs_collision: bool = _is_within_collision_radius(coord, current_player_chunk)
 	chunk.call("build",
 		coord,
-		data,
+		build_data,
 		terrain_material,
 		decoration_assets,
 		settings,
-		_destroyed_object_lookup(),
+		realization_destroyed,
 		needs_collision
 	)
 	add_child(chunk)
