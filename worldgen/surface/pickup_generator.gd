@@ -1,5 +1,8 @@
 extends RefCounted
 
+const StableAddressScript := preload("res://worldgen/identity/stable_address.gd")
+const StableIdScript := preload("res://worldgen/identity/stable_id.gd")
+
 var settings
 
 
@@ -16,7 +19,9 @@ func add_pickups_to_chunk_data(chunk_coord: Vector2i, data: Dictionary) -> void:
 	var build_values: PackedFloat32Array = data["buildability"]
 
 	var branch_transforms: Array[Transform3D] = []
+	var branch_stable_ids: Array[String] = []
 	var loose_stone_transforms: Array[Transform3D] = []
+	var loose_stone_stable_ids: Array[String] = []
 	var step: int = maxi(settings.pickup_vertex_step, 2)
 
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -62,6 +67,9 @@ func add_pickups_to_chunk_data(chunk_coord: Vector2i, data: Dictionary) -> void:
 					branch_basis,
 					Vector3(local_x, terrain_height + 0.09, local_z)
 				))
+				branch_stable_ids.append(_candidate_stable_id(
+					"branch", chunk_coord, resolution, base_x, base_z
+				))
 
 			# Loose stones favor shorelines and rocky ground, but retain a baseline
 			# chance in clearings so the starting loop cannot dead-end on one seed.
@@ -78,9 +86,33 @@ func add_pickups_to_chunk_data(chunk_coord: Vector2i, data: Dictionary) -> void:
 					stone_basis,
 					Vector3(local_x, terrain_height + sy * 0.5, local_z)
 				))
+				loose_stone_stable_ids.append(_candidate_stable_id(
+					"loose-stone", chunk_coord, resolution, base_x, base_z
+				))
 
 	data["branch_transforms"] = branch_transforms
+	data["branch_stable_ids"] = branch_stable_ids
 	data["loose_stone_transforms"] = loose_stone_transforms
+	data["loose_stone_stable_ids"] = loose_stone_stable_ids
+
+
+func _candidate_stable_id(
+	domain: String,
+	chunk_coord: Vector2i,
+	resolution: int,
+	base_x: int,
+	base_z: int
+) -> String:
+	var candidate_span: int = resolution - 1
+	var global_cell_x: int = chunk_coord.x * candidate_span + base_x
+	var global_cell_z: int = chunk_coord.y * candidate_span + base_z
+	var address = StableAddressScript.surface_candidate(
+		domain,
+		global_cell_x,
+		global_cell_z,
+		"0"
+	)
+	return StableIdScript.from_address(address).value()
 
 
 func _sample_grid(

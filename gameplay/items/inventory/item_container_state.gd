@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ContentId := preload("res://core/content/identity/content_id.gd")
+const FiniteNumber := preload("res://core/content/validation/finite_number.gd")
 const ItemDefinition := preload("res://gameplay/items/definitions/item_definition.gd")
 const ItemStackState := preload("res://gameplay/items/inventory/item_stack_state.gd")
 const ItemInstanceState := preload("res://gameplay/items/inventory/item_instance_state.gd")
@@ -58,7 +59,9 @@ func validate_container() -> Array[String]:
 	var failures: Array[String] = []
 	if _slot_capacity < 1:
 		failures.append("inventory slot capacity must be >= 1")
-	if not _is_valid_weight_capacity(_max_weight):
+	if not FiniteNumber.is_finite_number(_max_weight):
+		failures.append("inventory max_weight must be finite")
+	elif not _is_valid_weight_capacity(_max_weight):
 		failures.append("inventory max weight must be -1 (unlimited) or >= 0")
 	if _slots.size() != maxi(_slot_capacity, 0):
 		failures.append("inventory slot storage size does not match configured slot capacity")
@@ -81,10 +84,13 @@ func validate_container() -> Array[String]:
 		for failure in state.validate_against(definition):
 			failures.append("slot %d: %s" % [index, failure])
 
-	if _max_weight >= 0.0 and current_weight() > _max_weight + 0.00001:
+	var occupied_weight: float = current_weight()
+	if not FiniteNumber.is_finite_number(occupied_weight):
+		failures.append("inventory current_weight must be finite")
+	elif FiniteNumber.is_finite_number(_max_weight) and _max_weight >= 0.0 and occupied_weight > _max_weight + 0.00001:
 		failures.append(
 			"inventory occupied weight exceeds configured capacity: %.6f > %.6f" % [
-				current_weight(),
+				occupied_weight,
 				_max_weight,
 			]
 		)
@@ -127,7 +133,15 @@ func add_stack(definition, quantity: int, stack_state: Dictionary = {}) -> Dicti
 		])
 
 	var added_weight: float = definition.unit_weight * float(quantity)
-	if not _weight_allows(current_weight() + added_weight):
+	var projected_weight: float = current_weight() + added_weight
+	if not FiniteNumber.is_finite_number(projected_weight):
+		return _failure([
+			"inventory projected_weight must be finite for stack add: %s x%d" % [
+				definition.content_id,
+				quantity,
+			]
+		])
+	if not _weight_allows(projected_weight):
 		return _failure([
 			"inventory weight capacity would be exceeded by %s x%d" % [definition.content_id, quantity]
 		])
@@ -224,7 +238,12 @@ func add_instance(definition, per_copy_state: Dictionary = {}) -> Dictionary:
 	var empty_slot: int = _first_empty_slot()
 	if empty_slot < 0:
 		return _failure(["inventory has no empty slot for item instance: %s" % definition.content_id])
-	if not _weight_allows(current_weight() + definition.unit_weight):
+	var projected_weight: float = current_weight() + definition.unit_weight
+	if not FiniteNumber.is_finite_number(projected_weight):
+		return _failure([
+			"inventory projected_weight must be finite for item instance: %s" % definition.content_id
+		])
+	if not _weight_allows(projected_weight):
 		return _failure(["inventory weight capacity would be exceeded by item instance: %s" % definition.content_id])
 
 	var state = ItemInstanceState.new().configure(definition, per_copy_state)
@@ -296,16 +315,24 @@ func resize_capacity(new_slot_capacity: int, new_max_weight: float) -> Dictionar
 	var failures: Array[String] = validate_container()
 	if new_slot_capacity < 1:
 		failures.append("new inventory slot capacity must be >= 1")
-	if not _is_valid_weight_capacity(new_max_weight):
+	if not FiniteNumber.is_finite_number(new_max_weight):
+		failures.append("new inventory max_weight must be finite")
+	elif not _is_valid_weight_capacity(new_max_weight):
 		failures.append("new inventory max weight must be -1 (unlimited) or >= 0")
 	if new_slot_capacity < _slots.size():
 		for index in range(new_slot_capacity, _slots.size()):
 			if _slots[index] != null:
 				failures.append("cannot shrink inventory across occupied slot %d" % index)
-	if new_max_weight >= 0.0 and current_weight() > new_max_weight + 0.00001:
+	var occupied_weight: float = current_weight()
+	if (
+		FiniteNumber.is_finite_number(new_max_weight)
+		and FiniteNumber.is_finite_number(occupied_weight)
+		and new_max_weight >= 0.0
+		and occupied_weight > new_max_weight + 0.00001
+	):
 		failures.append(
 			"cannot reduce inventory weight capacity below occupied weight: %.6f > %.6f" % [
-				current_weight(),
+				occupied_weight,
 				new_max_weight,
 			]
 		)
@@ -356,11 +383,18 @@ func _first_empty_slot() -> int:
 
 
 func _weight_allows(projected_weight: float) -> bool:
+	if not FiniteNumber.is_finite_number(projected_weight):
+		return false
+	if not _is_valid_weight_capacity(_max_weight):
+		return false
 	return _max_weight < 0.0 or projected_weight <= _max_weight + 0.00001
 
 
 static func _is_valid_weight_capacity(value: float) -> bool:
-	return value >= 0.0 or is_equal_approx(value, UNLIMITED_WEIGHT)
+	return (
+		FiniteNumber.is_finite_number(value)
+		and (value >= 0.0 or is_equal_approx(value, UNLIMITED_WEIGHT))
+	)
 
 
 static func _stack_key(item_content_id: String, stack_state: Dictionary) -> String:
@@ -392,44 +426,24 @@ static func _authored_definition_compatibility_failures(
 	stored_definition,
 	incoming_definition
 ) -> Array[String]:
-	var failures: Array[String] = []
 	if stored_definition == null or not stored_definition is ItemDefinition:
 		return ["authored item definition mismatch: stored slot definition is not ItemDefinition"]
 	if incoming_definition == null or not incoming_definition is ItemDefinition:
 		return ["authored item definition mismatch: incoming definition is not ItemDefinition"]
-	if str(stored_definition.content_id) != str(incoming_definition.content_id):
-		failures.append(
-			"authored item definition mismatch: content_id %s != %s" % [
-				stored_definition.content_id,
-				incoming_definition.content_id,
-			]
+
+	var stored_descriptor_json: String = InventoryStateCodec.canonical_json(
+		stored_definition.canonical_descriptor()
+	)
+	var incoming_descriptor_json: String = InventoryStateCodec.canonical_json(
+		incoming_definition.canonical_descriptor()
+	)
+	if stored_descriptor_json == incoming_descriptor_json:
+		return []
+	return [
+		"authored item definition mismatch for %s: canonical authored descriptor differs" % str(
+			incoming_definition.content_id
 		)
-	if stored_definition.schema_revision != incoming_definition.schema_revision:
-		failures.append(
-			"authored item definition mismatch for %s: schema_revision %d != %d" % [
-				incoming_definition.content_id,
-				stored_definition.schema_revision,
-				incoming_definition.schema_revision,
-			]
-		)
-	if stored_definition.stack_limit != incoming_definition.stack_limit:
-		failures.append(
-			"authored item definition mismatch for %s: stack_limit %d != %d" % [
-				incoming_definition.content_id,
-				stored_definition.stack_limit,
-				incoming_definition.stack_limit,
-			]
-		)
-	if stored_definition.unit_weight != incoming_definition.unit_weight:
-		failures.append(
-			"authored item definition mismatch for %s: unit_weight %.6f != %.6f" % [
-				incoming_definition.content_id,
-				stored_definition.unit_weight,
-				incoming_definition.unit_weight,
-			]
-		)
-	failures.sort()
-	return failures
+	]
 
 
 static func _definition_failures(definition) -> Array[String]:

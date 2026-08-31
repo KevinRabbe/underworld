@@ -26,6 +26,7 @@ const SurfacePlan := preload("res://worldgen/surface/surface_entrance_chunk_plan
 
 signal traversal_gate_changed(entrance_id: String, open: bool)
 signal cell_attached(address, tier: String)
+signal cave_presence_changed(in_cave: bool)
 
 var streamer
 var world_id: String = ""
@@ -39,20 +40,32 @@ var _material: Material
 var last_bootstrap_fingerprint: String = ""
 var last_bootstrap_diagnostics: Array[String] = []
 var last_bootstrap_surface_position: Vector3 = Vector3.ZERO
+var _player_in_realized_cave: bool = false
 
 func configure(world_id_value: String, manifest_id_value: String, player_value: Node3D = null, executor = null) -> void:
+	_unbind_streamer()
+	_dispose_all_realizations()
+	entrance_plans.clear()
+	gates.clear()
 	world_id = world_id_value
 	generator_manifest_id = manifest_id_value
 	player = player_value
+	_player_in_realized_cave = false
 	streamer = Streamer.new(world_id, generator_manifest_id, executor)
+	_bind_streamer()
 
 func set_cave_material(material: Material) -> void:
 	_material = material
 
-## Builds the deterministic data pipeline for one region and realizes the selected
-## entrance cells. Call this during a loading phase; all scene/resource creation
-## remains inside the main-thread realization methods below.
+## Compatibility/developer entry point retained for MAP-015 and historical tests.
+## The generated-entrance operation below is the production authority.
 func bootstrap_fixture(world_seed: int, region: Vector2i, entrance_id: String) -> Array[String]:
+	return bootstrap_generated_entrance(world_seed, region, entrance_id)
+
+## Builds the deterministic data pipeline for one generated entrance and realizes
+## its selected cells. Call this during a loading phase; all scene/resource
+## creation remains inside the main-thread realization methods below.
+func bootstrap_generated_entrance(world_seed: int, region: Vector2i, entrance_id: String) -> Array[String]:
 	last_bootstrap_diagnostics.clear()
 	var context := WorldContext.new(world_seed)
 	var sampler := SurfaceSampler.new(world_seed)
@@ -65,7 +78,7 @@ func bootstrap_fixture(world_seed: int, region: Vector2i, entrance_id: String) -
 	var selected = null
 	for descriptor in entrances.data.surface_integration_descriptors:
 		if str(descriptor.entrance_id) == entrance_id: selected = descriptor; break
-	if selected == null: return _bootstrap_fail(["Fixture entrance was not found: " + entrance_id])
+	if selected == null: return _bootstrap_fail(["Generated entrance was not found: " + entrance_id])
 	last_bootstrap_surface_position = selected.surface_world_position
 	var neighbor_views: Array = []
 	for offset in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
@@ -131,6 +144,7 @@ func update_player_position(position: Vector3) -> void:
 	if streamer == null:
 		return
 	streamer.update_observer(position, "player")
+	_update_cave_presence(position)
 	for entrance_id in gates.keys():
 		var handoff = entrance_plans[entrance_id]
 		var near := false
@@ -148,6 +162,42 @@ func update_player_position(position: Vector3) -> void:
 			else:
 				streamer.release_entrance(address, entrance_id)
 		_update_gates()
+
+func _update_cave_presence(position: Vector3) -> void:
+	if not _is_finite_vector3(position):
+		return
+	var in_cave := false
+	for candidate in render_nodes.values():
+		if candidate == null or not candidate is Node or not is_instance_valid(candidate):
+			continue
+		if not candidate.has_meta("cell_semantic_snapshot"):
+			continue
+		var snapshot_variant = candidate.get_meta("cell_semantic_snapshot")
+		if not snapshot_variant is Dictionary:
+			continue
+		var bounds_variant = snapshot_variant.get("world_bounds", null)
+		if bounds_variant is AABB:
+			var bounds: AABB = bounds_variant
+			if bounds.size.x > 0.0 and bounds.size.y > 0.0 and bounds.size.z > 0.0 and bounds.has_point(position):
+				in_cave = true
+				break
+	if in_cave == _player_in_realized_cave:
+		return
+	_player_in_realized_cave = in_cave
+	cave_presence_changed.emit(in_cave)
+
+
+func player_is_in_realized_cave() -> bool:
+	return _player_in_realized_cave
+
+
+static func _is_finite_vector3(value: Vector3) -> bool:
+	return (
+		not is_nan(value.x) and not is_inf(value.x)
+		and not is_nan(value.y) and not is_inf(value.y)
+		and not is_nan(value.z) and not is_inf(value.z)
+	)
+
 
 ## Builds the compact renderer-facing semantic snapshot consumed by replaceable
 ## presentation. It contains value types only and deliberately excludes StableIds,
@@ -193,16 +243,21 @@ static func build_cell_semantic_snapshot(source_cell_plan) -> Dictionary:
 func accept_mesh_data(mesh_data, material = null, cell_semantic_snapshot: Dictionary = {}) -> bool:
 	if streamer == null or mesh_data == null:
 		return false
+	var key: String = mesh_data.cell_address.canonical_text()
+	var record = streamer.records.get(key)
+	if record == null:
+		return false
 	var realized: Dictionary = MeshBoundary.realize_main_thread(mesh_data, material if material != null else _material, mesh_data.input_fingerprint)
 	if not realized.success:
 		return false
-	var result := Result.new(mesh_data.cell_address, streamer.records[mesh_data.cell_address.canonical_text()].generation, "render", streamer.records[mesh_data.cell_address.canonical_text()].source_fingerprint, streamer.records[mesh_data.cell_address.canonical_text()].provenance_fingerprint, realized.handle, true, [], world_id, generator_manifest_id)
+	var result := Result.new(mesh_data.cell_address, record.generation, "render", record.source_fingerprint, record.provenance_fingerprint, realized.handle, true, [], world_id, generator_manifest_id)
 	if not streamer.accept_result(result):
 		return false
+	_dispose_tracked_node(render_nodes, key)
 	var node := MeshInstance3D.new()
-	node.name = "CaveCell_" + mesh_data.cell_address.canonical_text().replace(":", "_")
+	node.name = "CaveCell_" + key.replace(":", "_")
 	node.mesh = realized.mesh
-	node.set_meta("cell_address", mesh_data.cell_address.canonical_text())
+	node.set_meta("cell_address", key)
 	node.set_meta("source_fingerprint", mesh_data.output_fingerprint)
 	if not cell_semantic_snapshot.is_empty():
 		var stored_snapshot: Dictionary = cell_semantic_snapshot.duplicate(true)
@@ -215,29 +270,31 @@ func accept_mesh_data(mesh_data, material = null, cell_semantic_snapshot: Dictio
 		stored_snapshot.make_read_only()
 		node.set_meta("cell_semantic_snapshot", stored_snapshot)
 	add_child(node)
-	render_nodes[mesh_data.cell_address.canonical_text()] = node
-	streamer.records[mesh_data.cell_address.canonical_text()].runtime_handle = realized.handle
+	render_nodes[key] = node
+	record.runtime_handle = realized.handle
 	cell_attached.emit(mesh_data.cell_address, "render")
 	return true
 
 func accept_collision_shape(address, shape, source_fingerprint: String, provenance_fingerprint: String) -> bool:
 	if streamer == null or shape == null:
 		return false
-	var record = streamer.records.get(address.canonical_text())
+	var key: String = address.canonical_text()
+	var record = streamer.records.get(key)
 	if record == null:
 		return false
 	var result := Result.new(address, record.generation, "collision", source_fingerprint, provenance_fingerprint, shape, true, [], world_id, generator_manifest_id)
 	if not streamer.accept_result(result):
 		return false
+	_dispose_tracked_node(collision_nodes, key)
 	var body := StaticBody3D.new()
-	body.name = "CaveCollision_" + address.canonical_text().replace(":", "_")
+	body.name = "CaveCollision_" + key.replace(":", "_")
 	var collider := CollisionShape3D.new()
 	collider.shape = shape
 	body.add_child(collider)
-	body.set_meta("cell_address", address.canonical_text())
+	body.set_meta("cell_address", key)
 	body.set_meta("source_fingerprint", source_fingerprint)
 	add_child(body)
-	collision_nodes[address.canonical_text()] = body
+	collision_nodes[key] = body
 	cell_attached.emit(address, "collision")
 	_update_gates()
 	return true
@@ -245,7 +302,50 @@ func accept_collision_shape(address, shape, source_fingerprint: String, provenan
 func gate_is_open(entrance_id: String) -> bool:
 	return gates.has(entrance_id) and gates[entrance_id].is_open()
 
+func _bind_streamer() -> void:
+	if streamer == null:
+		return
+	var callback := Callable(self, "_on_streamer_tier_retired")
+	if streamer.has_signal("tier_retired") and not streamer.is_connected("tier_retired", callback):
+		streamer.connect("tier_retired", callback)
+
+func _unbind_streamer() -> void:
+	if streamer == null or not is_instance_valid(streamer):
+		return
+	var callback := Callable(self, "_on_streamer_tier_retired")
+	if streamer.has_signal("tier_retired") and streamer.is_connected("tier_retired", callback):
+		streamer.disconnect("tier_retired", callback)
+
+func _on_streamer_tier_retired(address, tier: String) -> void:
+	var key: String = address.canonical_text() if address != null and address.has_method("canonical_text") else str(address)
+	if tier == "render":
+		_dispose_tracked_node(render_nodes, key)
+	elif tier == "collision":
+		_dispose_tracked_node(collision_nodes, key)
+		_update_gates()
+
+func _dispose_tracked_node(nodes: Dictionary, key: String) -> void:
+	if not nodes.has(key):
+		return
+	var node = nodes.get(key)
+	nodes.erase(key)
+	if node == null or not is_instance_valid(node):
+		return
+	var parent = node.get_parent()
+	if parent != null:
+		parent.remove_child(node)
+	if not node.is_queued_for_deletion():
+		node.queue_free()
+
+func _dispose_all_realizations() -> void:
+	for key in render_nodes.keys().duplicate():
+		_dispose_tracked_node(render_nodes, str(key))
+	for key in collision_nodes.keys().duplicate():
+		_dispose_tracked_node(collision_nodes, str(key))
+
 func _update_gates() -> void:
+	if streamer == null:
+		return
 	for entrance_id in gates.keys():
 		var gate: Gate = gates[entrance_id]
 		var was_open := gate.is_open()

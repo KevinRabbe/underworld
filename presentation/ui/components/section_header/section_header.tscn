@@ -1,0 +1,18 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://presentation/ui/components/section_header/section_header.gd" id="1_script"]
+
+[node name="SectionHeader" type="HBoxContainer"]
+custom_minimum_size = Vector2(0, 28)
+script = ExtResource("1_script")
+
+[node name="Title" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SectionHeaderLabel"
+text = "SECTION"
+
+[node name="Divider" type="HSeparator" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SectionDivider"

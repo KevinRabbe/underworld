@@ -1,0 +1,27 @@
+[gd_resource type="Resource" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://gameplay/crafting/definitions/recipe_definition.gd" id="1_recipe"]
+[ext_resource type="Script" path="res://gameplay/crafting/definitions/recipe_item_amount.gd" id="2_amount"]
+
+[sub_resource type="Resource" id="Ingredient_wood"]
+script = ExtResource("2_amount")
+item_content_id = "item.resource.wood"
+quantity = 4
+
+[sub_resource type="Resource" id="Ingredient_stone"]
+script = ExtResource("2_amount")
+item_content_id = "item.resource.stone"
+quantity = 3
+
+[sub_resource type="Resource" id="Output_axe"]
+script = ExtResource("2_amount")
+item_content_id = "item.tool.stone_axe"
+quantity = 1
+
+[resource]
+script = ExtResource("1_recipe")
+content_id = "recipe.hand.stone_axe"
+definition_family = "recipe"
+schema_revision = 1
+ingredients = [SubResource("Ingredient_wood"), SubResource("Ingredient_stone")]
+outputs = [SubResource("Output_axe")]

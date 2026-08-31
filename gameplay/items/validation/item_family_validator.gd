@@ -81,3 +81,16 @@ func validate_definition(definition, context: Dictionary) -> Array[String]:
 
 	failures.sort()
 	return failures
+
+
+func canonical_evidence_descriptor() -> Dictionary:
+	var descriptor: Dictionary = super.canonical_evidence_descriptor()
+	var extensions: Array = []
+	for extension in _rule_extensions:
+		if extension == null or not extension is ItemRuleExtension:
+			extensions.append({"invalid_item_rule_extension": true})
+			continue
+		extensions.append(extension.canonical_evidence_descriptor().duplicate(true))
+	extensions.sort_custom(func(a, b): return JSON.stringify(a) < JSON.stringify(b))
+	descriptor["rule_extensions"] = extensions
+	return descriptor

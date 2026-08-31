@@ -9,6 +9,7 @@ const CategorySchemaRegistry := preload("res://core/content/schema/category_sche
 const CapabilitySchemaRegistry := preload("res://core/content/schema/capability_schema_registry.gd")
 const ContentFamilyValidator := preload("res://core/content/validation/content_family_validator.gd")
 const ReferenceCyclePolicy := preload("res://core/content/validation/content_reference_cycle_policy.gd")
+const ContentValidationEvidence := preload("res://core/content/validation/content_validation_evidence.gd")
 
 
 func validate_all(
@@ -65,6 +66,27 @@ func validate_ids(
 		target_ids,
 		""
 	)
+
+
+static func evidence_failures(
+	validation_result: Dictionary,
+	content_registry,
+	required_content_id: String = "",
+	current_context: Dictionary = {}
+) -> Array[String]:
+	var failures: Array[String] = []
+	var evidence = validation_result.get("evidence", null)
+	if evidence == null or not evidence is ContentValidationEvidence:
+		failures.append("expected CONTENT-006 snapshot-bound validation evidence")
+		return failures
+	for failure in evidence.verification_failures(
+		content_registry,
+		required_content_id,
+		current_context
+	):
+		failures.append(str(failure))
+	failures.sort()
+	return failures
 
 
 func _validate(
@@ -254,15 +276,79 @@ func _validate(
 	)
 
 	var canonical_diagnostics: Array = _canonicalize_diagnostics(diagnostics)
-	var validated_ids: Array[String] = []
+	var selected_id_list: Array[String] = []
 	for key in selected_ids.keys():
-		validated_ids.append(str(key))
-	validated_ids.sort()
+		selected_id_list.append(str(key))
+	selected_id_list.sort()
+	var validation_success: bool = canonical_diagnostics.is_empty()
+	var authority_ids: Array[String] = []
+	if validation_success:
+		authority_ids.append_array(selected_id_list)
+
+	var snapshot_descriptor: Dictionary = _snapshot_descriptor(
+		content_registry,
+		category_registry,
+		capability_registry,
+		validators,
+		effective_cycle_policy,
+		target_ids,
+		target_family
+	)
+	var evidence = ContentValidationEvidence.new(
+		validation_success,
+		canonical_diagnostics,
+		authority_ids,
+		snapshot_descriptor,
+		category_registry,
+		capability_registry,
+		validators,
+		effective_cycle_policy
+	)
 	return {
-		"success": canonical_diagnostics.is_empty(),
-		"validated_definition_ids": validated_ids,
+		"success": validation_success,
+		# Compatibility projection: keep reporting the selected IDs even on
+		# failure. CONTENT-006 runtime authority lives only in typed evidence,
+		# whose validated IDs are deliberately empty when validation fails.
+		"validated_definition_ids": selected_id_list,
 		"diagnostic_count": canonical_diagnostics.size(),
 		"diagnostics": canonical_diagnostics,
+		"evidence": evidence,
+	}
+
+
+func _snapshot_descriptor(
+	content_registry,
+	category_registry,
+	capability_registry,
+	validators: Array,
+	cycle_policy,
+	target_ids: Dictionary,
+	target_family: String
+) -> Dictionary:
+	var ordered_target_ids: Array[String] = []
+	for raw_id in target_ids.keys():
+		ordered_target_ids.append(str(raw_id))
+	ordered_target_ids.sort()
+	return {
+		"evidence_revision": ContentValidationEvidence.EVIDENCE_REVISION,
+		"definitions": content_registry.canonical_manifest(),
+		"category_schema_manifest": (
+			category_registry.canonical_manifest()
+			if category_registry != null and category_registry is CategorySchemaRegistry
+			else []
+		),
+		"capability_schema_manifest": (
+			capability_registry.canonical_manifest()
+			if capability_registry != null and capability_registry is CapabilitySchemaRegistry
+			else []
+		),
+		"family_validators": ContentValidationEvidence.family_validator_descriptors(validators),
+		"cycle_policy": cycle_policy.canonical_descriptor(),
+		"semantic_context": null,
+		"request": {
+			"target_ids": ordered_target_ids,
+			"target_family": target_family,
+		},
 	}
 
 

@@ -2,24 +2,21 @@ extends Node3D
 
 signal equipped_tool_changed(tool_id: String)
 signal harvest_result(event: Dictionary)
+signal craft_completed(recipe_id: String, item_id: String)
 
 const ItemDefinition := preload("res://gameplay/items/definitions/item_definition.gd")
 const ItemContainerState := preload("res://gameplay/items/inventory/item_container_state.gd")
 const InventoryTransactionPlan := preload("res://gameplay/items/inventory/inventory_transaction_plan.gd")
 const InventoryTransactionService := preload("res://gameplay/items/inventory/inventory_transaction_service.gd")
-const EquipmentSlotRule := preload("res://gameplay/items/equipment/equipment_slot_rule.gd")
 const EquipmentHotbarState := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
 const EquipmentService := preload("res://gameplay/items/equipment/equipment_service.gd")
 const SurfaceHarvestInventoryService := preload("res://gameplay/survival/surface_harvest_inventory_service.gd")
+const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
 
 const WOOD_ID := "item.resource.wood"
 const STONE_ID := "item.resource.stone"
 const AXE_ID := "item.tool.stone_axe"
 const PICKAXE_ID := "item.tool.stone_pickaxe"
-const WOOD_PATH := "res://content/items/resources/wood_definition.tres"
-const STONE_PATH := "res://content/items/resources/stone_definition.tres"
-const AXE_PATH := "res://content/items/tools/stone_axe_definition.tres"
-const PICKAXE_PATH := "res://content/items/tools/stone_pickaxe_definition.tres"
 const SLOT_HANDS := "equipment_slot.hotbar.hands"
 const SLOT_AXE := "equipment_slot.hotbar.axe"
 const SLOT_PICKAXE := "equipment_slot.hotbar.pickaxe"
@@ -66,7 +63,14 @@ func configure(
 	world_seed = seed
 	_inventory_slot_capacity = maxi(inventory_slot_capacity, 1)
 	_inventory_max_weight = inventory_max_weight
-	_load_state()
+	# SAVE-001 owns all durable file lifecycle. Survival always builds clean
+	# semantic runtime here and never inspects prototype-v2 files or resets the
+	# shared WorldDelta authority during gameplay construction.
+	_reset_state()
+
+
+func legacy_persistence_enabled() -> bool:
+	return false
 
 
 func set_player(player_node: Node3D) -> void:
@@ -149,19 +153,22 @@ func harvest_world_object(
 	if next_hits < required_hits:
 		object_hit_progress[object_id] = next_hits
 		last_action_message = "%s hit %d/%d" % [object_type.capitalize(), next_hits, required_hits]
+		var hit_event: Dictionary = {
+			"type": "harvest.hit_registered",
+			"object_id": object_id,
+			"object_type": object_type,
+			"hits": next_hits,
+			"required_hits": required_hits,
+			"world_position": player.global_position if player != null else Vector3.ZERO,
+		}
+		harvest_result.emit(hit_event)
 		return _harvest_success({
 			"object_id": object_id,
 			"object_type": object_type,
 			"hits": next_hits,
 			"required_hits": required_hits,
 			"completed": false,
-			"events": [{
-				"type": "harvest.hit_registered",
-				"object_id": object_id,
-				"object_type": object_type,
-				"hits": next_hits,
-				"required_hits": required_hits,
-			}],
+			"events": [hit_event],
 		})
 
 	var item_id: String = _harvest_inventory.item_id_for_world_object(object_type)
@@ -195,7 +202,6 @@ func harvest_world_object(
 		"quantity": yield_quantity,
 	}
 	harvest_result.emit(event)
-	_save_state()
 	return _harvest_success({
 		"object_id": object_id,
 		"object_type": object_type,
@@ -282,7 +288,6 @@ func collect_nearby_pickups_at(player_world_position: Vector3) -> Dictionary:
 		last_action_message = "Picked up %d wood" % branch_count
 	else:
 		last_action_message = "Picked up %d stone" % stone_count
-	_save_state()
 	return {
 		"success": diagnostics.is_empty(),
 		"diagnostics": diagnostics,
@@ -308,7 +313,6 @@ func select_hotbar_slot(slot: int) -> void:
 	else:
 		last_action_message = "Equipment selected"
 	equipped_tool_changed.emit(equipped_tool)
-	_save_state()
 
 
 func request_craft(recipe_id: String) -> void:
@@ -379,13 +383,12 @@ func request_craft(recipe_id: String) -> void:
 	if not bool(equipped.get("success", false)):
 		last_action_message = "Crafted tool remains in inventory"
 		_sync_legacy_mirrors()
-		_save_state()
 		return
 	_equipment.select_hotbar(target_hotbar)
 	_sync_legacy_mirrors()
 	last_action_message = "Crafted Stone Axe" if recipe_id == "stone_axe" else "Crafted Stone Pickaxe"
 	equipped_tool_changed.emit(equipped_tool)
-	_save_state()
+	craft_completed.emit(recipe_id, tool_id)
 
 
 func get_resource_counts() -> Vector2i:
@@ -448,10 +451,6 @@ func get_object_hit_progress(object_id: String) -> int:
 	return int(object_hit_progress.get(object_id, 0))
 
 
-func _get_save_path() -> String:
-	return "user://underworld_seed_%d.json" % world_seed
-
-
 func _reset_state() -> void:
 	object_hit_progress.clear()
 	last_action_message = "Walk over loose branches and stones"
@@ -461,93 +460,28 @@ func _reset_state() -> void:
 
 func _configure_semantic_runtime() -> void:
 	_definitions.clear()
-	for path in [WOOD_PATH, STONE_PATH, AXE_PATH, PICKAXE_PATH]:
-		var loaded: Variant = ResourceLoader.load(path)
-		if loaded != null and loaded is ItemDefinition:
-			_definitions[str(loaded.content_id)] = loaded
+	var catalog_result: Dictionary = GameplaySaveCatalog.build_registry()
+	if not bool(catalog_result.get("success", false)):
+		push_error("Survival durable gameplay catalog failed: %s" % [catalog_result.get("diagnostics", [])])
+	else:
+		var registry = catalog_result.get("registry", null)
+		if registry != null:
+			for content_id in registry.definition_ids():
+				var definition = registry.get_definition(content_id)
+				if definition != null and definition is ItemDefinition:
+					_definitions[content_id] = definition
 
 	_inventory = ItemContainerState.new().configure(_inventory_slot_capacity, _inventory_max_weight)
-	var rules: Array = [
-		EquipmentSlotRule.new().configure(SLOT_HANDS, ["category.item.equipment"], ["capability.equipable"]),
-		EquipmentSlotRule.new().configure(SLOT_AXE, ["category.item.equipment.tool.axe"], ["capability.equipable", "capability.harvest_tool"]),
-		EquipmentSlotRule.new().configure(SLOT_PICKAXE, ["category.item.equipment.tool.pickaxe"], ["capability.equipable", "capability.harvest_tool"]),
-		EquipmentSlotRule.new().configure(SLOT_UTILITY, ["category.item.equipment"], ["capability.equipable"]),
-	]
-	_equipment = EquipmentHotbarState.new().configure(rules, {
-		1: SLOT_HANDS,
-		2: SLOT_AXE,
-		3: SLOT_PICKAXE,
-		4: SLOT_UTILITY,
-	})
+	_equipment = EquipmentHotbarState.new().configure(
+		GameplaySaveCatalog.equipment_rules(),
+		GameplaySaveCatalog.hotbar_bindings()
+	)
 	_equipment.select_hotbar(1)
 	_harvest_inventory = SurfaceHarvestInventoryService.new().configure(
 		_inventory,
 		_equipment,
 		_definitions.values()
 	)
-
-
-func _load_state() -> void:
-	_reset_state()
-	if world != null:
-		world.load_destroyed_object_ids([])
-
-	var save_path: String = _get_save_path()
-	if not FileAccess.file_exists(save_path):
-		return
-	var file: FileAccess = FileAccess.open(save_path, FileAccess.READ)
-	if file == null:
-		return
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
-	if not parsed is Dictionary:
-		return
-	var save_data: Dictionary = parsed
-	if int(save_data.get("world_seed", -1)) != world_seed:
-		return
-
-	var destroyed_list: Array = save_data.get("destroyed_objects", [])
-	if world != null:
-		world.load_destroyed_object_ids(destroyed_list)
-	_restore_stack(WOOD_ID, maxi(int(save_data.get("wood", 0)), 0))
-	_restore_stack(STONE_ID, maxi(int(save_data.get("stone", 0)), 0))
-	if bool(save_data.get("stone_axe", false)):
-		_restore_tool(AXE_ID, SLOT_AXE)
-	if bool(save_data.get("stone_pickaxe", false)):
-		_restore_tool(PICKAXE_ID, SLOT_PICKAXE)
-	var saved_slot: int = clampi(int(save_data.get("selected_slot", 1)), 1, 3)
-	if saved_slot == 2 and not has_tool("stone_axe"):
-		saved_slot = 1
-	elif saved_slot == 3 and not has_tool("stone_pickaxe"):
-		saved_slot = 1
-	_equipment.select_hotbar(saved_slot)
-	_sync_legacy_mirrors()
-	if world != null and world.get_destroyed_object_count() > 0:
-		last_action_message = "Loaded %d world modifications" % world.get_destroyed_object_count()
-
-
-func _restore_stack(item_id: String, quantity: int) -> void:
-	if quantity <= 0:
-		return
-	var definition = _definitions.get(item_id, null)
-	if definition == null or not definition is ItemDefinition:
-		return
-	var plan = InventoryTransactionPlan.new().bind_container(INVENTORY_KEY, _inventory)
-	plan.add_stack(INVENTORY_KEY, definition, quantity)
-	_transactions.commit(plan)
-
-
-func _restore_tool(item_id: String, target_slot: String) -> void:
-	var definition = _definitions.get(item_id, null)
-	if definition == null or not definition is ItemDefinition:
-		return
-	var plan = InventoryTransactionPlan.new().bind_container(INVENTORY_KEY, _inventory)
-	plan.add_instance(INVENTORY_KEY, definition)
-	var restored: Dictionary = _transactions.commit(plan)
-	if not bool(restored.get("success", false)):
-		return
-	var source_slot: int = _find_inventory_instance_slot(item_id)
-	if source_slot >= 0:
-		_equipment_service.equip_from_inventory(_equipment, _inventory, source_slot, definition, target_slot)
 
 
 func _find_inventory_instance_slot(item_id: String) -> int:
@@ -585,28 +519,6 @@ func _sync_legacy_mirrors() -> void:
 		equipped_tool = "stone_pickaxe"
 	else:
 		equipped_tool = "hands"
-
-
-func _save_state() -> void:
-	_sync_legacy_mirrors()
-	var destroyed_list: Array = []
-	if world != null:
-		destroyed_list = world.get_destroyed_object_ids()
-	var save_data: Dictionary = {
-		"version": 2,
-		"world_seed": world_seed,
-		"destroyed_objects": destroyed_list,
-		"wood": gathered_wood,
-		"stone": gathered_stone,
-		"stone_axe": has_stone_axe,
-		"stone_pickaxe": has_stone_pickaxe,
-		"selected_slot": selected_hotbar_slot,
-	}
-	var file: FileAccess = FileAccess.open(_get_save_path(), FileAccess.WRITE)
-	if file == null:
-		last_action_message = "Save failed"
-		return
-	file.store_string(JSON.stringify(save_data, "  "))
 
 
 static func _harvest_failure(messages: Array) -> Dictionary:

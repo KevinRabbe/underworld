@@ -5,6 +5,8 @@ signal attack_requested(execution: Dictionary)
 signal hotbar_slot_requested(slot: int)
 signal craft_requested(recipe_id: String)
 signal parry_succeeded(source_position: Vector3)
+signal damage_committed(amount: int, remaining_health: int, source_position: Vector3)
+signal defeat_requested(reason: StringName)
 
 const PrototypeMannequinScript := preload("res://presentation/characters/player/prototype_mannequin/prototype_mannequin.gd")
 const PrototypeAnimationRuntimeFactoryScript := preload("res://presentation/characters/player/prototype_mannequin/prototype_animation_runtime_factory.gd")
@@ -41,6 +43,9 @@ const SPRINT_FOV := 79.0
 const RESPAWN_FALL_HEIGHT := -100.0
 const MAX_HEALTH := 100
 const DAMAGE_INVULNERABILITY := 0.45
+const POST_RESPAWN_INVULNERABILITY := 1.0
+const DEFEAT_REASON_DAMAGE: StringName = &"damage"
+const DEFEAT_REASON_FALL: StringName = &"fall"
 const TOOL_HAND_RIG_ROLE := "rig_role.socket.hand.right"
 
 var look_sensitivity: float = 0.0025
@@ -48,7 +53,6 @@ var camera_pitch: float = deg_to_rad(-12.0)
 var camera_distance: float = DEFAULT_CAMERA_DISTANCE
 var coyote_timer: float = 0.0
 var jump_buffer_timer: float = 0.0
-var respawn_position: Vector3 = Vector3.ZERO
 var harvest_range: float = 4.5
 var tool_use_cooldown_duration: float = 0.38
 var tool_use_cooldown_timer: float = 0.0
@@ -57,12 +61,17 @@ var damage_invulnerability_timer: float = 0.0
 var health: int = MAX_HEALTH
 var equipped_tool_visual: String = "hands"
 var sprinting_this_frame: bool = false
+var defeated: bool = false
+var _defeat_reason: StringName = &""
 
 var stamina := StaminaComponentScript.new(100.0, 0.75, 20.0)
 var action_controller := PlayerActionControllerScript.new(stamina)
 var input_buffer := PlayerInputBufferScript.new()
 var pending_attack_definition
 var pending_attack_direction: Vector3 = Vector3.ZERO
+var equipped_weapon_definition
+var equipped_weapon_attack_set
+var equipped_weapon_attack_resolver
 
 var visual_root: Node3D
 var mannequin
@@ -79,11 +88,12 @@ func _ready() -> void:
 	_configure_character_body()
 	_build_character_visual()
 	_build_camera()
-	respawn_position = global_position
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if defeated:
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		camera_yaw.rotate_y(-event.relative.x * look_sensitivity)
 		camera_pitch = clampf(
@@ -98,17 +108,31 @@ func _unhandled_input(event: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		return
 
+	if event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		return
+
+	if event.is_action_pressed("attack_light"):
+		_request_attack(false)
+		return
+	if event.is_action_pressed("attack_heavy"):
+		_request_attack(true)
+		return
+	if event.is_action_pressed("hotbar_slot_1"):
+		hotbar_slot_requested.emit(1)
+		return
+	if event.is_action_pressed("hotbar_slot_2"):
+		hotbar_slot_requested.emit(2)
+		return
+	if event.is_action_pressed("hotbar_slot_3"):
+		hotbar_slot_requested.emit(3)
+		return
+	if event.is_action_pressed("hotbar_slot_4"):
+		hotbar_slot_requested.emit(4)
+		return
+
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
-			KEY_1:
-				hotbar_slot_requested.emit(1)
-				return
-			KEY_2:
-				hotbar_slot_requested.emit(2)
-				return
-			KEY_3:
-				hotbar_slot_requested.emit(3)
-				return
 			KEY_C:
 				craft_requested.emit("stone_axe")
 				return
@@ -117,15 +141,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 
 	if event is InputEventMouseButton and event.pressed:
-		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-			return
-
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			_request_harvest()
-			return
-		if event.button_index == MOUSE_BUTTON_RIGHT:
-			_request_attack()
 			return
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_set_camera_distance(camera_distance - CAMERA_ZOOM_STEP)
@@ -134,6 +151,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if defeated:
+		velocity = Vector3.ZERO
+		sprinting_this_frame = false
+		return
 	damage_invulnerability_timer = maxf(0.0, damage_invulnerability_timer - delta)
 	_handle_action_inputs()
 	_update_jump_timers(delta)
@@ -152,10 +173,6 @@ func _physics_process(delta: float) -> void:
 	stamina.tick(delta)
 
 
-func set_respawn_position(position: Vector3) -> void:
-	respawn_position = position
-
-
 func set_harvest_range(distance: float) -> void:
 	harvest_range = maxf(distance, 0.1)
 
@@ -166,7 +183,14 @@ func set_tool_use_cooldown(duration: float) -> void:
 
 func set_equipped_tool(tool_id: String) -> void:
 	equipped_tool_visual = tool_id
+	configure_equipped_weapon_attack_source(null, null, null)
 	_rebuild_tool_visual()
+
+
+func configure_equipped_weapon_attack_source(weapon, attack_set, resolver) -> void:
+	equipped_weapon_definition = weapon
+	equipped_weapon_attack_set = attack_set
+	equipped_weapon_attack_resolver = resolver
 
 
 func get_horizontal_speed() -> float:
@@ -188,7 +212,6 @@ func get_stamina() -> float:
 func get_max_stamina() -> float:
 	return stamina.max_stamina
 
-
 func get_action_state_name() -> String:
 	return action_controller.state_name()
 
@@ -209,6 +232,14 @@ func is_blocking() -> bool:
 	return action_controller.is_blocking()
 
 
+func is_defeated() -> bool:
+	return defeated
+
+
+func get_defeat_reason() -> StringName:
+	return _defeat_reason
+
+
 func get_mannequin():
 	return mannequin
 
@@ -222,7 +253,7 @@ func receive_melee_attack(
 	source_position: Vector3,
 	parryable: bool = true
 ) -> StringName:
-	if amount <= 0:
+	if defeated or amount <= 0:
 		return &"ignored"
 	if action_controller.is_dodge_iframe_active():
 		return &"dodged"
@@ -261,8 +292,14 @@ func _is_source_in_front_arc(source_position: Vector3, minimum_dot: float) -> bo
 
 
 func _apply_damage(amount: int, source_position: Vector3) -> void:
+	if defeated:
+		return
 	damage_invulnerability_timer = DAMAGE_INVULNERABILITY
+	var previous_health: int = health
 	health = maxi(health - amount, 0)
+	var committed_damage: int = previous_health - health
+	if committed_damage > 0:
+		damage_committed.emit(committed_damage, health, source_position)
 	if animation_controller != null:
 		animation_controller.present_hit()
 
@@ -274,58 +311,75 @@ func _apply_damage(amount: int, source_position: Vector3) -> void:
 		velocity.z += away.z * 4.5
 
 	if health <= 0:
-		_respawn_after_defeat()
+		_enter_defeated(DEFEAT_REASON_DAMAGE)
 
 
 func _request_harvest() -> void:
-	if not _begin_tool_action():
+	if defeated or not _begin_tool_action():
 		return
 	var ray: Dictionary = _get_camera_action_ray(harvest_range)
 	harvest_requested.emit(ray["origin"], ray["direction"], ray["distance"])
 
 
-func _request_attack() -> void:
-	var intent: Dictionary = _build_attack_intent()
+func _request_attack(heavy: bool = false) -> void:
+	if defeated:
+		return
+	var intent: Dictionary = _build_attack_intent(heavy)
 	if intent.is_empty():
 		return
 	if action_controller.is_free():
 		_start_attack_from_intent(intent)
 		return
-	input_buffer.push(&"attack")
+	_queue_buffered_action(&"attack", intent, 0.16)
 
 
-func _build_attack_intent() -> Dictionary:
-	if camera == null:
+func _build_attack_intent(heavy: bool = false) -> Dictionary:
+	if defeated or camera == null:
 		return {}
-	var attack_definition = AttackCatalogScript.for_tool(equipped_tool_visual)
+	var attack_kind: StringName = &"heavy" if heavy else &"light"
+	var attack_definition = _resolve_attack_definition(equipped_tool_visual, attack_kind)
 	if attack_definition == null or not bool(attack_definition.call("is_valid")):
 		return {}
 	var direction: Vector3 = _get_combat_forward()
 	if direction.is_zero_approx():
 		return {}
+	var source_signature: String = _current_attack_source_signature()
+	if source_signature.is_empty():
+		return {}
 	return {
 		"tool_id": equipped_tool_visual,
 		"direction": direction,
+		"attack_kind": attack_kind,
+		"attack_definition": attack_definition,
+		"source_signature": source_signature,
 	}
 
 
-func _start_attack_from_intent(intent: Dictionary) -> bool:
-	if not action_controller.is_free():
+func _start_attack_from_intent(intent: Dictionary, require_current_source: bool = false) -> bool:
+	if defeated or not action_controller.is_free():
 		return false
-	var tool_id: String = str(intent.get("tool_id", "hands"))
+	var source_signature: String = str(intent.get("source_signature", ""))
+	if require_current_source and (
+		source_signature.is_empty()
+		or source_signature != _current_attack_source_signature()
+	):
+		return false
 	var direction: Vector3 = intent.get("direction", Vector3.ZERO)
+	var attack_kind: StringName = StringName(intent.get("attack_kind", &"light"))
 	direction.y = 0.0
 	if direction.is_zero_approx():
 		return false
 	direction = direction.normalized()
 
-	var attack_definition = AttackCatalogScript.for_tool(tool_id)
+	var attack_definition = intent.get("attack_definition", null)
 	if attack_definition == null or not bool(attack_definition.call("is_valid")):
 		return false
-	if not action_controller.try_start_attack(
+	if not action_controller.try_start_attack_profile(
 		float(attack_definition.get("startup")),
 		float(attack_definition.get("active")),
-		float(attack_definition.get("recovery"))
+		float(attack_definition.get("recovery")),
+		attack_kind,
+		float(attack_definition.get("stamina_cost"))
 	):
 		return false
 
@@ -340,7 +394,7 @@ func _start_attack_from_intent(intent: Dictionary) -> bool:
 
 
 func _resolve_pending_attack_activation() -> void:
-	if not action_controller.consume_attack_activation():
+	if defeated or not action_controller.consume_attack_activation():
 		return
 	var attack_definition = pending_attack_definition
 	var direction: Vector3 = pending_attack_direction
@@ -358,8 +412,52 @@ func _resolve_pending_attack_activation() -> void:
 	attack_requested.emit(execution)
 
 
+func _resolve_attack_definition(tool_id: String, attack_kind: StringName):
+	if (
+		equipped_weapon_definition != null
+		and equipped_weapon_attack_set != null
+		and equipped_weapon_attack_resolver != null
+	):
+		var technique_role: String = str(equipped_weapon_definition.primary_technique_role)
+		if attack_kind == &"heavy":
+			technique_role = "weapon_technique.heavy.primary"
+		var resolved: Dictionary = equipped_weapon_attack_resolver.resolve_attack(
+			equipped_weapon_definition,
+			equipped_weapon_attack_set,
+			technique_role
+		)
+		return resolved.get("attack_definition", null)
+	return AttackCatalogScript.for_tool(tool_id, attack_kind)
+
+
+func _current_attack_source_signature() -> String:
+	if (
+		equipped_weapon_definition != null
+		and equipped_weapon_attack_set != null
+		and equipped_weapon_attack_resolver != null
+	):
+		var weapon_id: String = str(equipped_weapon_definition.get("content_id"))
+		var attack_set_id: String = str(equipped_weapon_attack_set.get("content_id"))
+		if weapon_id.is_empty() or attack_set_id.is_empty():
+			return ""
+		return "weapon:%s|attack_set:%s" % [weapon_id, attack_set_id]
+	if equipped_tool_visual.is_empty():
+		return ""
+	return "tool:%s" % equipped_tool_visual
+
+
+func _queue_buffered_action(
+	action: StringName,
+	payload: Dictionary = {},
+	lifetime: float = PlayerInputBufferScript.DEFAULT_LIFETIME
+) -> bool:
+	if defeated or not action_controller.can_replace_buffered_action(action, input_buffer.peek_action()):
+		return false
+	return input_buffer.push(action, payload, lifetime)
+
+
 func _try_consume_buffered_action() -> void:
-	if not action_controller.is_free() or not input_buffer.has_pending():
+	if defeated or not action_controller.is_free() or not input_buffer.has_pending():
 		return
 	var buffered_action: StringName = input_buffer.peek_action()
 	if (
@@ -372,9 +470,7 @@ func _try_consume_buffered_action() -> void:
 	var payload: Dictionary = intent.get("payload", {})
 	match StringName(intent.get("action", &"")):
 		&"attack":
-			var live_attack_intent: Dictionary = _build_attack_intent()
-			if not live_attack_intent.is_empty():
-				_start_attack_from_intent(live_attack_intent)
+			_start_attack_from_intent(payload, true)
 		&"dodge":
 			_start_dodge(payload.get("direction", Vector3.ZERO))
 		&"parry":
@@ -383,7 +479,8 @@ func _try_consume_buffered_action() -> void:
 
 func _begin_tool_action() -> bool:
 	if (
-		camera == null
+		defeated
+		or camera == null
 		or tool_use_cooldown_timer > 0.0
 		or not action_controller.is_free()
 	):
@@ -410,6 +507,8 @@ func _get_camera_action_ray(reach_from_player: float) -> Dictionary:
 
 
 func _handle_action_inputs() -> void:
+	if defeated:
+		return
 	if action_controller.is_blocking():
 		if not is_on_floor() or not Input.is_action_pressed("block"):
 			action_controller.stop_block()
@@ -437,14 +536,14 @@ func _handle_action_inputs() -> void:
 
 
 func _buffer_pressed_defensive_inputs() -> void:
-	if not is_on_floor():
+	if defeated or not is_on_floor():
 		return
 	if Input.is_action_just_pressed("dodge"):
 		var dodge_direction: Vector3 = _get_requested_dodge_direction()
 		if not dodge_direction.is_zero_approx():
-			input_buffer.push(&"dodge", {"direction": dodge_direction})
+			_queue_buffered_action(&"dodge", {"direction": dodge_direction})
 	if Input.is_action_just_pressed("parry"):
-		input_buffer.push(&"parry")
+		_queue_buffered_action(&"parry")
 
 
 func _get_requested_dodge_direction() -> Vector3:
@@ -461,6 +560,8 @@ func _get_requested_dodge_direction() -> Vector3:
 
 
 func _start_dodge(dodge_direction: Vector3) -> bool:
+	if defeated:
+		return false
 	var horizontal := Vector3(dodge_direction.x, 0.0, dodge_direction.z)
 	if horizontal.is_zero_approx():
 		return false
@@ -475,7 +576,7 @@ func _start_dodge(dodge_direction: Vector3) -> bool:
 
 
 func _start_parry() -> bool:
-	if not action_controller.try_start_parry():
+	if defeated or not action_controller.try_start_parry():
 		return false
 	jump_buffer_timer = 0.0
 	_face_combat_camera()
@@ -645,25 +746,54 @@ func _update_camera_fov(delta: float) -> void:
 
 
 func _check_fall_respawn() -> void:
-	if global_position.y >= RESPAWN_FALL_HEIGHT:
+	if defeated or global_position.y >= RESPAWN_FALL_HEIGHT:
 		return
-	_respawn_after_defeat()
+	_enter_defeated(DEFEAT_REASON_FALL)
 
 
-func _respawn_after_defeat() -> void:
-	global_position = respawn_position
+func _enter_defeated(reason: StringName) -> bool:
+	if defeated or (reason != DEFEAT_REASON_DAMAGE and reason != DEFEAT_REASON_FALL):
+		return false
+	defeated = true
+	_defeat_reason = reason
+	velocity = Vector3.ZERO
+	sprinting_this_frame = false
+	defeat_requested.emit(reason)
+	return true
+
+
+func commit_respawn(position: Vector3) -> bool:
+	if not defeated or not _is_finite_vector3(position):
+		return false
+	global_position = position
 	velocity = Vector3.ZERO
 	health = MAX_HEALTH
-	damage_invulnerability_timer = 1.0
+	damage_invulnerability_timer = POST_RESPAWN_INVULNERABILITY
 	stamina.reset()
 	action_controller.reset()
 	input_buffer.reset()
 	pending_attack_definition = null
 	pending_attack_direction = Vector3.ZERO
+	jump_buffer_timer = 0.0
+	coyote_timer = 0.0
+	tool_use_cooldown_timer = 0.0
+	tool_swing_timer = 0.0
+	sprinting_this_frame = false
+	defeated = false
+	_defeat_reason = &""
 	if animation_controller != null:
 		animation_controller.reset_presentation()
 	elif mannequin != null:
 		mannequin.reset_pose()
+	return true
+
+
+static func _is_finite_vector3(value: Vector3) -> bool:
+	return (
+		not is_nan(value.x) and not is_inf(value.x)
+		and not is_nan(value.y) and not is_inf(value.y)
+		and not is_nan(value.z) and not is_inf(value.z)
+	)
 
 
 func _build_character_visual() -> void:
@@ -781,6 +911,12 @@ func _ensure_default_input_actions() -> void:
 	_add_key_action("dodge", KEY_CTRL)
 	_add_key_action("parry", KEY_Q)
 	_add_key_action("block", KEY_F)
+	_add_mouse_action("attack_light", MOUSE_BUTTON_RIGHT)
+	_add_remappable_key_action("attack_heavy", KEY_E)
+	_add_remappable_key_action("hotbar_slot_1", KEY_1)
+	_add_remappable_key_action("hotbar_slot_2", KEY_2)
+	_add_remappable_key_action("hotbar_slot_3", KEY_3)
+	_add_remappable_key_action("hotbar_slot_4", KEY_4)
 
 
 func _add_key_action(action_name: StringName, physical_key: Key) -> void:
@@ -791,6 +927,25 @@ func _add_key_action(action_name: StringName, physical_key: Key) -> void:
 		if existing_event is InputEventKey and existing_event.physical_keycode == physical_key:
 			return
 
+	var key_event := InputEventKey.new()
+	key_event.physical_keycode = physical_key
+	InputMap.action_add_event(action_name, key_event)
+
+
+func _add_mouse_action(action_name: StringName, button: MouseButton) -> void:
+	if InputMap.has_action(action_name):
+		return
+	InputMap.add_action(action_name)
+
+	var mouse_event := InputEventMouseButton.new()
+	mouse_event.button_index = button
+	InputMap.action_add_event(action_name, mouse_event)
+
+
+func _add_remappable_key_action(action_name: StringName, physical_key: Key) -> void:
+	if InputMap.has_action(action_name):
+		return
+	InputMap.add_action(action_name)
 	var key_event := InputEventKey.new()
 	key_event.physical_keycode = physical_key
 	InputMap.action_add_event(action_name, key_event)

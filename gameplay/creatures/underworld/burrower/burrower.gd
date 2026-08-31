@@ -1,6 +1,8 @@
 extends CharacterBody3D
 
 signal died(enemy_id: String)
+signal attack_started(enemy_id: String, world_position: Vector3)
+signal damage_committed(enemy_id: String, amount: int, remaining_health: int, world_position: Vector3)
 
 const GRAVITY := 24.0
 const TURN_SPEED := 8.0
@@ -8,6 +10,7 @@ const HIT_STAGGER_TIME := 0.20
 const PARRY_STAGGER_TIME := 0.85
 const HIT_FLASH_TIME := 0.12
 const PARRY_FLASH_TIME := 0.20
+const ATTACK_QUERY_HEIGHT := 0.65
 const BODY_COLOR := Color(0.25, 0.16, 0.10)
 const BODY_HIT_COLOR := Color(0.62, 0.25, 0.10)
 
@@ -121,11 +124,15 @@ func apply_damage(amount: int, source_position: Vector3) -> int:
 	if dead or amount <= 0:
 		return health
 
+	var previous_health: int = health
 	health = maxi(health - amount, 0)
+	var committed_damage: int = previous_health - health
 	stagger_timer = HIT_STAGGER_TIME
 	parry_stagger_timer = 0.0
 	hit_flash_timer = HIT_FLASH_TIME
 	_cancel_pending_attack()
+	if committed_damage > 0:
+		damage_committed.emit(enemy_id, committed_damage, health, global_position)
 
 	var away: Vector3 = global_position - source_position
 	away.y = 0.0
@@ -172,15 +179,20 @@ func _begin_attack() -> void:
 	attack_windup_timer = maxf(attack_windup_duration, 0.05)
 	attack_timer = attack_cooldown
 	_face_target(1.0)
+	attack_started.emit(enemy_id, global_position)
 
 
 func _resolve_pending_attack() -> void:
+	if not attack_pending:
+		return
 	attack_pending = false
 	if not is_instance_valid(target):
 		return
 	var to_target: Vector3 = target.global_position - global_position
 	var horizontal_distance: float = Vector2(to_target.x, to_target.z).length()
 	if horizontal_distance > attack_range + 0.35:
+		return
+	if not _attack_path_is_clear():
 		return
 
 	if target.has_method("receive_melee_attack"):
@@ -197,6 +209,42 @@ func _resolve_pending_attack() -> void:
 	# Compatibility path for targets that predate the defensive melee contract.
 	if target.has_method("take_damage"):
 		target.call("take_damage", attack_damage, global_position)
+
+
+func _attack_path_is_clear() -> bool:
+	var query: PhysicsRayQueryParameters3D = _build_attack_ray_query()
+	if query == null:
+		return false
+	var world := get_world_3d()
+	if world == null or world.direct_space_state == null:
+		return false
+	var hit: Dictionary = world.direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return true
+	return _collider_belongs_to_target(hit.get("collider", null))
+
+
+func _build_attack_ray_query() -> PhysicsRayQueryParameters3D:
+	if not is_inside_tree() or not is_instance_valid(target):
+		return null
+	var origin: Vector3 = global_position + Vector3.UP * ATTACK_QUERY_HEIGHT
+	var target_point: Vector3 = target.global_position + Vector3.UP * ATTACK_QUERY_HEIGHT
+	if origin.is_equal_approx(target_point):
+		target_point += Vector3.FORWARD * 0.001
+	var query := PhysicsRayQueryParameters3D.create(origin, target_point)
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+	query.collision_mask = collision_mask
+	query.exclude = [get_rid()]
+	return query
+
+
+func _collider_belongs_to_target(collider: Variant) -> bool:
+	if collider == target:
+		return true
+	if collider is Node and target != null and target is Node:
+		return target.is_ancestor_of(collider)
+	return false
 
 
 func _apply_parry_reaction(source_position: Vector3) -> void:
