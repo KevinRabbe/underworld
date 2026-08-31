@@ -5,6 +5,9 @@ const Address := preload("res://worldgen/geometry/geometry_cell_address.gd")
 const CaveMeshData := preload("res://worldgen/geometry/cave_mesh_data.gd")
 const PlanData := preload("res://worldgen/surface/surface_entrance_chunk_plan_data.gd")
 const Demand := preload("res://worldgen/surface/entrance_runtime_demand.gd")
+const WorldId := preload("res://worldgen/identity/world_id.gd")
+const Manifest := preload("res://worldgen/versioning/generator_manifest.gd")
+const Map015Fixture := preload("res://worldgen/validation/map015_fixture.gd")
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -37,6 +40,7 @@ static func run() -> Array[String]:
 	_test_tier_retirement_and_replacement(failures)
 	_test_full_controller_world_swap_clears_entrance_state(failures)
 	_test_bounded_observer_nodes(failures)
+	_test_production_observer_execution_and_reentry(failures)
 	return failures
 
 
@@ -157,6 +161,133 @@ static func _test_bounded_observer_nodes(failures: Array[String]) -> void:
 		controller.streamer.set_demand(address, "player", tiers, "source:window:%d" % x, "provenance:window:%d" % x)
 		_expect(failures, "bounded observer render realizes step %d" % x, controller.accept_mesh_data(_mesh_data(address, "mesh:window:%d" % x)))
 		_expect(failures, "bounded observer live render count step %d" % x, controller.render_nodes.size() == 1 and controller.get_child_count() == 1)
+	controller.free()
+
+
+static func _test_production_observer_execution_and_reentry(failures: Array[String]) -> void:
+	var controller := Controller.new()
+	controller.configure(
+		WorldId.from_seed(1).value(),
+		Manifest.foundation_default().manifest_id()
+	)
+	var diagnostics: Array[String] = controller.bootstrap_fixture(
+		1,
+		Map015Fixture.REGION,
+		Map015Fixture.ENTRANCE_ID
+	)
+	_expect(failures, "production observer fixture bootstrap succeeds", diagnostics.is_empty())
+	if not diagnostics.is_empty():
+		controller.free()
+		return
+
+	var handoff = controller.entrance_plans.get(Map015Fixture.ENTRANCE_ID, null)
+	_expect(failures, "production observer fixture exposes entrance handoff", handoff != null)
+	if handoff == null or handoff.cell_addresses.is_empty():
+		controller.free()
+		return
+	var initial_handoff_keys: Dictionary = {}
+	for handoff_address in handoff.cell_addresses:
+		initial_handoff_keys[handoff_address.canonical_text()] = true
+
+	var anchor_address = handoff.cell_addresses[0]
+	var anchor_position: Vector3 = (
+		Vector3(anchor_address.coordinate) * controller.streamer.cell_size
+		+ controller.streamer.cell_size * 0.5
+	)
+	var target_record = null
+	var target_key: String = ""
+	for _step in range(24):
+		controller.update_player_position(anchor_position)
+		var keys: Array = controller.streamer.records.keys()
+		keys.sort()
+		for raw_key in keys:
+			var key := str(raw_key)
+			if initial_handoff_keys.has(key):
+				continue
+			var candidate = controller.streamer.records.get(key, null)
+			if candidate == null:
+				continue
+			if candidate.source_fingerprint.is_empty() or candidate.provenance_fingerprint.is_empty():
+				continue
+			if not bool(candidate.readiness.get("render", false)) or not bool(candidate.readiness.get("collision", false)):
+				continue
+			if not controller.render_nodes.has(key) or not controller.collision_nodes.has(key):
+				continue
+			target_record = candidate
+			target_key = key
+			break
+		if target_record != null:
+			break
+
+	_expect(failures, "observer demand realizes a cell outside entrance handoff", target_record != null)
+	if target_record == null:
+		controller.free()
+		return
+	var target_address = target_record.cell_address
+	var target_position: Vector3 = (
+		Vector3(target_address.coordinate) * controller.streamer.cell_size
+		+ controller.streamer.cell_size * 0.5
+	)
+	for _step in range(4):
+		controller.update_player_position(target_position)
+	var first_source: String = target_record.source_fingerprint
+	var first_provenance: String = target_record.provenance_fingerprint
+	var first_generation: int = target_record.generation
+	_expect(
+		failures,
+		"outside observer cell carries canonical runtime identity",
+		not first_source.is_empty() and not first_provenance.is_empty()
+	)
+
+	var far_position := target_position + Vector3(controller.streamer.cell_size.x * 8.0, 0.0, 0.0)
+	for _step in range(4):
+		controller.update_player_position(far_position)
+	var released_record = controller.streamer.records.get(target_key, null)
+	_expect(
+		failures,
+		"outside observer cell settles dormant after bounded release",
+		released_record != null and released_record.state == "dormant" and released_record.demands.is_empty()
+	)
+	_expect(
+		failures,
+		"released observer cell retires render and collision nodes",
+		not controller.render_nodes.has(target_key) and not controller.collision_nodes.has(target_key)
+	)
+	_expect(
+		failures,
+		"released observer cell advances generation tombstone",
+		released_record != null and released_record.generation > first_generation
+	)
+
+	for _step in range(24):
+		controller.update_player_position(target_position)
+	var returned_record = controller.streamer.records.get(target_key, null)
+	_expect(
+		failures,
+		"returning observer cell reproduces canonical source and provenance",
+		returned_record != null
+		and returned_record.source_fingerprint == first_source
+		and returned_record.provenance_fingerprint == first_provenance
+	)
+	_expect(
+		failures,
+		"returning observer cell re-realizes render and collision through streamer",
+		returned_record != null
+		and bool(returned_record.readiness.get("render", false))
+		and bool(returned_record.readiness.get("collision", false))
+		and controller.render_nodes.has(target_key)
+		and controller.collision_nodes.has(target_key)
+	)
+	_expect(
+		failures,
+		"observer release and re-entry produce no stale-result resurrection",
+		controller.streamer.stale_result_count == 0
+	)
+	_expect(
+		failures,
+		"observer realization window remains bounded",
+		controller.render_nodes.size() <= 27 and controller.collision_nodes.size() <= 27
+	)
 	controller.free()
 
 
