@@ -47,8 +47,9 @@ func _run_live_new_game(failures: Array[String]) -> Dictionary:
 		game.free()
 		return {}
 
+	# Game._ready() is realized synchronously by add_child(). Assert startup state
+	# before the first physics frame so Player gravity cannot obscure spawn truth.
 	root.add_child(game)
-	await process_frame
 
 	if not game.has_method("natural_entrance_route_ready") or not bool(game.call("natural_entrance_route_ready")):
 		failures.append("live/new production Game did not activate a natural entrance route: %s" % [
@@ -179,8 +180,9 @@ func _run_live_continue(live_new: Dictionary, failures: Array[String]) -> void:
 	# prepare_continue owns a deep clone; mutation after preparation must not alter
 	# the committed durable resume point used by the live Game.
 	candidate["resume_position"] = Vector3(999.0, 999.0, 999.0)
+	# add_child() synchronously completes Game._ready(). Verify the exact durable
+	# resume point now, before CharacterBody3D gravity advances the first physics frame.
 	root.add_child(resumed)
-	await process_frame
 
 	if str(resumed.call("startup_mode")) != "continue":
 		failures.append("live/continue Game did not retain Continue startup mode")
