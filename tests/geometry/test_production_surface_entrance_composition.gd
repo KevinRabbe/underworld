@@ -73,11 +73,22 @@ static func _test_real_resolution_composition(failures: Array[String]) -> void:
 
 	_expect(failures, "production opening omits real render indices", omitted_count > 0 and first_indices.size() == source_indices.size() - omitted_count)
 	_expect(failures, "production opening creates real heightmap holes", hole_count > 0 and _nan_count(first_heights) == hole_count)
+	_expect(
+		failures,
+		"production collision holes stay inside accepted opening and preserve outside heights",
+		_collision_cutout_is_bounded(source, source_heights, first_heights, coord, settings, route)
+	)
 	_expect(failures, "production opening source render data remains immutable", source.get("indices", PackedInt32Array()) == source_indices)
 	_expect(failures, "production opening source height data remains immutable", source.get("collision_heights", PackedFloat32Array()) == source_heights)
 	_expect(failures, "production opening preserves candidate StableId ordering", source.get("branch_stable_ids", []) == source_branch_ids)
 	_expect(failures, "mouth candidate is suppressed only for realization", realization_destroyed.has(synthetic_id) and first_snapshot.get("suppressed_object_ids", []).has(synthetic_id))
 	_expect(failures, "mouth suppression never mutates durable destroyed lookup", durable_destroyed == durable_before and not durable_destroyed.has(synthetic_id))
+	for durable_id in durable_before.keys():
+		_expect(
+			failures,
+			"pre-existing WorldDelta suppression survives realization-only entrance mask",
+			realization_destroyed.has(durable_id)
+		)
 
 	var second: Dictionary = Composer.compose(coord, source, settings, route, durable_destroyed)
 	_expect(failures, "production opening recomposes deterministically", bool(second.get("success", false)))
@@ -107,6 +118,44 @@ static func _test_real_resolution_composition(failures: Array[String]) -> void:
 	_expect(failures, "production opening leaves non-overlapping chunks unchanged", bool(far.get("success", false)) and far.get("snapshot", {}).is_empty())
 	if bool(far.get("success", false)):
 		_expect(failures, "non-overlapping render indices remain identical", far.get("data", {}).get("indices", PackedInt32Array()) == far_indices)
+
+
+static func _collision_cutout_is_bounded(
+	source: Dictionary,
+	source_heights: PackedFloat32Array,
+	composed_heights: PackedFloat32Array,
+	coord: Vector2i,
+	settings,
+	route: Dictionary
+) -> bool:
+	var resolution: int = int(source.get("resolution", 0))
+	var spacing: float = float(source.get("spacing", 0.0))
+	if resolution < 2 or spacing <= 0.0 or composed_heights.size() != source_heights.size():
+		return false
+	var bounds_variant: Variant = route.get("required_opening_bounds", null)
+	if not bounds_variant is AABB:
+		return false
+	var opening: AABB = bounds_variant
+	opening = opening.grow(float(route.get("clearance_radius", 0.0)))
+	var chunk_origin := Vector3(
+		float(coord.x) * settings.chunk_size,
+		0.0,
+		float(coord.y) * settings.chunk_size
+	)
+	for index in range(composed_heights.size()):
+		var row: int = index / resolution
+		var column: int = index % resolution
+		var point := Vector3(
+			chunk_origin.x + float(column) * spacing,
+			0.0,
+			chunk_origin.z + float(row) * spacing
+		)
+		if is_nan(composed_heights[index]):
+			if not _contains_xz(opening, point):
+				return false
+		elif not is_equal_approx(composed_heights[index], source_heights[index]):
+			return false
+	return true
 
 
 static func _inject_mouth_candidate(
@@ -160,6 +209,15 @@ static func _nan_count(values: PackedFloat32Array) -> int:
 		if is_nan(value):
 			count += 1
 	return count
+
+
+static func _contains_xz(bounds: AABB, point: Vector3) -> bool:
+	return (
+		point.x >= bounds.position.x
+		and point.x <= bounds.end.x
+		and point.z >= bounds.position.z
+		and point.z <= bounds.end.z
+	)
 
 
 static func _expect(failures: Array[String], label: String, condition: bool) -> void:
