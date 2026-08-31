@@ -12,7 +12,11 @@ const PlayerSupportBounds := preload("res://gameplay/player/player_collision_sup
 
 const TEST_SEED: int = 2174242
 const FLOOR_CLEARANCE: float = 0.04
-const MAX_BOUNDARY_CANDIDATES_PER_CELL: int = 64
+const FLOOR_INTERIOR_INSET: float = 0.08
+const MAX_SEARCH_HOPS: int = 4
+const UPDATES_PER_HOP: int = 18
+const SCAN_INTERVAL: int = 6
+const MAX_PHYSICS_CANDIDATES: int = 48
 
 
 static func run_runtime(tree: SceneTree) -> Array[String]:
@@ -26,9 +30,6 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		_cleanup_slot()
 		return failures
 
-	# Start from a normal detached Continue, then use the production observer path
-	# to reach a real, physically standable near-boundary cell outside the finite
-	# entrance handoff. This is not a synthetic floor/fixture injection.
 	var game: Node = packed.instantiate()
 	game.set("enable_debug_hud", false)
 	if not bool(game.call("prepare_continue", candidate)):
@@ -44,12 +45,21 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		_free_attached(game)
 		_cleanup_slot()
 		return failures
-	var target: Dictionary = await _find_observer_boundary_target(runtime, player, tree)
+
+	var safe_player_position: Vector3 = player.global_position
+	var target: Dictionary = await _find_observer_boundary_target(
+		runtime,
+		player,
+		tree,
+		safe_player_position,
+		failures
+	)
 	if target.is_empty():
-		failures.append("production observer path did not find a standable near-boundary underground target outside entrance handoff")
+		failures.append("production observer path did not find a standable multi-cell underground target outside entrance handoff")
 		_free_attached(game)
 		_cleanup_slot()
 		return failures
+
 	var target_position: Vector3 = target["position"]
 	var target_key: String = str(target["key"])
 	var target_source: String = str(target["source"])
@@ -65,12 +75,12 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	elif initial_support.get("keys", []).size() < 2:
 		failures.append("deep observer target does not cross a runtime cell boundary")
 	else:
-		for key in initial_support.get("keys", []):
-			var support_record = runtime.streamer.records.get(str(key), null)
-			if not _record_is_gameplay_ready(runtime, support_record, str(key)):
-				failures.append("deep observer target support cell is not gameplay-ready before SAVE: %s" % str(key))
+		for raw_key in initial_support.get("keys", []):
+			var key: String = str(raw_key)
+			var support_record = runtime.streamer.records.get(key, null)
+			if not _record_is_gameplay_ready(runtime, support_record, key):
+				failures.append("deep observer target support cell is not gameplay-ready before SAVE: %s" % key)
 
-	# Real production snapshot -> durable slot -> detached load.
 	var request_variant: Variant = game.call("build_save_request")
 	if not request_variant is Dictionary or not bool(request_variant.get("success", false)):
 		failures.append("deep observer Game could not build production SAVE request")
@@ -81,6 +91,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var saved_resume_variant: Variant = request.get("resume_position", null)
 	if not saved_resume_variant is Vector3 or not saved_resume_variant.is_equal_approx(target_position):
 		failures.append("deep observer SAVE did not preserve exact runtime Player position")
+
 	var service = GameSaveSlotService.new()
 	var saved: Dictionary = service.save_slot(
 		request.get("context", null),
@@ -111,9 +122,6 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var loaded_candidate: Dictionary = loaded_candidate_variant
 	_free_attached(game)
 
-	# Recreate the real Game. The scene child readiness gate runs before Game._ready
-	# and must hold the entire Game subtree before the restored Player can receive
-	# a physics/process frame at the deep exact position.
 	var resumed: Node = packed.instantiate()
 	resumed.set("enable_debug_hud", false)
 	if not bool(resumed.call("prepare_continue", loaded_candidate)):
@@ -130,6 +138,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		_free_attached(resumed)
 		_cleanup_slot()
 		return failures
+
 	if not resumed_player.global_position.is_equal_approx(target_position):
 		failures.append("deep Continue changed exact durable Player resume position before readiness")
 	if resumed.process_mode != Node.PROCESS_MODE_DISABLED:
@@ -137,8 +146,6 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	if not bool(gate.call("is_holding")):
 		failures.append("deep Continue readiness gate was not holding restored Player startup")
 
-	# Resolve synchronously in the test instead of waiting an idle frame. Production
-	# uses the deferred call while the Game subtree remains processing-disabled.
 	var readiness_variant: Variant = gate.call("resolve_now")
 	if not readiness_variant is Array or not readiness_variant.is_empty():
 		failures.append("deep Continue local reconstruction failed: %s" % [readiness_variant])
@@ -148,6 +155,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		failures.append("deep Continue readiness gate did not report resolved state")
 	if str(gate.call("resume_cell_key")) != target_key:
 		failures.append("deep Continue reconstructed a different containing runtime cell than the saved position")
+
 	var resumed_support_variant: Variant = gate.call("resume_support_cell_keys")
 	if not resumed_support_variant is Array or resumed_support_variant.size() < 2:
 		failures.append("deep Continue gate did not require the multi-cell Player support envelope")
@@ -169,8 +177,6 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	):
 		failures.append("deep Continue rebuilt saved cell with different canonical source/provenance")
 
-	# Exercise actual SceneTree physics after release; direct _physics_process calls
-	# are not accepted evidence for collision-safe Continue.
 	var first_physics_position: Vector3 = resumed_player.global_position
 	for _frame in range(6):
 		await tree.physics_frame
@@ -182,8 +188,6 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	if absf(after_physics.y - first_physics_position.y) > 0.35:
 		failures.append("deep Continue first physics frames fell/teleported Player despite support readiness")
 
-	# Deliberately backtrack to the generated entrance and return to the saved cell.
-	# This verifies that reconstruction did not create a one-way/stale runtime state.
 	var entrance_ids: Array = resumed_runtime.entrance_plans.keys()
 	entrance_ids.sort()
 	if entrance_ids.is_empty():
@@ -225,7 +229,13 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	return failures
 
 
-static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> Dictionary:
+static func _find_observer_boundary_target(
+	runtime,
+	player,
+	tree: SceneTree,
+	safe_player_position: Vector3,
+	failures: Array[String]
+) -> Dictionary:
 	if runtime == null or runtime.streamer == null or runtime.entrance_plans.is_empty():
 		return {}
 	var entrance_ids: Array = runtime.entrance_plans.keys()
@@ -242,14 +252,69 @@ static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> 
 				anchor_address = address
 	if anchor_address == null:
 		return {}
-	var anchor_position: Vector3 = (
-		Vector3(anchor_address.coordinate) * runtime.streamer.cell_size
-		+ runtime.streamer.cell_size * 0.5
-	)
-	for _step in range(48):
-		runtime.update_player_position(anchor_position)
-	await tree.physics_frame
 
+	var cell_size: Vector3 = runtime.streamer.cell_size
+	var anchor_position: Vector3 = (
+		Vector3(anchor_address.coordinate) * cell_size
+		+ cell_size * 0.5
+	)
+	var observer_position: Vector3 = anchor_position
+	var visited_observer_keys: Dictionary = {}
+	var scanned_ready_cells: int = 0
+	var scanned_floor_triangles: int = 0
+
+	for _hop in range(MAX_SEARCH_HOPS):
+		var observer_coordinate: Vector3i = runtime.streamer.observer_cell(observer_position)
+		visited_observer_keys[_cell_key(observer_coordinate)] = true
+		for step in range(UPDATES_PER_HOP):
+			runtime.update_player_position(observer_position)
+			if (step + 1) % SCAN_INTERVAL != 0:
+				continue
+			await tree.physics_frame
+			var scan: Dictionary = await _scan_current_boundary_target(
+				runtime,
+				player,
+				tree,
+				handoff_keys,
+				safe_player_position
+			)
+			scanned_ready_cells += int(scan.get("ready_cells", 0))
+			scanned_floor_triangles += int(scan.get("floor_triangles", 0))
+			var target_variant: Variant = scan.get("target", null)
+			if target_variant is Dictionary and not target_variant.is_empty():
+				return target_variant
+
+		var next_position_variant: Variant = _next_exploration_position(
+			runtime,
+			handoff_keys,
+			visited_observer_keys,
+			anchor_position
+		)
+		if not next_position_variant is Vector3:
+			break
+		observer_position = next_position_variant
+
+	failures.append(
+		"deep boundary search exhausted bounded observer exploration: ready_cell_scans=%d floor_triangles=%d records=%d collisions=%d" % [
+			scanned_ready_cells,
+			scanned_floor_triangles,
+			runtime.streamer.records.size(),
+			runtime.collision_nodes.size(),
+		]
+	)
+	return {}
+
+
+static func _scan_current_boundary_target(
+	runtime,
+	player,
+	tree: SceneTree,
+	handoff_keys: Dictionary,
+	safe_player_position: Vector3
+) -> Dictionary:
+	var candidates: Array[Dictionary] = []
+	var ready_cells: int = 0
+	var floor_triangles: int = 0
 	var keys: Array = runtime.streamer.records.keys()
 	keys.sort()
 	for raw_key in keys:
@@ -260,143 +325,195 @@ static func _find_observer_boundary_target(runtime, player, tree: SceneTree) -> 
 		if record == null or record.cell_address == null:
 			continue
 		var coordinate: Vector3i = record.cell_address.coordinate
-		# Keep this proof above the legacy pre-#394 global fall threshold while it
-		# exercises #372. #394 later removes Y as cross-domain validity authority.
-		if coordinate.y >= 0 or coordinate.y < -2:
+		# #394 later removes the legacy global fall threshold. Until then, allow
+		# generated y=-3 geometry but retain only exact Player roots above -95.
+		if coordinate.y >= 0 or coordinate.y < -3:
 			continue
 		if not _record_is_gameplay_ready(runtime, record, key):
 			continue
-
-		# A boundary is whichever geometry-cell plane the actual Player collision /
-		# floor-snap support AABB crosses. Do not couple this proof to an X/Z-only
-		# seam or to where Marching Cubes happened to place vertices.
-		var floor_candidates: Array[Vector3] = _generated_multicell_floor_candidates(
-			runtime,
-			player,
-			coordinate
-		)
-		for floor_position in floor_candidates:
-			var support: Dictionary = _support_keys_for_player(runtime, player, floor_position)
-			if not bool(support.get("success", false)) or support.get("keys", []).size() < 2:
+		ready_cells += 1
+		var body_variant: Variant = runtime.collision_nodes.get(key, null)
+		if not body_variant is StaticBody3D:
+			continue
+		var collider_variant: Variant = body_variant.get_node_or_null("CollisionShape3D")
+		if not collider_variant is CollisionShape3D:
+			continue
+		var shape_variant: Variant = collider_variant.shape
+		if not shape_variant is ConcavePolygonShape3D:
+			continue
+		var faces: PackedVector3Array = shape_variant.get_faces()
+		for index in range(0, faces.size(), 3):
+			if index + 2 >= faces.size():
+				break
+			var a: Vector3 = body_variant.global_transform * faces[index]
+			var b: Vector3 = body_variant.global_transform * faces[index + 1]
+			var c: Vector3 = body_variant.global_transform * faces[index + 2]
+			var normal: Vector3 = (b - a).cross(c - a)
+			if normal.length_squared() <= 0.000001:
 				continue
-			var all_ready: bool = true
-			for support_key in support.get("keys", []):
-				var support_record = runtime.streamer.records.get(str(support_key), null)
-				if not _record_is_gameplay_ready(runtime, support_record, str(support_key)):
-					all_ready = false
-					break
-			if not all_ready:
+			normal = normal.normalized()
+			if normal.y < 0.55:
 				continue
-
-			# The candidate comes directly from generated collision geometry. Real
-			# CharacterBody physics is still the authority for whether it is actually
-			# standable; retain the exact settled position only when it stays stable.
-			player.global_position = floor_position
-			player.velocity = Vector3.ZERO
-			var before: Vector3 = floor_position
-			for _frame in range(3):
-				await tree.physics_frame
-			if player.has_method("is_defeated") and bool(player.call("is_defeated")):
-				return {}
-			var settled: Vector3 = player.global_position
-			if Vector2(settled.x, settled.z).distance_to(Vector2(before.x, before.z)) > 0.05:
-				continue
-			if absf(settled.y - before.y) > 0.30:
-				continue
-			for _step in range(12):
-				runtime.update_player_position(settled)
-			var settled_coordinate: Vector3i = runtime.streamer.observer_cell(settled)
-			var settled_key: String = "gcell1:r1:x%d:y%d:z%d" % [
-				settled_coordinate.x,
-				settled_coordinate.y,
-				settled_coordinate.z,
+			floor_triangles += 1
+			var centroid: Vector3 = (a + b + c) / 3.0
+			var edge_ab: Vector3 = (a + b) * 0.5
+			var edge_bc: Vector3 = (b + c) * 0.5
+			var edge_ca: Vector3 = (c + a) * 0.5
+			var samples: Array[Vector3] = [
+				centroid,
+				_inset_toward(a, centroid),
+				_inset_toward(b, centroid),
+				_inset_toward(c, centroid),
+				_inset_toward(edge_ab, centroid),
+				_inset_toward(edge_bc, centroid),
+				_inset_toward(edge_ca, centroid),
 			]
-			if handoff_keys.has(settled_key):
-				continue
-			var settled_record = runtime.streamer.records.get(settled_key, null)
-			if not _record_is_gameplay_ready(runtime, settled_record, settled_key):
-				continue
-			var settled_support: Dictionary = _support_keys_for_player(runtime, player, settled)
-			if not bool(settled_support.get("success", false)) or settled_support.get("keys", []).size() < 2:
-				continue
-			var settled_support_ready: bool = true
-			for support_key in settled_support.get("keys", []):
-				var support_record = runtime.streamer.records.get(str(support_key), null)
-				if not _record_is_gameplay_ready(runtime, support_record, str(support_key)):
-					settled_support_ready = false
-					break
-			if not settled_support_ready:
-				continue
-			return {
+			for sample in samples:
+				var candidate: Vector3 = sample + Vector3.UP * FLOOR_CLEARANCE
+				if candidate.y >= 0.0 or candidate.y <= -95.0:
+					continue
+				var support: Dictionary = _support_keys_for_player(runtime, player, candidate)
+				if not bool(support.get("success", false)) or support.get("keys", []).size() < 2:
+					continue
+				if not _support_is_ready(runtime, support.get("keys", [])):
+					continue
+				var nearest_plane: float = _nearest_cell_plane_distance(candidate, runtime.streamer.cell_size)
+				candidates.append({
+					"position": candidate,
+					"normal_y": normal.y,
+					"plane_distance": nearest_plane,
+					"source_key": key,
+				})
+
+	candidates.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+		if not is_equal_approx(float(left["normal_y"]), float(right["normal_y"])):
+			return float(left["normal_y"]) > float(right["normal_y"])
+		if not is_equal_approx(float(left["plane_distance"]), float(right["plane_distance"])):
+			return float(left["plane_distance"]) < float(right["plane_distance"])
+		var lp: Vector3 = left["position"]
+		var rp: Vector3 = right["position"]
+		if not is_equal_approx(lp.y, rp.y):
+			return lp.y > rp.y
+		if not is_equal_approx(lp.x, rp.x):
+			return lp.x < rp.x
+		return lp.z < rp.z
+	)
+
+	var tested: int = 0
+	for entry in candidates:
+		if tested >= MAX_PHYSICS_CANDIDATES:
+			break
+		tested += 1
+		var floor_position: Vector3 = entry["position"]
+		player.global_position = floor_position
+		player.velocity = Vector3.ZERO
+		for _frame in range(3):
+			await tree.physics_frame
+		if player.has_method("is_defeated") and bool(player.call("is_defeated")):
+			return {"target": {}, "ready_cells": ready_cells, "floor_triangles": floor_triangles}
+		var settled: Vector3 = player.global_position
+		if Vector2(settled.x, settled.z).distance_to(Vector2(floor_position.x, floor_position.z)) > 0.05:
+			player.global_position = safe_player_position
+			player.velocity = Vector3.ZERO
+			continue
+		if absf(settled.y - floor_position.y) > 0.30:
+			player.global_position = safe_player_position
+			player.velocity = Vector3.ZERO
+			continue
+		for _step in range(12):
+			runtime.update_player_position(settled)
+		var settled_coordinate: Vector3i = runtime.streamer.observer_cell(settled)
+		var settled_key: String = _cell_key(settled_coordinate)
+		if handoff_keys.has(settled_key):
+			player.global_position = safe_player_position
+			player.velocity = Vector3.ZERO
+			continue
+		var settled_record = runtime.streamer.records.get(settled_key, null)
+		if not _record_is_gameplay_ready(runtime, settled_record, settled_key):
+			player.global_position = safe_player_position
+			player.velocity = Vector3.ZERO
+			continue
+		var settled_support: Dictionary = _support_keys_for_player(runtime, player, settled)
+		if (
+			not bool(settled_support.get("success", false))
+			or settled_support.get("keys", []).size() < 2
+			or not _support_is_ready(runtime, settled_support.get("keys", []))
+		):
+			player.global_position = safe_player_position
+			player.velocity = Vector3.ZERO
+			continue
+		return {
+			"target": {
 				"key": settled_key,
 				"position": settled,
 				"source": settled_record.source_fingerprint,
 				"provenance": settled_record.provenance_fingerprint,
-			}
-	return {}
+			},
+			"ready_cells": ready_cells,
+			"floor_triangles": floor_triangles,
+		}
+
+	player.global_position = safe_player_position
+	player.velocity = Vector3.ZERO
+	return {"target": {}, "ready_cells": ready_cells, "floor_triangles": floor_triangles}
 
 
-static func _generated_multicell_floor_candidates(
+static func _next_exploration_position(
 	runtime,
-	player,
-	coordinate: Vector3i
-) -> Array[Vector3]:
-	var result: Array[Vector3] = []
-	if runtime == null or not runtime.is_inside_tree():
-		return result
-	var key: String = "gcell1:r1:x%d:y%d:z%d" % [coordinate.x, coordinate.y, coordinate.z]
-	var body_variant: Variant = runtime.collision_nodes.get(key, null)
-	if not body_variant is StaticBody3D:
-		return result
-	var body: StaticBody3D = body_variant
-	var collider_variant: Variant = body.get_node_or_null("CollisionShape3D")
-	if not collider_variant is CollisionShape3D:
-		return result
-	var shape_variant: Variant = collider_variant.shape
-	if not shape_variant is ConcavePolygonShape3D:
-		return result
-	var shape: ConcavePolygonShape3D = shape_variant
-	var faces: PackedVector3Array = shape.get_faces()
-	if faces.size() < 3:
-		return result
+	handoff_keys: Dictionary,
+	visited_observer_keys: Dictionary,
+	anchor_position: Vector3
+) -> Variant:
+	var best_position: Variant = null
+	var best_distance: float = -1.0
+	var best_key: String = ""
+	var keys: Array = runtime.streamer.records.keys()
+	keys.sort()
+	for raw_key in keys:
+		var key: String = str(raw_key)
+		if handoff_keys.has(key) or visited_observer_keys.has(key):
+			continue
+		var record = runtime.streamer.records.get(key, null)
+		if record == null or record.cell_address == null:
+			continue
+		var coordinate: Vector3i = record.cell_address.coordinate
+		if coordinate.y >= 0 or coordinate.y < -3:
+			continue
+		if not _record_is_gameplay_ready(runtime, record, key):
+			continue
+		if not runtime.collision_nodes.has(key):
+			continue
+		var center: Vector3 = (
+			Vector3(coordinate) * runtime.streamer.cell_size
+			+ runtime.streamer.cell_size * 0.5
+		)
+		var distance: float = center.distance_squared_to(anchor_position)
+		if distance > best_distance or (is_equal_approx(distance, best_distance) and (best_key.is_empty() or key < best_key)):
+			best_distance = distance
+			best_key = key
+			best_position = center
+	return best_position
 
-	var seen: Dictionary = {}
-	for index in range(0, faces.size(), 3):
-		if index + 2 >= faces.size() or result.size() >= MAX_BOUNDARY_CANDIDATES_PER_CELL:
-			break
-		var a: Vector3 = body.global_transform * faces[index]
-		var b: Vector3 = body.global_transform * faces[index + 1]
-		var c: Vector3 = body.global_transform * faces[index + 2]
-		var normal: Vector3 = (b - a).cross(c - a)
-		if normal.length_squared() <= 0.000001:
-			continue
-		normal = normal.normalized()
-		if normal.y < 0.55:
-			continue
-		var centroid: Vector3 = (a + b + c) / 3.0
-		# Near-vertex samples make the search sensitive to actual cell-boundary
-		# geometry without requiring a vertex itself to be the final Player origin.
-		var samples: Array[Vector3] = [
-			centroid,
-			a.lerp(centroid, 0.18),
-			b.lerp(centroid, 0.18),
-			c.lerp(centroid, 0.18),
-		]
-		for sample in samples:
-			if result.size() >= MAX_BOUNDARY_CANDIDATES_PER_CELL:
-				break
-			var candidate: Vector3 = sample + Vector3.UP * FLOOR_CLEARANCE
-			if candidate.y >= 0.0 or candidate.y <= -95.0:
-				continue
-			var support: Dictionary = _support_keys_for_player(runtime, player, candidate)
-			if not bool(support.get("success", false)) or support.get("keys", []).size() < 2:
-				continue
-			var dedupe_key: String = "%.3f:%.3f:%.3f" % [candidate.x, candidate.y, candidate.z]
-			if seen.has(dedupe_key):
-				continue
-			seen[dedupe_key] = true
-			result.append(candidate)
-	return result
+
+static func _inset_toward(point: Vector3, centroid: Vector3) -> Vector3:
+	var delta: Vector3 = centroid - point
+	var distance: float = delta.length()
+	if distance <= 0.000001:
+		return point
+	return point + delta / distance * minf(FLOOR_INTERIOR_INSET, distance * 0.45)
+
+
+static func _nearest_cell_plane_distance(point: Vector3, cell_size: Vector3) -> float:
+	var local_x: float = fposmod(point.x, cell_size.x)
+	var local_y: float = fposmod(point.y, cell_size.y)
+	var local_z: float = fposmod(point.z, cell_size.z)
+	return minf(
+		minf(local_x, cell_size.x - local_x),
+		minf(
+			minf(local_y, cell_size.y - local_y),
+			minf(local_z, cell_size.z - local_z)
+		)
+	)
 
 
 static func _support_keys_for_player(runtime, player, position: Vector3) -> Dictionary:
@@ -423,9 +540,18 @@ static func _support_keys_for_player(runtime, player, position: Vector3) -> Dict
 	for x in range(minimum_coordinate.x, maximum_coordinate.x + 1):
 		for y in range(minimum_coordinate.y, maximum_coordinate.y + 1):
 			for z in range(minimum_coordinate.z, maximum_coordinate.z + 1):
-				keys.append("gcell1:r1:x%d:y%d:z%d" % [x, y, z])
+				keys.append(_cell_key(Vector3i(x, y, z)))
 	keys.sort()
 	return {"success": true, "keys": keys, "diagnostics": []}
+
+
+static func _support_is_ready(runtime, keys: Array) -> bool:
+	for raw_key in keys:
+		var key: String = str(raw_key)
+		var record = runtime.streamer.records.get(key, null)
+		if not _record_is_gameplay_ready(runtime, record, key):
+			return false
+	return true
 
 
 static func _record_is_gameplay_ready(runtime, record, key: String) -> bool:
@@ -437,6 +563,10 @@ static func _record_is_gameplay_ready(runtime, record, key: String) -> bool:
 		if not bool(record.readiness.get(tier, false)):
 			return false
 	return runtime.render_nodes.has(key) and runtime.collision_nodes.has(key)
+
+
+static func _cell_key(coordinate: Vector3i) -> String:
+	return "gcell1:r1:x%d:y%d:z%d" % [coordinate.x, coordinate.y, coordinate.z]
 
 
 static func _candidate(failures: Array[String]) -> Dictionary:
