@@ -4,6 +4,8 @@ const PerformanceContractTests := preload("res://tests/geometry/test_runtime_per
 const Profiler := preload("res://worldgen/runtime/runtime_cave_profiler.gd")
 const ProductionTransitionProfiler := preload("res://worldgen/runtime/production_cave_transition_profiler.gd")
 
+const PRODUCTION_SEEDS: Array[int] = [12345, 1]
+
 
 func _init() -> void:
 	var failures: Array[String] = []
@@ -28,13 +30,26 @@ func _init() -> void:
 	for failure in report.failures:
 		failures.append(str(failure))
 
-	var production: Dictionary = ProductionTransitionProfiler.run(12345)
+	for world_seed in PRODUCTION_SEEDS:
+		var production: Dictionary = ProductionTransitionProfiler.run(world_seed)
+		_print_production_profile(world_seed, production)
+		for failure in production.get("failures", []):
+			failures.append("PERF-003 seed %d: %s" % [world_seed, str(failure)])
+		if bool(production.get("success", false)):
+			print("[PERF-003] PASS seed=%d" % world_seed)
+	if failures.is_empty():
+		print("[PERF-003] PASS")
+	_finish(failures)
+
+
+func _print_production_profile(world_seed: int, production: Dictionary) -> void:
 	print("[PERF-003 PRODUCTION PROFILE]")
 	var route: Dictionary = production.get("route", {})
-	print("  seed=12345")
+	print("  seed=%d" % world_seed)
 	print("  route.entrance_id=%s" % str(route.get("entrance_id", "")))
 	print("  route.region_coord=%s" % str(route.get("region_coord", Vector2i.ZERO)))
 	print("  route.selection_fingerprint=%s" % str(route.get("selection_fingerprint", "")))
+	print("  budget_state=%s" % str(production.get("budget_state", "")))
 	print("  measurement_semantics=%s" % production.get("measurement_semantics", {}))
 	var production_metrics: Dictionary = production.get("metrics", {})
 	var production_metric_keys: Array = production_metrics.keys()
@@ -43,11 +58,6 @@ func _init() -> void:
 		print("  metric.%s=%s" % [str(key), str(production_metrics[key])])
 	for scenario in production.get("scenarios", []):
 		print("  scenario=%s" % scenario)
-	for failure in production.get("failures", []):
-		failures.append("PERF-003: " + str(failure))
-	if bool(production.get("success", false)):
-		print("[PERF-003] PASS")
-	_finish(failures)
 
 
 func _finish(failures: Array[String]) -> void:
