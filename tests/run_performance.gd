@@ -2,6 +2,7 @@ extends SceneTree
 
 const PerformanceContractTests := preload("res://tests/geometry/test_runtime_performance_contract.gd")
 const Profiler := preload("res://worldgen/runtime/runtime_cave_profiler.gd")
+const ProductionTransitionProfiler := preload("res://worldgen/runtime/production_cave_transition_profiler.gd")
 
 
 func _init() -> void:
@@ -26,6 +27,26 @@ func _init() -> void:
 		print("  [PERF WARNING] %s" % warning)
 	for failure in report.failures:
 		failures.append(str(failure))
+
+	var production: Dictionary = ProductionTransitionProfiler.run(12345)
+	print("[PERF-003 PRODUCTION PROFILE]")
+	var route: Dictionary = production.get("route", {})
+	print("  seed=12345")
+	print("  route.entrance_id=%s" % str(route.get("entrance_id", "")))
+	print("  route.region_coord=%s" % str(route.get("region_coord", Vector2i.ZERO)))
+	print("  route.selection_fingerprint=%s" % str(route.get("selection_fingerprint", "")))
+	print("  measurement_semantics=%s" % production.get("measurement_semantics", {}))
+	var production_metrics: Dictionary = production.get("metrics", {})
+	var production_metric_keys: Array = production_metrics.keys()
+	production_metric_keys.sort()
+	for key in production_metric_keys:
+		print("  metric.%s=%s" % [str(key), str(production_metrics[key])])
+	for scenario in production.get("scenarios", []):
+		print("  scenario=%s" % scenario)
+	for failure in production.get("failures", []):
+		failures.append("PERF-003: " + str(failure))
+	if bool(production.get("success", false)):
+		print("[PERF-003] PASS")
 	_finish(failures)
 
 
