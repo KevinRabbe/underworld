@@ -319,6 +319,10 @@ static func _find_observer_boundary_target(
 	var scanned_collision_keys: Dictionary = {}
 	var totals := {
 		"ready_cells": 0,
+		"gameplay_ready_records": 0,
+		"static_bodies": 0,
+		"shape_children": 0,
+		"concave_shapes": 0,
 		"seam_probes": 0,
 		"raycasts": 0,
 		"hits": 0,
@@ -362,11 +366,17 @@ static func _find_observer_boundary_target(
 	failures.append(
 		(
 			"deep boundary search exhausted geometry-seeded physics exploration: "
-			+ "ready_cells=%d seam_probes=%d raycasts=%d hits=%d floor_hits=%d "
-			+ "multicell_hits=%d physics_attempts=%d records=%d collisions=%d"
+			+ "ready_cells=%d gameplay_ready_records=%d static_bodies=%d "
+			+ "shape_children=%d concave_shapes=%d seam_probes=%d raycasts=%d "
+			+ "hits=%d floor_hits=%d multicell_hits=%d physics_attempts=%d "
+			+ "records=%d collisions=%d"
 		)
 		% [
 			totals["ready_cells"],
+			totals["gameplay_ready_records"],
+			totals["static_bodies"],
+			totals["shape_children"],
+			totals["concave_shapes"],
 			totals["seam_probes"],
 			totals["raycasts"],
 			totals["hits"],
@@ -391,6 +401,10 @@ static func _scan_current_boundary_target(
 	var result := {
 		"target": {},
 		"ready_cells": 0,
+		"gameplay_ready_records": 0,
+		"static_bodies": 0,
+		"shape_children": 0,
+		"concave_shapes": 0,
 		"seam_probes": 0,
 		"raycasts": 0,
 		"hits": 0,
@@ -424,16 +438,24 @@ static func _scan_current_boundary_target(
 			continue
 		if not _record_is_gameplay_ready(runtime, record, key):
 			continue
+		result["gameplay_ready_records"] = int(result["gameplay_ready_records"]) + 1
 
 		var body_variant: Variant = runtime.collision_nodes.get(key, null)
 		if not body_variant is StaticBody3D:
 			continue
-		var collider_variant: Variant = body_variant.get_node_or_null("CollisionShape3D")
-		if not collider_variant is CollisionShape3D:
+		result["static_bodies"] = int(result["static_bodies"]) + 1
+		var collider: CollisionShape3D = null
+		for child in body_variant.get_children():
+			if child is CollisionShape3D:
+				collider = child
+				break
+		if collider == null:
 			continue
-		var shape_variant: Variant = collider_variant.shape
+		result["shape_children"] = int(result["shape_children"]) + 1
+		var shape_variant: Variant = collider.shape
 		if not shape_variant is ConcavePolygonShape3D:
 			continue
+		result["concave_shapes"] = int(result["concave_shapes"]) + 1
 
 		scanned_collision_keys[key] = true
 		result["ready_cells"] = int(result["ready_cells"]) + 1
