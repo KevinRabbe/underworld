@@ -2,161 +2,209 @@
 
 Status: **project-governance index**
 
-[`../DECISION_LOG.md`](../DECISION_LOG.md) remains the authoritative chronological decision history. This file is a navigation/index layer only: it does not rewrite, reclassify or supersede old decisions by itself.
+[`../DECISION_LOG.md`](../DECISION_LOG.md) preserves the chronological decision history. Newer explicit ADRs may supersede specific historical locked clauses without deleting or rewriting that history.
 
-Use this index to answer three questions quickly:
+Current supersession authority:
+- [`ADR-001_TWO_WORLD_DOMAINS.md`](ADR-001_TWO_WORLD_DOMAINS.md) — **ACTIVE / LOCKED**, 2026-08-31.
 
-1. Which part of the decision log covers this topic?
-2. Is the source explicitly locked/directional/open, or merely a historical/recorded note?
-3. Where should a new decision be recorded?
+Current master roadmap:
+- [`MASTER_ROADMAP.md`](MASTER_ROADMAP.md)
 
-Related governance/ownership references:
+Current milestone history:
+- [`MILESTONES.md`](MILESTONES.md)
 
-- [`DOCUMENTATION_ARCHITECTURE.md`](DOCUMENTATION_ARCHITECTURE.md) — documentation ownership and document types.
-- [`../10_architecture/DEPENDENCY_RULES.md`](../10_architecture/DEPENDENCY_RULES.md) — cross-system dependency direction.
-- [`../10_architecture/REPOSITORY_STRUCTURE.md`](../10_architecture/REPOSITORY_STRUCTURE.md) — repository/system ownership.
-- [`../STREAMING_OWNERSHIP.md`](../STREAMING_OWNERSHIP.md) — world-definition, geometry, runtime and durable-delta ownership.
+## Status meanings
 
-## How status is represented here
+- **Active — LOCKED**: current binding architecture/design rule.
+- **Active — LOCKED DIRECTION**: binding direction with intentionally open implementation/tuning details.
+- **Recorded**: historical/current-at-entry observation, not permanent architecture.
+- **Historical milestone**: accepted implementation checkpoint.
+- **Open**: intentionally undecided.
+- **Superseded**: a later explicit decision names/replaces the old normative rule. Historical text remains preserved.
 
-Historical entries predate this index and use their own explicit labels. Do not retrofit newer terminology onto them unless the source supports it.
+Never infer supersession from newer code alone. A later decision/ADR must identify what it replaces.
 
-This index therefore uses:
+---
 
-- **Active — explicit LOCKED**: the source heading/rule says `LOCKED` or `LOCKED ARCHITECTURAL ...`.
-- **Active — explicit LOCKED DIRECTION**: the source says `LOCKED DIRECTION`; the direction is binding while some implementation detail remains open.
-- **Recorded**: the source explicitly records technical debt/current state without declaring it a permanent rule.
-- **Historical milestone**: the source records a completed implementation checkpoint/transition rather than a permanent architecture rule.
-- **Open**: the source explicitly lists the subject as intentionally undecided.
-- **Superseded**: use only when a later decision explicitly identifies what it replaces. No old entry is marked superseded here merely because implementation has advanced.
+# Current high-level decision index
 
-If an old entry's current status is ambiguous, treat the ambiguity as **needs clarification** rather than guessing.
-
-## Topic index
-
-All current indexed entries are dated **2026-08-27** in the source log.
-
-| Domain / topic | Source checkpoint | Source-backed status | What to look for |
+| Domain / topic | Current authority | Status | Current rule |
 | --- | --- | --- | --- |
-| World identity / surface–Underworld relationship | [Architecture/design checkpoint](../DECISION_LOG.md#2026-08-27--architecturedesign-checkpoint) | Active — explicit LOCKED | One continuous 3D world relationship; underground content independent of progression/building choices. |
-| Cave systems / entrances | [Architecture/design checkpoint](../DECISION_LOG.md#2026-08-27--architecturedesign-checkpoint) | Active — explicit LOCKED | Hierarchical topology, entrance tendencies, deep/unexpected connections. |
-| Depth structure | [Architecture/design checkpoint](../DECISION_LOG.md#2026-08-27--architecturedesign-checkpoint) | Active — explicit LOCKED | Shallow/mid/deep grammars, continuous overlap and exceptions. |
-| Secondary connectivity design | [Architecture/design checkpoint](../DECISION_LOG.md#2026-08-27--architecturedesign-checkpoint) | Active — explicit LOCKED | Rough 10% connectivity philosophy, meaningful loops/reconnections. |
-| Underground building / terrain modification | [Architecture/design checkpoint](../DECISION_LOG.md#2026-08-27--architecturedesign-checkpoint) | Active — explicit LOCKED | Build freedom, selective cave modification, structural bedrock. |
-| Boss/special-area environment rules | [Architecture/design checkpoint](../DECISION_LOG.md#2026-08-27--architecturedesign-checkpoint) | Active — explicit LOCKED | No universal build/terraform ban; protect only required encounter geometry. |
-| Creature/world audio | [Architecture/design checkpoint](../DECISION_LOG.md#2026-08-27--architecturedesign-checkpoint) | Active — explicit LOCKED | Finite local 3D relevance and physical propagation. |
-| Mining / resource interaction | [Architecture/design checkpoint](../DECISION_LOG.md#2026-08-27--architecturedesign-checkpoint) | Active + Open subset | Small-node and large-deposit direction is locked; tree harvesting remains explicitly undecided. |
-| Development/testing process | [Architecture/design checkpoint](../DECISION_LOG.md#2026-08-27--architecturedesign-checkpoint) | Active — explicit LOCKED | Architecture-first batches, automated validation, milestone playtests. |
-| Prototype surface-ID technical debt | [Architecture/design checkpoint](../DECISION_LOG.md#2026-08-27--architecturedesign-checkpoint) | Recorded | Accepted-array-index identity debt and migration need. Do not infer current completion from this old note alone. |
-| Pure graph/topology data | [Underground graph schema checkpoint](../DECISION_LOG.md#2026-08-27--underground-graph-schema-checkpoint) | Active — explicit LOCKED | Scene-independent graph definitions and headless generation/validation. |
-| Region/network ownership | [Underground graph schema checkpoint](../DECISION_LOG.md#2026-08-27--underground-graph-schema-checkpoint) | Active — explicit LOCKED | Macro region, cave network and runtime cell are separate concepts. |
-| Depth weights in graph data | [Underground graph schema checkpoint](../DECISION_LOG.md#2026-08-27--underground-graph-schema-checkpoint) | Active — explicit LOCKED | Continuous profile weights; exact meter curves remain open. |
-| Secondary/cross-region edge ownership | [Underground graph schema checkpoint](../DECISION_LOG.md#2026-08-27--underground-graph-schema-checkpoint) | Active — explicit LOCKED | Stable edges, canonical cross-region owner, no network renumbering. |
-| Immutable generated definitions / durable deltas | [Underground graph schema checkpoint](../DECISION_LOG.md#2026-08-27--underground-graph-schema-checkpoint) | Active — explicit LOCKED | Finalized definitions are deterministic base truth; player changes are deltas. |
-| Future special-location hooks | [Underground graph schema checkpoint](../DECISION_LOG.md#2026-08-27--underground-graph-schema-checkpoint) | Active — explicit architectural interface | Stable anchors reserve future content without implementing that content in topology. |
-| Canonical graph fingerprints | [Underground graph schema checkpoint](../DECISION_LOG.md#2026-08-27--underground-graph-schema-checkpoint) | Active — explicit LOCKED | Canonical sorted debug serialization/fingerprints for deterministic comparison. |
-| Procedural candidate identity / WorldId / StableAddress / StableId | [Stable procedural ID checkpoint](../DECISION_LOG.md#2026-08-27--stable-procedural-id-checkpoint) | Active — explicit LOCKED | Candidate-address identity, world scoping, stable lineage and no runtime/index identity. |
-| Surface candidate addressing | [Stable procedural ID checkpoint](../DECISION_LOG.md#2026-08-27--stable-procedural-id-checkpoint) | Active — explicit LOCKED DIRECTION | Global candidate domains/cells and fixed semantic slots. |
-| Legacy prototype-v2 identity migration | [Stable procedural ID checkpoint](../DECISION_LOG.md#2026-08-27--stable-procedural-id-checkpoint) | Active — explicit LOCKED DIRECTION | Frozen legacy regeneration/mapping; unresolved IDs must not be guessed. |
-| Seed domains / no shared RNG | [Deterministic seed-domain checkpoint](../DECISION_LOG.md#2026-08-27--deterministic-seed-domain-checkpoint) | Active — explicit LOCKED | Named domain/revision randomness independent of order/scheduling. |
-| Generator version vs domain revision | [Deterministic seed-domain checkpoint](../DECISION_LOG.md#2026-08-27--deterministic-seed-domain-checkpoint) | Active — explicit LOCKED | Manifest is compatibility identity, not universal RNG salt. |
-| Topology/geometry RNG separation | [Deterministic seed-domain checkpoint](../DECISION_LOG.md#2026-08-27--deterministic-seed-domain-checkpoint) | Active — explicit LOCKED | Geometry randomness cannot implicitly reshuffle graph topology. |
-| Project-owned deterministic RNG | [Deterministic seed-domain checkpoint](../DECISION_LOG.md#2026-08-27--deterministic-seed-domain-checkpoint) | Active — explicit LOCKED DIRECTION | Frozen/project-owned deterministic primitive plus hard-coded vectors. |
-| Engine/noise drift detection | [Deterministic seed-domain checkpoint](../DECISION_LOG.md#2026-08-27--deterministic-seed-domain-checkpoint) | Active — explicit LOCKED | Representative persistent fingerprints guard upgrades. |
-| Current surface RNG implementation note | [Deterministic seed-domain checkpoint](../DECISION_LOG.md#2026-08-27--deterministic-seed-domain-checkpoint) | Recorded | Historical/current-at-entry prototype behavior; do not treat as permanent architecture. |
-| Pure generation stages / scheduler boundary | [Generation pipeline interface checkpoint](../DECISION_LOG.md#2026-08-27--generation-pipeline-interface-checkpoint) | Active — explicit LOCKED | Typed pure stages; scheduler owns dependency resolution and worker orchestration. |
-| Generation stage order | [Generation pipeline interface checkpoint](../DECISION_LOG.md#2026-08-27--generation-pipeline-interface-checkpoint) | Active — explicit architectural order | Macro → topology → entrances → connectivity → hooks → finalization → geometry → runtime. |
-| Depth profiles as generation input | [Generation pipeline interface checkpoint](../DECISION_LOG.md#2026-08-27--generation-pipeline-interface-checkpoint) | Active — explicit LOCKED | Depth grammar participates during generation, not as cosmetic post-processing. |
-| Surface entrance dependency | [Generation pipeline interface checkpoint](../DECISION_LOG.md#2026-08-27--generation-pipeline-interface-checkpoint) | Active — explicit LOCKED | Surface may need pure underground definitions/descriptors, never live cave runtime state. |
-| Base geometry vs player deltas | [Generation pipeline interface checkpoint](../DECISION_LOG.md#2026-08-27--generation-pipeline-interface-checkpoint) | Active — explicit LOCKED | Untouched geometry is deterministic base data; player changes compose later. |
-| Typed stage data / stage revisions | [Generation pipeline interface checkpoint](../DECISION_LOG.md#2026-08-27--generation-pipeline-interface-checkpoint) | Active — explicit LOCKED DIRECTION | Typed request/result contracts and manifest stage revisions. |
-| Continuous runtime world / streaming ownership | [Streaming ownership checkpoint](../DECISION_LOG.md#2026-08-27--streaming-ownership-checkpoint) | Active — explicit LOCKED | No surface/cave mode split; services, streamers and delta store have separate lifetimes. |
-| Runtime tiers and 3D underground cells | [Streaming ownership checkpoint](../DECISION_LOG.md#2026-08-27--streaming-ownership-checkpoint) | Active — explicit LOCKED | Definition → geometry → render → collision → simulation/audio tiers. |
-| Async stale-result rejection | [Streaming ownership checkpoint](../DECISION_LOG.md#2026-08-27--streaming-ownership-checkpoint) | Active — explicit LOCKED | Request identity prevents stale workers resurrecting/overwriting runtime state. |
-| Entrance prefetch | [Streaming ownership checkpoint](../DECISION_LOG.md#2026-08-27--streaming-ownership-checkpoint) | Active — explicit LOCKED DIRECTION | Entrance proximity may prefetch connected underground data. |
-| Saved vs regenerated state | [Persistence and generator-version checkpoint](../DECISION_LOG.md#2026-08-27--persistence-and-generator-version-checkpoint) | Active — explicit LOCKED | Untouched truth regenerates; player/persistent changes are durable state. |
-| Version concepts / generator manifest | [Persistence and generator-version checkpoint](../DECISION_LOG.md#2026-08-27--persistence-and-generator-version-checkpoint) | Active + LOCKED DIRECTION | Separate schema/seed/address/manifest concepts; pin reproducible generation configuration. |
-| Compatibility / migration safety | [Persistence and generator-version checkpoint](../DECISION_LOG.md#2026-08-27--persistence-and-generator-version-checkpoint) | Active — explicit LOCKED | Explicit compatibility classes, transactional migrations, no guessed references. |
-| Prototype-v2 migration order | [Persistence and generator-version checkpoint](../DECISION_LOG.md#2026-08-27--persistence-and-generator-version-checkpoint) | Active — explicit LOCKED | Identity migration precedes later generator-contract change. |
-| Automated validation strategy | [Automated validation checkpoint](../DECISION_LOG.md#2026-08-27--automated-validation-checkpoint) | Active — explicit LOCKED | Headless/data validation before experiential testing. |
-| Batch campaigns / schedule independence | [Automated validation checkpoint](../DECISION_LOG.md#2026-08-27--automated-validation-checkpoint) | Active — explicit LOCKED | Fixed + campaign corpora and legal scheduling-order equivalence. |
-| Reproducible failures / expected deterministic changes | [Automated validation checkpoint](../DECISION_LOG.md#2026-08-27--automated-validation-checkpoint) | Active — explicit LOCKED | Reproduction metadata and constrained golden-output updates. |
-| Architecture foundation cycle complete | [Architecture foundation cycle complete](../DECISION_LOG.md#2026-08-27--architecture-foundation-cycle-complete) | Historical milestone | Marks transition from pre-implementation architecture to foundation implementation. |
-| Primary topology / entrance cycle transitions | [Primary topology complete; deterministic entrance cycle begins](../DECISION_LOG.md#2026-08-27--primary-topology-complete-deterministic-entrance-cycle-begins) | Historical milestone | Records PR/cycle sequencing at that time; not a permanent current task board. |
-| Deterministic foundation / topology cycle transition | [Deterministic foundation merged; primary topology cycle begins](../DECISION_LOG.md#2026-08-27--deterministic-foundation-merged-primary-topology-cycle-begins) | Historical milestone | Records completed foundation gate and then-next implementation cycle. |
-| Explicitly undecided implementation/tuning topics | [Current intentionally open implementation/tuning decisions](../DECISION_LOG.md#current-intentionally-open-implementationtuning-decisions) | Open | Numerical tuning, final algorithms/content, cell sizes, storage format and other listed undecided details. |
+| Overworld / Underworld relationship | [`ADR-001`](ADR-001_TWO_WORLD_DOMAINS.md), [`WORLD_DOMAINS_AND_TRANSITIONS`](../20_world/WORLD_DOMAINS_AND_TRANSITIONS.md) | **Active — LOCKED** | Two independent procedural world domains connected by deterministic gateways; no shared-coordinate/physical-continuity requirement. |
+| Cross-domain transition | [`ADR-001`](ADR-001_TWO_WORLD_DOMAINS.md), [`STREAMING_OWNERSHIP`](../STREAMING_OWNERSHIP.md) | **Active — LOCKED** | Explicit transition lifecycle; direct fade/loading is valid V1; destination safety/readiness precedes control. |
+| Active surface/Underworld semantic | [`ADR-001`](ADR-001_TWO_WORLD_DOMAINS.md) | **Active — LOCKED** | `active_domain` is authoritative coarse state; UI/audio do not infer from Y/AABB/render visibility. |
+| Domain-local persistence | [`PERSISTENCE_AND_VERSIONING`](../PERSISTENCE_AND_VERSIONING.md) | **Active — LOCKED** | Player location is `active_domain + domain_local_transform`; no coordinate conversion/nearest-gateway guessing. |
+| Underworld generation pipeline | [`UNDERWORLD_GENERATION_PIPELINE`](../20_world/UNDERWORLD_GENERATION_PIPELINE.md) | **Active — LOCKED** | Pure deterministic domain-local topology/sites/connectivity/hooks/geometry pipeline. |
+| Underworld depth grammar | [`UNDERWORLD_GENERATION_PIPELINE`](../20_world/UNDERWORLD_GENERATION_PIPELINE.md) | **Active — LOCKED** | Shallow/mid/deep remain structural grammars but no longer require Overworld surface-relative physical depth. |
+| Underworld entry/exit sites | [`UNDERWORLD_GENERATION_PIPELINE`](../20_world/UNDERWORLD_GENERATION_PIPELINE.md) | **Active — LOCKED** | Deterministic Underworld-local sites; gateway linking is a separate semantic layer. |
+| Streaming ownership | [`STREAMING_OWNERSHIP`](../STREAMING_OWNERSHIP.md) | **Active — LOCKED** | Independent Overworld/Underworld residency; bounded relevance; explicit world-domain coordinator; stale-result rejection. |
+| Performance/scale discipline | [`PERFORMANCE_AND_SCALABILITY`](../10_architecture/PERFORMANCE_AND_SCALABILITY.md) | **Active — LOCKED DIRECTION** | Canonical state separate from runtime representation; static unchanged state approaches zero CPU work; scale by current relevance. |
+| Building architecture | [`BUILDING_SYSTEM`](../30_gameplay/BUILDING_SYSTEM.md) | **Active — LOCKED direction** | Modular declarative pieces, arbitrary transforms, grid + sockets, snap escape, overlap, terrain embedding, event-driven structural graph. |
+| Visual production strategy | [`VISUAL_DIRECTION`](VISUAL_DIRECTION.md) | **Active — LOCKED visual family** | Silhouette/readability first; economical geometry + materials/shaders/lighting/atmosphere; modular reusable asset families. |
+| Long-horizon execution | [`MASTER_ROADMAP`](MASTER_ROADMAP.md) | **Active strategic plan pending PR acceptance** | Topic lanes allow parallel work; phases are integration gates, not one serial worker queue. |
 
-## Supersession policy
+---
 
-Do not delete or silently rewrite an old decision when a locked rule changes.
+# Explicit 2026-08-31 supersessions
 
-A replacement decision should:
+[`ADR-001_TWO_WORLD_DOMAINS.md`](ADR-001_TWO_WORLD_DOMAINS.md) explicitly supersedes only the listed old normative clauses. Everything else in the historical checkpoints remains active unless separately changed.
 
-1. create a new dated decision entry;
-2. state the old stable heading/decision ID it supersedes;
-3. state why the old decision is insufficient;
-4. identify the new rule;
-5. link/update affected authoritative contracts;
-6. mark the old entry as superseded only through an explicit cross-reference, preserving its historical text.
+| Historical source/topic | Previous status | Current status | Replacement |
+| --- | --- | --- | --- |
+| `DECISION_LOG` Architecture/design → World identity: “Surface and Underworld share one real 3D world-coordinate relationship” | LOCKED | **Superseded** | Independent world domains + gateway linkage. |
+| `DECISION_LOG` Generation pipeline → physical surface-to-topology entrance integration | LOCKED | **Superseded** | Underworld-local entry sites + separate gateway linking. |
+| `DECISION_LOG` Generation pipeline → required deterministic surface-reference depth | LOCKED | **Superseded** | Underworld-domain depth/profile metrics. |
+| `DECISION_LOG` Streaming → “One continuous runtime world” / no SURFACE-vs-UNDERWORLD state | LOCKED | **Superseded** | Explicit active world domain + independent runtime residency. |
+| `DECISION_LOG` Streaming → mandatory entrance overlap/prefetch for physical traversal | LOCKED DIRECTION | **Superseded** | Destination readiness inside explicit transition/loading lifecycle. |
+| old `GENERATION_PIPELINE_INTERFACES.md` physical `SurfaceEntranceIntegrationDescriptor` cross-domain authority | LOCKED | **Superseded** | `20_world/UNDERWORLD_GENERATION_PIPELINE.md`. |
+| old `STREAMING_OWNERSHIP.md` one-global-coordinate/runtime ownership | LOCKED | **Superseded** | current rewritten `STREAMING_OWNERSHIP.md`. |
 
-Until that explicit relationship exists, this index must not infer supersession from newer code, newer task status or a similar-looking later paragraph.
+Historical continuous-traversal implementation evidence remains valid as M2/project history and as internal Underworld geometry/runtime evidence. Supersession does not retroactively invalidate completed tests or accepted deterministic topology contracts.
 
-## Future decision-entry convention
+---
 
-New durable decisions should use a stable heading/ID and a small metadata block so they remain indexable.
+# Preserved 2026-08-27 architecture decisions
 
-Recommended form:
+Unless named above, the following historical decision families remain active and are read from [`../DECISION_LOG.md`](../DECISION_LOG.md).
+
+## World/game design
+- surface remains comparatively readable/familiar while Underworld carries primary long-term spatial mystery;
+- deterministic world contents exist independently of future player progression/build choices;
+- old geography can gain new meaning;
+- about 10% Souls-style connectivity remains a design shorthand for occasional meaningful loops/reconnections;
+- shallow/mid/deep are overlapping tendencies rather than rigid hard floors;
+- underground building is allowed where normal building/world rules permit;
+- selective Underworld modification preserves meaningful structural cave material;
+- critical boss/encounter geometry may be protected without a universal build ban;
+- mining has distinct small-node versus large-deposit interaction goals.
+
+## Deterministic graph/identity
+- pure topology data independent of scene Nodes;
+- macro region, cave network, geometry/runtime cell are separate concepts;
+- stable candidate identity exists before acceptance;
+- rejected candidates never renumber later siblings;
+- canonical cross-region connector ownership;
+- immutable finalized generated definitions;
+- StableAddress/StableId are semantic, not runtime index/Node identity;
+- generated graphs require canonical fingerprints.
+
+## Seed domains/versioning
+- no shared mutable generation RNG;
+- named domains/revisions + semantic stable addresses;
+- generator manifest is compatibility identity, not universal RNG salt;
+- topology/geometry randomness separated;
+- engine/noise drift protected by deterministic fingerprints;
+- old incompatible generation is migrated/classified explicitly rather than silently reinterpreted.
+
+## Generation internals
+- explicit pure stage boundaries;
+- scheduler owns dependencies/worker orchestration;
+- secondary connectivity remains post-primary analysis;
+- special-location hooks reserve future content without owning gameplay;
+- base generated geometry and player-caused deltas remain separate.
+
+## Runtime/persistence
+- runtime tiers and caches are replaceable representations;
+- stale asynchronous results cannot resurrect stale runtime owners;
+- durable deltas are not owned by runtime cells;
+- generated untouched truth is regenerated under pinned contracts;
+- migration is explicit/transactional;
+- unresolved references fail visibly/quarantine rather than nearest-object guessing.
+
+## Validation/process
+- deterministic reproducible tests across many seeds;
+- schedule/order independence where legal;
+- reproducible failure metadata;
+- architecture-first meaningful batches;
+- human playtests reserved for milestone feel/readability/fun rather than every small change.
+
+---
+
+# Historical milestone/checkpoint index
+
+The full chronology remains in [`../DECISION_LOG.md`](../DECISION_LOG.md). Major 2026-08-27 checkpoint families include:
+
+1. Architecture/design checkpoint
+2. Underground graph schema checkpoint
+3. Stable procedural ID checkpoint
+4. Deterministic seed-domain checkpoint
+5. Generation pipeline interface checkpoint
+6. Streaming ownership checkpoint
+7. Persistence/generator-version checkpoint
+8. Automated validation checkpoint
+9. Architecture-foundation completion / deterministic-foundation / topology / entrance-cycle transitions
+
+These headings remain useful historical anchors even where ADR-001 supersedes specific clauses within them.
+
+---
+
+# Current open/tunable topics
+
+Architecture intentionally does not lock arbitrary numeric values that require profiling or gameplay testing, including:
+- exact Underworld depth curves;
+- exact cell/chunk dimensions;
+- render/collision/simulation radii;
+- cache/publication budgets;
+- final gateway-linking geographical policy;
+- exact building grid dimensions/rotation increments/support values;
+- final art/texture/poly budgets;
+- exact persistence physical format/sharding;
+- long-term legacy support window;
+- final multiplayer replication budgets.
+
+Open tuning must not be mistaken for permission to violate the current ownership/identity boundaries.
+
+---
+
+# Decision recording convention
+
+Ordinary durable decisions should normally be recorded chronologically in `DECISION_LOG.md`.
+
+A dedicated ADR is warranted when one decision has substantial alternatives, cross-system consequences or an important supersession/migration story.
+
+Recommended ADR metadata:
 
 ```markdown
-## YYYY-MM-DD — DEC-### — Short decision title
-
-Status: active | superseded | historical
+# ADR-### — Short title
+Date: YYYY-MM-DD
+Status: ACTIVE | SUPERSEDED | HISTORICAL
 
 Decision:
-- concise normative choice
+- normative choice
 
 Rationale:
-- why this choice was made and the important trade-off
+- trade-off / why
+
+Supersedes:
+- exact prior decisions/clauses
 
 Affected contracts:
-- path/to/authoritative_contract.md
-
-Supersedes: DEC-### | None
-Superseded by: DEC-### | None
+- authoritative docs
 ```
 
-Rules:
+## Supersession rules
 
-- Use **active** for a currently governing decision.
-- Use **superseded** only with an explicit replacement link.
-- Use **historical** for a preserved implementation/process milestone that no longer claims to be the current governing rule.
-- A stable descriptive heading is acceptable where a numeric ID has not yet been allocated; never renumber old decisions just to make the file look uniform.
-- Existing 2026-08-27 history is grandfathered. Do not bulk-rewrite it into the new form.
+When a locked rule changes:
+1. preserve the historical text;
+2. create a later explicit decision/ADR;
+3. identify the exact old clause(s) replaced;
+4. update owning architecture contracts;
+5. update this index;
+6. do not infer additional supersessions that were not named.
 
-### When a dedicated ADR is warranted
+A supersession is narrow: untouched portions of the historical checkpoint remain active.
 
-Keep ordinary durable decisions in the decision log. A dedicated architecture decision record is justified only when one decision has substantial alternatives/trade-offs, cross-system consequences or a long supersession/migration story that would make a concise log entry hard to review.
+## Where changes belong
 
-If a dedicated ADR is introduced:
-
-- keep the same date/status/decision/rationale/affected-contract/supersession metadata;
-- add a short entry in `DECISION_LOG.md` linking to it so chronological history remains complete;
-- let the ADR explain alternatives and consequences, while the authoritative architecture contracts still contain the normative system rules;
-- do not create ADRs for routine implementation choices, small refactors or task sequencing.
-
-This task defines the convention only; it does not retroactively split existing history into ADR files.
-
-## Where should a change be recorded?
-
-| Change type | Record it in | Why |
-| --- | --- | --- |
-| Durable design/architecture choice or deliberate replacement of a locked rule | `DECISION_LOG.md` (and optional dedicated ADR when warranted) | Preserves chronological rationale and supersession history. |
-| Normative system ownership, schema, invariant or dependency rule | The owning architecture/contract document | This is the operational source of truth implementation must follow. |
-| Work item, dependency, blocker, claim or acceptance criteria | Task/PM issue | Task state is project execution metadata, not permanent architecture. |
-| Concrete implementation plus tests/evidence | Pull request | PRs implement/review decisions; they should not be the only permanent record of architecture. |
-| Routine implementation detail with no durable architectural consequence | Code/tests/PR only | Avoid turning every small choice into governance ceremony. |
-| Unresolved architecture question | Owning issue/design discussion, marked open | Do not manufacture a decision-log entry until a decision actually exists. |
+| Change | Primary record |
+| --- | --- |
+| Durable architecture/product decision | `DECISION_LOG.md` and/or dedicated ADR when warranted |
+| Normative system ownership/invariant | Owning architecture document |
+| Work item/blocker/dependency/status | PM/task issue |
+| Implementation + test evidence | PR / test suite |
+| Accepted milestone baseline | `MILESTONES.md` |
+| Unresolved question | Owning issue/design discussion marked open |
 
 ## Maintenance rule
 
-When a new durable decision is added or explicitly superseded, update this index in the same documentation/governance change when practical. If the source decision is ambiguous, add a clarification follow-up rather than silently resolving ambiguity in this index.
+Whenever a new decision explicitly supersedes an old one, update this index in the same documentation/governance change where practical. Never let an older locked clause remain displayed here as current after a known explicit supersession.
