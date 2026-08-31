@@ -147,6 +147,15 @@ func _validate_reference_targets(
 		failures.append("weapon archetype target must inherit ArchetypeDefinition: %s" % definition.archetype_id)
 
 
+func canonical_evidence_descriptor() -> Dictionary:
+	var descriptor: Dictionary = super.canonical_evidence_descriptor()
+	if _role_registry != null and _role_registry is SemanticRoleSchemaRegistryScript:
+		descriptor["semantic_role_schema_manifest"] = _role_registry.canonical_manifest()
+	else:
+		descriptor["semantic_role_schema_manifest"] = {"invalid_registry": true}
+	return descriptor
+
+
 static func _resolved_definition(content_registry, content_id: String, family: String):
 	var resolved: Dictionary = content_registry.resolve(content_id, family)
 	if not resolved.get("diagnostics", []).is_empty():
