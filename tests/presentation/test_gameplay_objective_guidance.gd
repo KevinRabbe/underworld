@@ -114,7 +114,7 @@ static func _test_reconstructive_objective_chain(failures: Array[String]) -> voi
 
 	_add_stack(failures, inventory, fixture["wood"], 8, "UX fixture wood")
 	_add_stack(failures, inventory, fixture["stone"], 7, "UX fixture stone")
-	_add_stack(failures, inventory, fixture["axe"], 1, "UX inventory-only axe")
+	_add_instance(failures, inventory, fixture["axe"], "UX inventory-only axe")
 	objective = model.sample(game, player, inventory, equipment)
 	_expect(failures, "inventory-only stone tool does not satisfy equip objective", _objective_is(objective, "craft_equip_stone_tools"))
 
@@ -132,7 +132,7 @@ static func _test_reconstructive_objective_chain(failures: Array[String]) -> voi
 	_expect(failures, "iron objective uses authored recipe requirement", int(objective.get("iron_required", 0)) == 4)
 
 	_add_stack(failures, inventory, fixture["iron"], 4, "UX fixture iron")
-	_add_stack(failures, inventory, fixture["sword"], 1, "UX inventory-only sword")
+	_add_instance(failures, inventory, fixture["sword"], "UX inventory-only sword")
 	objective = model.sample(game, player, inventory, equipment)
 	_expect(failures, "inventory-only sword does not satisfy production sword objective", _objective_is(objective, "craft_equip_iron_sword"))
 
@@ -153,6 +153,7 @@ static func _test_reconstructive_objective_chain(failures: Array[String]) -> voi
 	game.mode = &"continue"
 	objective = model.sample(game, player, inventory, equipment)
 	_expect(failures, "Continue reconstructs complete state without UX flag", _objective_is(objective, "m3_route_complete") and bool(objective.get("complete", false)))
+	_cleanup_fixture(fixture)
 
 
 static func _test_route_failure_is_visible_and_safe(failures: Array[String]) -> void:
@@ -183,6 +184,7 @@ static func _test_route_failure_is_visible_and_safe(failures: Array[String]) -> 
 	game.route["surface_world_position"] = Vector3(INF, 0.0, 0.0)
 	objective = GameplayObjectiveReadModel.new().sample(game, fixture["player"], inventory, equipment)
 	_expect(failures, "malformed route target fails closed", not bool(objective.get("success", true)))
+	_cleanup_fixture(fixture)
 
 
 static func _test_hud_renders_guidance_without_debug_authority(failures: Array[String]) -> void:
@@ -203,11 +205,16 @@ static func _test_hud_renders_guidance_without_debug_authority(failures: Array[S
 	_expect(failures, "GameplayHUD renders current objective without DebugHUD", str(snapshot.get("objective", "")).begins_with("Objective: Gather resources"))
 	_expect(failures, "GameplayHUD objective snapshot exposes semantic objective id", str(snapshot.get("objective_model", {}).get("objective_id", "")) == "gather_surface_materials")
 	_expect(failures, "GameplayHUD objective controls remain mouse passthrough", hud.controls_are_mouse_passthrough())
-	game.free()
+	_cleanup_fixture(fixture)
 
 
 static func _fixture(failures: Array[String]) -> Dictionary:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null or tree.root == null:
+		failures.append("UX fixture requires live SceneTree root")
+		return {}
 	var game := FakeGame.new()
+	tree.root.add_child(game)
 	var player := FakePlayer.new()
 	game.add_child(player)
 	player.global_position = Vector3.ZERO
@@ -245,6 +252,12 @@ static func _fixture(failures: Array[String]) -> Dictionary:
 	return fixture
 
 
+static func _cleanup_fixture(fixture: Dictionary) -> void:
+	var game = fixture.get("game", null)
+	if game != null and is_instance_valid(game):
+		game.free()
+
+
 static func _equip(
 	failures: Array[String],
 	equipment,
@@ -277,6 +290,17 @@ static func _add_stack(
 	label: String
 ) -> void:
 	var result: Dictionary = inventory.add_stack(definition, quantity)
+	if not bool(result.get("success", false)):
+		failures.append("%s failed: %s" % [label, result.get("diagnostics", [])])
+
+
+static func _add_instance(
+	failures: Array[String],
+	inventory,
+	definition,
+	label: String
+) -> void:
+	var result: Dictionary = inventory.add_instance(definition, {})
 	if not bool(result.get("success", false)):
 		failures.append("%s failed: %s" % [label, result.get("diagnostics", [])])
 
