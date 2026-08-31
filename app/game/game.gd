@@ -338,6 +338,13 @@ func _create_world() -> void:
 			push_error("Detached Continue state failed during activation: %s" % [restore_failures])
 
 	_resolve_natural_route()
+	if not _selected_entrance_route.is_empty():
+		var surface_bind_failures: Array[String] = world.bind_selected_entrance_route(
+			_selected_entrance_route
+		)
+		if not surface_bind_failures.is_empty():
+			_record_route_failure(surface_bind_failures)
+			_selected_entrance_route = {}
 	if _startup_mode == STARTUP_CONTINUE:
 		var resume_position: Vector3 = _startup_candidate.get("resume_position", Vector3.ZERO)
 		spawn_xz = Vector3(resume_position.x, 0.0, resume_position.z)
