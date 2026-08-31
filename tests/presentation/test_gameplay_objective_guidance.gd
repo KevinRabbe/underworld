@@ -115,8 +115,10 @@ static func _test_reconstructive_objective_chain(failures: Array[String]) -> voi
 	_add_stack(failures, inventory, fixture["wood"], 8, "UX fixture wood")
 	_add_stack(failures, inventory, fixture["stone"], 7, "UX fixture stone")
 	_add_instance(failures, inventory, fixture["axe"], "UX inventory-only axe")
+	_remove_stack(failures, inventory, "item.resource.wood", 4, "UX crafted axe wood")
+	_remove_stack(failures, inventory, "item.resource.stone", 3, "UX crafted axe stone")
 	objective = model.sample(game, player, inventory, equipment)
-	_expect(failures, "inventory-only stone tool does not satisfy equip objective", _objective_is(objective, "craft_equip_stone_tools"))
+	_expect(failures, "crafted inventory-only tool does not send player back to gather", _objective_is(objective, "craft_equip_stone_tools"))
 
 	_equip(failures, equipment, fixture["equip_source"], fixture["axe"], SLOT_AXE, "UX equip axe")
 	_equip(failures, equipment, fixture["equip_source"], fixture["pickaxe"], SLOT_PICKAXE, "UX equip pickaxe")
@@ -133,8 +135,9 @@ static func _test_reconstructive_objective_chain(failures: Array[String]) -> voi
 
 	_add_stack(failures, inventory, fixture["iron"], 4, "UX fixture iron")
 	_add_instance(failures, inventory, fixture["sword"], "UX inventory-only sword")
+	_remove_stack(failures, inventory, "item.resource.iron_chunk", 4, "UX crafted sword iron")
 	objective = model.sample(game, player, inventory, equipment)
-	_expect(failures, "inventory-only sword does not satisfy production sword objective", _objective_is(objective, "craft_equip_iron_sword"))
+	_expect(failures, "crafted inventory-only sword does not send player back to mine", _objective_is(objective, "craft_equip_iron_sword") and bool(objective.get("sword_owned", false)))
 
 	_equip(failures, equipment, fixture["equip_source"], fixture["sword"], SLOT_UTILITY, "UX equip sword")
 	objective = model.sample(game, player, inventory, equipment)
@@ -290,6 +293,18 @@ static func _add_stack(
 	label: String
 ) -> void:
 	var result: Dictionary = inventory.add_stack(definition, quantity)
+	if not bool(result.get("success", false)):
+		failures.append("%s failed: %s" % [label, result.get("diagnostics", [])])
+
+
+static func _remove_stack(
+	failures: Array[String],
+	inventory,
+	item_id: String,
+	quantity: int,
+	label: String
+) -> void:
+	var result: Dictionary = inventory.remove_stack(item_id, quantity)
 	if not bool(result.get("success", false)):
 		failures.append("%s failed: %s" % [label, result.get("diagnostics", [])])
 
