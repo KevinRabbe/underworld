@@ -12,16 +12,11 @@ const PlayerSupportBounds := preload("res://gameplay/player/player_collision_sup
 
 const TEST_SEED: int = 2174242
 const FLOOR_CLEARANCE: float = 0.04
-const BOUNDARY_INSET: float = 0.10
-const SEAM_GEOMETRY_BAND: float = 1.25
-const SEAM_QUANTIZATION: float = 0.10
-const SEAM_TANGENTIAL_OFFSETS: Array[float] = [-0.45, 0.0, 0.45]
-const MAX_SEAM_PROBES_PER_SIDE: int = 48
 const MAX_SEARCH_HOPS: int = 4
 const UPDATES_PER_HOP: int = 18
 const SCAN_INTERVAL: int = 6
-const MAX_PHYSICS_CANDIDATES: int = 48
-const MAX_RAY_HITS_PER_PROBE: int = 8
+const MAX_PHYSICS_CANDIDATES: int = 64
+const POSITION_QUANTIZATION: float = 0.01
 
 
 static func run_runtime(tree: SceneTree) -> Array[String]:
@@ -77,16 +72,20 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		runtime.update_player_position(target_position)
 
 	var initial_support: Dictionary = _support_keys_for_player(runtime, player, target_position)
+	var expected_support_keys: Array[String] = []
 	if not bool(initial_support.get("success", false)):
 		failures.append(
 			"deep observer target support query failed: %s"
 			% [initial_support.get("diagnostics", [])]
 		)
-	elif initial_support.get("keys", []).size() < 2:
-		failures.append("deep observer target does not cross a runtime cell boundary")
 	else:
 		for raw_key in initial_support.get("keys", []):
-			var key: String = str(raw_key)
+			expected_support_keys.append(str(raw_key))
+		if expected_support_keys.size() < 2:
+			failures.append("deep observer target does not cross a runtime cell boundary")
+		if not _crosses_exactly_one_horizontal_seam(runtime, player, target_position):
+			failures.append("deep observer target is not isolated to one X/Z cell-boundary seam")
+		for key in expected_support_keys:
 			var support_record = runtime.streamer.records.get(key, null)
 			if not _record_is_gameplay_ready(runtime, support_record, key):
 				failures.append(
@@ -186,11 +185,19 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		)
 
 	var resumed_support_variant: Variant = gate.call("resume_support_cell_keys")
-	if not resumed_support_variant is Array or resumed_support_variant.size() < 2:
-		failures.append("deep Continue gate did not require the multi-cell Player support envelope")
+	if not resumed_support_variant is Array:
+		failures.append("deep Continue gate did not expose its support-cell set")
 	else:
+		var resumed_support_keys: Array[String] = []
 		for raw_key in resumed_support_variant:
-			var key: String = str(raw_key)
+			resumed_support_keys.append(str(raw_key))
+		resumed_support_keys.sort()
+		expected_support_keys.sort()
+		if resumed_support_keys != expected_support_keys:
+			failures.append(
+				"deep Continue gate reconstructed a different support envelope than the saved Player requires"
+			)
+		for key in resumed_support_keys:
 			var support_record = resumed_runtime.streamer.records.get(key, null)
 			if not _record_is_gameplay_ready(resumed_runtime, support_record, key):
 				failures.append(
@@ -319,15 +326,8 @@ static func _find_observer_boundary_target(
 	var scanned_collision_keys: Dictionary = {}
 	var totals := {
 		"ready_cells": 0,
-		"gameplay_ready_records": 0,
-		"static_bodies": 0,
-		"shape_children": 0,
-		"concave_shapes": 0,
-		"seam_probes": 0,
-		"raycasts": 0,
-		"hits": 0,
-		"floor_hits": 0,
-		"multicell_hits": 0,
+		"floor_faces": 0,
+		"seam_proposals": 0,
 		"physics_attempts": 0,
 	}
 
@@ -365,23 +365,14 @@ static func _find_observer_boundary_target(
 
 	failures.append(
 		(
-			"deep boundary search exhausted geometry-seeded physics exploration: "
-			+ "ready_cells=%d gameplay_ready_records=%d static_bodies=%d "
-			+ "shape_children=%d concave_shapes=%d seam_probes=%d raycasts=%d "
-			+ "hits=%d floor_hits=%d multicell_hits=%d physics_attempts=%d "
+			"deep boundary search exhausted realized-floor exploration: "
+			+ "ready_cells=%d floor_faces=%d seam_proposals=%d physics_attempts=%d "
 			+ "records=%d collisions=%d"
 		)
 		% [
 			totals["ready_cells"],
-			totals["gameplay_ready_records"],
-			totals["static_bodies"],
-			totals["shape_children"],
-			totals["concave_shapes"],
-			totals["seam_probes"],
-			totals["raycasts"],
-			totals["hits"],
-			totals["floor_hits"],
-			totals["multicell_hits"],
+			totals["floor_faces"],
+			totals["seam_proposals"],
 			totals["physics_attempts"],
 			runtime.streamer.records.size(),
 			runtime.collision_nodes.size(),
@@ -401,26 +392,13 @@ static func _scan_current_boundary_target(
 	var result := {
 		"target": {},
 		"ready_cells": 0,
-		"gameplay_ready_records": 0,
-		"static_bodies": 0,
-		"shape_children": 0,
-		"concave_shapes": 0,
-		"seam_probes": 0,
-		"raycasts": 0,
-		"hits": 0,
-		"floor_hits": 0,
-		"multicell_hits": 0,
+		"floor_faces": 0,
+		"seam_proposals": 0,
 		"physics_attempts": 0,
 	}
-	if runtime == null or not runtime.is_inside_tree():
-		return result
-	var world: World3D = runtime.get_world_3d()
-	if world == null:
-		return result
-
-	var cell_size: Vector3 = runtime.streamer.cell_size
 	var minimum_floor_dot: float = cos(float(player.floor_max_angle))
 	var candidates: Array[Dictionary] = []
+	var candidate_keys: Dictionary = {}
 	var keys: Array = runtime.streamer.records.keys()
 	keys.sort()
 
@@ -438,60 +416,56 @@ static func _scan_current_boundary_target(
 			continue
 		if not _record_is_gameplay_ready(runtime, record, key):
 			continue
-		result["gameplay_ready_records"] = int(result["gameplay_ready_records"]) + 1
-
 		var body_variant: Variant = runtime.collision_nodes.get(key, null)
 		if not body_variant is StaticBody3D:
 			continue
-		result["static_bodies"] = int(result["static_bodies"]) + 1
 		var collider: CollisionShape3D = null
 		for child in body_variant.get_children():
 			if child is CollisionShape3D:
 				collider = child
 				break
-		if collider == null:
+		if collider == null or not collider.shape is ConcavePolygonShape3D:
 			continue
-		result["shape_children"] = int(result["shape_children"]) + 1
-		var shape_variant: Variant = collider.shape
-		if not shape_variant is ConcavePolygonShape3D:
-			continue
-		result["concave_shapes"] = int(result["concave_shapes"]) + 1
 
 		scanned_collision_keys[key] = true
 		result["ready_cells"] = int(result["ready_cells"]) + 1
-		var cell_min: Vector3 = Vector3(coordinate) * cell_size
-		var cell_max: Vector3 = cell_min + cell_size
-		var top_y: float = minf(cell_max.y + 0.5, -0.05)
-		var bottom_y: float = maxf(cell_min.y - 0.5, -95.0)
-		if top_y <= bottom_y:
-			continue
-
-		var probes: Array[Vector3] = _collision_seam_probes(
-			body_variant,
-			shape_variant,
-			cell_min,
-			cell_max
-		)
-		result["seam_probes"] = int(result["seam_probes"]) + probes.size()
-		for probe in probes:
-			var ray_start := Vector3(probe.x, top_y, probe.z)
-			var floor_hit: Dictionary = _first_floor_hit(
-				world,
-				player,
-				runtime,
-				handoff_keys,
-				ray_start,
-				bottom_y,
-				minimum_floor_dot,
-				result
-			)
-			_add_physics_candidate(
-				runtime,
-				player,
-				floor_hit,
-				candidates,
-				result
-			)
+		var shape: ConcavePolygonShape3D = collider.shape
+		var faces: PackedVector3Array = shape.get_faces()
+		for index in range(0, faces.size(), 3):
+			if index + 2 >= faces.size():
+				break
+			var a: Vector3 = body_variant.global_transform * faces[index]
+			var b: Vector3 = body_variant.global_transform * faces[index + 1]
+			var c: Vector3 = body_variant.global_transform * faces[index + 2]
+			var normal: Vector3 = (b - a).cross(c - a)
+			if normal.length_squared() < 0.00000001:
+				continue
+			normal = normal.normalized()
+			var floor_dot: float = normal.dot(Vector3.UP)
+			if floor_dot + 0.0001 < minimum_floor_dot:
+				continue
+			result["floor_faces"] = int(result["floor_faces"]) + 1
+			var position: Vector3 = (a + b + c) / 3.0 + Vector3.UP * FLOOR_CLEARANCE
+			if position.y >= 0.0 or position.y <= -95.0:
+				continue
+			if not _crosses_exactly_one_horizontal_seam(runtime, player, position):
+				continue
+			var support: Dictionary = _support_keys_for_player(runtime, player, position)
+			if (
+				not bool(support.get("success", false))
+				or support.get("keys", []).size() < 2
+				or not _support_is_ready(runtime, support.get("keys", []))
+			):
+				continue
+			var candidate_key: String = _position_key(position)
+			if candidate_keys.has(candidate_key):
+				continue
+			candidate_keys[candidate_key] = true
+			result["seam_proposals"] = int(result["seam_proposals"]) + 1
+			candidates.append({
+				"position": position,
+				"floor_dot": floor_dot,
+			})
 
 	candidates.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
 		if not is_equal_approx(float(left["floor_dot"]), float(right["floor_dot"])):
@@ -531,6 +505,9 @@ static func _scan_current_boundary_target(
 		if absf(settled.y - floor_position.y) > 0.30:
 			_restore_probe_player(player, safe_player_position)
 			continue
+		if not _crosses_exactly_one_horizontal_seam(runtime, player, settled):
+			_restore_probe_player(player, safe_player_position)
+			continue
 
 		for _step in range(12):
 			runtime.update_player_position(settled)
@@ -567,213 +544,27 @@ static func _scan_current_boundary_target(
 	return result
 
 
-static func _collision_seam_probes(
-	body: StaticBody3D,
-	shape: ConcavePolygonShape3D,
-	cell_min: Vector3,
-	cell_max: Vector3
-) -> Array[Vector3]:
-	var side_seeds := {
-		"xmin": {},
-		"xmax": {},
-		"zmin": {},
-		"zmax": {},
-	}
-	var faces: PackedVector3Array = shape.get_faces()
-	for index in range(0, faces.size(), 3):
-		if index + 2 >= faces.size():
-			break
-		var a: Vector3 = body.global_transform * faces[index]
-		var b: Vector3 = body.global_transform * faces[index + 1]
-		var c: Vector3 = body.global_transform * faces[index + 2]
-		var centroid: Vector3 = (a + b + c) / 3.0
-		var samples: Array[Vector3] = [
-			a,
-			b,
-			c,
-			centroid,
-			(a + b) * 0.5,
-			(b + c) * 0.5,
-			(c + a) * 0.5,
-		]
-		for sample in samples:
-			_register_seam_probe_seeds(
-				side_seeds,
-				sample,
-				cell_min,
-				cell_max
-			)
-
-	var probes: Array[Vector3] = []
-	for side_name in ["xmin", "xmax", "zmin", "zmax"]:
-		var seeds_variant: Variant = side_seeds.get(side_name, {})
-		if not seeds_variant is Dictionary:
-			continue
-		var seeds: Dictionary = seeds_variant
-		var ordered_keys: Array = seeds.keys()
-		ordered_keys.sort()
-		var accepted: int = 0
-		for raw_key in ordered_keys:
-			if accepted >= MAX_SEAM_PROBES_PER_SIDE:
-				break
-			var probe_variant: Variant = seeds.get(raw_key, null)
-			if probe_variant is Vector3:
-				probes.append(probe_variant)
-				accepted += 1
-	return probes
-
-
-static func _register_seam_probe_seeds(
-	side_seeds: Dictionary,
-	sample: Vector3,
-	cell_min: Vector3,
-	cell_max: Vector3
-) -> void:
-	if absf(sample.x - cell_min.x) <= SEAM_GEOMETRY_BAND:
-		for offset in SEAM_TANGENTIAL_OFFSETS:
-			var z: float = clampf(
-				sample.z + offset,
-				cell_min.z + BOUNDARY_INSET,
-				cell_max.z - BOUNDARY_INSET
-			)
-			_store_side_probe(
-				side_seeds["xmin"],
-				z,
-				Vector3(cell_min.x + BOUNDARY_INSET, 0.0, z)
-			)
-	if absf(sample.x - cell_max.x) <= SEAM_GEOMETRY_BAND:
-		for offset in SEAM_TANGENTIAL_OFFSETS:
-			var z: float = clampf(
-				sample.z + offset,
-				cell_min.z + BOUNDARY_INSET,
-				cell_max.z - BOUNDARY_INSET
-			)
-			_store_side_probe(
-				side_seeds["xmax"],
-				z,
-				Vector3(cell_max.x - BOUNDARY_INSET, 0.0, z)
-			)
-	if absf(sample.z - cell_min.z) <= SEAM_GEOMETRY_BAND:
-		for offset in SEAM_TANGENTIAL_OFFSETS:
-			var x: float = clampf(
-				sample.x + offset,
-				cell_min.x + BOUNDARY_INSET,
-				cell_max.x - BOUNDARY_INSET
-			)
-			_store_side_probe(
-				side_seeds["zmin"],
-				x,
-				Vector3(x, 0.0, cell_min.z + BOUNDARY_INSET)
-			)
-	if absf(sample.z - cell_max.z) <= SEAM_GEOMETRY_BAND:
-		for offset in SEAM_TANGENTIAL_OFFSETS:
-			var x: float = clampf(
-				sample.x + offset,
-				cell_min.x + BOUNDARY_INSET,
-				cell_max.x - BOUNDARY_INSET
-			)
-			_store_side_probe(
-				side_seeds["zmax"],
-				x,
-				Vector3(x, 0.0, cell_max.z - BOUNDARY_INSET)
-			)
-
-
-static func _store_side_probe(
-	seeds: Dictionary,
-	tangential_coordinate: float,
-	probe: Vector3
-) -> void:
-	var quantized: int = roundi(tangential_coordinate / SEAM_QUANTIZATION)
-	var key: String = str(quantized)
-	if not seeds.has(key):
-		seeds[key] = probe
-
-
-static func _first_floor_hit(
-	world: World3D,
-	player,
-	runtime,
-	handoff_keys: Dictionary,
-	ray_start: Vector3,
-	bottom_y: float,
-	minimum_floor_dot: float,
-	counters: Dictionary
-) -> Dictionary:
-	var current_y: float = ray_start.y
-	for _attempt in range(MAX_RAY_HITS_PER_PROBE):
-		if current_y <= bottom_y:
-			break
-		counters["raycasts"] = int(counters["raycasts"]) + 1
-		var query := PhysicsRayQueryParameters3D.create(
-			Vector3(ray_start.x, current_y, ray_start.z),
-			Vector3(ray_start.x, bottom_y, ray_start.z)
-		)
-		query.collision_mask = 1
-		query.collide_with_areas = false
-		query.collide_with_bodies = true
-		query.exclude = [player.get_rid()]
-		var hit: Dictionary = world.direct_space_state.intersect_ray(query)
-		if hit.is_empty():
-			break
-		counters["hits"] = int(counters["hits"]) + 1
-		var position_variant: Variant = hit.get("position", null)
-		var normal_variant: Variant = hit.get("normal", null)
-		var collider_variant: Variant = hit.get("collider", null)
-		if not position_variant is Vector3:
-			break
-		var hit_position: Vector3 = position_variant
-		current_y = hit_position.y - 0.08
-		if not normal_variant is Vector3 or not collider_variant is StaticBody3D:
-			continue
-		var collider: StaticBody3D = collider_variant
-		if collider.get_parent() != runtime:
-			continue
-		var hit_key: String = str(collider.get_meta("cell_address", ""))
-		if hit_key.is_empty() or handoff_keys.has(hit_key):
-			continue
-		if (
-			not runtime.collision_nodes.has(hit_key)
-			or runtime.collision_nodes.get(hit_key) != collider
-		):
-			continue
-		var floor_dot: float = normal_variant.dot(Vector3.UP)
-		if floor_dot + 0.0001 < minimum_floor_dot:
-			continue
-		counters["floor_hits"] = int(counters["floor_hits"]) + 1
-		return {
-			"position": hit_position + Vector3.UP * FLOOR_CLEARANCE,
-			"floor_dot": floor_dot,
-			"hit_key": hit_key,
-		}
-	return {}
-
-
-static func _add_physics_candidate(
+static func _crosses_exactly_one_horizontal_seam(
 	runtime,
 	player,
-	hit: Dictionary,
-	candidates: Array[Dictionary],
-	counters: Dictionary
-) -> void:
-	if hit.is_empty():
-		return
-	var position_variant: Variant = hit.get("position", null)
-	if not position_variant is Vector3:
-		return
-	var position: Vector3 = position_variant
-	if position.y >= 0.0 or position.y <= -95.0:
-		return
-	var support: Dictionary = _support_keys_for_player(runtime, player, position)
-	if (
-		not bool(support.get("success", false))
-		or support.get("keys", []).size() < 2
-	):
-		return
-	if not _support_is_ready(runtime, support.get("keys", [])):
-		return
-	counters["multicell_hits"] = int(counters["multicell_hits"]) + 1
-	candidates.append(hit)
+	position: Vector3
+) -> bool:
+	var support_result: Dictionary = PlayerSupportBounds.bounds_at(player, position)
+	if not bool(support_result.get("success", false)):
+		return false
+	var bounds_variant: Variant = support_result.get("bounds", null)
+	if not bounds_variant is AABB:
+		return false
+	var bounds: AABB = bounds_variant
+	var maximum: Vector3 = bounds.end - Vector3.ONE * 0.0001
+	var cell_size: Vector3 = runtime.streamer.cell_size
+	var minimum_x: int = floori(bounds.position.x / cell_size.x)
+	var maximum_x: int = floori(maximum.x / cell_size.x)
+	var minimum_z: int = floori(bounds.position.z / cell_size.z)
+	var maximum_z: int = floori(maximum.z / cell_size.z)
+	var crosses_x: bool = maximum_x > minimum_x
+	var crosses_z: bool = maximum_z > minimum_z
+	return crosses_x != crosses_z
 
 
 static func _next_exploration_position(
@@ -875,6 +666,14 @@ static func _record_is_gameplay_ready(runtime, record, key: String) -> bool:
 		if not bool(record.readiness.get(tier, false)):
 			return false
 	return runtime.render_nodes.has(key) and runtime.collision_nodes.has(key)
+
+
+static func _position_key(position: Vector3) -> String:
+	return "%d:%d:%d" % [
+		roundi(position.x / POSITION_QUANTIZATION),
+		roundi(position.y / POSITION_QUANTIZATION),
+		roundi(position.z / POSITION_QUANTIZATION),
+	]
 
 
 static func _restore_probe_player(player, position: Vector3) -> void:
