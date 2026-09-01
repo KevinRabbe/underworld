@@ -6,6 +6,12 @@ const PickupGeneratorScript := preload("res://worldgen/surface/pickup_generator.
 const StableIdScript := preload("res://worldgen/identity/stable_id.gd")
 const WorldDeltaStoreScript := preload("res://worldgen/persistence/world_delta_store.gd")
 
+const PLAYER_CAPSULE_RADIUS: float = 0.45
+const PLAYER_CAPSULE_HEIGHT: float = 1.8
+const PLAYER_FLOOR_MAX_ANGLE_DEGREES: float = 50.0
+const SPAWN_WATER_CLEARANCE: float = 1.5
+const PLACEMENT_NEIGHBOR_CHUNK_RADIUS: int = 1
+
 var settings
 var main_generator
 var worker_generator
@@ -277,29 +283,42 @@ func get_surface_sample_at_world(world_x: float, world_z: float) -> Dictionary:
 	return main_generator.get_surface_sample(world_x, world_z)
 
 
-func find_spawn_xz(preferred: Vector3) -> Vector3:
+func query_player_placement_xz(candidate: Vector3) -> Dictionary:
+	var decoration_cache: Dictionary = {}
+	return _query_player_placement_xz(candidate, decoration_cache)
+
+
+func resolve_spawn_xz(preferred: Vector3) -> Dictionary:
+	if settings == null or main_generator == null:
+		return _placement_failure(["surface placement requires configured generation authority"])
+	if not _is_finite_number(preferred.x) or not _is_finite_number(preferred.z):
+		return _placement_failure(["surface placement preferred XZ must be finite"])
+
 	var search_step: float = maxf(settings.chunk_size * 0.25, 16.0)
 	var search_radius: float = settings.chunk_size * 3.0
 	var half_steps: int = ceili(search_radius / search_step)
-	var best_position: Vector3 = preferred
+	var decoration_cache: Dictionary = {}
+	var best_result: Dictionary = {}
 	var best_score: float = -1.0e20
 
 	for z_index in range(-half_steps, half_steps + 1):
 		for x_index in range(-half_steps, half_steps + 1):
-			var candidate_x: float = preferred.x + float(x_index) * search_step
-			var candidate_z: float = preferred.z + float(z_index) * search_step
-			var sample: Dictionary = main_generator.get_surface_sample(candidate_x, candidate_z)
-			var height: float = float(sample["height"])
-			if height <= settings.sea_level + 1.5:
+			var candidate := Vector3(
+				preferred.x + float(x_index) * search_step,
+				0.0,
+				preferred.z + float(z_index) * search_step
+			)
+			var placement: Dictionary = _query_player_placement_xz(candidate, decoration_cache)
+			if not bool(placement.get("success", false)):
 				continue
-
-			var buildability: float = float(sample["buildability"])
-			var rockiness: float = float(sample["rockiness"])
-			var moisture: float = float(sample["moisture"])
-			var forest_density: float = float(sample["forest_density"])
+			var sample: Dictionary = placement.get("sample", {})
+			var buildability: float = float(sample.get("buildability", 0.0))
+			var rockiness: float = float(sample.get("rockiness", 0.0))
+			var moisture: float = float(sample.get("moisture", 0.0))
+			var forest_density: float = float(sample.get("forest_density", 0.0))
 			var distance: float = Vector2(
-				candidate_x - preferred.x,
-				candidate_z - preferred.z
+				candidate.x - preferred.x,
+				candidate.z - preferred.z
 			).length()
 			var distance_penalty: float = distance / maxf(search_radius, 1.0)
 			var score: float = (
@@ -309,12 +328,216 @@ func find_spawn_xz(preferred: Vector3) -> Vector3:
 				+ moisture * 0.15
 				- distance_penalty * 1.15
 			)
-
 			if score > best_score:
 				best_score = score
-				best_position = Vector3(candidate_x, 0.0, candidate_z)
+				best_result = placement
 
-	return best_position
+	if best_result.is_empty():
+		return _placement_failure(["surface placement search found no viable Player target"])
+	best_result["search_used"] = true
+	best_result["preferred"] = Vector3(preferred.x, 0.0, preferred.z)
+	return best_result
+
+
+func find_spawn_xz(preferred: Vector3) -> Vector3:
+	var resolved: Dictionary = resolve_spawn_xz(preferred)
+	if bool(resolved.get("success", false)):
+		return resolved.get("xz", preferred)
+	# Legacy callers require a Vector3. Recovery and other safety-critical consumers
+	# use resolve_spawn_xz/query_player_placement_xz so no failed placement is committed.
+	return preferred
+
+
+func _query_player_placement_xz(candidate: Vector3, decoration_cache: Dictionary) -> Dictionary:
+	if settings == null or main_generator == null:
+		return _placement_failure(["surface placement requires configured generation authority"])
+	if not _is_finite_number(candidate.x) or not _is_finite_number(candidate.z):
+		return _placement_failure(["surface placement candidate XZ must be finite"])
+
+	var sample_variant: Variant = main_generator.get_surface_sample(candidate.x, candidate.z)
+	if not sample_variant is Dictionary:
+		return _placement_failure(["surface placement generator returned invalid sample"])
+	var sample: Dictionary = sample_variant
+	var height_variant: Variant = sample.get("height", null)
+	var slope_variant: Variant = sample.get("slope", null)
+	if not _is_finite_number(height_variant) or not _is_finite_number(slope_variant):
+		return _placement_failure(["surface placement sample must contain finite height/slope"])
+	var height: float = float(height_variant)
+	var slope: float = float(slope_variant)
+	if height <= float(settings.sea_level) + SPAWN_WATER_CLEARANCE:
+		return _placement_failure(["surface placement target is not safely above water"])
+	var max_slope: float = 1.0 - cos(deg_to_rad(PLAYER_FLOOR_MAX_ANGLE_DEGREES))
+	if slope > max_slope:
+		return _placement_failure(["surface placement target exceeds Player floor angle"])
+
+	var blocker: Dictionary = _find_player_placement_blocker(
+		candidate.x,
+		candidate.z,
+		height,
+		decoration_cache
+	)
+	if not blocker.is_empty():
+		return _placement_failure([
+			"surface placement blocked by %s %s" % [
+				str(blocker.get("type", "world object")),
+				str(blocker.get("stable_id", "")),
+			]
+		])
+	return {
+		"success": true,
+		"xz": Vector3(candidate.x, 0.0, candidate.z),
+		"surface_height": height,
+		"sample": sample.duplicate(true),
+		"search_used": false,
+		"diagnostics": [],
+	}
+
+
+func _find_player_placement_blocker(
+	world_x: float,
+	world_z: float,
+	surface_height: float,
+	decoration_cache: Dictionary
+) -> Dictionary:
+	var center_coord: Vector2i = world_to_chunk(Vector3(world_x, 0.0, world_z))
+	for z_offset in range(-PLACEMENT_NEIGHBOR_CHUNK_RADIUS, PLACEMENT_NEIGHBOR_CHUNK_RADIUS + 1):
+		for x_offset in range(-PLACEMENT_NEIGHBOR_CHUNK_RADIUS, PLACEMENT_NEIGHBOR_CHUNK_RADIUS + 1):
+			var coord: Vector2i = center_coord + Vector2i(x_offset, z_offset)
+			var data: Dictionary = _placement_chunk_data(coord, decoration_cache)
+			var tree_blocker: Dictionary = _find_tree_placement_blocker(
+				world_x, world_z, surface_height, coord, data
+			)
+			if not tree_blocker.is_empty():
+				return tree_blocker
+			var rock_blocker: Dictionary = _find_rock_placement_blocker(
+				world_x, world_z, surface_height, coord, data
+			)
+			if not rock_blocker.is_empty():
+				return rock_blocker
+	return {}
+
+
+func _placement_chunk_data(coord: Vector2i, decoration_cache: Dictionary) -> Dictionary:
+	if decoration_cache.has(coord):
+		return decoration_cache[coord]
+	var generated_variant: Variant = main_generator.generate_chunk_data(coord)
+	var generated: Dictionary = generated_variant if generated_variant is Dictionary else {}
+	decoration_cache[coord] = generated
+	return generated
+
+
+func _find_tree_placement_blocker(
+	world_x: float,
+	world_z: float,
+	surface_height: float,
+	chunk_coord: Vector2i,
+	data: Dictionary
+) -> Dictionary:
+	var transforms: Array = data.get("tree_transforms", [])
+	var stable_ids: Array = data.get("tree_stable_ids", [])
+	var count: int = mini(transforms.size(), stable_ids.size())
+	var chunk_origin := Vector3(
+		float(chunk_coord.x) * float(settings.chunk_size),
+		0.0,
+		float(chunk_coord.y) * float(settings.chunk_size)
+	)
+	for index in range(count):
+		if not transforms[index] is Transform3D:
+			continue
+		var stable_id: String = str(stable_ids[index])
+		if _world_delta_store != null and _world_delta_store.is_generated_object_destroyed(stable_id):
+			continue
+		var local_transform: Transform3D = transforms[index]
+		var world_origin: Vector3 = local_transform.origin + chunk_origin
+		var uniform_scale: float = maxf(local_transform.basis.x.length(), 0.05)
+		var collider_radius: float = float(settings.tree_collider_radius) * uniform_scale
+		var collider_height: float = maxf(
+			float(settings.tree_collider_height) * uniform_scale,
+			collider_radius * 2.0
+		)
+		if not _vertical_intervals_overlap(
+			surface_height,
+			surface_height + PLAYER_CAPSULE_HEIGHT,
+			world_origin.y - collider_height * 0.5,
+			world_origin.y + collider_height * 0.5
+		):
+			continue
+		var radius_sum: float = PLAYER_CAPSULE_RADIUS + collider_radius
+		var delta := Vector2(world_x - world_origin.x, world_z - world_origin.z)
+		if delta.length_squared() <= radius_sum * radius_sum:
+			return {"type": "tree", "stable_id": stable_id}
+	return {}
+
+
+func _find_rock_placement_blocker(
+	world_x: float,
+	world_z: float,
+	surface_height: float,
+	chunk_coord: Vector2i,
+	data: Dictionary
+) -> Dictionary:
+	var transforms: Array = data.get("rock_transforms", [])
+	var stable_ids: Array = data.get("rock_stable_ids", [])
+	var count: int = mini(transforms.size(), stable_ids.size())
+	var chunk_origin := Vector3(
+		float(chunk_coord.x) * float(settings.chunk_size),
+		0.0,
+		float(chunk_coord.y) * float(settings.chunk_size)
+	)
+	for index in range(count):
+		if not transforms[index] is Transform3D:
+			continue
+		var stable_id: String = str(stable_ids[index])
+		if _world_delta_store != null and _world_delta_store.is_generated_object_destroyed(stable_id):
+			continue
+		var local_transform: Transform3D = transforms[index]
+		var world_origin: Vector3 = local_transform.origin + chunk_origin
+		var box_size := Vector3(
+			maxf(local_transform.basis.x.length(), 0.05),
+			maxf(local_transform.basis.y.length(), 0.05),
+			maxf(local_transform.basis.z.length(), 0.05)
+		)
+		if not _vertical_intervals_overlap(
+			surface_height,
+			surface_height + PLAYER_CAPSULE_HEIGHT,
+			world_origin.y - box_size.y * 0.5,
+			world_origin.y + box_size.y * 0.5
+		):
+			continue
+		var orientation: Basis = local_transform.basis.orthonormalized()
+		var local_delta: Vector3 = orientation.inverse() * Vector3(
+			world_x - world_origin.x,
+			0.0,
+			world_z - world_origin.z
+		)
+		var half_x: float = box_size.x * 0.5
+		var half_z: float = box_size.z * 0.5
+		var closest_x: float = clampf(local_delta.x, -half_x, half_x)
+		var closest_z: float = clampf(local_delta.z, -half_z, half_z)
+		var dx: float = local_delta.x - closest_x
+		var dz: float = local_delta.z - closest_z
+		if dx * dx + dz * dz <= PLAYER_CAPSULE_RADIUS * PLAYER_CAPSULE_RADIUS:
+			return {"type": "rock", "stable_id": stable_id}
+	return {}
+
+
+func _vertical_intervals_overlap(a_min: float, a_max: float, b_min: float, b_max: float) -> bool:
+	return a_max >= b_min and b_max >= a_min
+
+
+func _placement_failure(messages: Array) -> Dictionary:
+	var diagnostics: Array[String] = []
+	for message in messages:
+		diagnostics.append(str(message))
+	diagnostics.sort()
+	return {"success": false, "diagnostics": diagnostics}
+
+
+func _is_finite_number(value: Variant) -> bool:
+	if typeof(value) != TYPE_INT and typeof(value) != TYPE_FLOAT:
+		return false
+	var number: float = float(value)
+	return not is_nan(number) and not is_inf(number)
 
 
 func get_loaded_chunk_count() -> int:
