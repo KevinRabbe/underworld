@@ -56,7 +56,9 @@ static func run() -> Array[String]:
 	_expect(
 		failures,
 		"begin deep-owns request semantic values against caller mutation",
-		str(owned_attempt.get("gateway_identity", {}).get("link_id", "")) == "gateway:pair:a"
+		str(owned_attempt.get("source_domain", "")) == State.DOMAIN_OVERWORLD
+		and str(owned_attempt.get("destination_domain", "")) == State.DOMAIN_UNDERWORLD
+		and str(owned_attempt.get("gateway_identity", {}).get("link_id", "")) == "gateway:pair:a"
 		and str(owned_attempt.get("arrival_locator", {}).get("site_id", "")) == "underworld:site:a"
 		and str(owned_attempt.get("return_context", {}).get("source_site", "")) == "overworld:site:a"
 	)
@@ -250,12 +252,18 @@ static func run() -> Array[String]:
 	)
 
 	var restore_result: Dictionary = State.restore_from_durable(authoritative_durable)
-	var restored = restore_result.get("state", null)
+	var restored = null
+	if bool(restore_result.get("success", false)):
+		restored = State.new(
+			str(restore_result.get("active_domain", "")),
+			restore_result.get("committed_return_context", {})
+		)
 	authoritative_durable["active_domain"] = State.DOMAIN_OVERWORLD
 	authoritative_durable["committed_return_context"]["source_site"] = "mutated:restore-input"
+	restore_result["committed_return_context"]["source_site"] = "mutated:validated-output"
 	_expect(
 		failures,
-		"durable restore constructs one fresh clean ACTIVE state and deep-owns restored data",
+		"durable restore validates then constructs one fresh clean ACTIVE state with deep ownership",
 		bool(restore_result.get("success", false))
 		and bool(restore_result.get("did_restore", false))
 		and restored != null
@@ -274,8 +282,18 @@ static func run() -> Array[String]:
 		"active_domain": State.DOMAIN_UNDERWORLD,
 		"committed_return_context": {"position": same_position},
 	})
-	var overworld_restore = overworld_result.get("state", null)
-	var underworld_restore = underworld_result.get("state", null)
+	var overworld_restore = null
+	var underworld_restore = null
+	if bool(overworld_result.get("success", false)):
+		overworld_restore = State.new(
+			str(overworld_result.get("active_domain", "")),
+			overworld_result.get("committed_return_context", {})
+		)
+	if bool(underworld_result.get("success", false)):
+		underworld_restore = State.new(
+			str(underworld_result.get("active_domain", "")),
+			underworld_result.get("committed_return_context", {})
+		)
 	_expect(
 		failures,
 		"identical numeric positions do not determine world-domain truth",
@@ -296,10 +314,11 @@ static func run() -> Array[String]:
 	})
 	_expect(
 		failures,
-		"restore rejects persisted transient attempt state and constructs no session",
+		"restore rejects persisted transient attempt state before construction",
 		not bool(transient_restore.get("success", false))
 		and not bool(transient_restore.get("did_restore", true))
-		and transient_restore.get("state", null) == null
+		and str(transient_restore.get("active_domain", "")).is_empty()
+		and transient_restore.get("committed_return_context", {}) == {}
 	)
 
 	return failures
