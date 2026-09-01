@@ -71,23 +71,71 @@ static func run() -> Array[String]:
 		failures.append("MAP-015 runtime accepted a definition producer/runtime manifest mismatch")
 	elif not _contains(mismatch_diagnostics, "GeneratorManifestId does not match controller runtime identity"):
 		failures.append("MAP-015 manifest mismatch did not report the producer/runtime identity diagnostic")
-	if mismatch._definition_service == null:
-		failures.append("MAP-015 manifest mismatch did not retain definition service for pre-generation inspection")
-	else:
-		if mismatch._definition_service.cached_cell_count() != 0:
-			failures.append("MAP-015 manifest mismatch generated cell definitions before rejection")
-		if mismatch._definition_service.cached_region_count() != 0 or not mismatch._definition_service._base_regions.is_empty():
-			failures.append("MAP-015 manifest mismatch generated region definitions before rejection")
-	mismatch.update_player_position(Vector3(0.5, -31.5, 0.5))
-	if not mismatch.streamer.records.is_empty():
-		failures.append("MAP-015 manifest mismatch admitted observer demand after rejection")
-	if not mismatch.render_nodes.is_empty() or not mismatch.collision_nodes.is_empty():
-		failures.append("MAP-015 manifest mismatch attached render/collision nodes")
-	if not mismatch.entrance_plans.is_empty() or not mismatch.gates.is_empty():
-		failures.append("MAP-015 manifest mismatch registered entrance runtime state")
+	_assert_empty_identity_rejection(failures, mismatch, "manifest mismatch")
 	mismatch.free()
+
+	var world_mismatch := Controller.new()
+	world_mismatch.configure("world:runtime-mismatch", pinned_context.generator_manifest_id)
+	var world_mismatch_diagnostics: Array[String] = world_mismatch.bootstrap_generated_entrance(
+		1,
+		Fixture.REGION,
+		entrance_id,
+		pinned_context
+	)
+	if world_mismatch_diagnostics.is_empty():
+		failures.append("MAP-015 runtime accepted a definition producer/runtime WorldId mismatch")
+	elif not _contains(world_mismatch_diagnostics, "WorldId does not match controller runtime identity"):
+		failures.append("MAP-015 WorldId mismatch did not report the producer/runtime identity diagnostic")
+	_assert_empty_identity_rejection(failures, world_mismatch, "WorldId mismatch")
+	world_mismatch.free()
+
+	var streamer_mismatch := Controller.new()
+	streamer_mismatch.configure(pinned_context.world_id, pinned_context.generator_manifest_id)
+	streamer_mismatch.streamer.reconfigure(
+		pinned_context.world_id,
+		"manifest:streamer-runtime-mismatch"
+	)
+	var streamer_mismatch_diagnostics: Array[String] = streamer_mismatch.bootstrap_generated_entrance(
+		1,
+		Fixture.REGION,
+		entrance_id,
+		pinned_context
+	)
+	if streamer_mismatch_diagnostics.is_empty():
+		failures.append("MAP-015 runtime accepted a definition producer/live-streamer manifest mismatch")
+	elif not _contains(streamer_mismatch_diagnostics, "GeneratorManifestId does not match streamer runtime identity"):
+		failures.append("MAP-015 live-streamer mismatch did not report the streamer identity diagnostic")
+	_assert_empty_identity_rejection(failures, streamer_mismatch, "live-streamer mismatch")
+	streamer_mismatch.free()
+
 	controller.free()
 	return failures
+
+
+static func _assert_empty_identity_rejection(
+	failures: Array[String],
+	controller,
+	label: String
+) -> void:
+	if controller._definition_service == null:
+		failures.append("MAP-015 %s did not retain definition service for pre-generation inspection" % label)
+	else:
+		if controller._definition_service.cached_cell_count() != 0:
+			failures.append("MAP-015 %s generated cell definitions before rejection" % label)
+		if (
+			controller._definition_service.cached_region_count() != 0
+			or not controller._definition_service._base_regions.is_empty()
+		):
+			failures.append("MAP-015 %s generated region definitions before rejection" % label)
+	controller.update_player_position(Vector3(0.5, -31.5, 0.5))
+	if not controller.streamer.records.is_empty():
+		failures.append("MAP-015 %s admitted observer demand after rejection" % label)
+	if not controller.render_nodes.is_empty() or not controller.collision_nodes.is_empty():
+		failures.append("MAP-015 %s attached render/collision nodes" % label)
+	if not controller.entrance_plans.is_empty() or not controller.gates.is_empty():
+		failures.append("MAP-015 %s registered entrance runtime state" % label)
+	if controller.streamer.executor != null:
+		failures.append("MAP-015 %s configured runtime executor after rejection" % label)
 
 
 static func _contains(values: Array[String], needle: String) -> bool:
