@@ -11,6 +11,7 @@ const CombatArchitectureTests := preload("res://tests/character/test_combat_arch
 const WorldSurvivalArchitectureTests := preload("res://tests/character/test_world_survival_architecture.gd")
 const PlayerFeelTests := preload("res://tests/character/test_player_feel.gd")
 const DeathRecoveryTests := preload("res://tests/character/test_death_recovery.gd")
+const DeathRecoveryPhysicsTests := preload("res://tests/character/test_death_recovery_physics.gd")
 
 
 func _init() -> void:
@@ -32,6 +33,7 @@ func _run_tests() -> void:
 	failures.append_array(WorldSurvivalArchitectureTests.run())
 	failures.append_array(PlayerFeelTests.run(self))
 	failures.append_array(DeathRecoveryTests.run(self))
+	failures.append_array(DeathRecoveryPhysicsTests.run(self))
 
 	if failures.is_empty():
 		print("[CHARACTER VALIDATION] PASS")
@@ -46,6 +48,7 @@ func _run_tests() -> void:
 		print("  surface streaming / prototype survival ownership split contracts passed")
 		print("  responsive light/heavy action, buffering, stamina, and transition contracts passed")
 		print("  defeated input gate / idempotent recovery / deterministic safe-surface fallback passed")
+		print("  recovered real Player terrain support / world-object collision envelope passed")
 		quit(0)
 		return
 
