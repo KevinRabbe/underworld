@@ -12,6 +12,8 @@ const GAME_SCENE: PackedScene = preload("res://app/game/game.tscn")
 const TITLE_SCREEN_SCENE: PackedScene = preload("res://presentation/ui/screens/title/title_screen.tscn")
 
 @onready var scene_host: Node = $SceneHost
+@onready var gameplay_input_gate: Node = $GameplayInputGate
+@onready var ui_focus_stack: Node = $UiFocusStack
 @onready var game_flow_controller: Node = $GameFlowController
 @onready var pause_menu: Control = $PauseLayer/PauseMenu
 
@@ -51,13 +53,21 @@ func configure_save_slot_path(slot_path: String) -> bool:
 
 
 func _ready() -> void:
-	if not bool(game_flow_controller.call("configure", self, pause_menu)):
+	if not bool(game_flow_controller.call("configure", self, pause_menu, ui_focus_stack)):
 		push_error("Application game-flow controller failed semantic composition")
 	show_title()
 
 
 func current_route_id() -> StringName:
 	return _current_route
+
+
+func get_gameplay_input_gate() -> Node:
+	return _application_gameplay_input_gate()
+
+
+func get_ui_focus_stack() -> Node:
+	return ui_focus_stack if ui_focus_stack != null else get_node_or_null("UiFocusStack")
 
 
 func show_title() -> bool:
@@ -141,6 +151,11 @@ func _replace_game_scene(is_continue: bool, candidate: Dictionary) -> bool:
 		push_error("Application scene router could not instantiate requested game scene")
 		return false
 
+	if not _configure_gameplay_input_authority(next_scene):
+		next_scene.free()
+		_transition_in_progress = false
+		return false
+
 	var preparation_method: StringName = &"prepare_continue" if is_continue else &"prepare_new_game"
 	if not next_scene.has_method(preparation_method):
 		next_scene.free()
@@ -157,6 +172,29 @@ func _replace_game_scene(is_continue: bool, candidate: Dictionary) -> bool:
 		_transition_in_progress = false
 		return false
 	return _commit_prepared_scene(next_scene, ROUTE_GAME)
+
+
+func _application_gameplay_input_gate() -> Node:
+	if gameplay_input_gate != null and is_instance_valid(gameplay_input_gate):
+		return gameplay_input_gate
+	return get_node_or_null("GameplayInputGate")
+
+
+func _configure_gameplay_input_authority(next_scene: Node) -> bool:
+	var gate: Node = _application_gameplay_input_gate()
+	if gate == null or not is_instance_valid(gate):
+		push_error("Application Game route requires live gameplay-input authority")
+		return false
+	if next_scene == null or not is_instance_valid(next_scene):
+		push_error("Application Game route requires a valid off-tree Game candidate")
+		return false
+	if not next_scene.has_method("configure_gameplay_input_gate"):
+		push_error("Game route is missing required gameplay-input authority seam")
+		return false
+	if not bool(next_scene.call("configure_gameplay_input_gate", gate)):
+		push_error("Game route rejected application gameplay-input authority")
+		return false
+	return true
 
 
 func _replace_scene(scene: PackedScene, route_id: StringName) -> bool:
@@ -181,6 +219,14 @@ func _commit_prepared_scene(next_scene: Node, route_id: StringName) -> bool:
 			next_scene.free()
 		_transition_in_progress = false
 		return false
+	# Route replacement is a hard ownership boundary. Presentation focus entries
+	# and gameplay-input captures may be owned by Nodes inside the outgoing route;
+	# clear both application-lived coordinators before detaching that route so no
+	# dead owner can poison Title or a later Game instance.
+	if ui_focus_stack != null and ui_focus_stack.has_method("clear"):
+		ui_focus_stack.call("clear", false)
+	if gameplay_input_gate != null and gameplay_input_gate.has_method("clear_captures"):
+		gameplay_input_gate.call("clear_captures")
 	var previous_scene: Node = current_scene
 	if previous_scene != null and is_instance_valid(previous_scene):
 		if previous_scene.get_parent() == scene_host:
