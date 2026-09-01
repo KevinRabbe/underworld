@@ -50,7 +50,7 @@ var cave_presentation
 var spawn_xz: Vector3 = Vector3.ZERO
 var loot_collection_poll_timer: float = 0.0
 @export var enable_map015_fixture: bool = false
-@export var enable_debug_hud: bool = true
+@export var enable_debug_hud: bool = false
 
 var _startup_prepared: bool = false
 var _startup_mode: StringName = STARTUP_NEW
