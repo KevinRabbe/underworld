@@ -167,7 +167,7 @@ func durable_snapshot() -> Dictionary:
 	}
 
 
-func restore_durable(snapshot: Dictionary) -> Dictionary:
+static func restore_from_durable(snapshot: Dictionary) -> Dictionary:
 	var failures: Array[String] = []
 	for raw_key in snapshot.keys():
 		var key: String = str(raw_key)
@@ -187,16 +187,23 @@ func restore_durable(snapshot: Dictionary) -> Dictionary:
 			false
 		)
 	if not failures.is_empty():
-		return _failure(failures, {"did_restore": false})
+		return {
+			"success": false,
+			"did_restore": false,
+			"state": null,
+			"diagnostics": failures.duplicate(),
+		}
 
-	_active_domain = restored_domain
-	_committed_return_context = return_context_variant.duplicate(true)
-	_attempt.clear()
-	return _success({
+	var restored := WorldDomainSessionState.new(restored_domain)
+	restored._committed_return_context = return_context_variant.duplicate(true)
+	return {
+		"success": true,
 		"did_restore": true,
-		"active_domain": _active_domain,
+		"state": restored,
+		"active_domain": restored.active_domain(),
 		"phase": PHASE_ACTIVE,
-	})
+		"diagnostics": [],
+	}
 
 
 func _validate_transition_request(request: Dictionary) -> Array[String]:
@@ -220,20 +227,18 @@ func _validate_transition_request(request: Dictionary) -> Array[String]:
 	if not request.has("gateway_identity"):
 		failures.append("Transition requires gateway_identity")
 	else:
-		_append_semantic_failures(
+		_append_identity_failures(
 			failures,
 			request.get("gateway_identity"),
-			"gateway_identity",
-			true
+			"gateway_identity"
 		)
 	if not request.has("arrival_locator"):
 		failures.append("Transition requires arrival_locator")
 	else:
-		_append_semantic_failures(
+		_append_locator_failures(
 			failures,
 			request.get("arrival_locator"),
-			"arrival_locator",
-			true
+			"arrival_locator"
 		)
 
 	var return_context_variant: Variant = request.get("return_context", {})
@@ -281,6 +286,53 @@ static func _deep_copy_semantic(value: Variant) -> Variant:
 	if value is Array:
 		return value.duplicate(true)
 	return value
+
+
+static func _append_identity_failures(
+	failures: Array[String],
+	value: Variant,
+	path: String
+) -> void:
+	match typeof(value):
+		TYPE_STRING, TYPE_STRING_NAME:
+			if str(value).strip_edges().is_empty():
+				failures.append(path + " must not be empty")
+		TYPE_INT:
+			if int(value) == 0:
+				failures.append(path + " numeric identity must be non-zero")
+		TYPE_ARRAY, TYPE_DICTIONARY:
+			_append_semantic_failures(failures, value, path, true)
+		_:
+			failures.append(path + " must be a non-empty semantic identity scalar or container")
+
+
+static func _append_locator_failures(
+	failures: Array[String],
+	value: Variant,
+	path: String
+) -> void:
+	match typeof(value):
+		TYPE_STRING, TYPE_STRING_NAME:
+			if str(value).strip_edges().is_empty():
+				failures.append(path + " must not be empty")
+		TYPE_INT:
+			pass
+		TYPE_VECTOR2:
+			var vector2_value: Vector2 = value
+			if not is_finite(vector2_value.x) or not is_finite(vector2_value.y):
+				failures.append(path + " must contain only finite Vector2 values")
+		TYPE_VECTOR2I:
+			pass
+		TYPE_VECTOR3:
+			var vector3_value: Vector3 = value
+			if not is_finite(vector3_value.x) or not is_finite(vector3_value.y) or not is_finite(vector3_value.z):
+				failures.append(path + " must contain only finite Vector3 values")
+		TYPE_VECTOR3I:
+			pass
+		TYPE_ARRAY, TYPE_DICTIONARY:
+			_append_semantic_failures(failures, value, path, true)
+		_:
+			failures.append(path + " must be a semantic site locator scalar, vector, or container")
 
 
 static func _append_semantic_failures(
