@@ -35,15 +35,26 @@ var _regions: Dictionary = {}
 var _cells: Dictionary = {}
 
 
-func configure(world_seed_value: int) -> Array[String]:
+func configure(world_seed_value: int, context_value = null) -> Array[String]:
 	world_seed = world_seed_value
-	context = WorldContext.new(world_seed)
+	var failures: Array[String] = []
+	if context_value == null:
+		context = WorldContext.new(world_seed)
+	elif context_value is WorldContext:
+		context = context_value
+	else:
+		context = null
+		failures.append("Runtime cell definition context must be WorldGenerationContext")
+
 	surface_sampler = SurfaceSampler.new(world_seed)
 	cell_config = PartitionConfig.new()
 	_base_regions.clear()
 	_regions.clear()
 	_cells.clear()
-	var failures: Array[String] = context.validate()
+	if context != null:
+		failures.append_array(context.validate())
+		if int(context.world_seed) != world_seed:
+			failures.append("Runtime cell definition world seed does not match supplied context")
 	failures.append_array(cell_config.validate())
 	return failures
 
