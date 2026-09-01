@@ -33,7 +33,7 @@ func configure(
 
 
 func _ready() -> void:
-	layer = 100
+	layer = 25
 	label = Label.new()
 	label.name = "DebugLabel"
 	label.position = Vector2(14.0, 14.0)
@@ -64,6 +64,7 @@ func _ready() -> void:
 	survival_label.add_theme_constant_override("shadow_offset_y", 2)
 	add_child(survival_label)
 
+	_set_debug_presentation_visible(visible_debug)
 	_refresh_text()
 	_update_layout()
 
@@ -80,8 +81,14 @@ func _process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F3:
-		visible_debug = not visible_debug
-		label.visible = visible_debug
+		_set_debug_presentation_visible(not visible_debug)
+
+
+func _set_debug_presentation_visible(value: bool) -> void:
+	visible_debug = value
+	for control in [label, crosshair, survival_label]:
+		if control != null:
+			control.visible = visible_debug
 
 
 func _update_layout() -> void:
