@@ -68,6 +68,9 @@ class FakePlacementGenerator:
 		chunk_generation_counts[coord] = int(chunk_generation_counts.get(coord, 0)) + 1
 		return chunk_data.get(coord, _empty_chunk_data()).duplicate(true)
 
+	func reset_chunk_generation_counts() -> void:
+		chunk_generation_counts.clear()
+
 	func max_chunk_generation_count() -> int:
 		var maximum: int = 0
 		for count_variant in chunk_generation_counts.values():
@@ -227,12 +230,15 @@ static func _test_surface_placement_viability(failures: Array[String]) -> void:
 		"rock_stable_ids": [],
 	})
 	var tree_preferred: Dictionary = tree_world.query_player_placement_xz(preferred)
+	tree_generator.reset_chunk_generation_counts()
 	var tree_first: Dictionary = tree_world.resolve_spawn_xz(preferred)
+	_expect_true(failures, "placement search generates each deterministic chunk at most once", tree_generator.max_chunk_generation_count() <= 1)
+	tree_generator.reset_chunk_generation_counts()
 	var tree_second: Dictionary = tree_world.resolve_spawn_xz(preferred)
+	_expect_true(failures, "repeated placement search independently caches each deterministic chunk", tree_generator.max_chunk_generation_count() <= 1)
 	_expect_true(failures, "tree-overlapped preferred Player placement is rejected", not bool(tree_preferred.get("success", false)))
 	_expect_vector_close(failures, "tree blocker deterministically selects nearby viable XZ", tree_first.get("xz", Vector3.ZERO), nearby)
 	_expect_vector_close(failures, "repeated identical tree-blocked search is byte-stable in XZ", tree_second.get("xz", Vector3.ZERO), nearby)
-	_expect_true(failures, "placement search caches deterministic chunk decorations per search", tree_generator.max_chunk_generation_count() <= 2)
 	_expect_true(failures, "tree fixture marks deterministic blocker destroyed", bool(tree_delta.mark_generated_object_destroyed(tree_id)))
 	var tree_after_destroy: Dictionary = tree_world.query_player_placement_xz(preferred)
 	_expect_true(failures, "destroyed tree StableId no longer blocks same Player placement", bool(tree_after_destroy.get("success", false)))
