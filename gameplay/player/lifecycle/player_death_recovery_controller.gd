@@ -4,13 +4,15 @@ class_name UnderworldPlayerDeathRecoveryController
 signal recovery_committed(reason: StringName, target: Vector3)
 signal recovery_failed(reason: StringName, diagnostics: Array[String])
 
+const PlayerPlacementProfileScript := preload("res://gameplay/player/player_placement_profile.gd")
+
 const REASON_DAMAGE: StringName = &"damage"
 const REASON_FALL: StringName = &"fall"
-const BODY_CLEARANCE: float = 3.0
 
 var _player
 var _world
 var _world_settings
+var _placement_profile
 var _pending: bool = false
 var _pending_reason: StringName = &""
 var _last_diagnostics: Array[String] = []
@@ -22,22 +24,29 @@ func configure(player_node, surface_world, world_settings) -> Array[String]:
 		failures.append("death recovery requires Player defeat/respawn authority")
 	if (
 		surface_world == null
-		or not surface_world.has_method("query_player_placement_xz")
 		or not surface_world.has_method("resolve_spawn_xz")
-		or not surface_world.has_method("generate_initial")
+		or not surface_world.has_method("prepare_player_placement")
 	):
-		failures.append("death recovery requires safe surface placement/realization authority")
+		failures.append("death recovery requires safe surface placement/readiness authority")
 	if world_settings == null:
 		failures.append("death recovery requires WorldSettings")
 	elif not _is_finite_number(world_settings.get("sea_level")) or not _is_finite_number(world_settings.get("chunk_size")):
 		failures.append("death recovery requires finite world settings")
 	elif float(world_settings.get("chunk_size")) <= 0.0:
 		failures.append("death recovery requires positive chunk size")
+
+	var placement_profile = PlayerPlacementProfileScript.new()
+	if player_node != null:
+		failures.append_array(placement_profile.configure_from_player(player_node))
+	else:
+		failures.append("death recovery cannot derive Player placement profile")
 	if not failures.is_empty():
 		return failures
+
 	_player = player_node
 	_world = surface_world
 	_world_settings = world_settings
+	_placement_profile = placement_profile
 	return []
 
 
@@ -62,37 +71,64 @@ func try_commit_recovery() -> Dictionary:
 	var resolved: Dictionary = resolve_safe_target(_player.get("global_position"))
 	if not bool(resolved.get("success", false)):
 		return _record_failure(resolved.get("diagnostics", []))
-	var target: Vector3 = resolved.get("target", Vector3.ZERO)
+	var target_variant: Variant = resolved.get("target", null)
+	if not target_variant is Vector3 or not _is_finite_vector3(target_variant):
+		return _record_failure(["death recovery resolved invalid target before readiness"])
+	var target: Vector3 = target_variant
 
-	# Surface streaming remains the geometry realization authority. Generating the
-	# target chunk before teleport prevents a valid deterministic placement from
-	# being committed ahead of its terrain collision realization.
-	_world.call("generate_initial", Vector3(target.x, 0.0, target.z))
-	if not bool(_player.call("commit_respawn", target)):
+	# Readiness must be established against realized target-local terrain and solid
+	# object collision before Player state is cleared. This seam is also consumable
+	# by #404 without moving/healing the defeated Player during domain preparation.
+	var readiness_variant: Variant = _world.call(
+		"prepare_player_placement",
+		target,
+		_placement_profile
+	)
+	if not readiness_variant is Dictionary:
+		return _record_failure(["death recovery surface readiness returned invalid result"])
+	var readiness: Dictionary = readiness_variant
+	if not bool(readiness.get("success", false)) or not bool(readiness.get("ready", false)):
+		var readiness_failures: Array[String] = []
+		_append_attempt_diagnostics(readiness_failures, "target-readiness", readiness)
+		return _record_failure(readiness_failures)
+	var prepared_target_variant: Variant = readiness.get("target", null)
+	if not prepared_target_variant is Vector3 or not _is_finite_vector3(prepared_target_variant):
+		return _record_failure(["death recovery readiness returned invalid prepared target"])
+	var prepared_target: Vector3 = prepared_target_variant
+
+	if not bool(_player.call("commit_respawn", prepared_target)):
 		return _record_failure(["Player rejected validated death recovery target"])
 
 	var reason: StringName = _pending_reason
 	_pending = false
 	_pending_reason = &""
 	_last_diagnostics.clear()
-	recovery_committed.emit(reason, target)
+	recovery_committed.emit(reason, prepared_target)
 	return {
 		"success": true,
 		"reason": reason,
-		"target": target,
+		"target": prepared_target,
 		"fallback_used": bool(resolved.get("fallback_used", false)),
 		"diagnostics": [],
 	}
 
 
 func resolve_safe_target(current_position: Vector3) -> Dictionary:
-	if _world == null or _world_settings == null:
+	if _world == null or _world_settings == null or _placement_profile == null:
 		return _failure(["death recovery is not configured"])
 	if not _is_finite_vector3(current_position):
 		return _failure(["death recovery current Player position must be finite"])
 
+	# Both attempts use the same bounded placement search and the same live-derived
+	# Player profile. The first search is centered on the defeated Player's current
+	# Overworld XZ; only if that bounded region has no viable point do we search the
+	# ordinary initial-spawn region.
 	var primary_preferred := Vector3(current_position.x, 0.0, current_position.z)
-	var primary_variant: Variant = _world.call("query_player_placement_xz", primary_preferred)
+	var primary_variant: Variant = _world.call(
+		"resolve_spawn_xz",
+		primary_preferred,
+		_placement_profile
+	)
 	if primary_variant is Dictionary:
 		var primary: Dictionary = primary_variant
 		if bool(primary.get("success", false)):
@@ -105,7 +141,11 @@ func resolve_safe_target(current_position: Vector3) -> Dictionary:
 		0.0,
 		float(_world_settings.get("chunk_size")) * 0.5
 	)
-	var fallback_variant: Variant = _world.call("resolve_spawn_xz", fallback_preferred)
+	var fallback_variant: Variant = _world.call(
+		"resolve_spawn_xz",
+		fallback_preferred,
+		_placement_profile
+	)
 	if fallback_variant is Dictionary:
 		var fallback: Dictionary = fallback_variant
 		if bool(fallback.get("success", false)):
@@ -113,6 +153,10 @@ func resolve_safe_target(current_position: Vector3) -> Dictionary:
 	_append_attempt_diagnostics(failures, "initial-spawn", fallback_variant)
 	failures.sort()
 	return _failure(failures)
+
+
+func placement_profile():
+	return _placement_profile
 
 
 func _target_from_placement(placement: Dictionary, fallback_used: bool) -> Dictionary:
@@ -127,7 +171,11 @@ func _target_from_placement(placement: Dictionary, fallback_used: bool) -> Dicti
 		or not _is_finite_number(height_variant)
 	):
 		return _failure(["death recovery safe placement returned non-finite target data"])
-	var target := Vector3(candidate.x, float(height_variant) + BODY_CLEARANCE, candidate.z)
+	var target := Vector3(
+		candidate.x,
+		float(_placement_profile.body_origin_y_for_support(float(height_variant))),
+		candidate.z
+	)
 	if not _is_finite_vector3(target):
 		return _failure(["death recovery safe placement produced non-finite target"])
 	return {
