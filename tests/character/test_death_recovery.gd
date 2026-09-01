@@ -1,6 +1,7 @@
 extends RefCounted
 
 const PlayerScript := preload("res://gameplay/player/player.gd")
+const PlayerPlacementProfileScript := preload("res://gameplay/player/player_placement_profile.gd")
 const DeathRecoveryControllerScript := preload("res://gameplay/player/lifecycle/player_death_recovery_controller.gd")
 const SurfaceChunkStreamerScript := preload("res://world/runtime/streaming/surface_chunk_streamer.gd")
 const WorldSettingsScript := preload("res://world/runtime/config/world_settings.gd")
@@ -17,36 +18,39 @@ class FakeWorldSettings:
 
 class FakeSurfaceWorld:
 	extends RefCounted
-	var query_results: Array[Dictionary] = []
-	var fallback_results: Array[Dictionary] = []
-	var query_calls: Array[Vector3] = []
-	var fallback_calls: Array[Vector3] = []
-	var generated: Array[Vector3] = []
+	var resolve_results: Array[Dictionary] = []
+	var prepare_results: Array[Dictionary] = []
+	var resolve_calls: Array[Vector3] = []
+	var resolve_profiles: Array = []
+	var prepare_calls: Array[Vector3] = []
+	var prepare_profiles: Array = []
 
-	func query_player_placement_xz(preferred: Vector3) -> Dictionary:
-		query_calls.append(preferred)
-		if query_results.is_empty():
+	func resolve_spawn_xz(preferred: Vector3, profile = null) -> Dictionary:
+		resolve_calls.append(preferred)
+		resolve_profiles.append(profile)
+		if resolve_results.is_empty():
 			return {
 				"success": true,
 				"xz": preferred,
 				"surface_height": 8.0,
 				"diagnostics": [],
 			}
-		return query_results.pop_front().duplicate(true)
+		return resolve_results.pop_front().duplicate(true)
 
-	func resolve_spawn_xz(preferred: Vector3) -> Dictionary:
-		fallback_calls.append(preferred)
-		if fallback_results.is_empty():
+	func prepare_player_placement(target: Vector3, profile = null) -> Dictionary:
+		prepare_calls.append(target)
+		prepare_profiles.append(profile)
+		if prepare_results.is_empty():
 			return {
 				"success": true,
-				"xz": preferred,
-				"surface_height": 8.0,
+				"ready": true,
+				"target": target,
 				"diagnostics": [],
 			}
-		return fallback_results.pop_front().duplicate(true)
-
-	func generate_initial(position: Vector3) -> void:
-		generated.append(position)
+		var result: Dictionary = prepare_results.pop_front().duplicate(true)
+		if bool(result.get("success", false)) and bool(result.get("ready", false)) and not result.has("target"):
+			result["target"] = target
+		return result
 
 
 class FakePlacementGenerator:
@@ -103,6 +107,7 @@ static func run(tree: SceneTree) -> Array[String]:
 	var failures: Array[String] = []
 	_test_player_defeat_and_commit(tree, failures)
 	_test_fall_uses_same_defeat_seam(tree, failures)
+	_test_player_placement_profile_matches_live_player(tree, failures)
 	_test_surface_placement_viability(failures)
 	_test_surface_recovery_policy(tree, failures)
 	return failures
@@ -212,6 +217,23 @@ static func _test_fall_uses_same_defeat_seam(tree: SceneTree, failures: Array[St
 	player.get_parent().free()
 
 
+static func _test_player_placement_profile_matches_live_player(tree: SceneTree, failures: Array[String]) -> void:
+	var player = _spawn_player(tree, failures)
+	if player == null:
+		return
+	var default_profile = PlayerPlacementProfileScript.new()
+	var live_profile = PlayerPlacementProfileScript.new()
+	var profile_failures: Array[String] = live_profile.configure_from_player(player)
+	_expect_true(failures, "live Player placement profile configures from production body", profile_failures.is_empty())
+	_expect_close(failures, "default spawn profile matches live Player capsule radius", default_profile.capsule_radius(), live_profile.capsule_radius())
+	_expect_close(failures, "default spawn profile matches live Player capsule height", default_profile.capsule_height(), live_profile.capsule_height())
+	_expect_close(failures, "default spawn profile matches live Player capsule center", default_profile.capsule_center_y(), live_profile.capsule_center_y())
+	_expect_close(failures, "default spawn profile matches live Player floor angle", default_profile.floor_max_angle(), live_profile.floor_max_angle())
+	_expect_close(failures, "default spawn profile matches live Player floor snap", default_profile.floor_snap_length(), live_profile.floor_snap_length())
+	_expect_equal(failures, "default spawn profile matches live Player collision mask", default_profile.collision_mask(), live_profile.collision_mask())
+	player.get_parent().free()
+
+
 static func _test_surface_placement_viability(failures: Array[String]) -> void:
 	var preferred := Vector3(32.0, 0.0, 32.0)
 	var nearby := Vector3(48.0, 0.0, 32.0)
@@ -284,7 +306,7 @@ static func _test_surface_recovery_policy(tree: SceneTree, failures: Array[Strin
 	player.global_position = Vector3(40.0, -20.0, -24.0)
 	player.call("_enter_defeated", &"fall")
 	var world := FakeSurfaceWorld.new()
-	world.query_results = [{
+	world.resolve_results = [{
 		"success": true,
 		"xz": Vector3(40.0, 0.0, -24.0),
 		"surface_height": 9.0,
@@ -293,25 +315,30 @@ static func _test_surface_recovery_policy(tree: SceneTree, failures: Array[Strin
 	var controller = DeathRecoveryControllerScript.new()
 	var config_failures: Array[String] = controller.configure(player, world, settings)
 	_expect_true(failures, "death controller accepts Player/surface authority", config_failures.is_empty())
+	var expected_primary_y: float = float(controller.placement_profile().body_origin_y_for_support(9.0))
 	var before_resolve: Vector3 = player.global_position
 	var resolved_without_commit: Dictionary = controller.resolve_safe_target(before_resolve)
 	_expect_true(failures, "target-resolution seam succeeds without lifecycle mutation", bool(resolved_without_commit.get("success", false)))
 	_expect_vector_close(failures, "target resolution does not move defeated Player", player.global_position, before_resolve)
 	_expect_true(failures, "target resolution does not revive Player", bool(player.call("is_defeated")))
-	world.query_results = [{
+	_expect_vector_close(failures, "resolved target uses profile settlement origin", resolved_without_commit.get("target", Vector3.ZERO), Vector3(40.0, expected_primary_y, -24.0))
+	world.resolve_results = [{
 		"success": true,
 		"xz": Vector3(40.0, 0.0, -24.0),
 		"surface_height": 9.0,
 		"diagnostics": [],
 	}]
+	world.resolve_calls.clear()
+	world.resolve_profiles.clear()
 	_expect_true(failures, "first recovery request is accepted", controller.request_recovery(&"fall"))
 	_expect_true(failures, "duplicate recovery request is rejected", not controller.request_recovery(&"fall"))
 	var primary: Dictionary = controller.try_commit_recovery()
-	_expect_true(failures, "exact current-XZ recovery succeeds", bool(primary.get("success", false)))
-	_expect_true(failures, "current-XZ recovery does not report fallback", not bool(primary.get("fallback_used", true)))
-	_expect_vector_close(failures, "current-XZ viability query uses exact Player projection", world.query_calls[0], Vector3(40.0, 0.0, -24.0))
-	_expect_vector_close(failures, "current-XZ recovery applies startup clearance", player.global_position, Vector3(40.0, 12.0, -24.0))
-	_expect_equal(failures, "surface target is realized before commit", world.generated.size(), 1)
+	_expect_true(failures, "current-centered bounded recovery succeeds", bool(primary.get("success", false)))
+	_expect_true(failures, "current-centered recovery does not report fallback", not bool(primary.get("fallback_used", true)))
+	_expect_vector_close(failures, "current recovery search is centered on exact Player projection", world.resolve_calls[0], Vector3(40.0, 0.0, -24.0))
+	_expect_vector_close(failures, "current recovery commits profile-derived prepared target", player.global_position, Vector3(40.0, expected_primary_y, -24.0))
+	_expect_equal(failures, "current recovery prepares target collision exactly once", world.prepare_calls.size(), 1)
+	_expect_true(failures, "current search and readiness consume same placement profile", world.resolve_profiles[0] == world.prepare_profiles[0])
 	player.get_parent().free()
 	controller.free()
 
@@ -321,22 +348,28 @@ static func _test_surface_recovery_policy(tree: SceneTree, failures: Array[Strin
 	fallback_player.global_position = Vector3(100.0, -30.0, 200.0)
 	fallback_player.call("_enter_defeated", &"damage")
 	var fallback_world := FakeSurfaceWorld.new()
-	fallback_world.query_results = [{"success": false, "diagnostics": ["blocked current placement"]}]
-	fallback_world.fallback_results = [{
-		"success": true,
-		"xz": Vector3(32.0, 0.0, 32.0),
-		"surface_height": 6.0,
-		"diagnostics": [],
-	}]
+	fallback_world.resolve_results = [
+		{"success": false, "diagnostics": ["no safe current-region placement"]},
+		{
+			"success": true,
+			"xz": Vector3(32.0, 0.0, 32.0),
+			"surface_height": 6.0,
+			"diagnostics": [],
+		},
+	]
 	var fallback_controller = DeathRecoveryControllerScript.new()
 	fallback_controller.configure(fallback_player, fallback_world, settings)
+	var expected_fallback_y: float = float(fallback_controller.placement_profile().body_origin_y_for_support(6.0))
 	fallback_controller.request_recovery(&"damage")
 	var fallback: Dictionary = fallback_controller.try_commit_recovery()
-	_expect_true(failures, "blocked exact primary target uses deterministic initial-center fallback", bool(fallback.get("success", false)))
+	_expect_true(failures, "failed current-region search uses deterministic initial-center fallback", bool(fallback.get("success", false)))
 	_expect_true(failures, "fallback result is identified", bool(fallback.get("fallback_used", false)))
-	_expect_equal(failures, "fallback performs one exact query and one initial-center search", fallback_world.query_calls.size() + fallback_world.fallback_calls.size(), 2)
-	_expect_vector_close(failures, "fallback preference uses normal initial center", fallback_world.fallback_calls[0], Vector3(32.0, 0.0, 32.0))
-	_expect_vector_close(failures, "fallback recovery commits finite target", fallback_player.global_position, Vector3(32.0, 9.0, 32.0))
+	_expect_equal(failures, "fallback performs exactly two bounded surface searches", fallback_world.resolve_calls.size(), 2)
+	_expect_vector_close(failures, "primary bounded search prefers Player projection", fallback_world.resolve_calls[0], Vector3(100.0, 0.0, 200.0))
+	_expect_vector_close(failures, "fallback bounded search prefers normal initial center", fallback_world.resolve_calls[1], Vector3(32.0, 0.0, 32.0))
+	_expect_vector_close(failures, "fallback recovery commits profile-derived target", fallback_player.global_position, Vector3(32.0, expected_fallback_y, 32.0))
+	_expect_true(failures, "both recovery searches share one live-derived placement profile", fallback_world.resolve_profiles[0] == fallback_world.resolve_profiles[1])
+	_expect_true(failures, "fallback readiness consumes same profile as both searches", fallback_world.prepare_profiles[0] == fallback_world.resolve_profiles[0])
 	fallback_player.get_parent().free()
 	fallback_controller.free()
 
@@ -346,8 +379,10 @@ static func _test_surface_recovery_policy(tree: SceneTree, failures: Array[Strin
 	failed_player.global_position = Vector3(8.0, -50.0, 8.0)
 	failed_player.call("_enter_defeated", &"fall")
 	var failed_world := FakeSurfaceWorld.new()
-	failed_world.query_results = [{"success": false, "diagnostics": ["unsafe current placement"]}]
-	failed_world.fallback_results = [{"success": false, "diagnostics": ["no safe initial placement"]}]
+	failed_world.resolve_results = [
+		{"success": false, "diagnostics": ["unsafe current region"]},
+		{"success": false, "diagnostics": ["no safe initial region placement"]},
+	]
 	var failed_controller = DeathRecoveryControllerScript.new()
 	failed_controller.configure(failed_player, failed_world, settings)
 	failed_controller.request_recovery(&"fall")
@@ -355,9 +390,39 @@ static func _test_surface_recovery_policy(tree: SceneTree, failures: Array[Strin
 	_expect_true(failures, "invalid primary and fallback fail closed", not bool(failed.get("success", false)))
 	_expect_true(failures, "failed recovery leaves Player defeated", bool(failed_player.call("is_defeated")))
 	_expect_true(failures, "failed recovery stays pending for explicit retry", failed_controller.is_recovery_pending())
-	_expect_equal(failures, "failed recovery never realizes invalid geometry", failed_world.generated.size(), 0)
+	_expect_equal(failures, "failed search never attempts collision readiness", failed_world.prepare_calls.size(), 0)
 	failed_player.get_parent().free()
 	failed_controller.free()
+
+	var readiness_player = _spawn_player(tree, failures)
+	if readiness_player == null:
+		return
+	readiness_player.global_position = Vector3(16.0, -25.0, 16.0)
+	readiness_player.call("_enter_defeated", &"damage")
+	var readiness_world := FakeSurfaceWorld.new()
+	readiness_world.resolve_results = [{
+		"success": true,
+		"xz": Vector3(20.0, 0.0, 16.0),
+		"surface_height": 7.0,
+		"diagnostics": [],
+	}]
+	readiness_world.prepare_results = [{
+		"success": false,
+		"ready": false,
+		"diagnostics": ["injected target collision readiness failure"],
+	}]
+	var readiness_controller = DeathRecoveryControllerScript.new()
+	readiness_controller.configure(readiness_player, readiness_world, settings)
+	var readiness_before: Vector3 = readiness_player.global_position
+	readiness_controller.request_recovery(&"damage")
+	var readiness_failed: Dictionary = readiness_controller.try_commit_recovery()
+	_expect_true(failures, "target collision readiness failure rejects recovery commit", not bool(readiness_failed.get("success", false)))
+	_expect_true(failures, "readiness failure leaves Player defeated", bool(readiness_player.call("is_defeated")))
+	_expect_true(failures, "readiness failure remains pending for retry", readiness_controller.is_recovery_pending())
+	_expect_vector_close(failures, "readiness failure does not move Player", readiness_player.global_position, readiness_before)
+	_expect_equal(failures, "readiness failure attempts preparation exactly once", readiness_world.prepare_calls.size(), 1)
+	readiness_player.get_parent().free()
+	readiness_controller.free()
 
 
 static func _make_placement_streamer() -> Dictionary:
