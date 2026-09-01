@@ -3,8 +3,10 @@ name: UI Architecture Validation
 on:
   pull_request:
     paths:
+      - 'project.godot'
       - 'presentation/ui/**'
       - 'tests/presentation/test_ui_architecture_contract.gd'
+      - 'tests/presentation/test_ui_scale_contract.gd'
       - 'tests/presentation/fixtures/ui_skin_reuse_fixture.tscn'
       - 'tests/run_ui_architecture.gd'
       - '.github/workflows/ui-architecture-validation.yml'
@@ -12,8 +14,10 @@ on:
     branches:
       - main
     paths:
+      - 'project.godot'
       - 'presentation/ui/**'
       - 'tests/presentation/test_ui_architecture_contract.gd'
+      - 'tests/presentation/test_ui_scale_contract.gd'
       - 'tests/presentation/fixtures/ui_skin_reuse_fixture.tscn'
       - 'tests/run_ui_architecture.gd'
       - '.github/workflows/ui-architecture-validation.yml'
