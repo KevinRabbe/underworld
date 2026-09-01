@@ -1,6 +1,7 @@
 extends RefCounted
 
 const PRESENTATION_UI_ROOT := "res://presentation/ui"
+const PROJECT_FILE_PATH := "res://project.godot"
 const EXPECTED_CONTENT_SCALE_SIZE := Vector2i(1280, 720)
 const EXPECTED_CONTENT_SCALE_FACTOR := 1.0
 
@@ -8,6 +9,7 @@ const EXPECTED_CONTENT_SCALE_FACTOR := 1.0
 static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_explicit_project_settings(failures)
+	_test_serialized_project_settings(failures)
 	_test_live_root_window(failures)
 	_test_no_competing_presentation_scale_authority(failures)
 	return failures
@@ -29,6 +31,38 @@ static func _expect_explicit_setting(path: String, expected: Variant, failures: 
 	var actual: Variant = ProjectSettings.get_setting(path)
 	if actual != expected:
 		failures.append("%s must resolve to %s, got %s" % [path, str(expected), str(actual)])
+
+
+static func _test_serialized_project_settings(failures: Array[String]) -> void:
+	var config := ConfigFile.new()
+	var error := config.load(PROJECT_FILE_PATH)
+	if error != OK:
+		failures.append("UI scale contract could not load project.godot through ConfigFile")
+		return
+
+	_expect_serialized_display_setting(config, "window/size/viewport_width", 1280, failures)
+	_expect_serialized_display_setting(config, "window/size/viewport_height", 720, failures)
+	_expect_serialized_display_setting(config, "window/stretch/mode", "canvas_items", failures)
+	_expect_serialized_display_setting(config, "window/stretch/aspect", "expand", failures)
+	_expect_serialized_display_setting(config, "window/stretch/scale", EXPECTED_CONTENT_SCALE_FACTOR, failures)
+	_expect_serialized_display_setting(config, "window/stretch/scale_mode", "fractional", failures)
+
+
+static func _expect_serialized_display_setting(
+	config: ConfigFile,
+	key: String,
+	expected: Variant,
+	failures: Array[String]
+) -> void:
+	if not config.has_section_key("display", key):
+		failures.append("project.godot [display] must physically serialize %s" % key)
+		return
+	var actual: Variant = config.get_value("display", key)
+	if actual != expected:
+		failures.append(
+			"project.godot [display] %s must serialize %s, got %s"
+			% [key, str(expected), str(actual)]
+		)
 
 
 static func _test_live_root_window(failures: Array[String]) -> void:
