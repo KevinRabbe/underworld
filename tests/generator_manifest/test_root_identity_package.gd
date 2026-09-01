@@ -150,6 +150,31 @@ static func _test_registry_compatibility_is_separate_from_identity(failures: Arr
 	_expect_equal(failures, "extra runtime domain cannot change manifest bytes", manifest.canonical_text(), baseline_text)
 	_expect_equal(failures, "extra runtime domain cannot change manifest ID", manifest.manifest_id(), baseline_id)
 
+	var package: Dictionary = RootPackage.encode(Context.new(424242))
+	var package_with_extra_support: Dictionary = RootPackage.rehydrate(
+		424242,
+		package,
+		support
+	)
+	_expect_true(
+		failures,
+		"package rehydrate stays compatible after extra runtime domain appears",
+		bool(package_with_extra_support.get("compatible", false))
+	)
+	if bool(package_with_extra_support.get("success", false)):
+		_expect_equal(
+			failures,
+			"package rehydrate after extra runtime domain preserves exact manifest ID",
+			package_with_extra_support["context"].generator_manifest_id,
+			GOLDEN_MANIFEST_ID
+		)
+		_expect_equal(
+			failures,
+			"package rehydrate after extra runtime domain preserves exact canonical bytes",
+			package_with_extra_support["context"].generator_manifest.canonical_text(),
+			GOLDEN_CANONICAL
+		)
+
 	var mismatch_support: Dictionary = GeneratorManifest.current_runtime_support()
 	mismatch_support["seed_domain_descriptors"][0]["revision"] = 2
 	mismatch_support["seed_domain_descriptors"][0]["readable_name"] = "fixture.changed.name"
@@ -159,6 +184,23 @@ static func _test_registry_compatibility_is_separate_from_identity(failures: Arr
 		"same domain ID with revision/name mismatch fails compatibility",
 		not mismatch_failures.is_empty()
 	)
+	var package_with_mismatch: Dictionary = RootPackage.rehydrate(
+		424242,
+		package,
+		mismatch_support
+	)
+	_expect_true(
+		failures,
+		"package rehydrate reports same-ID seed-domain mismatch",
+		not bool(package_with_mismatch.get("compatible", true))
+	)
+	if bool(package_with_mismatch.get("success", false)):
+		_expect_equal(
+			failures,
+			"package compatibility mismatch cannot rewrite exact manifest ID",
+			package_with_mismatch["context"].generator_manifest_id,
+			GOLDEN_MANIFEST_ID
+		)
 	_expect_equal(failures, "compatibility failure cannot rewrite manifest identity", manifest.manifest_id(), baseline_id)
 
 
@@ -299,6 +341,23 @@ static func _test_malformed_and_duplicate_package_entries(failures: Array[String
 		"duplicate stage package diagnostic is deterministic",
 		duplicate_stage_result.get("failures", []),
 		"duplicate stage revision key"
+	)
+
+	var duplicate_profile: Dictionary = package.duplicate(true)
+	duplicate_profile["manifest_snapshot"]["profile_entries"].append(
+		duplicate_profile["manifest_snapshot"]["profile_entries"][0].duplicate(true)
+	)
+	var duplicate_profile_result: Dictionary = RootPackage.decode(duplicate_profile)
+	_expect_true(
+		failures,
+		"duplicate profile package entry fails closed",
+		not bool(duplicate_profile_result.get("success", true))
+	)
+	_expect_contains(
+		failures,
+		"duplicate profile package diagnostic is deterministic",
+		duplicate_profile_result.get("failures", []),
+		"duplicate profile revision key"
 	)
 
 	var duplicate_domain: Dictionary = package.duplicate(true)
