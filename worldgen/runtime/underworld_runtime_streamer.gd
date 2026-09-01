@@ -25,7 +25,15 @@ var generator_manifest_id: String = ""
 # Runtime-only current relevance. Fully retired cells are erased; deterministic
 # generation/persistence remains the authority for reconstructing them later.
 var records: Dictionary = {}
-var executor = null
+# The executor strongly retains this streamer while it is active. Keep the
+# reverse edge weak so controller-owned runtime objects cannot form a RefCounted
+# cycle across teardown/reconfigure.
+var _executor_ref: WeakRef = null
+var executor:
+	get:
+		return _executor_ref.get_ref() if _executor_ref != null else null
+	set(value):
+		_executor_ref = weakref(value) if value != null else null
 var stale_result_count: int = 0
 var released_count: int = 0
 var queued_count: int = 0
@@ -367,9 +375,19 @@ func _retire_undemanded_tiers(record) -> void:
 		return
 	# Generation is cell-scoped. A new opaque incarnation token invalidates all
 	# in-flight work without retaining per-address tombstones after eviction.
+	# Executor cancellation also drops generation-keyed mesh artifacts. If the
+	# cell still demands voxel geometry, invalidate that readiness so the normal
+	# dependency frontier rebuilds a mesh for this new generation before a later
+	# render/collision reacquisition can run.
+	var rebuild_voxel_artifact: bool = (
+		record.demand_count("voxel_geometry") > 0
+		and bool(record.readiness.get("voxel_geometry", false))
+	)
 	_advance_generation(record)
 	_cancel_record_work(record)
 	record.queued.clear()
+	if rebuild_voxel_artifact:
+		record.readiness["voxel_geometry"] = false
 	for tier in retired:
 		var was_realized: bool = bool(record.readiness.get(tier, false)) or (tier == "render" and record.runtime_handle != null) or (tier == "collision" and record.collision_handle != null)
 		record.readiness[tier] = false
