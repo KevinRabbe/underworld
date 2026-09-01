@@ -400,7 +400,9 @@ static func _append_semantic_failures(
 			var dictionary_value: Dictionary = value
 			if require_non_empty and dictionary_value.is_empty():
 				failures.append(path + " must not be an empty semantic container")
-			var canonical_keys: Dictionary = {}
+			# Godot Dictionary equality coalesces equal String/StringName spellings into
+			# one entry while preserving the surviving raw key Variant. Distinct raw keys
+			# that canonicalize to the same String therefore cannot coexist here.
 			for raw_key in dictionary_value.keys():
 				if not (raw_key is String or raw_key is StringName):
 					failures.append(path + " Dictionary keys must be semantic strings")
@@ -409,10 +411,6 @@ static func _append_semantic_failures(
 				if key.strip_edges().is_empty():
 					failures.append(path + " Dictionary keys must not be empty")
 					continue
-				if canonical_keys.has(key):
-					failures.append(path + " Dictionary keys collide after canonical string normalization: " + key)
-					continue
-				canonical_keys[key] = true
 				_append_semantic_failures(
 					failures,
 					dictionary_value[raw_key],
