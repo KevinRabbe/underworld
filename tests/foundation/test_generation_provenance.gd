@@ -88,8 +88,18 @@ static func _test_mutation_and_required_ancestry(failures: Array[String]) -> voi
 		"exact ancestry rejects unrelated extra parent",
 		not extra_parent.validate_exact_sources(["parent:a", "parent:b"]).is_empty()
 	)
+	var pinned_world_id: String = context.world_id
 	context.world_id = "world:wrong"
-	_expect_true(failures, "context world id must match seed", not context.validate().is_empty())
+	_expect_true(
+		failures,
+		"context world id is immutable after construction",
+		context.world_id == pinned_world_id
+	)
+	_expect_true(
+		failures,
+		"immutable context remains valid after rejected mutation",
+		context.validate().is_empty()
+	)
 
 
 static func _test_authoritative_exact_parent_boundary(failures: Array[String]) -> void:
@@ -116,4 +126,3 @@ static func _test_authoritative_exact_parent_boundary(failures: Array[String]) -
 static func _expect_true(failures: Array[String], label: String, condition: bool) -> void:
 	if not condition:
 		failures.append(label)
-
