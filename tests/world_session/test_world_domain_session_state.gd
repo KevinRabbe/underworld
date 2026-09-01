@@ -220,6 +220,107 @@ static func run() -> Array[String]:
 		and not session.has_active_attempt()
 	)
 
+	var canonical_session := State.new()
+	var canonical_arrival: Dictionary = {}
+	canonical_arrival[StringName("site_id")] = StringName("underworld:site:canonical")
+	canonical_arrival["path"] = [StringName("entrance"), {StringName("segment"): StringName("a")}]
+	var canonical_return_context: Dictionary = {}
+	canonical_return_context[StringName("gateway_identity")] = StringName("gateway:canonical")
+	canonical_return_context["source_site"] = StringName("overworld:site:canonical")
+	var canonical_begin: Dictionary = canonical_session.begin_transition({
+		"source_domain": State.DOMAIN_OVERWORLD,
+		"destination_domain": State.DOMAIN_UNDERWORLD,
+		"gateway_identity": StringName("gateway:canonical"),
+		"arrival_locator": canonical_arrival,
+		"return_context": canonical_return_context,
+	})
+	var canonical_token: int = int(canonical_begin.get("token", 0))
+	var canonical_attempt: Dictionary = canonical_session.runtime_snapshot().get("attempt", {})
+	_expect(
+		failures,
+		"accepted StringName semantic input is recursively normalized into canonical String-owned attempt data",
+		bool(canonical_begin.get("success", false))
+		and canonical_token > 0
+		and typeof(canonical_attempt.get("gateway_identity")) == TYPE_STRING
+		and _is_canonical_semantic(canonical_attempt.get("arrival_locator", {}))
+		and _is_canonical_semantic(canonical_attempt.get("return_context", {}))
+	)
+	canonical_session.mark_destination_ready(canonical_token)
+	var canonical_commit: Dictionary = canonical_session.commit_transition(canonical_token)
+	var canonical_durable: Dictionary = canonical_session.durable_snapshot()
+	_expect(
+		failures,
+		"durable snapshot exposes canonical String domain and recursively canonical transport-safe committed values",
+		bool(canonical_commit.get("success", false))
+		and bool(canonical_commit.get("did_commit", false))
+		and typeof(canonical_durable.get("active_domain")) == TYPE_STRING
+		and _is_canonical_semantic(canonical_durable.get("committed_return_context", {}))
+		and typeof(canonical_durable.get("committed_return_context", {}).get("gateway_identity")) == TYPE_STRING
+	)
+
+	var validation_session := State.new()
+	var runtime_node := Node.new()
+	var invalid_node: Dictionary = validation_session.begin_transition({
+		"source_domain": State.DOMAIN_OVERWORLD,
+		"destination_domain": State.DOMAIN_UNDERWORLD,
+		"gateway_identity": runtime_node,
+		"arrival_locator": "underworld:site:validation",
+	})
+	var invalid_rid: Dictionary = validation_session.begin_transition({
+		"source_domain": State.DOMAIN_OVERWORLD,
+		"destination_domain": State.DOMAIN_UNDERWORLD,
+		"gateway_identity": RID(),
+		"arrival_locator": "underworld:site:validation",
+	})
+	var invalid_callable: Dictionary = validation_session.begin_transition({
+		"source_domain": State.DOMAIN_OVERWORLD,
+		"destination_domain": State.DOMAIN_UNDERWORLD,
+		"gateway_identity": Callable(),
+		"arrival_locator": "underworld:site:validation",
+	})
+	var invalid_non_finite: Dictionary = validation_session.begin_transition({
+		"source_domain": State.DOMAIN_OVERWORLD,
+		"destination_domain": State.DOMAIN_UNDERWORLD,
+		"gateway_identity": "gateway:validation",
+		"arrival_locator": {"position": Vector3(INF, 0.0, 0.0)},
+	})
+	var invalid_key_context: Dictionary = {}
+	invalid_key_context[7] = "not-a-string-key"
+	var invalid_key: Dictionary = validation_session.begin_transition({
+		"source_domain": State.DOMAIN_OVERWORLD,
+		"destination_domain": State.DOMAIN_UNDERWORLD,
+		"gateway_identity": "gateway:validation",
+		"arrival_locator": "underworld:site:validation",
+		"return_context": invalid_key_context,
+	})
+	_expect(
+		failures,
+		"runtime references non-finite values and non-string-key containers fail closed without session mutation",
+		not bool(invalid_node.get("success", false))
+		and not bool(invalid_rid.get("success", false))
+		and not bool(invalid_callable.get("success", false))
+		and not bool(invalid_non_finite.get("success", false))
+		and not bool(invalid_key.get("success", false))
+		and validation_session.active_domain() == State.DOMAIN_OVERWORLD
+		and validation_session.transition_phase() == State.PHASE_ACTIVE
+		and not validation_session.has_active_attempt()
+	)
+	runtime_node.free()
+	var valid_after_rejections: Dictionary = validation_session.begin_transition({
+		"source_domain": State.DOMAIN_OVERWORLD,
+		"destination_domain": State.DOMAIN_UNDERWORLD,
+		"gateway_identity": "gateway:first-valid",
+		"arrival_locator": "underworld:site:first-valid",
+	})
+	_expect(
+		failures,
+		"rejected malformed payloads do not consume the service-owned attempt-token sequence",
+		bool(valid_after_rejections.get("success", false))
+		and bool(valid_after_rejections.get("did_begin", false))
+		and int(valid_after_rejections.get("token", 0)) == 1
+	)
+	validation_session.fail_transition(int(valid_after_rejections.get("token", 0)))
+
 	var runtime_snapshot: Dictionary = session.runtime_snapshot()
 	runtime_snapshot["active_domain"] = State.DOMAIN_OVERWORLD
 	runtime_snapshot["committed_return_context"]["source_site"] = "mutated:snapshot"
@@ -244,6 +345,8 @@ static func run() -> Array[String]:
 		and not authoritative_durable.has("token")
 		and not authoritative_durable.has("readiness")
 		and not authoritative_durable.has("attempt")
+		and typeof(authoritative_durable.get("active_domain")) == TYPE_STRING
+		and _is_canonical_semantic(authoritative_durable.get("committed_return_context", {}))
 	)
 	_expect(
 		failures,
@@ -322,6 +425,36 @@ static func run() -> Array[String]:
 	)
 
 	return failures
+
+
+static func _is_canonical_semantic(value: Variant) -> bool:
+	match typeof(value):
+		TYPE_STRING:
+			return not str(value).strip_edges().is_empty()
+		TYPE_INT, TYPE_BOOL, TYPE_VECTOR2I, TYPE_VECTOR3I:
+			return true
+		TYPE_FLOAT:
+			return is_finite(float(value))
+		TYPE_VECTOR2:
+			var vector2_value: Vector2 = value
+			return is_finite(vector2_value.x) and is_finite(vector2_value.y)
+		TYPE_VECTOR3:
+			var vector3_value: Vector3 = value
+			return is_finite(vector3_value.x) and is_finite(vector3_value.y) and is_finite(vector3_value.z)
+		TYPE_ARRAY:
+			for entry in value:
+				if not _is_canonical_semantic(entry):
+					return false
+			return true
+		TYPE_DICTIONARY:
+			for raw_key in value.keys():
+				if typeof(raw_key) != TYPE_STRING or str(raw_key).strip_edges().is_empty():
+					return false
+				if not _is_canonical_semantic(value[raw_key]):
+					return false
+			return true
+		_:
+			return false
 
 
 static func _expect(
