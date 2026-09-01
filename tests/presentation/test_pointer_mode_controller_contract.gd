@@ -66,10 +66,17 @@ static func _test_nested_request_contract(controller: Node, failures: Array[Stri
 	if int(controller.call("effective_mode")) != Input.MOUSE_MODE_VISIBLE or Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
 		failures.append("Final release did not resolve the current VISIBLE baseline")
 
+	var route_handoff_token := int(controller.call("request_visible"))
+	if route_handoff_token <= 0:
+		failures.append("Pointer authority could not acquire visible protection for route-handoff proof")
 	if not bool(controller.call("set_route_baseline", Input.MOUSE_MODE_CAPTURED)):
-		failures.append("Pointer authority could not restore semantic CAPTURED baseline after request retirement")
+		failures.append("Pointer authority rejected VISIBLE-to-CAPTURED baseline change under active ownership")
+	if int(controller.call("effective_mode")) != Input.MOUSE_MODE_VISIBLE or Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
+		failures.append("Active visible request did not mask a VISIBLE-to-CAPTURED route-baseline handoff")
+	if not bool(controller.call("release_visible", route_handoff_token)):
+		failures.append("Route-handoff visible request could not be released")
 	if int(controller.call("effective_mode")) != Input.MOUSE_MODE_CAPTURED:
-		failures.append("Current CAPTURED baseline was not restored after request retirement")
+		failures.append("Final route-handoff release did not resolve the current CAPTURED baseline")
 
 
 static func _test_clear_and_stale_token_contract(controller: Node, failures: Array[String]) -> void:
