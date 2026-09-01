@@ -400,8 +400,7 @@ static func _append_semantic_failures(
 			var dictionary_value: Dictionary = value
 			if require_non_empty and dictionary_value.is_empty():
 				failures.append(path + " must not be an empty semantic container")
-			# Godot normalizes StringName Dictionary keys to String at insertion/iteration,
-			# so equal String/StringName spellings cannot reach this validator as distinct raw keys.
+			var canonical_keys: Dictionary = {}
 			for raw_key in dictionary_value.keys():
 				if not (raw_key is String or raw_key is StringName):
 					failures.append(path + " Dictionary keys must be semantic strings")
@@ -410,6 +409,10 @@ static func _append_semantic_failures(
 				if key.strip_edges().is_empty():
 					failures.append(path + " Dictionary keys must not be empty")
 					continue
+				if canonical_keys.has(key):
+					failures.append(path + " Dictionary keys collide after canonical string normalization: " + key)
+					continue
+				canonical_keys[key] = true
 				_append_semantic_failures(
 					failures,
 					dictionary_value[raw_key],
