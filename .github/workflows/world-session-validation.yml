@@ -1,0 +1,43 @@
+name: World Session Validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'm3/world-domain-state-*'
+
+permissions:
+  contents: read
+
+jobs:
+  world-session-contracts:
+    name: Godot world session contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Show Godot version
+        run: godot --version
+
+      - name: Run world session contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tests/run_world_session.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[WORLD SESSION VALIDATION] PASS' "$validation_log"
