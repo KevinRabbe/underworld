@@ -26,7 +26,9 @@ var world_id: String:
 
 var generator_manifest:
 	get:
-		return _generator_manifest
+		if _generator_manifest == null:
+			return null
+		return _generator_manifest.immutable_copy()
 	set(_value):
 		pass
 
