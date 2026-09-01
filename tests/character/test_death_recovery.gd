@@ -2,6 +2,11 @@ extends RefCounted
 
 const PlayerScript := preload("res://gameplay/player/player.gd")
 const DeathRecoveryControllerScript := preload("res://gameplay/player/lifecycle/player_death_recovery_controller.gd")
+const SurfaceChunkStreamerScript := preload("res://world/runtime/streaming/surface_chunk_streamer.gd")
+const WorldSettingsScript := preload("res://world/runtime/config/world_settings.gd")
+const WorldDeltaStoreScript := preload("res://worldgen/persistence/world_delta_store.gd")
+const StableAddressScript := preload("res://worldgen/identity/stable_address.gd")
+const StableIdScript := preload("res://worldgen/identity/stable_id.gd")
 
 
 class FakeWorldSettings:
@@ -12,30 +17,90 @@ class FakeWorldSettings:
 
 class FakeSurfaceWorld:
 	extends RefCounted
-	var spawn_results: Array[Vector3] = []
-	var heights: Array[float] = []
-	var preferred_calls: Array[Vector3] = []
+	var query_results: Array[Dictionary] = []
+	var fallback_results: Array[Dictionary] = []
+	var query_calls: Array[Vector3] = []
+	var fallback_calls: Array[Vector3] = []
 	var generated: Array[Vector3] = []
 
-	func find_spawn_xz(preferred: Vector3) -> Vector3:
-		preferred_calls.append(preferred)
-		if spawn_results.is_empty():
-			return preferred
-		return spawn_results.pop_front()
+	func query_player_placement_xz(preferred: Vector3) -> Dictionary:
+		query_calls.append(preferred)
+		if query_results.is_empty():
+			return {
+				"success": true,
+				"xz": preferred,
+				"surface_height": 8.0,
+				"diagnostics": [],
+			}
+		return query_results.pop_front().duplicate(true)
 
-	func get_height_at_world(_x: float, _z: float) -> float:
-		if heights.is_empty():
-			return 8.0
-		return heights.pop_front()
+	func resolve_spawn_xz(preferred: Vector3) -> Dictionary:
+		fallback_calls.append(preferred)
+		if fallback_results.is_empty():
+			return {
+				"success": true,
+				"xz": preferred,
+				"surface_height": 8.0,
+				"diagnostics": [],
+			}
+		return fallback_results.pop_front().duplicate(true)
 
 	func generate_initial(position: Vector3) -> void:
 		generated.append(position)
+
+
+class FakePlacementGenerator:
+	extends RefCounted
+	var samples: Dictionary = {}
+	var chunk_data: Dictionary = {}
+	var chunk_generation_counts: Dictionary = {}
+
+	func set_sample(x: float, z: float, sample: Dictionary) -> void:
+		samples[_sample_key(x, z)] = sample.duplicate(true)
+
+	func set_chunk_data(coord: Vector2i, data: Dictionary) -> void:
+		chunk_data[coord] = data.duplicate(true)
+
+	func get_surface_sample(x: float, z: float) -> Dictionary:
+		return samples.get(_sample_key(x, z), _unsafe_sample()).duplicate(true)
+
+	func generate_chunk_data(coord: Vector2i) -> Dictionary:
+		chunk_generation_counts[coord] = int(chunk_generation_counts.get(coord, 0)) + 1
+		return chunk_data.get(coord, _empty_chunk_data()).duplicate(true)
+
+	func max_chunk_generation_count() -> int:
+		var maximum: int = 0
+		for count_variant in chunk_generation_counts.values():
+			maximum = maxi(maximum, int(count_variant))
+		return maximum
+
+	func _sample_key(x: float, z: float) -> String:
+		return "%.4f|%.4f" % [x, z]
+
+	func _unsafe_sample() -> Dictionary:
+		return {
+			"height": 0.0,
+			"slope": 0.0,
+			"buildability": 0.0,
+			"rockiness": 0.0,
+			"moisture": 0.0,
+			"forest_density": 0.0,
+		}
+
+	func _empty_chunk_data() -> Dictionary:
+		return {
+			"tree_transforms": [],
+			"tree_stable_ids": [],
+			"rock_transforms": [],
+			"rock_stable_ids": [],
+		}
 
 
 static func run(tree: SceneTree) -> Array[String]:
 	var failures: Array[String] = []
 	_test_player_defeat_and_commit(tree, failures)
 	_test_fall_uses_same_defeat_seam(tree, failures)
+	_test_surface_placement_viability(failures)
 	_test_surface_recovery_policy(tree, failures)
 	return failures
 
@@ -144,6 +209,66 @@ static func _test_fall_uses_same_defeat_seam(tree: SceneTree, failures: Array[St
 	player.get_parent().free()
 
 
+static func _test_surface_placement_viability(failures: Array[String]) -> void:
+	var preferred := Vector3(32.0, 0.0, 32.0)
+	var nearby := Vector3(48.0, 0.0, 32.0)
+
+	var tree_fixture: Dictionary = _make_placement_streamer()
+	var tree_world = tree_fixture["world"]
+	var tree_generator: FakePlacementGenerator = tree_fixture["generator"]
+	var tree_delta = tree_fixture["delta"]
+	var tree_id: String = _surface_candidate_id("tree", 0, 0)
+	tree_generator.set_sample(preferred.x, preferred.z, _safe_sample(10.0, 0.0, 1.0))
+	tree_generator.set_sample(nearby.x, nearby.z, _safe_sample(10.0, 0.0, 0.9))
+	tree_generator.set_chunk_data(Vector2i.ZERO, {
+		"tree_transforms": [Transform3D(Basis.IDENTITY, Vector3(32.0, 12.25, 32.0))],
+		"tree_stable_ids": [tree_id],
+		"rock_transforms": [],
+		"rock_stable_ids": [],
+	})
+	var tree_preferred: Dictionary = tree_world.query_player_placement_xz(preferred)
+	var tree_first: Dictionary = tree_world.resolve_spawn_xz(preferred)
+	var tree_second: Dictionary = tree_world.resolve_spawn_xz(preferred)
+	_expect_true(failures, "tree-overlapped preferred Player placement is rejected", not bool(tree_preferred.get("success", false)))
+	_expect_vector_close(failures, "tree blocker deterministically selects nearby viable XZ", tree_first.get("xz", Vector3.ZERO), nearby)
+	_expect_vector_close(failures, "repeated identical tree-blocked search is byte-stable in XZ", tree_second.get("xz", Vector3.ZERO), nearby)
+	_expect_true(failures, "placement search caches deterministic chunk decorations per search", tree_generator.max_chunk_generation_count() <= 2)
+	_expect_true(failures, "tree fixture marks deterministic blocker destroyed", bool(tree_delta.mark_generated_object_destroyed(tree_id)))
+	var tree_after_destroy: Dictionary = tree_world.query_player_placement_xz(preferred)
+	_expect_true(failures, "destroyed tree StableId no longer blocks same Player placement", bool(tree_after_destroy.get("success", false)))
+	tree_world.free()
+
+	var rock_fixture: Dictionary = _make_placement_streamer()
+	var rock_world = rock_fixture["world"]
+	var rock_generator: FakePlacementGenerator = rock_fixture["generator"]
+	var rock_delta = rock_fixture["delta"]
+	var rock_id: String = _surface_candidate_id("rock", 0, 0)
+	rock_generator.set_sample(preferred.x, preferred.z, _safe_sample(10.0, 0.0, 1.0))
+	rock_generator.set_sample(nearby.x, nearby.z, _safe_sample(10.0, 0.0, 0.9))
+	rock_generator.set_chunk_data(Vector2i.ZERO, {
+		"tree_transforms": [],
+		"tree_stable_ids": [],
+		"rock_transforms": [Transform3D(Basis.IDENTITY, Vector3(32.0, 10.5, 32.0))],
+		"rock_stable_ids": [rock_id],
+	})
+	var rock_preferred: Dictionary = rock_world.query_player_placement_xz(preferred)
+	var rock_search: Dictionary = rock_world.resolve_spawn_xz(preferred)
+	_expect_true(failures, "rock-overlapped preferred Player placement is rejected", not bool(rock_preferred.get("success", false)))
+	_expect_vector_close(failures, "rock blocker selects deterministic nearby viable XZ", rock_search.get("xz", Vector3.ZERO), nearby)
+	_expect_true(failures, "rock fixture marks deterministic blocker destroyed", bool(rock_delta.mark_generated_object_destroyed(rock_id)))
+	_expect_true(failures, "destroyed rock StableId no longer blocks same Player placement", bool(rock_world.query_player_placement_xz(preferred).get("success", false)))
+	rock_world.free()
+
+	var slope_fixture: Dictionary = _make_placement_streamer()
+	var slope_world = slope_fixture["world"]
+	var slope_generator: FakePlacementGenerator = slope_fixture["generator"]
+	slope_generator.set_sample(preferred.x, preferred.z, _safe_sample(10.0, 0.50, 1.0))
+	slope_generator.set_sample(nearby.x, nearby.z, _safe_sample(10.0, 0.0, 0.9))
+	_expect_true(failures, "terrain steeper than real Player floor envelope is rejected", not bool(slope_world.query_player_placement_xz(preferred).get("success", false)))
+	_expect_vector_close(failures, "excessive slope deterministically selects nearby viable XZ", slope_world.resolve_spawn_xz(preferred).get("xz", Vector3.ZERO), nearby)
+	slope_world.free()
+
+
 static func _test_surface_recovery_policy(tree: SceneTree, failures: Array[String]) -> void:
 	var settings := FakeWorldSettings.new()
 
@@ -153,18 +278,33 @@ static func _test_surface_recovery_policy(tree: SceneTree, failures: Array[Strin
 	player.global_position = Vector3(40.0, -20.0, -24.0)
 	player.call("_enter_defeated", &"fall")
 	var world := FakeSurfaceWorld.new()
-	world.spawn_results = [Vector3(48.0, 0.0, -16.0)]
-	world.heights = [9.0]
+	world.query_results = [{
+		"success": true,
+		"xz": Vector3(40.0, 0.0, -24.0),
+		"surface_height": 9.0,
+		"diagnostics": [],
+	}]
 	var controller = DeathRecoveryControllerScript.new()
 	var config_failures: Array[String] = controller.configure(player, world, settings)
 	_expect_true(failures, "death controller accepts Player/surface authority", config_failures.is_empty())
+	var before_resolve: Vector3 = player.global_position
+	var resolved_without_commit: Dictionary = controller.resolve_safe_target(before_resolve)
+	_expect_true(failures, "target-resolution seam succeeds without lifecycle mutation", bool(resolved_without_commit.get("success", false)))
+	_expect_vector_close(failures, "target resolution does not move defeated Player", player.global_position, before_resolve)
+	_expect_true(failures, "target resolution does not revive Player", bool(player.call("is_defeated")))
+	world.query_results = [{
+		"success": true,
+		"xz": Vector3(40.0, 0.0, -24.0),
+		"surface_height": 9.0,
+		"diagnostics": [],
+	}]
 	_expect_true(failures, "first recovery request is accepted", controller.request_recovery(&"fall"))
 	_expect_true(failures, "duplicate recovery request is rejected", not controller.request_recovery(&"fall"))
 	var primary: Dictionary = controller.try_commit_recovery()
-	_expect_true(failures, "current-XZ recovery succeeds", bool(primary.get("success", false)))
+	_expect_true(failures, "exact current-XZ recovery succeeds", bool(primary.get("success", false)))
 	_expect_true(failures, "current-XZ recovery does not report fallback", not bool(primary.get("fallback_used", true)))
-	_expect_vector_close(failures, "current-XZ preference is Player projection", world.preferred_calls[0], Vector3(40.0, 0.0, -24.0))
-	_expect_vector_close(failures, "current-XZ recovery applies startup clearance", player.global_position, Vector3(48.0, 12.0, -16.0))
+	_expect_vector_close(failures, "current-XZ viability query uses exact Player projection", world.query_calls[0], Vector3(40.0, 0.0, -24.0))
+	_expect_vector_close(failures, "current-XZ recovery applies startup clearance", player.global_position, Vector3(40.0, 12.0, -24.0))
 	_expect_equal(failures, "surface target is realized before commit", world.generated.size(), 1)
 	player.get_parent().free()
 	controller.free()
@@ -175,16 +315,21 @@ static func _test_surface_recovery_policy(tree: SceneTree, failures: Array[Strin
 	fallback_player.global_position = Vector3(100.0, -30.0, 200.0)
 	fallback_player.call("_enter_defeated", &"damage")
 	var fallback_world := FakeSurfaceWorld.new()
-	fallback_world.spawn_results = [Vector3(104.0, 0.0, 200.0), Vector3(32.0, 0.0, 32.0)]
-	fallback_world.heights = [NAN, 6.0]
+	fallback_world.query_results = [{"success": false, "diagnostics": ["blocked current placement"]}]
+	fallback_world.fallback_results = [{
+		"success": true,
+		"xz": Vector3(32.0, 0.0, 32.0),
+		"surface_height": 6.0,
+		"diagnostics": [],
+	}]
 	var fallback_controller = DeathRecoveryControllerScript.new()
 	fallback_controller.configure(fallback_player, fallback_world, settings)
 	fallback_controller.request_recovery(&"damage")
 	var fallback: Dictionary = fallback_controller.try_commit_recovery()
-	_expect_true(failures, "invalid primary target uses deterministic fallback", bool(fallback.get("success", false)))
+	_expect_true(failures, "blocked exact primary target uses deterministic initial-center fallback", bool(fallback.get("success", false)))
 	_expect_true(failures, "fallback result is identified", bool(fallback.get("fallback_used", false)))
-	_expect_equal(failures, "fallback performs exactly two surface searches", fallback_world.preferred_calls.size(), 2)
-	_expect_vector_close(failures, "fallback preference uses normal initial center", fallback_world.preferred_calls[1], Vector3(32.0, 0.0, 32.0))
+	_expect_equal(failures, "fallback performs one exact query and one initial-center search", fallback_world.query_calls.size() + fallback_world.fallback_calls.size(), 2)
+	_expect_vector_close(failures, "fallback preference uses normal initial center", fallback_world.fallback_calls[0], Vector3(32.0, 0.0, 32.0))
 	_expect_vector_close(failures, "fallback recovery commits finite target", fallback_player.global_position, Vector3(32.0, 9.0, 32.0))
 	fallback_player.get_parent().free()
 	fallback_controller.free()
@@ -195,8 +340,8 @@ static func _test_surface_recovery_policy(tree: SceneTree, failures: Array[Strin
 	failed_player.global_position = Vector3(8.0, -50.0, 8.0)
 	failed_player.call("_enter_defeated", &"fall")
 	var failed_world := FakeSurfaceWorld.new()
-	failed_world.spawn_results = [Vector3(8.0, 0.0, 8.0), Vector3(32.0, 0.0, 32.0)]
-	failed_world.heights = [0.5, 1.0]
+	failed_world.query_results = [{"success": false, "diagnostics": ["unsafe current placement"]}]
+	failed_world.fallback_results = [{"success": false, "diagnostics": ["no safe initial placement"]}]
 	var failed_controller = DeathRecoveryControllerScript.new()
 	failed_controller.configure(failed_player, failed_world, settings)
 	failed_controller.request_recovery(&"fall")
@@ -207,6 +352,35 @@ static func _test_surface_recovery_policy(tree: SceneTree, failures: Array[Strin
 	_expect_equal(failures, "failed recovery never realizes invalid geometry", failed_world.generated.size(), 0)
 	failed_player.get_parent().free()
 	failed_controller.free()
+
+
+static func _make_placement_streamer() -> Dictionary:
+	var settings = WorldSettingsScript.new()
+	settings.chunk_size = 64.0
+	settings.sea_level = 0.0
+	var world = SurfaceChunkStreamerScript.new()
+	world.configure(settings)
+	var generator := FakePlacementGenerator.new()
+	world.set("main_generator", generator)
+	var delta = WorldDeltaStoreScript.new()
+	world.bind_world_delta_store(delta)
+	return {"world": world, "generator": generator, "delta": delta}
+
+
+static func _safe_sample(height: float, slope: float, buildability: float) -> Dictionary:
+	return {
+		"height": height,
+		"slope": slope,
+		"buildability": buildability,
+		"rockiness": 0.0,
+		"moisture": 0.4,
+		"forest_density": 0.0,
+	}
+
+
+static func _surface_candidate_id(domain: String, cell_x: int, cell_z: int) -> String:
+	var address = StableAddressScript.surface_candidate(domain, cell_x, cell_z, "0")
+	return StableIdScript.from_address(address).value()
 
 
 static func _spawn_player(tree: SceneTree, failures: Array[String]):
