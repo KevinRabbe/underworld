@@ -5,12 +5,12 @@ const TerrainChunkScript := preload("res://world/terrain_chunk.gd")
 const PickupGeneratorScript := preload("res://worldgen/surface/pickup_generator.gd")
 const StableIdScript := preload("res://worldgen/identity/stable_id.gd")
 const WorldDeltaStoreScript := preload("res://worldgen/persistence/world_delta_store.gd")
+const PlayerPlacementProfileScript := preload("res://gameplay/player/player_placement_profile.gd")
 
-const PLAYER_CAPSULE_RADIUS: float = 0.45
-const PLAYER_CAPSULE_HEIGHT: float = 1.8
-const PLAYER_FLOOR_MAX_ANGLE_DEGREES: float = 50.0
 const SPAWN_WATER_CLEARANCE: float = 1.5
 const PLACEMENT_NEIGHBOR_CHUNK_RADIUS: int = 1
+const LIVE_CAPSULE_QUERY_SHRINK: float = 0.01
+const SURFACE_SOLID_COLLISION_MASK: int = 1
 
 var settings
 var main_generator
@@ -283,16 +283,22 @@ func get_surface_sample_at_world(world_x: float, world_z: float) -> Dictionary:
 	return main_generator.get_surface_sample(world_x, world_z)
 
 
-func query_player_placement_xz(candidate: Vector3) -> Dictionary:
+func query_player_placement_xz(candidate: Vector3, player_profile = null) -> Dictionary:
+	var profile = _resolve_player_profile(player_profile)
+	if profile == null:
+		return _placement_failure(["surface placement requires valid Player placement profile"])
 	var decoration_cache: Dictionary = {}
-	return _query_player_placement_xz(candidate, decoration_cache)
+	return _query_player_placement_xz(candidate, decoration_cache, profile)
 
 
-func resolve_spawn_xz(preferred: Vector3) -> Dictionary:
+func resolve_spawn_xz(preferred: Vector3, player_profile = null) -> Dictionary:
 	if settings == null or main_generator == null:
 		return _placement_failure(["surface placement requires configured generation authority"])
 	if not _is_finite_number(preferred.x) or not _is_finite_number(preferred.z):
 		return _placement_failure(["surface placement preferred XZ must be finite"])
+	var profile = _resolve_player_profile(player_profile)
+	if profile == null:
+		return _placement_failure(["surface placement requires valid Player placement profile"])
 
 	var search_step: float = maxf(settings.chunk_size * 0.25, 16.0)
 	var search_radius: float = settings.chunk_size * 3.0
@@ -308,7 +314,7 @@ func resolve_spawn_xz(preferred: Vector3) -> Dictionary:
 				0.0,
 				preferred.z + float(z_index) * search_step
 			)
-			var placement: Dictionary = _query_player_placement_xz(candidate, decoration_cache)
+			var placement: Dictionary = _query_player_placement_xz(candidate, decoration_cache, profile)
 			if not bool(placement.get("success", false)):
 				continue
 			var sample: Dictionary = placement.get("sample", {})
@@ -344,11 +350,131 @@ func find_spawn_xz(preferred: Vector3) -> Vector3:
 	if bool(resolved.get("success", false)):
 		return resolved.get("xz", preferred)
 	# Legacy callers require a Vector3. Recovery and other safety-critical consumers
-	# use resolve_spawn_xz/query_player_placement_xz so no failed placement is committed.
+	# use resolve_spawn_xz/prepare_player_placement so failed placement is not committed.
 	return preferred
 
 
-func _query_player_placement_xz(candidate: Vector3, decoration_cache: Dictionary) -> Dictionary:
+func prepare_player_placement(target: Vector3, player_profile = null) -> Dictionary:
+	if not is_inside_tree() or get_world_3d() == null:
+		return _placement_failure(["surface placement readiness requires live physics world"])
+	if not _is_finite_vector3(target):
+		return _placement_failure(["surface placement readiness target must be finite"])
+	var profile = _resolve_player_profile(player_profile)
+	if profile == null:
+		return _placement_failure(["surface placement readiness requires valid Player profile"])
+
+	var semantic: Dictionary = query_player_placement_xz(
+		Vector3(target.x, 0.0, target.z),
+		profile
+	)
+	if not bool(semantic.get("success", false)):
+		return _placement_prefixed_failure("semantic", semantic.get("diagnostics", []))
+	var semantic_height: float = float(semantic.get("surface_height", NAN))
+	if not _is_finite_number(semantic_height):
+		return _placement_failure(["surface placement readiness requires finite semantic height"])
+	var expected_body_y: float = float(profile.body_origin_y_for_support(semantic_height))
+	var allowed_vertical_delta: float = float(profile.floor_snap_length())
+	if absf(target.y - expected_body_y) > allowed_vertical_delta:
+		return _placement_failure(["surface placement readiness target is outside Player settlement envelope"])
+
+	var center_coord: Vector2i = world_to_chunk(target)
+	var newly_created: Array[Vector2i] = []
+	for z_offset in range(-PLACEMENT_NEIGHBOR_CHUNK_RADIUS, PLACEMENT_NEIGHBOR_CHUNK_RADIUS + 1):
+		for x_offset in range(-PLACEMENT_NEIGHBOR_CHUNK_RADIUS, PLACEMENT_NEIGHBOR_CHUNK_RADIUS + 1):
+			var coord: Vector2i = center_coord + Vector2i(x_offset, z_offset)
+			var existed: bool = chunks.has(coord)
+			_create_chunk_sync(coord)
+			if not chunks.has(coord):
+				_rollback_player_placement_preparation(newly_created)
+				return _placement_failure(["surface placement readiness could not realize target chunk %s" % coord])
+			if not existed:
+				newly_created.append(coord)
+			chunks[coord].set_collision_enabled(true)
+
+	# Activate target-local solid proxies directly from the target rather than from
+	# the defeated Player's old observer position. This keeps Player state untouched.
+	_update_world_object_physics_at(target)
+
+	var exclude_rids: Array[RID] = []
+	if player != null and is_instance_valid(player) and player is CollisionObject3D:
+		exclude_rids.append(player.get_rid())
+	var space = get_world_3d().direct_space_state
+	if space == null:
+		_rollback_player_placement_preparation(newly_created)
+		return _placement_failure(["surface placement readiness has no direct physics state"])
+
+	var support_distance: float = float(profile.floor_snap_length())
+	var ray := PhysicsRayQueryParameters3D.new()
+	ray.from = Vector3(target.x, semantic_height + support_distance, target.z)
+	ray.to = Vector3(target.x, semantic_height - support_distance, target.z)
+	ray.collision_mask = SURFACE_SOLID_COLLISION_MASK
+	ray.collide_with_bodies = true
+	ray.collide_with_areas = false
+	ray.exclude = exclude_rids
+	var support: Dictionary = space.intersect_ray(ray)
+	if support.is_empty():
+		_rollback_player_placement_preparation(newly_created)
+		return _placement_failure(["surface placement readiness found no realized support"])
+	var support_collider = support.get("collider", null)
+	if support_collider != null and support_collider.has_meta("world_object_type"):
+		_rollback_player_placement_preparation(newly_created)
+		return _placement_failure(["surface placement readiness support is a world object"])
+	var support_position_variant: Variant = support.get("position", null)
+	var support_normal_variant: Variant = support.get("normal", null)
+	if not support_position_variant is Vector3 or not support_normal_variant is Vector3:
+		_rollback_player_placement_preparation(newly_created)
+		return _placement_failure(["surface placement readiness returned invalid support geometry"])
+	var support_position: Vector3 = support_position_variant
+	var support_normal: Vector3 = support_normal_variant
+	if not _is_finite_vector3(support_position) or not _is_finite_vector3(support_normal):
+		_rollback_player_placement_preparation(newly_created)
+		return _placement_failure(["surface placement readiness support geometry must be finite"])
+	if absf(support_position.y - semantic_height) > support_distance:
+		_rollback_player_placement_preparation(newly_created)
+		return _placement_failure(["surface placement readiness support exceeds Player snap tolerance"])
+	if support_normal.is_zero_approx():
+		_rollback_player_placement_preparation(newly_created)
+		return _placement_failure(["surface placement readiness support normal is zero"])
+	support_normal = support_normal.normalized()
+	if support_normal.dot(Vector3.UP) < cos(float(profile.floor_max_angle())):
+		_rollback_player_placement_preparation(newly_created)
+		return _placement_failure(["surface placement readiness support exceeds Player floor angle"])
+
+	var prepared_target := Vector3(
+		target.x,
+		float(profile.body_origin_y_for_support(support_position.y)),
+		target.z
+	)
+	var shape_query := PhysicsShapeQueryParameters3D.new()
+	shape_query.shape = profile.make_capsule_shape(LIVE_CAPSULE_QUERY_SHRINK)
+	shape_query.transform = Transform3D(
+		Basis.IDENTITY,
+		prepared_target + Vector3(0.0, float(profile.capsule_center_y()), 0.0)
+	)
+	shape_query.collision_mask = int(profile.collision_mask())
+	shape_query.collide_with_bodies = true
+	shape_query.collide_with_areas = false
+	shape_query.exclude = exclude_rids
+	var overlaps: Array[Dictionary] = space.intersect_shape(shape_query, 32)
+	if not overlaps.is_empty():
+		_rollback_player_placement_preparation(newly_created)
+		return _placement_failure(["surface placement readiness capsule overlaps realized physics"])
+
+	return {
+		"success": true,
+		"ready": true,
+		"target": prepared_target,
+		"support_position": support_position,
+		"support_normal": support_normal,
+		"diagnostics": [],
+	}
+
+
+func _query_player_placement_xz(
+	candidate: Vector3,
+	decoration_cache: Dictionary,
+	profile
+) -> Dictionary:
 	if settings == null or main_generator == null:
 		return _placement_failure(["surface placement requires configured generation authority"])
 	if not _is_finite_number(candidate.x) or not _is_finite_number(candidate.z):
@@ -366,7 +492,7 @@ func _query_player_placement_xz(candidate: Vector3, decoration_cache: Dictionary
 	var slope: float = float(slope_variant)
 	if height <= float(settings.sea_level) + SPAWN_WATER_CLEARANCE:
 		return _placement_failure(["surface placement target is not safely above water"])
-	var max_slope: float = 1.0 - cos(deg_to_rad(PLAYER_FLOOR_MAX_ANGLE_DEGREES))
+	var max_slope: float = 1.0 - cos(float(profile.floor_max_angle()))
 	if slope > max_slope:
 		return _placement_failure(["surface placement target exceeds Player floor angle"])
 
@@ -374,7 +500,8 @@ func _query_player_placement_xz(candidate: Vector3, decoration_cache: Dictionary
 		candidate.x,
 		candidate.z,
 		height,
-		decoration_cache
+		decoration_cache,
+		profile
 	)
 	if not blocker.is_empty():
 		return _placement_failure([
@@ -397,7 +524,8 @@ func _find_player_placement_blocker(
 	world_x: float,
 	world_z: float,
 	surface_height: float,
-	decoration_cache: Dictionary
+	decoration_cache: Dictionary,
+	profile
 ) -> Dictionary:
 	var center_coord: Vector2i = world_to_chunk(Vector3(world_x, 0.0, world_z))
 	for z_offset in range(-PLACEMENT_NEIGHBOR_CHUNK_RADIUS, PLACEMENT_NEIGHBOR_CHUNK_RADIUS + 1):
@@ -405,12 +533,12 @@ func _find_player_placement_blocker(
 			var coord: Vector2i = center_coord + Vector2i(x_offset, z_offset)
 			var data: Dictionary = _placement_chunk_data(coord, decoration_cache)
 			var tree_blocker: Dictionary = _find_tree_placement_blocker(
-				world_x, world_z, surface_height, coord, data
+				world_x, world_z, surface_height, coord, data, profile
 			)
 			if not tree_blocker.is_empty():
 				return tree_blocker
 			var rock_blocker: Dictionary = _find_rock_placement_blocker(
-				world_x, world_z, surface_height, coord, data
+				world_x, world_z, surface_height, coord, data, profile
 			)
 			if not rock_blocker.is_empty():
 				return rock_blocker
@@ -431,7 +559,8 @@ func _find_tree_placement_blocker(
 	world_z: float,
 	surface_height: float,
 	chunk_coord: Vector2i,
-	data: Dictionary
+	data: Dictionary,
+	profile
 ) -> Dictionary:
 	var transforms: Array = data.get("tree_transforms", [])
 	var stable_ids: Array = data.get("tree_stable_ids", [])
@@ -441,6 +570,8 @@ func _find_tree_placement_blocker(
 		0.0,
 		float(chunk_coord.y) * float(settings.chunk_size)
 	)
+	var body_min: float = float(profile.body_origin_y_for_support(surface_height))
+	var body_max: float = body_min + float(profile.capsule_height())
 	for index in range(count):
 		if not transforms[index] is Transform3D:
 			continue
@@ -456,13 +587,13 @@ func _find_tree_placement_blocker(
 			collider_radius * 2.0
 		)
 		if not _vertical_intervals_overlap(
-			surface_height,
-			surface_height + PLAYER_CAPSULE_HEIGHT,
+			body_min,
+			body_max,
 			world_origin.y - collider_height * 0.5,
 			world_origin.y + collider_height * 0.5
 		):
 			continue
-		var radius_sum: float = PLAYER_CAPSULE_RADIUS + collider_radius
+		var radius_sum: float = float(profile.capsule_radius()) + collider_radius
 		var delta := Vector2(world_x - world_origin.x, world_z - world_origin.z)
 		if delta.length_squared() <= radius_sum * radius_sum:
 			return {"type": "tree", "stable_id": stable_id}
@@ -474,7 +605,8 @@ func _find_rock_placement_blocker(
 	world_z: float,
 	surface_height: float,
 	chunk_coord: Vector2i,
-	data: Dictionary
+	data: Dictionary,
+	profile
 ) -> Dictionary:
 	var transforms: Array = data.get("rock_transforms", [])
 	var stable_ids: Array = data.get("rock_stable_ids", [])
@@ -484,6 +616,8 @@ func _find_rock_placement_blocker(
 		0.0,
 		float(chunk_coord.y) * float(settings.chunk_size)
 	)
+	var body_min: float = float(profile.body_origin_y_for_support(surface_height))
+	var body_max: float = body_min + float(profile.capsule_height())
 	for index in range(count):
 		if not transforms[index] is Transform3D:
 			continue
@@ -498,8 +632,8 @@ func _find_rock_placement_blocker(
 			maxf(local_transform.basis.z.length(), 0.05)
 		)
 		if not _vertical_intervals_overlap(
-			surface_height,
-			surface_height + PLAYER_CAPSULE_HEIGHT,
+			body_min,
+			body_max,
 			world_origin.y - box_size.y * 0.5,
 			world_origin.y + box_size.y * 0.5
 		):
@@ -516,13 +650,56 @@ func _find_rock_placement_blocker(
 		var closest_z: float = clampf(local_delta.z, -half_z, half_z)
 		var dx: float = local_delta.x - closest_x
 		var dz: float = local_delta.z - closest_z
-		if dx * dx + dz * dz <= PLAYER_CAPSULE_RADIUS * PLAYER_CAPSULE_RADIUS:
+		var capsule_radius: float = float(profile.capsule_radius())
+		if dx * dx + dz * dz <= capsule_radius * capsule_radius:
 			return {"type": "rock", "stable_id": stable_id}
 	return {}
 
 
+func _resolve_player_profile(profile_variant):
+	var profile = profile_variant
+	if profile == null:
+		profile = PlayerPlacementProfileScript.new()
+	if (
+		not profile.has_method("validate")
+		or not profile.has_method("capsule_radius")
+		or not profile.has_method("capsule_height")
+		or not profile.has_method("capsule_center_y")
+		or not profile.has_method("floor_max_angle")
+		or not profile.has_method("floor_snap_length")
+		or not profile.has_method("collision_mask")
+		or not profile.has_method("settlement_margin")
+		or not profile.has_method("body_origin_y_for_support")
+		or not profile.has_method("make_capsule_shape")
+	):
+		return null
+	var failures_variant: Variant = profile.validate()
+	if not failures_variant is Array or not failures_variant.is_empty():
+		return null
+	return profile
+
+
+func _rollback_player_placement_preparation(newly_created: Array[Vector2i]) -> void:
+	if player != null and is_instance_valid(player):
+		_update_world_object_physics_at(player.global_position)
+		_update_collision_radius(world_to_chunk(player.global_position))
+	else:
+		_update_collision_radius(current_player_chunk)
+	for coord in newly_created:
+		if chunks.has(coord) and not desired_chunks.has(coord):
+			chunks[coord].queue_free()
+			chunks.erase(coord)
+
+
 func _vertical_intervals_overlap(a_min: float, a_max: float, b_min: float, b_max: float) -> bool:
 	return a_max >= b_min and b_max >= a_min
+
+
+func _placement_prefixed_failure(prefix: String, messages: Array) -> Dictionary:
+	var prefixed: Array[String] = []
+	for message in messages:
+		prefixed.append("%s: %s" % [prefix, str(message)])
+	return _placement_failure(prefixed)
 
 
 func _placement_failure(messages: Array) -> Dictionary:
@@ -530,7 +707,7 @@ func _placement_failure(messages: Array) -> Dictionary:
 	for message in messages:
 		diagnostics.append(str(message))
 	diagnostics.sort()
-	return {"success": false, "diagnostics": diagnostics}
+	return {"success": false, "ready": false, "diagnostics": diagnostics}
 
 
 func _is_finite_number(value: Variant) -> bool:
@@ -538,6 +715,14 @@ func _is_finite_number(value: Variant) -> bool:
 		return false
 	var number: float = float(value)
 	return not is_nan(number) and not is_inf(number)
+
+
+func _is_finite_vector3(value: Vector3) -> bool:
+	return (
+		_is_finite_number(value.x)
+		and _is_finite_number(value.y)
+		and _is_finite_number(value.z)
+	)
 
 
 func get_loaded_chunk_count() -> int:
@@ -759,12 +944,15 @@ func _build_chunk_from_data(coord: Vector2i, data: Dictionary, data_ms: float) -
 func _update_world_object_physics() -> void:
 	if player == null:
 		return
+	_update_world_object_physics_at(player.global_position)
 
+
+func _update_world_object_physics_at(observer_position: Vector3) -> void:
 	var activation_radius: float = settings.world_object_physics_radius
 	var release_radius: float = activation_radius + settings.world_object_release_margin
 	for chunk in chunks.values():
 		chunk.update_world_object_physics(
-			player.global_position,
+			observer_position,
 			activation_radius,
 			release_radius
 		)
