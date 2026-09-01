@@ -263,11 +263,20 @@ func _definition_context_identity_failures() -> Array[String]:
 	if _definition_service == null or _definition_service.context == null:
 		failures.append("Runtime cell definition context is unavailable")
 		return failures
+	if streamer == null:
+		failures.append("Runtime cell definition streamer is unavailable")
+		return failures
 	var definition_context = _definition_service.context
-	if str(definition_context.world_id) != world_id:
+	var context_world_id: String = str(definition_context.world_id)
+	var context_manifest_id: String = str(definition_context.generator_manifest_id)
+	if context_world_id != world_id:
 		failures.append("Runtime cell definition WorldId does not match controller runtime identity")
-	if str(definition_context.generator_manifest_id) != generator_manifest_id:
+	if context_manifest_id != generator_manifest_id:
 		failures.append("Runtime cell definition GeneratorManifestId does not match controller runtime identity")
+	if context_world_id != str(streamer.world_id):
+		failures.append("Runtime cell definition WorldId does not match streamer runtime identity")
+	if context_manifest_id != str(streamer.generator_manifest_id):
+		failures.append("Runtime cell definition GeneratorManifestId does not match streamer runtime identity")
 	return failures
 
 
