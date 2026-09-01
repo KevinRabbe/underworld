@@ -221,8 +221,21 @@ static func run() -> Array[String]:
 	)
 
 	var canonical_session := State.new()
-	var canonical_arrival: Dictionary = {}
-	canonical_arrival[StringName("site_id")] = StringName("underworld:site:canonical")
+	var key_equivalence_probe: Dictionary = {}
+	key_equivalence_probe[StringName("site_id")] = StringName("underworld:site:from-string-name")
+	key_equivalence_probe["site_id"] = StringName("underworld:site:canonical")
+	var key_equivalence_keys: Array = key_equivalence_probe.keys()
+	_expect(
+		failures,
+		"Godot Dictionary key equality collapses equivalent StringName and String spellings before session validation",
+		key_equivalence_probe.size() == 1
+		and key_equivalence_keys.size() == 1
+		and typeof(key_equivalence_keys[0]) == TYPE_STRING
+		and key_equivalence_probe.has(StringName("site_id"))
+		and key_equivalence_probe.has("site_id")
+		and str(key_equivalence_probe.get("site_id", "")) == "underworld:site:canonical"
+	)
+	var canonical_arrival: Dictionary = key_equivalence_probe.duplicate(true)
 	canonical_arrival["path"] = [StringName("entrance"), {StringName("segment"): StringName("a")}]
 	var canonical_return_context: Dictionary = {}
 	canonical_return_context[StringName("gateway_identity")] = StringName("gateway:canonical")
@@ -240,7 +253,7 @@ static func run() -> Array[String]:
 		failures,
 		"accepted StringName semantic input is recursively normalized into canonical String-owned attempt data",
 		bool(canonical_begin.get("success", false))
-		and canonical_token > 0
+		and canonical_token == 1
 		and typeof(canonical_attempt.get("gateway_identity")) == TYPE_STRING
 		and _is_canonical_semantic(canonical_attempt.get("arrival_locator", {}))
 		and _is_canonical_semantic(canonical_attempt.get("return_context", {}))
