@@ -10,6 +10,7 @@ const DEFAULT_CAPSULE_CENTER_Y: float = 0.9
 const DEFAULT_FLOOR_MAX_ANGLE: float = deg_to_rad(50.0)
 const DEFAULT_FLOOR_SNAP_LENGTH: float = 0.45
 const DEFAULT_COLLISION_MASK: int = 1 | 2
+const SURFACE_SUPPORT_COLLISION_MASK: int = 1
 const SETTLEMENT_MARGIN: float = 0.08
 
 var _capsule_radius: float = DEFAULT_CAPSULE_RADIUS
@@ -82,16 +83,51 @@ func make_capsule_shape(shrink: float = 0.0) -> CapsuleShape3D:
 
 func validate() -> Array[String]:
 	var failures: Array[String] = []
-	if _capsule_radius <= 0.0:
+	var radius_finite := _is_finite_scalar(_capsule_radius)
+	var height_finite := _is_finite_scalar(_capsule_height)
+	var center_finite := _is_finite_scalar(_capsule_center_y)
+	var floor_angle_finite := _is_finite_scalar(_floor_max_angle)
+	var floor_snap_finite := _is_finite_scalar(_floor_snap_length)
+	var settlement_finite := _is_finite_scalar(SETTLEMENT_MARGIN)
+
+	if not radius_finite:
+		failures.append("Player placement profile capsule radius must be finite")
+	elif _capsule_radius <= 0.0:
 		failures.append("Player placement profile requires positive capsule radius")
-	if _capsule_height < _capsule_radius * 2.0:
+
+	if not height_finite:
+		failures.append("Player placement profile capsule height must be finite")
+	elif radius_finite and _capsule_height < _capsule_radius * 2.0:
 		failures.append("Player placement profile capsule height must contain its radius")
-	if not is_equal_approx(_capsule_center_y, _capsule_height * 0.5):
+
+	if not center_finite:
+		failures.append("Player placement profile capsule center must be finite")
+	elif height_finite and not is_equal_approx(_capsule_center_y, _capsule_height * 0.5):
 		failures.append("Player placement profile expects body origin at capsule bottom")
-	if _floor_max_angle <= 0.0 or _floor_max_angle >= PI * 0.5:
+
+	if not floor_angle_finite:
+		failures.append("Player placement profile floor angle must be finite")
+	elif _floor_max_angle <= 0.0 or _floor_max_angle >= PI * 0.5:
 		failures.append("Player placement profile requires walkable floor angle below 90 degrees")
-	if _floor_snap_length <= 0.0:
+
+	if not floor_snap_finite:
+		failures.append("Player placement profile floor snap length must be finite")
+	elif _floor_snap_length <= 0.0:
 		failures.append("Player placement profile requires positive floor snap length")
-	if SETTLEMENT_MARGIN <= 0.0 or SETTLEMENT_MARGIN >= _floor_snap_length:
+
+	if not settlement_finite:
+		failures.append("Player placement profile settlement margin must be finite")
+	elif floor_snap_finite and (SETTLEMENT_MARGIN <= 0.0 or SETTLEMENT_MARGIN >= _floor_snap_length):
 		failures.append("Player placement profile settlement margin must fit inside floor snap range")
+
+	if _collision_mask == 0:
+		failures.append("Player placement profile requires nonzero collision mask")
+	if (_collision_mask & SURFACE_SUPPORT_COLLISION_MASK) == 0:
+		failures.append("Player placement profile collision mask must include canonical surface support")
+
+	failures.sort()
 	return failures
+
+
+static func _is_finite_scalar(value: float) -> bool:
+	return not is_nan(value) and not is_inf(value)
