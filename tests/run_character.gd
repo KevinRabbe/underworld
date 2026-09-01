@@ -12,6 +12,7 @@ const WorldSurvivalArchitectureTests := preload("res://tests/character/test_worl
 const PlayerFeelTests := preload("res://tests/character/test_player_feel.gd")
 const DeathRecoveryTests := preload("res://tests/character/test_death_recovery.gd")
 const DeathRecoveryPhysicsTests := preload("res://tests/character/test_death_recovery_physics.gd")
+const PlayerPlacementProfileReviewerRepairs := preload("res://tests/character/test_player_placement_profile_reviewer_repairs.gd")
 
 
 func _init() -> void:
@@ -34,6 +35,7 @@ func _run_tests() -> void:
 	failures.append_array(PlayerFeelTests.run(self))
 	failures.append_array(DeathRecoveryTests.run(self))
 	failures.append_array(DeathRecoveryPhysicsTests.run(self))
+	failures.append_array(PlayerPlacementProfileReviewerRepairs.run(self))
 
 	if failures.is_empty():
 		print("[CHARACTER VALIDATION] PASS")
@@ -49,6 +51,7 @@ func _run_tests() -> void:
 		print("  responsive light/heavy action, buffering, stamina, and transition contracts passed")
 		print("  defeated input gate / idempotent recovery / deterministic safe-surface fallback passed")
 		print("  recovered real Player terrain support / world-object collision envelope passed")
+		print("  fail-closed placement profile validation / live-Player physical discrimination passed")
 		quit(0)
 		return
 
