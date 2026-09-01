@@ -44,7 +44,7 @@ func _init(
 		push_error("WorldDomainSessionState requires semantic committed return context")
 		return
 	_active_domain = active_domain_value
-	_committed_return_context = committed_return_context_value.duplicate(true)
+	_committed_return_context = _canonicalize_semantic(committed_return_context_value)
 
 
 func active_domain() -> String:
@@ -68,7 +68,7 @@ func current_attempt_token() -> int:
 
 
 func committed_return_context_snapshot() -> Dictionary:
-	return _committed_return_context.duplicate(true)
+	return _canonicalize_semantic(_committed_return_context)
 
 
 func begin_transition(request: Dictionary) -> Dictionary:
@@ -91,9 +91,9 @@ func begin_transition(request: Dictionary) -> Dictionary:
 		"phase": PHASE_PREPARING,
 		"source_domain": str(request.get("source_domain", "")),
 		"destination_domain": str(request.get("destination_domain", "")),
-		"gateway_identity": _deep_copy_semantic(request.get("gateway_identity", null)),
-		"arrival_locator": _deep_copy_semantic(request.get("arrival_locator", null)),
-		"return_context": _deep_copy_semantic(request.get("return_context", {})),
+		"gateway_identity": _canonicalize_semantic(request.get("gateway_identity", null)),
+		"arrival_locator": _canonicalize_semantic(request.get("arrival_locator", null)),
+		"return_context": _canonicalize_semantic(request.get("return_context", {})),
 	}
 	return _success({
 		"did_begin": true,
@@ -134,7 +134,7 @@ func commit_transition(token: int) -> Dictionary:
 		)
 
 	var destination_domain: String = str(_attempt.get("destination_domain", ""))
-	var committed_return_context: Dictionary = _deep_copy_semantic(
+	var committed_return_context: Dictionary = _canonicalize_semantic(
 		_attempt.get("return_context", {})
 	)
 	_active_domain = destination_domain
@@ -145,7 +145,7 @@ func commit_transition(token: int) -> Dictionary:
 		"token": token,
 		"active_domain": _active_domain,
 		"phase": PHASE_ACTIVE,
-		"committed_return_context": _committed_return_context.duplicate(true),
+		"committed_return_context": _canonicalize_semantic(_committed_return_context),
 	})
 
 
@@ -169,15 +169,15 @@ func runtime_snapshot() -> Dictionary:
 	return {
 		"active_domain": _active_domain,
 		"phase": transition_phase(),
-		"attempt": _attempt.duplicate(true),
-		"committed_return_context": _committed_return_context.duplicate(true),
+		"attempt": _canonicalize_semantic(_attempt),
+		"committed_return_context": _canonicalize_semantic(_committed_return_context),
 	}
 
 
 func durable_snapshot() -> Dictionary:
 	return {
 		"active_domain": _active_domain,
-		"committed_return_context": _committed_return_context.duplicate(true),
+		"committed_return_context": _canonicalize_semantic(_committed_return_context),
 	}
 
 
@@ -213,7 +213,7 @@ static func restore_from_durable(snapshot: Dictionary) -> Dictionary:
 		"success": true,
 		"did_restore": true,
 		"active_domain": restored_domain,
-		"committed_return_context": return_context_variant.duplicate(true),
+		"committed_return_context": _canonicalize_semantic(return_context_variant),
 		"phase": PHASE_ACTIVE,
 		"diagnostics": [],
 	}
@@ -293,12 +293,22 @@ static func _is_domain(value: String) -> bool:
 	return value == DOMAIN_OVERWORLD or value == DOMAIN_UNDERWORLD
 
 
-static func _deep_copy_semantic(value: Variant) -> Variant:
-	if value is Dictionary:
-		return value.duplicate(true)
-	if value is Array:
-		return value.duplicate(true)
-	return value
+static func _canonicalize_semantic(value: Variant) -> Variant:
+	match typeof(value):
+		TYPE_STRING_NAME:
+			return str(value)
+		TYPE_ARRAY:
+			var result: Array = []
+			for entry in value:
+				result.append(_canonicalize_semantic(entry))
+			return result
+		TYPE_DICTIONARY:
+			var result: Dictionary = {}
+			for raw_key in value.keys():
+				result[str(raw_key)] = _canonicalize_semantic(value[raw_key])
+			return result
+		_:
+			return value
 
 
 static func _append_identity_failures(
@@ -390,6 +400,7 @@ static func _append_semantic_failures(
 			var dictionary_value: Dictionary = value
 			if require_non_empty and dictionary_value.is_empty():
 				failures.append(path + " must not be an empty semantic container")
+			var canonical_keys: Dictionary = {}
 			for raw_key in dictionary_value.keys():
 				if not (raw_key is String or raw_key is StringName):
 					failures.append(path + " Dictionary keys must be semantic strings")
@@ -398,6 +409,10 @@ static func _append_semantic_failures(
 				if key.strip_edges().is_empty():
 					failures.append(path + " Dictionary keys must not be empty")
 					continue
+				if canonical_keys.has(key):
+					failures.append(path + " Dictionary keys collide after canonical string normalization: " + key)
+					continue
+				canonical_keys[key] = true
 				_append_semantic_failures(
 					failures,
 					dictionary_value[raw_key],
@@ -414,7 +429,7 @@ static func _success(extra: Dictionary = {}) -> Dictionary:
 		"diagnostics": [],
 	}
 	for key in extra.keys():
-		result[key] = _deep_copy_semantic(extra[key])
+		result[key] = _canonicalize_semantic(extra[key])
 	return result
 
 
@@ -424,5 +439,5 @@ static func _failure(failures: Array[String], extra: Dictionary = {}) -> Diction
 		"diagnostics": failures.duplicate(),
 	}
 	for key in extra.keys():
-		result[key] = _deep_copy_semantic(extra[key])
+		result[key] = _canonicalize_semantic(extra[key])
 	return result
