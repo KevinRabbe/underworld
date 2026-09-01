@@ -6,12 +6,16 @@ const GeneratorManifestMutationTests := preload(
 const RootIdentityPackageTests := preload(
 	"res://tests/generator_manifest/test_root_identity_package.gd"
 )
+const RootIdentityReviewerRepairTests := preload(
+	"res://tests/generator_manifest/test_root_identity_reviewer_repairs.gd"
+)
 
 
 func _init() -> void:
 	var failures: Array[String] = []
 	failures.append_array(GeneratorManifestMutationTests.run())
 	failures.append_array(RootIdentityPackageTests.run())
+	failures.append_array(RootIdentityReviewerRepairTests.run())
 	if failures.is_empty():
 		print("[GENERATOR MANIFEST VALIDATION] PASS")
 		print("  revision dictionary insertion order is canonical")
@@ -19,6 +23,7 @@ func _init() -> void:
 		print("  root identity package round-trips exact gm1/wid1 identity")
 		print("  structural validation is separated from runtime compatibility")
 		print("  exact historical WorldId and manifest identity never rewrite on incompatibility")
+		print("  reviewer repair seams preserve detached manifest authority and explicit historical support")
 		quit(0)
 		return
 
