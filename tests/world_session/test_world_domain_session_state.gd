@@ -220,22 +220,56 @@ static func run() -> Array[String]:
 		and not session.has_active_attempt()
 	)
 
-	var canonical_session := State.new()
-	var key_equivalence_probe: Dictionary = {}
-	key_equivalence_probe[StringName("site_id")] = StringName("underworld:site:from-string-name")
-	key_equivalence_probe["site_id"] = StringName("underworld:site:canonical")
-	var key_equivalence_keys: Array = key_equivalence_probe.keys()
+	var collision_session := State.new()
+	var collision_context: Dictionary = {}
+	collision_context[StringName("site_id")] = "underworld:site:string-name-key"
+	collision_context["site_id"] = "underworld:site:string-key"
+	var collision_key_types: Dictionary = {}
+	for raw_key in collision_context.keys():
+		collision_key_types[typeof(raw_key)] = true
 	_expect(
 		failures,
-		"Godot Dictionary key equality collapses equivalent StringName and String spellings before session validation",
-		key_equivalence_probe.size() == 1
-		and key_equivalence_keys.size() == 1
-		and typeof(key_equivalence_keys[0]) == TYPE_STRING
-		and key_equivalence_probe.has(StringName("site_id"))
-		and key_equivalence_probe.has("site_id")
-		and str(key_equivalence_probe.get("site_id", "")) == "underworld:site:canonical"
+		"Godot Dictionary preserves distinct StringName and String key Variants with equal spelling",
+		collision_context.size() == 2
+		and collision_key_types.has(TYPE_STRING_NAME)
+		and collision_key_types.has(TYPE_STRING)
 	)
-	var canonical_arrival: Dictionary = key_equivalence_probe.duplicate(true)
+	var collision_begin: Dictionary = collision_session.begin_transition({
+		"source_domain": State.DOMAIN_OVERWORLD,
+		"destination_domain": State.DOMAIN_UNDERWORLD,
+		"gateway_identity": "gateway:collision",
+		"arrival_locator": "underworld:site:collision",
+		"return_context": collision_context,
+	})
+	_expect(
+		failures,
+		"canonical Dictionary key collision rejects before state mutation and token allocation",
+		not bool(collision_begin.get("success", false))
+		and not bool(collision_begin.get("did_begin", true))
+		and int(collision_begin.get("token", -1)) == 0
+		and collision_session.active_domain() == State.DOMAIN_OVERWORLD
+		and collision_session.transition_phase() == State.PHASE_ACTIVE
+		and not collision_session.has_active_attempt()
+		and collision_session.current_attempt_token() == 0
+	)
+	var valid_after_collision: Dictionary = collision_session.begin_transition({
+		"source_domain": State.DOMAIN_OVERWORLD,
+		"destination_domain": State.DOMAIN_UNDERWORLD,
+		"gateway_identity": "gateway:after-collision",
+		"arrival_locator": "underworld:site:after-collision",
+	})
+	_expect(
+		failures,
+		"rejected canonical key collision does not consume the service-owned token sequence",
+		bool(valid_after_collision.get("success", false))
+		and bool(valid_after_collision.get("did_begin", false))
+		and int(valid_after_collision.get("token", 0)) == 1
+	)
+	collision_session.fail_transition(int(valid_after_collision.get("token", 0)))
+
+	var canonical_session := State.new()
+	var canonical_arrival: Dictionary = {}
+	canonical_arrival[StringName("site_id")] = StringName("underworld:site:canonical")
 	canonical_arrival["path"] = [StringName("entrance"), {StringName("segment"): StringName("a")}]
 	var canonical_return_context: Dictionary = {}
 	canonical_return_context[StringName("gateway_identity")] = StringName("gateway:canonical")
@@ -253,7 +287,7 @@ static func run() -> Array[String]:
 		failures,
 		"accepted StringName semantic input is recursively normalized into canonical String-owned attempt data",
 		bool(canonical_begin.get("success", false))
-		and canonical_token == 1
+		and canonical_token > 0
 		and typeof(canonical_attempt.get("gateway_identity")) == TYPE_STRING
 		and _is_canonical_semantic(canonical_attempt.get("arrival_locator", {}))
 		and _is_canonical_semantic(canonical_attempt.get("return_context", {}))
