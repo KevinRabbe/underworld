@@ -7,7 +7,6 @@ signal recovery_failed(reason: StringName, diagnostics: Array[String])
 const REASON_DAMAGE: StringName = &"damage"
 const REASON_FALL: StringName = &"fall"
 const BODY_CLEARANCE: float = 3.0
-const WATER_CLEARANCE: float = 1.5
 
 var _player
 var _world
@@ -21,8 +20,13 @@ func configure(player_node, surface_world, world_settings) -> Array[String]:
 	var failures: Array[String] = []
 	if player_node == null or not player_node.has_method("is_defeated") or not player_node.has_method("commit_respawn"):
 		failures.append("death recovery requires Player defeat/respawn authority")
-	if surface_world == null or not surface_world.has_method("find_spawn_xz") or not surface_world.has_method("get_height_at_world"):
-		failures.append("death recovery requires surface spawn/height authority")
+	if (
+		surface_world == null
+		or not surface_world.has_method("query_player_placement_xz")
+		or not surface_world.has_method("resolve_spawn_xz")
+		or not surface_world.has_method("generate_initial")
+	):
+		failures.append("death recovery requires safe surface placement/realization authority")
 	if world_settings == null:
 		failures.append("death recovery requires WorldSettings")
 	elif not _is_finite_number(world_settings.get("sea_level")) or not _is_finite_number(world_settings.get("chunk_size")):
@@ -61,10 +65,9 @@ func try_commit_recovery() -> Dictionary:
 	var target: Vector3 = resolved.get("target", Vector3.ZERO)
 
 	# Surface streaming remains the geometry realization authority. Generating the
-	# target chunk before teleport prevents a valid deterministic height from being
-	# committed ahead of its collision realization.
-	if _world.has_method("generate_initial"):
-		_world.call("generate_initial", Vector3(target.x, 0.0, target.z))
+	# target chunk before teleport prevents a valid deterministic placement from
+	# being committed ahead of its terrain collision realization.
+	_world.call("generate_initial", Vector3(target.x, 0.0, target.z))
 	if not bool(_player.call("commit_respawn", target)):
 		return _record_failure(["Player rejected validated death recovery target"])
 
@@ -89,46 +92,62 @@ func resolve_safe_target(current_position: Vector3) -> Dictionary:
 		return _failure(["death recovery current Player position must be finite"])
 
 	var primary_preferred := Vector3(current_position.x, 0.0, current_position.z)
+	var primary_variant: Variant = _world.call("query_player_placement_xz", primary_preferred)
+	if primary_variant is Dictionary:
+		var primary: Dictionary = primary_variant
+		if bool(primary.get("success", false)):
+			return _target_from_placement(primary, false)
+
+	var failures: Array[String] = []
+	_append_attempt_diagnostics(failures, "current-xz", primary_variant)
 	var fallback_preferred := Vector3(
 		float(_world_settings.get("chunk_size")) * 0.5,
 		0.0,
 		float(_world_settings.get("chunk_size")) * 0.5
 	)
-	var attempts: Array[Dictionary] = [
-		{"label": "current-xz", "preferred": primary_preferred, "fallback": false},
-		{"label": "initial-spawn", "preferred": fallback_preferred, "fallback": true},
-	]
-	var failures: Array[String] = []
-	for attempt in attempts:
-		var candidate_variant: Variant = _world.call("find_spawn_xz", attempt["preferred"])
-		if not candidate_variant is Vector3:
-			failures.append("%s surface search returned non-Vector3 target" % attempt["label"])
-			continue
-		var candidate: Vector3 = candidate_variant
-		if not _is_finite_number(candidate.x) or not _is_finite_number(candidate.z):
-			failures.append("%s surface search returned non-finite XZ" % attempt["label"])
-			continue
-		var height_variant: Variant = _world.call("get_height_at_world", candidate.x, candidate.z)
-		if not _is_finite_number(height_variant):
-			failures.append("%s surface height is non-finite" % attempt["label"])
-			continue
-		var height: float = float(height_variant)
-		var sea_level: float = float(_world_settings.get("sea_level"))
-		if height <= sea_level + WATER_CLEARANCE:
-			failures.append("%s surface target is not safely above water" % attempt["label"])
-			continue
-		var target := Vector3(candidate.x, height + BODY_CLEARANCE, candidate.z)
-		if not _is_finite_vector3(target):
-			failures.append("%s surface target is non-finite" % attempt["label"])
-			continue
-		return {
-			"success": true,
-			"target": target,
-			"fallback_used": bool(attempt["fallback"]),
-			"diagnostics": [],
-		}
+	var fallback_variant: Variant = _world.call("resolve_spawn_xz", fallback_preferred)
+	if fallback_variant is Dictionary:
+		var fallback: Dictionary = fallback_variant
+		if bool(fallback.get("success", false)):
+			return _target_from_placement(fallback, true)
+	_append_attempt_diagnostics(failures, "initial-spawn", fallback_variant)
 	failures.sort()
 	return _failure(failures)
+
+
+func _target_from_placement(placement: Dictionary, fallback_used: bool) -> Dictionary:
+	var candidate_variant: Variant = placement.get("xz", null)
+	var height_variant: Variant = placement.get("surface_height", null)
+	if not candidate_variant is Vector3:
+		return _failure(["death recovery safe placement returned non-Vector3 XZ"])
+	var candidate: Vector3 = candidate_variant
+	if (
+		not _is_finite_number(candidate.x)
+		or not _is_finite_number(candidate.z)
+		or not _is_finite_number(height_variant)
+	):
+		return _failure(["death recovery safe placement returned non-finite target data"])
+	var target := Vector3(candidate.x, float(height_variant) + BODY_CLEARANCE, candidate.z)
+	if not _is_finite_vector3(target):
+		return _failure(["death recovery safe placement produced non-finite target"])
+	return {
+		"success": true,
+		"target": target,
+		"fallback_used": fallback_used,
+		"diagnostics": [],
+	}
+
+
+func _append_attempt_diagnostics(failures: Array[String], label: String, result: Variant) -> void:
+	if not result is Dictionary:
+		failures.append("%s surface placement returned invalid result" % label)
+		return
+	var diagnostics_variant: Variant = result.get("diagnostics", [])
+	if not diagnostics_variant is Array or diagnostics_variant.is_empty():
+		failures.append("%s surface placement failed without diagnostics" % label)
+		return
+	for diagnostic in diagnostics_variant:
+		failures.append("%s: %s" % [label, str(diagnostic)])
 
 
 func is_recovery_pending() -> bool:
