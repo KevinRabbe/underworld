@@ -18,8 +18,15 @@ static func from_seed(world_seed: int):
 	return from_seed_with_contract(world_seed, current_contract_descriptor())
 
 
-static func from_seed_with_contract(world_seed: int, contract_descriptor: Dictionary):
-	if not runtime_compatibility_failures(contract_descriptor).is_empty():
+static func from_seed_with_contract(
+	world_seed: int,
+	contract_descriptor: Dictionary,
+	supported_contracts: Array = []
+):
+	if not runtime_compatibility_failures(
+		contract_descriptor,
+		supported_contracts
+	).is_empty():
 		return null
 	var canonical_source: String = "%s|seed|%d" % [
 		str(contract_descriptor["contract_tag"]),
@@ -129,7 +136,11 @@ static func validate_exact_for_seed(
 	if not failures.is_empty():
 		return failures
 
-	var expected = from_seed_with_contract(world_seed, contract_descriptor)
+	var expected = from_seed_with_contract(
+		world_seed,
+		contract_descriptor,
+		supported_contracts
+	)
 	if expected == null or expected.value() != exact_world_id:
 		failures.append("WorldId value does not match world_seed under captured contract")
 	return failures
