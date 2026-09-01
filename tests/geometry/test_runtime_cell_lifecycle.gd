@@ -3,6 +3,10 @@ extends RefCounted
 const Address := preload("res://worldgen/geometry/geometry_cell_address.gd")
 const Streamer := preload("res://worldgen/runtime/underworld_runtime_streamer.gd")
 const Result := preload("res://worldgen/runtime/runtime_cell_result.gd")
+const Controller := preload("res://worldgen/runtime/underworld_cave_runtime_controller.gd")
+const WorldId := preload("res://worldgen/identity/world_id.gd")
+const Manifest := preload("res://worldgen/versioning/generator_manifest.gd")
+const Map015Fixture := preload("res://worldgen/validation/map015_fixture.gd")
 
 
 class ManualExecutor extends RefCounted:
@@ -120,6 +124,7 @@ static func run() -> Array[String]:
 	var pre_retire_generation: int = retirement_record.generation
 	retirement_streamer.release_demand(retirement_address, "route", ["render"])
 	_expect(failures, "retiring queued render advances generation", retirement_record.generation > pre_retire_generation and retirement_record.demand_count("render") == 0)
+	_expect(failures, "generation-wide retirement invalidates cached voxel readiness", not bool(retirement_record.readiness.get("voxel_geometry", false)))
 	var stale_retired_render := Result.new(retirement_address, pre_retire_generation, "render", "source:retire", "provenance:retire", null, true, [], "world:retire", "manifest:retire")
 	_expect(failures, "retired generation cannot resurrect after renewal", not retirement_streamer.accept_result(stale_retired_render))
 
@@ -157,7 +162,144 @@ static func run() -> Array[String]:
 	_expect(failures, "re-entry reproduces canonical identity", second.source_fingerprint == first.source_fingerprint and second.provenance_fingerprint == first.provenance_fingerprint)
 	_expect(failures, "re-entry uses a new opaque generation token", second.generation > first_generation)
 	_expect(failures, "old delayed result cannot mutate new incarnation", not incarnations.accept_result(delayed) and not bool(second.readiness.get("definition", false)))
+
+	_test_real_executor_hysteresis_and_internal_lifetime(failures)
 	return failures
+
+
+static func _test_real_executor_hysteresis_and_internal_lifetime(failures: Array[String]) -> void:
+	var expected_world_id: String = WorldId.from_seed(1).value()
+	var expected_manifest_id: String = Manifest.foundation_default().manifest_id()
+	var controller := Controller.new()
+	controller.configure(expected_world_id, expected_manifest_id)
+	var bootstrap_failures: Array[String] = controller.bootstrap_fixture(
+		1,
+		Map015Fixture.REGION,
+		Map015Fixture.ENTRANCE_ID
+	)
+	_expect(failures, "internal runtime bootstrap succeeds for lifetime proof", bootstrap_failures.is_empty())
+	if not bootstrap_failures.is_empty():
+		controller.free()
+		return
+	_expect(failures, "internal runtime bootstrap owns real executor", controller._runtime_executor != null and controller.streamer.executor == controller._runtime_executor)
+
+	var handoff = controller.entrance_plans.get(Map015Fixture.ENTRANCE_ID, null)
+	_expect(failures, "internal runtime bootstrap exposes handoff for executor probe", handoff != null and not handoff.cell_addresses.is_empty())
+	if handoff == null or handoff.cell_addresses.is_empty():
+		controller.free()
+		return
+	var probe_address := Address.new(handoff.cell_addresses[0].coordinate + Vector3i(3, 0, 0))
+	var definition_stage = controller._definition_service.cell_definition(probe_address)
+	_expect(failures, "real executor probe resolves canonical cell definition", definition_stage.success)
+	if not definition_stage.success:
+		controller.free()
+		return
+	var definition: Dictionary = definition_stage.data
+	var probe_record = controller.streamer.set_demand(
+		probe_address,
+		"hysteresis-probe",
+		["definition", "fragment_plan", "voxel_geometry", "render", "collision"],
+		str(definition["source_fingerprint"]),
+		str(definition["provenance_fingerprint"])
+	)
+	var probe_position: Vector3 = Vector3(probe_address.coordinate) * controller.streamer.cell_size + controller.streamer.cell_size * 0.5
+	controller._runtime_executor.set_observer_position(probe_position)
+	for _step in range(12):
+		controller._runtime_executor.pump(1, 16)
+		controller._runtime_executor.prune_runtime_cache()
+		if (
+			bool(probe_record.readiness.get("render", false))
+			and bool(probe_record.readiness.get("collision", false))
+		):
+			break
+	var probe_key: String = probe_address.canonical_text()
+	_expect(
+		failures,
+		"real executor realizes probe render/collision before hysteresis retirement",
+		bool(probe_record.readiness.get("voxel_geometry", false))
+		and bool(probe_record.readiness.get("render", false))
+		and bool(probe_record.readiness.get("collision", false))
+		and controller.render_nodes.has(probe_key)
+		and controller.collision_nodes.has(probe_key)
+	)
+
+	var generation_before_partial_retire: int = probe_record.generation
+	controller.streamer.set_demand(
+		probe_address,
+		"hysteresis-probe",
+		["definition", "fragment_plan", "voxel_geometry"],
+		str(definition["source_fingerprint"]),
+		str(definition["provenance_fingerprint"])
+	)
+	_expect(
+		failures,
+		"partial render/collision retirement advances generation and invalidates mesh dependency",
+		probe_record.generation > generation_before_partial_retire
+		and not bool(probe_record.readiness.get("voxel_geometry", false))
+		and not bool(probe_record.readiness.get("render", false))
+		and not bool(probe_record.readiness.get("collision", false))
+		and not controller.render_nodes.has(probe_key)
+		and not controller.collision_nodes.has(probe_key)
+	)
+
+	controller.streamer.set_demand(
+		probe_address,
+		"hysteresis-probe",
+		["definition", "fragment_plan", "voxel_geometry", "render", "collision"],
+		str(definition["source_fingerprint"]),
+		str(definition["provenance_fingerprint"])
+	)
+	for _step in range(12):
+		controller._runtime_executor.pump(1, 16)
+		controller._runtime_executor.prune_runtime_cache()
+		if (
+			bool(probe_record.readiness.get("render", false))
+			and bool(probe_record.readiness.get("collision", false))
+		):
+			break
+	_expect(
+		failures,
+		"real executor rebuilds voxel artifact and reacquires render/collision",
+		bool(probe_record.readiness.get("voxel_geometry", false))
+		and bool(probe_record.readiness.get("render", false))
+		and bool(probe_record.readiness.get("collision", false))
+		and controller.render_nodes.has(probe_key)
+		and controller.collision_nodes.has(probe_key)
+		and controller.streamer.stale_result_count == 0
+	)
+
+	var old_streamer_ref: WeakRef = weakref(controller.streamer)
+	var old_executor_ref: WeakRef = weakref(controller._runtime_executor)
+	var old_definition_ref: WeakRef = weakref(controller._definition_service)
+	controller.configure(expected_world_id, expected_manifest_id)
+	_expect(
+		failures,
+		"controller reconfigure releases internally bootstrapped runtime graph",
+		old_streamer_ref.get_ref() == null
+		and old_executor_ref.get_ref() == null
+		and old_definition_ref.get_ref() == null
+	)
+
+	bootstrap_failures = controller.bootstrap_fixture(
+		1,
+		Map015Fixture.REGION,
+		Map015Fixture.ENTRANCE_ID
+	)
+	_expect(failures, "second internal runtime bootstrap succeeds for destruction proof", bootstrap_failures.is_empty())
+	if not bootstrap_failures.is_empty():
+		controller.free()
+		return
+	var destroy_streamer_ref: WeakRef = weakref(controller.streamer)
+	var destroy_executor_ref: WeakRef = weakref(controller._runtime_executor)
+	var destroy_definition_ref: WeakRef = weakref(controller._definition_service)
+	controller.free()
+	_expect(
+		failures,
+		"controller destruction releases internally bootstrapped runtime graph",
+		destroy_streamer_ref.get_ref() == null
+		and destroy_executor_ref.get_ref() == null
+		and destroy_definition_ref.get_ref() == null
+	)
 
 
 static func _request_count(requests: Array, tier: String) -> int:
