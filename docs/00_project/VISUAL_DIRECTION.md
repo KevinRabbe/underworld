@@ -1,10 +1,12 @@
 # Underworld Visual Direction
 
-Status: **LOCKED visual family and production philosophy; production details remain adjustable**
+Status: **LOCKED production philosophy and current vertical-slice direction; future biome identities intentionally open**
 
 Underworld targets a stylized dark-fantasy 3D survival presentation that looks substantially richer than the raw geometry cost would suggest. The project deliberately prioritizes strong silhouettes, reusable geometry, materials, shaders, lighting, atmosphere and controlled VFX over brute-force geometric detail.
 
 Prototype geometry remains valid while systems are changing. Final architecture/layout/interaction can be stable before final art is produced.
+
+This document deliberately distinguishes **project-wide production rules** from **current-biome art direction**. Current biome rules are not a promise that future biomes must look, sound, behave or play the same way.
 
 ## 1. Visual thesis
 
@@ -14,11 +16,54 @@ Underworld should read as:
 - higher detail on player, important creatures, weapons, armor and bosses;
 - atmosphere, fog, lighting and VFX carrying a large share of perceived quality;
 - modular/reusable asset families rather than one-off assets everywhere;
-- a grounded Overworld contrasted with stronger visual identities in the Underworld.
+- a grounded Overworld contrasted with stronger and potentially radically different identities in the Underworld.
 
 The target is not photorealism, voxel/block rendering, retro PS1 rendering or heavily cartoon-proportioned fantasy.
 
-## 2. Perceptual complexity over invisible complexity
+## 2. Hard production constraint — solo developer + AI assistance
+
+The project is built by one developer with substantial AI assistance. Art/world direction must therefore be selected partly by **value per development time**.
+
+Code-scalable content is high value:
+- procedural terrain;
+- procedural caves;
+- vegetation distribution;
+- resource distribution;
+- weather;
+- reusable encounter/spawn systems;
+- reusable materials/shaders;
+- modular asset families;
+- deterministic variation.
+
+Authored constructed-world content is expensive:
+- giant bespoke settlements;
+- colossal monuments as a recurring theme requirement;
+- thousands of manually placed building pieces;
+- enormous one-off ruins;
+- huge unique prop catalogs;
+- environment spectacle that requires months of handcrafted work but adds little gameplay value.
+
+Therefore, the world theme must **not depend on large quantities of complex authored architecture** to work visually.
+
+Wild-spawned constructed content should usually remain relatively simple, sparse, modular and reusable: small houses, camps, workshops, compact ruins, entrances, portal sites, towers or similarly bounded structures when they add clear value.
+
+This constraint applies to developer-authored world content, **not to player creativity**. The existing building system may support far more complex player-created settlements and megabuilds.
+
+## 3. Reference-image policy
+
+Valheim and similar reference images may be used to specify:
+- building freedom;
+- settlement complexity achievable by players;
+- atmosphere/lighting quality;
+- material readability;
+- vegetation density;
+- the visual quality ceiling obtainable from economical geometry.
+
+They do **not** define the game's Nordic theme, architecture, culture or asset style.
+
+The target is the **possibility of creating complex structures**, not copying the structures shown in the references.
+
+## 4. Perceptual complexity over invisible complexity
 
 Spend art and runtime complexity on cues the player actually perceives.
 
@@ -43,7 +88,7 @@ Model geometry when it materially affects:
 
 Prefer shaders/materials/decals/masks/VFX for detail that does not need unique geometry.
 
-## 3. Readability before raw detail
+## 5. Readability before raw detail
 
 Preferred hierarchy:
 
@@ -57,7 +102,7 @@ A rock, tree, building, weapon or creature should remain recognizable at gamepla
 
 Shaders cannot rescue a fundamentally bad silhouette.
 
-## 4. Detail follows importance and distance
+## 6. Detail follows importance and distance
 
 Indicative relative detail priority:
 
@@ -74,7 +119,7 @@ Indicative relative detail priority:
 
 These are priorities, not final polygon budgets.
 
-## 5. Presentation is replaceable
+## 7. Presentation is replaceable
 
 Changing a mesh, shader, material, texture, VFX package, LOD, color grade or rendering technique must not silently change:
 - world seed identity;
@@ -86,59 +131,114 @@ Changing a mesh, shader, material, texture, VFX package, LOD, color grade or ren
 
 Presentation consumes authoritative state; it does not define it.
 
-## 6. Overworld direction
+## 8. Current vertical-slice world scope — HARD GATE
 
-The Overworld should feel familiar, grounded and readable so the Underworld creates meaningful contrast.
+Until the core game is genuinely playable, art/world design is scoped to exactly:
+- **one Overworld biome**;
+- **one biome in the first accessible Underworld layer**;
+- the transition between them.
 
-Direction:
-- natural/desaturated greens;
-- gray/brown stone and soil;
-- temperate/coniferous forest families where appropriate;
-- daylight/overcast lighting that can be beautiful rather than permanently dramatic;
-- haze/fog for depth;
-- timber, rough stone and iron for grounded structures;
-- stronger color reserved for biome accents, unusual resources, magic/corruption and special events.
+Do not spend design or implementation time defining additional Overworld biomes, deeper Underworld biomes/layers or their content before this two-biome foundation is playable and validated.
 
-The Overworld should not be uniformly bleak.
+The long-term game may contain many additional biomes in both domains, with the Underworld intended to be the larger long-term world space. Their identities remain intentionally undefined.
 
-## 7. Underworld direction
+## 9. Current Overworld direction — grounded Bronze-Age fantasy
 
-The Underworld is a separate procedural world domain and may use more aggressive atmosphere, scale and regional identity.
+The current Overworld baseline is a **grounded Bronze-Age-fantasy** visual language rather than Nordic/medieval fantasy.
 
-Possible visual families include:
-- dry limestone/stone caverns;
-- wet caves and underground water;
-- fungal/bioluminescent regions;
-- crystal/mineral caverns;
-- collapsed mines;
-- buried ruins;
-- root-infested regions;
-- volcanic/deep-hot regions;
-- enormous abyssal chambers;
-- unusual corrupted/magical/artificial spaces.
+Core material cues:
+- wood;
+- rough stone;
+- bronze and other practical metal use;
+- cloth;
+- leather/hide where useful;
+- handmade, imperfect construction and tools.
 
-These examples are not a locked biome list.
+This is a fantasy baseline, not a requirement for strict historical Bronze-Age reconstruction.
 
-## 8. Lighting and color language
+The Overworld should feel understandable, practical and grounded. Player habitation is especially important because the player may establish a home/base almost anywhere normal building rules permit. The authored world does not need large cities to provide its sense of habitation.
 
-Lighting is a major quality multiplier.
+Avoid making ceramics a defining material cue; rough stone is preferred for the current surface identity.
 
-Possible recurring language:
+## 10. Current first Underworld biome — "This biome hates you"
 
-| Source / meaning | Direction |
-| --- | --- |
-| neutral cave ambient | cool gray / blue-gray |
-| fire / settlement | warm orange / yellow |
-| fungus / spores | cyan / green family |
-| crystals / unusual minerals | blue / violet family |
-| corruption / danger | restrained red / magenta |
-| ancient sacred/artificial | pale gold / warm white |
+The first accessible Underworld biome is currently conceived as a **Hell Entrance / outer hostile layer**.
 
-Exact values remain adjustable.
+Its core identity is not simply visual hell imagery. Its design sentence is:
 
-Color should support navigation/readability rather than producing constant MMO-style visual noise.
+> **This biome hates you.**
 
-## 9. Environment geometry
+The player has crossed into a place whose inhabitants actively reject their presence.
+
+Combat/environmental implications:
+- many enemies are immediately aggressive;
+- threats seek out or pressure the player rather than behaving mainly as passive wildlife;
+- danger comes heavily from speed, numbers, positioning and sustained pressure;
+- common enemies should generally be relatively low-HP rather than health sponges;
+- clean successful attacks should kill ordinary enemies reasonably quickly;
+- packs and simultaneous threats create difficulty;
+- hell-hound/hell-dog-like creatures and other low-level demon/Underworld/Hades-inspired creatures are suitable archetypes;
+- stronger creatures in this layer should preferably be dangerous because of attacks, mobility or behavior rather than inflated HP.
+
+This layer may be visually infernal if that serves the final art pass, but the behavioral identity above is more important than simply making everything red.
+
+## 11. Underworld is not synonymous with Hell — HARD WORLD RULE
+
+The first Underworld biome being a Hell Entrance does **not** define the entire Underworld.
+
+"Underworld" describes the larger world domain, not one mandatory aesthetic.
+
+Future Underworld biomes may be peaceful, eerie, beautiful, wet, dry, fungal, mineral, ancient, cold, artificial, lush, empty, violent, bright, dark or something not yet conceived.
+
+Do not extrapolate the first biome's hell imagery, aggression, enemy density, palette or ecology into a universal Underworld rule.
+
+## 12. Future-biome freedom — HARD RULE
+
+Future biomes are explicitly allowed to **break every biome-specific rule established for the current two-biome vertical slice**.
+
+A future biome does not need to preserve the current:
+- palette;
+- lighting model;
+- climate;
+- vegetation density;
+- enemy temperament;
+- enemy HP philosophy;
+- environmental mood;
+- material emphasis;
+- traversal rhythm;
+- settlement frequency;
+- visual symbolism;
+- Hell-Entrance identity;
+- current Overworld-biome identity.
+
+Biome diversity should be allowed to become extreme when future development reaches those biomes.
+
+What future biomes may **not** casually break are project-wide technical/production contracts such as deterministic world identity, persistence semantics, core readability, performance/scalability requirements and the production-efficiency rule above.
+
+In short: **current biome rules are local, not universal.**
+
+## 13. Ancient Technology — long-term signature layer, NOT current implementation scope
+
+The current leading long-term world contrast is:
+
+- **Overworld:** grounded Bronze-Age fantasy craftsmanship;
+- **Underworld progression:** eventual discovery/unlocking of a visually separate lost Ancient Technology layer.
+
+Ancient Technology should feel clearly distinct from normal surface craftsmanship: more precise, strange and difficult to reproduce, while avoiding generic neon/holographic science-fiction presentation.
+
+A signature late-game concept is the **Ancient Stabilization Technology** network:
+- a deep exotic material is unusable outside active stabilization;
+- a central ancient core/generator creates the stabilizing state;
+- portals transmit that state across distance;
+- local anchors/field projectors extend stabilization where needed;
+- mining, storage, processing, transport and construction with that material must remain inside the active network;
+- the material enables exceptional structural possibilities without replacing ordinary wood/stone/metal.
+
+This is **late-game direction only**. Do not implement or prototype the stabilization network, its deep material, or broader Ancient Technology progression in the current playable milestone.
+
+Exact device names, power values, visuals, variants, lore and late-game biome context remain open.
+
+## 14. Environment geometry
 
 Favor:
 - large readable planes/forms;
@@ -151,7 +251,7 @@ Favor:
 
 Procedural terrain/cave geometry may stay economical if downstream presentation can create richness without rewriting world truth.
 
-## 10. Vegetation strategy
+## 15. Vegetation strategy
 
 Vegetation is a primary example of perceptual optimization.
 
@@ -175,7 +275,7 @@ A manageable tree archetype library should be multiplied by procedural/presentat
 
 Large-scale forest/clearing distribution must be proven before expensive vegetation content production.
 
-## 11. Tree LOD direction
+## 16. Tree LOD direction
 
 Indicative representation tiers:
 
@@ -199,9 +299,9 @@ Exact distances depend on profiling.
 
 The same logical vegetation instance may use different representations without changing world identity.
 
-## 12. Modular architecture/building presentation
+## 17. Modular architecture/building presentation
 
-Building geometry should be designed as reusable modular kits aligned with the logical building system.
+Building geometry should be designed as reusable modular kits aligned with the already-decided logical building system.
 
 Families may share:
 - walls/half walls;
@@ -219,17 +319,15 @@ The logical grid/socket contract defines compatibility. Art may extend beyond lo
 
 A single gameplay-compatible wall geometry may support multiple later visual/material treatments without requiring new placement logic.
 
-## 13. Shape variation before texture explosion
+Do not use the current art-direction discussion to redesign the building-piece grammar; that system is already owned elsewhere.
 
-For early building/environment content, prioritize new silhouettes/shapes before dozens of material recolors.
+## 18. Shape variation before texture explosion
 
-Example:
-- several useful beam lengths and roof joins create new architecture;
-- six slightly different brown wall textures do not create equivalent gameplay possibility.
+For early building/environment content, prioritize useful silhouettes/shapes before dozens of material recolors.
 
 Visual/style families can multiply later behind stable geometry/content contracts.
 
-## 14. Materials and texturing
+## 19. Materials and texturing
 
 Default direction: stylized PBR.
 
@@ -258,7 +356,7 @@ base rock
 + decals
 ```
 
-## 15. Characters
+## 20. Characters
 
 Characters may use substantially more detail than generic environment assets.
 
@@ -275,7 +373,7 @@ Long-term direction:
 
 The target remains stylized enough for a small production pipeline.
 
-## 16. Creatures and bosses
+## 21. Creatures and bosses
 
 Common creatures can remain mid-detail if silhouette and attack poses are strong.
 
@@ -283,7 +381,9 @@ Bosses/important enemies may receive hero-level attention.
 
 Animation timing, silhouette and telegraph readability take priority over ornament.
 
-## 17. Weapons, armor and tools
+For the first Underworld biome specifically, avoid using HP inflation as the default way to communicate danger.
+
+## 22. Weapons, armor and tools
 
 Equipped assets deserve more detail because they are close to the camera.
 
@@ -294,7 +394,7 @@ Direction:
 - modular attachment/equipment compatibility;
 - normal/trim/material detail instead of extreme mesh density.
 
-## 18. Animation
+## 23. Animation
 
 Animation should prioritize readable intent and weight.
 
@@ -306,37 +406,26 @@ anticipation -> action/contact -> recovery
 
 Gameplay timing remains authoritative in gameplay contracts; presentation satisfies semantic action roles.
 
-## 19. VFX
+## 24. VFX
 
 VFX should answer:
 - what happened;
 - where;
 - how important it was.
 
-Useful restrained families include impacts, trails, dust/debris, fire/smoke, cave mist, water effects, spores and unusual mineral/magic effects.
+Useful restrained families include impacts, trails, dust/debris, fire/smoke, cave mist, water effects and biome-specific effects when later justified.
 
-## 20. UI
+Do not pre-commit future biomes to the current effect palette.
 
-UI direction remains minimal dark medieval/survival rather than a permanently crowded MMO HUD.
+## 25. UI
 
-Use reusable theme/9-slice/skin architecture and shared layout primitives. Information-dense screens such as inventory, crafting and especially a future large building catalog may use stronger hierarchy/search/filter structures.
+UI should remain reusable and information-efficient rather than a permanently crowded MMO HUD.
 
-## 21. Alternate visual treatments
+Use reusable theme/9-slice/skin architecture and shared layout primitives. Information-dense screens such as inventory, crafting and a future large building catalog may use stronger hierarchy/search/filter structures.
 
-Shaders/post-process may substantially alter perceived style without changing logical geometry.
+Final cultural ornamentation of the UI should follow the game's later finalized visual identity rather than forcing a Nordic/medieval skin now.
 
-Possible future treatments include:
-- cel/banded lighting;
-- quantization/posterization;
-- pixelation;
-- dithering;
-- stylized normals;
-- outlines;
-- alternate filtering/color grading.
-
-True silhouette changes still require alternate geometry/renderer representation.
-
-## 22. Prototype-art policy
+## 26. Prototype-art policy
 
 Cheap primitives are acceptable when validating:
 - world distribution;
@@ -352,7 +441,7 @@ Do not replace a useful placeholder merely because it looks unfinished while its
 
 Once a system is stable enough for meaningful visual evaluation, improve presentation behind the same logical contracts.
 
-## 23. Production-efficiency rules
+## 27. Production-efficiency rules
 
 Prefer:
 - reusable modular kits;
@@ -362,19 +451,29 @@ Prefer:
 - procedural/per-instance variation;
 - shaders that create perceived richness;
 - LOD/instancing/batching;
-- hero detail only where attention/camera distance justifies it.
+- hero detail only where attention/camera distance justifies it;
+- procedural natural environments over large amounts of hand-placed authored spectacle.
 
 Avoid:
 - unique hero-level asset cost for generic clutter;
+- themes that require colossal handcrafted structures to communicate their identity;
+- giant bespoke settlements as routine world content;
 - gameplay identity tied to presentation paths;
 - final-art production before scale/contracts are stable;
 - geometry detail that provides little visible benefit;
 - art decisions that force deterministic world-generation rewrites.
 
-## 24. Intentionally adjustable decisions
+## 28. Intentionally adjustable decisions
 
 Not locked:
-- exact palettes;
+- exact palette of the first Overworld biome;
+- exact visual treatment of the Hell Entrance biome;
+- final architecture ornament/style vocabulary;
+- final clothing motifs;
+- exact Bronze-Age cultural inspiration;
+- exact Ancient Technology visual language;
+- exact palettes of future biomes;
+- future biome identities;
 - polygon budgets;
 - texture resolutions;
 - asset counts per biome;
@@ -386,17 +485,19 @@ Not locked:
 - final character topology;
 - animation production method.
 
-These require tests and profiling.
+These require tests, profiling or later design work.
 
 ## Locked direction summary
 
-1. Stylized dark-fantasy 3D remains the target.
-2. Environment geometry remains comparatively economical with strong silhouettes.
-3. Perceived richness should come heavily from materials, shaders, lighting, atmosphere and VFX.
-4. Trees/vegetation use reusable archetypes, foliage clusters, shader variation and LOD rather than brute-force leaf geometry.
-5. Player/hero assets may use substantially more detail than generic environment assets.
-6. Modular geometry/content is preferred over one-off asset production.
-7. Shape vocabulary is generally more valuable early than cosmetic duplication.
-8. Prototype geometry remains valid until replacing it materially improves evaluation.
-9. Presentation never becomes authoritative gameplay/world/persistence identity.
-10. Final technical budgets remain profile-driven.
+1. Stylized dark-fantasy 3D remains the broad rendering target.
+2. Perceived richness should come heavily from silhouettes, materials, shaders, lighting, atmosphere and VFX rather than brute-force asset complexity.
+3. Solo-developer production economics are a hard art-direction constraint; avoid themes that require huge amounts of bespoke constructed-world content.
+4. Valheim references specify building possibility/quality, not Nordic identity.
+5. Current playable art scope is one Overworld biome plus one first-layer Underworld biome only.
+6. Current Overworld baseline is grounded Bronze-Age fantasy using wood, rough stone, bronze/metal, cloth and practical handmade materials.
+7. The first Underworld biome's core identity is **"This biome hates you"**: aggressive pressure, many relatively fragile enemies, no default HP-sponging.
+8. The Underworld as a whole is **not Hell**; later biomes can have radically different identities.
+9. Future biomes may intentionally break every current biome-specific visual/combat/ecology rule.
+10. Ancient Technology is a long-term Underworld progression layer; the stabilization network/deep material are late-game direction and are not current implementation scope.
+11. Presentation never becomes authoritative gameplay/world/persistence identity.
+12. Final technical budgets remain profile-driven.
