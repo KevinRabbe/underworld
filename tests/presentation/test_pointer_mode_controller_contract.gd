@@ -28,6 +28,27 @@ static func _test_default_and_baseline_contract(controller: Node, failures: Arra
 		failures.append("Pointer authority accepted an arbitrary non-semantic route baseline")
 	if int(controller.call("route_baseline")) != Input.MOUSE_MODE_VISIBLE:
 		failures.append("Rejected pointer baseline changed canonical route baseline")
+
+	var forbidden_valid_modes: Array[int] = [
+		Input.MOUSE_MODE_HIDDEN,
+		Input.MOUSE_MODE_CONFINED,
+		Input.MOUSE_MODE_CONFINED_HIDDEN,
+	]
+	for forbidden_mode in forbidden_valid_modes:
+		var baseline_before := int(controller.call("route_baseline"))
+		var effective_before := int(controller.call("effective_mode"))
+		var request_count_before := int(controller.call("visible_request_count"))
+		var observed_mode_before := Input.mouse_mode
+		if bool(controller.call("set_route_baseline", forbidden_mode)):
+			failures.append("Pointer authority accepted valid-but-forbidden Godot mouse mode: %d" % forbidden_mode)
+		if (
+			int(controller.call("route_baseline")) != baseline_before
+			or int(controller.call("effective_mode")) != effective_before
+			or int(controller.call("visible_request_count")) != request_count_before
+			or Input.mouse_mode != observed_mode_before
+		):
+			failures.append("Rejected valid-but-forbidden mouse mode mutated pointer authority state: %d" % forbidden_mode)
+
 	if not bool(controller.call("set_route_baseline", Input.MOUSE_MODE_CAPTURED)):
 		failures.append("Pointer authority rejected semantic CAPTURED route baseline")
 	if int(controller.call("effective_mode")) != Input.MOUSE_MODE_CAPTURED:
@@ -43,6 +64,16 @@ static func _test_nested_request_contract(controller: Node, failures: Array[Stri
 		failures.append("Nested visible requests were not retained independently")
 	if int(controller.call("effective_mode")) != Input.MOUSE_MODE_VISIBLE or Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
 		failures.append("Any valid visible request must force semantic and observable VISIBLE pointer mode")
+
+	var never_issued_token := maxi(first_token, second_token) + 1000
+	if bool(controller.call("release_visible", never_issued_token)):
+		failures.append("Positive never-issued visible-request token was not rejected harmlessly")
+	if (
+		int(controller.call("visible_request_count")) != 2
+		or int(controller.call("effective_mode")) != Input.MOUSE_MODE_VISIBLE
+		or Input.mouse_mode != Input.MOUSE_MODE_VISIBLE
+	):
+		failures.append("Positive never-issued token mutated active visible ownership")
 
 	if not bool(controller.call("release_visible", second_token)):
 		failures.append("Out-of-order release rejected a valid visible-request token")
