@@ -111,6 +111,13 @@ static func _test_foundation_theme_contract(theme: Theme, failures: Array[String
 		or ITEM_SLOT_ICON_SAFE_RECT.end.y > ITEM_SLOT_PROTOTYPE_SIZE.y:
 		failures.append("ItemSlot 40x40 icon safe rect must remain inside the fixed 64x64 frame")
 
+	if not theme.is_type_variation(&"ItemSlotInputSurface", &"Button"):
+		failures.append("ItemSlotInputSurface must be a semantic Button Theme variation")
+	for state in [&"normal", &"hover", &"focus", &"pressed", &"disabled"]:
+		var input_style := theme.get_stylebox(state, &"ItemSlotInputSurface")
+		if input_style == null or not input_style is StyleBoxEmpty:
+			failures.append("ItemSlotInputSurface/%s must suppress native Button chrome with StyleBoxEmpty" % state)
+
 	if not theme.is_type_variation(&"KeyPrompt", &"PanelContainer"):
 		failures.append("KeyPrompt must expose a semantic PanelContainer Theme role")
 	var keycap_style := theme.get_stylebox(&"panel", &"KeyPrompt")
@@ -130,6 +137,19 @@ static func _test_foundation_theme_contract(theme: Theme, failures: Array[String
 		if background == null or not background is StyleBoxFlat or fill == null or not fill is StyleBoxFlat:
 			failures.append("%s must use procedural StyleBoxFlat track/fill styles rather than skin textures" % variation)
 
+	if not theme.is_type_variation(&"OverlayShade", &"Panel"):
+		failures.append("OverlayShade must be a semantic Panel Theme variation")
+	elif not theme.get_stylebox(&"panel", &"OverlayShade") is StyleBoxFlat:
+		failures.append("OverlayShade must remain procedural StyleBoxFlat presentation")
+	if not theme.is_type_variation(&"OverlayStack", &"VBoxContainer"):
+		failures.append("OverlayStack must be a semantic VBoxContainer Theme variation")
+	elif theme.get_constant(&"separation", &"OverlayStack") != 16:
+		failures.append("OverlayStack must preserve the 16px reference content separation")
+
+	if theme.get_font_size(&"font_size", &"BodyLabel") != 18:
+		failures.append("BodyLabel must resolve the 18px reference typography")
+	if theme.get_font_size(&"font_size", &"CompactLabel") != 14:
+		failures.append("CompactLabel must resolve the 14px reference typography")
 	if theme.get_font_size(&"font_size", &"ItemQuantityLabel") != 14:
 		failures.append("ItemQuantityLabel must resolve the 14px reference typography")
 	if theme.get_font_size(&"font_size", &"ItemIndexLabel") != 12:

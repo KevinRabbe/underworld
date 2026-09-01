@@ -1,4 +1,4 @@
-[gd_resource type="Theme" load_steps=19 format=3]
+[gd_resource type="Theme" load_steps=21 format=3]
 
 [ext_resource type="StyleBoxTexture" path="res://presentation/ui/theme/styles/panel_frame.tres" id="1_panel"]
 [ext_resource type="StyleBoxTexture" path="res://presentation/ui/theme/styles/button_normal.tres" id="2_normal"]
@@ -43,6 +43,11 @@ corner_radius_top_right = 3
 corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_overlay_shade"]
+bg_color = Color(0.01, 0.01, 0.01, 0.72)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_input_surface"]
+
 [resource]
 default_font_size = 20
 Button/colors/font_color = Color(0.91, 0.86, 0.76, 1)
@@ -57,6 +62,10 @@ Button/styles/focus = ExtResource("4_focus")
 Button/styles/pressed = ExtResource("5_pressed")
 Button/styles/disabled = ExtResource("6_disabled")
 Label/colors/font_color = Color(0.88, 0.84, 0.76, 1)
+BodyLabel/base_type = &"Label"
+BodyLabel/font_sizes/font_size = 18
+CompactLabel/base_type = &"Label"
+CompactLabel/font_sizes/font_size = 14
 ContentPanel/base_type = &"PanelContainer"
 ContentPanel/styles/panel = ExtResource("1_panel")
 DialogPanel/base_type = &"PanelContainer"
@@ -81,6 +90,12 @@ ItemSlotFocusOverlay/base_type = &"Panel"
 ItemSlotFocusOverlay/styles/panel = ExtResource("11_slot_focus")
 ItemSlotHoverOverlay/base_type = &"Panel"
 ItemSlotHoverOverlay/styles/panel = ExtResource("12_slot_hover")
+ItemSlotInputSurface/base_type = &"Button"
+ItemSlotInputSurface/styles/normal = SubResource("StyleBoxEmpty_input_surface")
+ItemSlotInputSurface/styles/hover = SubResource("StyleBoxEmpty_input_surface")
+ItemSlotInputSurface/styles/focus = SubResource("StyleBoxEmpty_input_surface")
+ItemSlotInputSurface/styles/pressed = SubResource("StyleBoxEmpty_input_surface")
+ItemSlotInputSurface/styles/disabled = SubResource("StyleBoxEmpty_input_surface")
 ItemSlotInvalid/base_type = &"Panel"
 ItemSlotInvalid/styles/panel = ExtResource("9_slot_invalid")
 ItemSlotSelectedOverlay/base_type = &"Panel"
@@ -105,6 +120,10 @@ OverlaySafeMargin/constants/margin_left = 48
 OverlaySafeMargin/constants/margin_top = 48
 OverlaySafeMargin/constants/margin_right = 48
 OverlaySafeMargin/constants/margin_bottom = 48
+OverlayShade/base_type = &"Panel"
+OverlayShade/styles/panel = SubResource("StyleBoxFlat_overlay_shade")
+OverlayStack/base_type = &"VBoxContainer"
+OverlayStack/constants/separation = 16
 ScreenBackground/base_type = &"Panel"
 ScreenBackground/styles/panel = SubResource("StyleBoxFlat_screen_background")
 SectionDivider/base_type = &"HSeparator"
