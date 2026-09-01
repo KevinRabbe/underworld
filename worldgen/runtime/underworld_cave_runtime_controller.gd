@@ -39,6 +39,7 @@ var last_bootstrap_surface_position: Vector3 = Vector3.ZERO
 var _player_in_realized_cave: bool = false
 var _definition_service
 var _runtime_executor
+var _definition_context_identity_valid: bool = false
 # Runtime-only suppression for currently relevant failed binding attempts. It is
 # pruned against the streamer's bounded record table every update.
 var _observer_binding_failures: Dictionary = {}
@@ -57,6 +58,7 @@ func configure(
 	_observer_binding_failures.clear()
 	_definition_service = null
 	_runtime_executor = null
+	_definition_context_identity_valid = false
 	world_id = world_id_value
 	generator_manifest_id = manifest_id_value
 	player = player_value
@@ -81,14 +83,23 @@ func bootstrap_fixture(world_seed: int, region: Vector2i, entrance_id: String) -
 func bootstrap_generated_entrance(
 	world_seed: int,
 	region: Vector2i,
-	entrance_id: String
+	entrance_id: String,
+	world_context = null
 ) -> Array[String]:
 	last_bootstrap_diagnostics.clear()
 	_observer_binding_failures.clear()
+	_definition_context_identity_valid = false
 	_definition_service = DefinitionService.new()
-	var definition_failures: Array[String] = _definition_service.configure(world_seed)
+	var definition_failures: Array[String] = _definition_service.configure(
+		world_seed,
+		world_context
+	)
 	if not definition_failures.is_empty():
 		return _bootstrap_fail(definition_failures)
+	definition_failures.append_array(_definition_context_identity_failures())
+	if not definition_failures.is_empty():
+		return _bootstrap_fail(definition_failures)
+	_definition_context_identity_valid = true
 
 	var region_stage = _definition_service.region_definition(region)
 	if not region_stage.success:
@@ -247,6 +258,19 @@ func _bootstrap_fail(diagnostics: Array) -> Array[String]:
 	return last_bootstrap_diagnostics.duplicate()
 
 
+func _definition_context_identity_failures() -> Array[String]:
+	var failures: Array[String] = []
+	if _definition_service == null or _definition_service.context == null:
+		failures.append("Runtime cell definition context is unavailable")
+		return failures
+	var definition_context = _definition_service.context
+	if str(definition_context.world_id) != world_id:
+		failures.append("Runtime cell definition WorldId does not match controller runtime identity")
+	if str(definition_context.generator_manifest_id) != generator_manifest_id:
+		failures.append("Runtime cell definition GeneratorManifestId does not match controller runtime identity")
+	return failures
+
+
 func register_surface_plan(
 	plan,
 	provenance_fingerprint: String = "",
@@ -288,7 +312,11 @@ func update_player_position(position: Vector3) -> void:
 	if streamer == null:
 		return
 	var production_streaming_active: bool = (
-		_definition_service == null or _observer_streaming_active(position)
+		_definition_service == null
+		or (
+			_definition_context_identity_valid
+			and _observer_streaming_active(position)
+		)
 	)
 	if production_streaming_active:
 		streamer.update_observer(position, "player")
