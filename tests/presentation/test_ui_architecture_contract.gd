@@ -118,16 +118,18 @@ static func _test_foundation_theme_contract(theme: Theme, failures: Array[String
 		if input_style == null or not input_style is StyleBoxEmpty:
 			failures.append("ItemSlotInputSurface/%s must suppress native Button chrome with StyleBoxEmpty" % state)
 
-	if not theme.is_type_variation(&"KeyPrompt", &"PanelContainer"):
-		failures.append("KeyPrompt must expose a semantic PanelContainer Theme role")
-	var keycap_style := theme.get_stylebox(&"panel", &"KeyPrompt")
-	_expect_texture_style(keycap_style, "KeyPrompt", failures)
+	if not theme.is_type_variation(&"KeycapPanel", &"PanelContainer"):
+		failures.append("KeycapPanel must expose the inner keycap semantic PanelContainer Theme role")
+	if theme.is_type_variation(&"KeyPrompt", &"PanelContainer"):
+		failures.append("KeyPrompt is the complete binding + action-text component and must not alias the inner keycap Theme role")
+	var keycap_style := theme.get_stylebox(&"panel", &"KeycapPanel")
+	_expect_texture_style(keycap_style, "KeycapPanel", failures)
 	if keycap_style is StyleBoxTexture and (keycap_style as StyleBoxTexture).texture != null:
 		if (keycap_style as StyleBoxTexture).texture.get_size() != KEYCAP_PROTOTYPE_SIZE:
-			failures.append("KeyPrompt prototype source must remain 48x48")
+			failures.append("KeycapPanel prototype source must remain 48x48")
 	var keycap_source := FileAccess.get_file_as_string(KEYCAP_SOURCE_PATH)
 	if keycap_source.is_empty() or keycap_source.contains("<text"):
-		failures.append("KeyPrompt skin art must exist and must not bake physical key text into the texture")
+		failures.append("KeycapPanel skin art must exist and must not bake physical key text into the texture")
 
 	for variation in [&"HealthResourceBar", &"StaminaResourceBar"]:
 		if not theme.is_type_variation(variation, &"ProgressBar"):
