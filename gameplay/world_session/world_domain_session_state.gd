@@ -26,11 +26,25 @@ var _committed_return_context: Dictionary = {}
 var _next_attempt_token: int = 1
 
 
-func _init(active_domain_value: String = DOMAIN_OVERWORLD) -> void:
-	if _is_domain(active_domain_value):
-		_active_domain = active_domain_value
+func _init(
+	active_domain_value: String = DOMAIN_OVERWORLD,
+	committed_return_context_value: Dictionary = {}
+) -> void:
+	if not _is_domain(active_domain_value):
+		push_error("WorldDomainSessionState requires a canonical initial domain")
 		return
-	push_error("WorldDomainSessionState requires a canonical initial domain")
+	var failures: Array[String] = []
+	_append_semantic_failures(
+		failures,
+		committed_return_context_value,
+		"committed_return_context",
+		false
+	)
+	if not failures.is_empty():
+		push_error("WorldDomainSessionState requires semantic committed return context")
+		return
+	_active_domain = active_domain_value
+	_committed_return_context = committed_return_context_value.duplicate(true)
 
 
 func active_domain() -> String:
@@ -190,17 +204,16 @@ static func restore_from_durable(snapshot: Dictionary) -> Dictionary:
 		return {
 			"success": false,
 			"did_restore": false,
-			"state": null,
+			"active_domain": "",
+			"committed_return_context": {},
 			"diagnostics": failures.duplicate(),
 		}
 
-	var restored := WorldDomainSessionState.new(restored_domain)
-	restored._committed_return_context = return_context_variant.duplicate(true)
 	return {
 		"success": true,
 		"did_restore": true,
-		"state": restored,
-		"active_domain": restored.active_domain(),
+		"active_domain": restored_domain,
+		"committed_return_context": return_context_variant.duplicate(true),
 		"phase": PHASE_ACTIVE,
 		"diagnostics": [],
 	}
