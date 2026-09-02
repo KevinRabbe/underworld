@@ -50,6 +50,7 @@ on:
       - 'tests/resources/test_underground_resource_residency.gd'
       - 'tests/resources/test_underground_resource_mining_ticket.gd'
       - 'tests/resources/test_underground_resource_support.gd'
+      - 'tests/resources/test_underground_resource_harvest_sink.gd'
       - 'tests/resources/test_underground_resource_realization.gd'
       - 'tests/run_resource_runtime.gd'
       - 'tests/run_resource_composition.gd'
