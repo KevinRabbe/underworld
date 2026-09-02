@@ -2,6 +2,8 @@ extends RefCounted
 
 const CaveRuntimeController := preload("res://worldgen/runtime/underworld_cave_runtime_controller.gd")
 const CellAddress := preload("res://worldgen/geometry/geometry_cell_address.gd")
+const StableAddress := preload("res://worldgen/identity/stable_address.gd")
+const StableId := preload("res://worldgen/identity/stable_id.gd")
 const Observer := preload("res://gameplay/resources/runtime/underworld_resource_cell_observer.gd")
 const CompositionService := preload("res://gameplay/resources/runtime/underground_resource_composition_service.gd")
 const ContentEvidence := preload("res://gameplay/resources/runtime/underground_resource_content_evidence.gd")
@@ -75,7 +77,7 @@ static func _test_detached_owner_snapshot_and_stale_generation(failures: Array[S
 	record.readiness["render"] = true
 
 	var owner_metadata: Dictionary = {
-		"stable_id": "sid1:sa1|2:ug|6:region|1:0|1:0|8:special|13:reserved_site|4:slot|1:0",
+		"stable_id": _owner_site_stable_id(),
 		"free_world_anchor": Vector3(1.5, -20.0, 3.0),
 		"semantic_category": "reserved_site",
 		"reserved_bounds": AABB(Vector3(-2, -24, -2), Vector3(8, 8, 8)),
@@ -139,12 +141,13 @@ static func _test_detached_owner_snapshot_and_stale_generation(failures: Array[S
 
 	var authority: Dictionary = ContentEvidence.build_first_iron_authority()
 	var composition: Dictionary = CompositionService.plan_current_cell(controller, address, authority)
-	_expect_true(
-		failures,
-		"current generated owner site composes through canonical assignment and placement services",
-		bool(composition.get("success", false))
-	)
-	if bool(composition.get("success", false)):
+	if not bool(composition.get("success", false)):
+		failures.append(
+			"current generated owner site composes through canonical assignment and placement services — %s" % [
+				composition.get("diagnostics", [])
+			]
+		)
+	else:
 		_expect_equal(failures, "one current owner site yields one placement", composition.get("placements", []).size(), 1)
 		if composition.get("placements", []).size() == 1:
 			_expect_equal(
@@ -197,6 +200,13 @@ static func _test_identity_mismatch_fails_closed(failures: Array[String]) -> voi
 		"definition/record source mismatch fails closed",
 		Observer.current_snapshot(controller, address).is_empty()
 	)
+
+
+static func _owner_site_stable_id() -> String:
+	var region_address = StableAddress.underground_region(0, 0)
+	var site_address = StableAddress.special_location(region_address, "reserved_site", 0)
+	var stable_id = StableId.from_address(site_address)
+	return "" if stable_id == null else stable_id.value()
 
 
 static func _expect_true(failures: Array[String], label: String, condition: bool) -> void:
