@@ -3,6 +3,8 @@ extends RefCounted
 const StableAddress := preload("res://worldgen/identity/stable_address.gd")
 const StableId := preload("res://worldgen/identity/stable_id.gd")
 const UndergroundPlacementRecord := preload("res://content/placement/underground_placement_record.gd")
+const EquipmentSlotRule := preload("res://gameplay/items/equipment/equipment_slot_rule.gd")
+const EquipmentHotbarState := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
 const ItemContainerState := preload("res://gameplay/items/inventory/item_container_state.gd")
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
 const TicketService := preload("res://gameplay/resources/runtime/underground_resource_mining_ticket_service.gd")
@@ -12,7 +14,8 @@ const RuntimeTests := preload("res://tests/resources/test_underground_resource_r
 static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_retry_reuses_captured_operation_identity(failures)
-	_test_failed_attempt_does_not_advance_durable_ordinal(failures)
+	_test_failed_inventory_does_not_advance_durable_ordinal(failures)
+	_test_wrong_tool_does_not_advance_durable_ordinal(failures)
 	_test_reconstruction_advances_from_world_delta(failures)
 	_test_same_ordinal_never_aliases_across_placements(failures)
 	_test_depletion_is_restored_before_realization_eligibility(failures)
@@ -74,7 +77,7 @@ static func _test_retry_reuses_captured_operation_identity(failures: Array[Strin
 		_expect_true(failures, "next legitimate interaction has distinct operation id", next_ticket.operation_id() != first_operation_id)
 
 
-static func _test_failed_attempt_does_not_advance_durable_ordinal(failures: Array[String]) -> void:
+static func _test_failed_inventory_does_not_advance_durable_ordinal(failures: Array[String]) -> void:
 	var fixture: Dictionary = RuntimeTests._content_fixture(failures)
 	if fixture.is_empty():
 		return
@@ -90,7 +93,7 @@ static func _test_failed_attempt_does_not_advance_durable_ordinal(failures: Arra
 	var before_store: Dictionary = store.snapshot()
 
 	var first_prepare: Dictionary = service.prepare_ticket(placement, fixture["registry"], store)
-	_expect_true(failures, "failed-attempt ticket prepares", bool(first_prepare.get("success", false)))
+	_expect_true(failures, "failed-inventory ticket prepares", bool(first_prepare.get("success", false)))
 	if not bool(first_prepare.get("success", false)):
 		return
 	var first_ticket = first_prepare.get("ticket", null)
@@ -106,11 +109,50 @@ static func _test_failed_attempt_does_not_advance_durable_ordinal(failures: Arra
 	_expect_equal(failures, "failed ticket execution leaves WorldDelta unchanged", store.snapshot(), before_store)
 
 	var retry_prepare: Dictionary = TicketService.new().prepare_ticket(placement, fixture["registry"], store)
-	_expect_true(failures, "later preparation after failed attempt succeeds", bool(retry_prepare.get("success", false)))
+	_expect_true(failures, "later preparation after failed inventory succeeds", bool(retry_prepare.get("success", false)))
 	if bool(retry_prepare.get("success", false)):
 		var retry_ticket = retry_prepare.get("ticket", null)
-		_expect_equal(failures, "failed attempt does not advance ordinal", retry_ticket.operation_ordinal(), first_ticket.operation_ordinal())
-		_expect_equal(failures, "failed attempt reuses same durable operation identity", retry_ticket.operation_id(), first_ticket.operation_id())
+		_expect_equal(failures, "failed inventory does not advance ordinal", retry_ticket.operation_ordinal(), first_ticket.operation_ordinal())
+		_expect_equal(failures, "failed inventory reuses same durable operation identity", retry_ticket.operation_id(), first_ticket.operation_id())
+
+
+static func _test_wrong_tool_does_not_advance_durable_ordinal(failures: Array[String]) -> void:
+	var fixture: Dictionary = RuntimeTests._content_fixture(failures)
+	if fixture.is_empty():
+		return
+	var placement = RuntimeTests._placement()
+	var rule = EquipmentSlotRule.new().configure(
+		"equipment_slot.tool.primary",
+		["category.item.equipment.tool.pickaxe"],
+		["capability.harvest_tool"]
+	)
+	var empty_equipment = EquipmentHotbarState.new().configure([rule], {1: "equipment_slot.tool.primary"})
+	var inventory = ItemContainerState.new().configure(4)
+	var store = WorldDeltaStore.new()
+	var service = TicketService.new()
+	var before_store: Dictionary = store.snapshot()
+	var prepared: Dictionary = service.prepare_ticket(placement, fixture["registry"], store)
+	_expect_true(failures, "wrong-tool ticket prepares from semantic resource state", bool(prepared.get("success", false)))
+	if not bool(prepared.get("success", false)):
+		return
+	var ticket = prepared.get("ticket", null)
+	var failed: Dictionary = service.execute_ticket(
+		ticket,
+		placement,
+		fixture["registry"],
+		empty_equipment,
+		inventory,
+		store
+	)
+	_expect_true(failures, "wrong tool rejects ticket execution", not bool(failed.get("success", true)))
+	_expect_equal(failures, "wrong tool leaves WorldDelta unchanged", store.snapshot(), before_store)
+	_expect_equal(failures, "wrong tool yields no iron", inventory.quantity_of("item.resource.iron_chunk"), 0)
+	var retry_prepare: Dictionary = TicketService.new().prepare_ticket(placement, fixture["registry"], store)
+	_expect_true(failures, "later preparation after wrong tool succeeds", bool(retry_prepare.get("success", false)))
+	if bool(retry_prepare.get("success", false)):
+		var retry_ticket = retry_prepare.get("ticket", null)
+		_expect_equal(failures, "wrong tool does not advance durable ordinal", retry_ticket.operation_ordinal(), ticket.operation_ordinal())
+		_expect_equal(failures, "wrong tool reuses same durable operation identity", retry_ticket.operation_id(), ticket.operation_id())
 
 
 static func _test_reconstruction_advances_from_world_delta(failures: Array[String]) -> void:
@@ -182,7 +224,7 @@ static func _test_depletion_is_restored_before_realization_eligibility(failures:
 	var service = TicketService.new()
 	var fresh_state: Dictionary = service.inspect_realization_state(placement, fixture["registry"], store)
 	_expect_true(failures, "fresh placement restores before realization decision", bool(fresh_state.get("success", false)))
-	_expect_true(failures, "fresh placement is realization-eligible after restore", bool(fresh_state.get("should_realize", false)))
+	_expect_true(failures, "fresh depletion state permits later gated realization", bool(fresh_state.get("depletion_allows_realization", false)))
 
 	for ordinal in range(1, 5):
 		var prepared: Dictionary = service.prepare_ticket(placement, fixture["registry"], store)
@@ -204,7 +246,7 @@ static func _test_depletion_is_restored_before_realization_eligibility(failures:
 	var before_reconstruction: Dictionary = store.snapshot()
 	var depleted_state: Dictionary = TicketService.new().inspect_realization_state(placement, fixture["registry"], store)
 	_expect_true(failures, "depleted placement state still restores successfully", bool(depleted_state.get("success", false)))
-	_expect_true(failures, "depleted placement suppresses realization before Node creation", not bool(depleted_state.get("should_realize", true)))
+	_expect_true(failures, "depleted placement blocks realization before Node creation", not bool(depleted_state.get("depletion_allows_realization", true)))
 	_expect_equal(failures, "depletion restore inspection does not rewrite WorldDelta", store.snapshot(), before_reconstruction)
 	var impossible_ticket: Dictionary = TicketService.new().prepare_ticket(placement, fixture["registry"], store)
 	_expect_true(failures, "depleted placement cannot prepare another mining ticket", not bool(impossible_ticket.get("success", true)))
