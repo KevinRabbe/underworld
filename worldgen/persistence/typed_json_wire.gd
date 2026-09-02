@@ -108,7 +108,10 @@ static func from_wire_value(
 			var reserved_tag: String = _present_reserved_tag(dictionary)
 			if not reserved_tag.is_empty():
 				if dictionary.size() != 1:
-					failures.append("%s has malformed reserved serialization tag %s" % [path, reserved_tag])
+					if reserved_tag == INT64_WIRE_TAG:
+						failures.append("%s has malformed %s integer tag" % [path, INT64_WIRE_TAG])
+					else:
+						failures.append("%s has malformed reserved serialization tag %s" % [path, reserved_tag])
 					return null
 				match reserved_tag:
 					INT64_WIRE_TAG:
