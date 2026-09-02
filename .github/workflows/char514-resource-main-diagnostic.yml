@@ -1,4 +1,4 @@
-name: CHAR514 Accepted Main State Diagnostic
+name: CHAR514 Canonical Persistence Comparison
 
 on:
   push:
@@ -9,8 +9,40 @@ permissions:
   contents: read
 
 jobs:
+  candidate-persistence:
+    name: Cleaned candidate canonical persistence-state
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact cleaned candidate
+        uses: actions/checkout@v6
+        with:
+          ref: 1e22bde42dad554d68c6beab5499210da201016b
+          fetch-depth: 0
+      - name: Assert candidate identity
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "1e22bde42dad554d68c6beab5499210da201016b"
+          test "$(git rev-parse HEAD^{tree})" = "27647177c2f26c52e74acaa5eb4ff90047c05a24"
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+      - name: Import candidate resources
+        run: godot --headless --editor --path . --quit
+      - name: Persistence-state canonical check
+        shell: bash
+        run: |
+          set -o pipefail
+          log="$(mktemp)"
+          godot --headless --path . --script res://tests/run_persistence_state.gd 2>&1 | tee "$log"
+          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
+          grep -Fq '[PERSISTENCE STATE VALIDATION] PASS' "$log"
+
   accepted-main-persistence:
-    name: Accepted main persistence-state
+    name: Accepted main canonical persistence-state
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -37,35 +69,6 @@ jobs:
         run: |
           set -o pipefail
           log="$(mktemp)"
-          godot --headless --path . --quit-after 1 --script res://tests/run_persistence_state.gd 2>&1 | tee "$log"
+          godot --headless --path . --script res://tests/run_persistence_state.gd 2>&1 | tee "$log"
           ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
           grep -Fq '[PERSISTENCE STATE VALIDATION] PASS' "$log"
-
-  accepted-main-inventory:
-    name: Accepted main inventory
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - name: Checkout exact accepted main
-        uses: actions/checkout@v6
-        with:
-          ref: 2948912830c21a0f3e1578bc2dbd48da032368b3
-          fetch-depth: 0
-      - name: Assert accepted-main identity
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "2948912830c21a0f3e1578bc2dbd48da032368b3"
-      - name: Setup Godot 4.7.2
-        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
-        with:
-          version: 4.7.2
-          use-dotnet: false
-          include-templates: false
-      - name: Inventory canonical check
-        shell: bash
-        run: |
-          set -o pipefail
-          log="$(mktemp)"
-          godot --headless --path . --quit-after 1 --script res://tests/run_inventory.gd 2>&1 | tee "$log"
-          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
-          grep -Fq '[INVENTORY VALIDATION] PASS' "$log"
