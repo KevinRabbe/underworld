@@ -8,6 +8,9 @@ const Ticket := preload("res://gameplay/resources/runtime/underground_resource_m
 const RuntimeService := preload("res://gameplay/resources/runtime/underground_resource_runtime_service.gd")
 
 
+## Restores durable depletion before any caller may consider creating a live
+## resource Node. This is only the depletion gate: current cave collision/support
+## and final committed-domain authority remain separate mandatory gates.
 func inspect_realization_state(placement, content_registry, delta_store) -> Dictionary:
 	var restored: Dictionary = RuntimeService.new().restore_state(
 		placement,
@@ -21,7 +24,7 @@ func inspect_realization_state(placement, content_registry, delta_store) -> Dict
 		return _failure(["resource realization preparation did not restore depletion state"])
 	return {
 		"success": true,
-		"should_realize": state.remaining_capacity_units > 0.0,
+		"depletion_allows_realization": state.remaining_capacity_units > 0.0,
 		"remaining_capacity_units": state.remaining_capacity_units,
 		"fresh": bool(restored.get("fresh", false)),
 		"diagnostics": [],
