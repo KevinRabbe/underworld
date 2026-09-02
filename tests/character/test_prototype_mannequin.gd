@@ -39,6 +39,13 @@ static func run() -> Array[String]:
 		mannequin.get_tool_visual_root() != null
 		and mannequin.get_tool_visual_root().get_parent() == mannequin.get_socket(&"hand_r")
 	)
+	var head_attachment: Node = mannequin.skeleton.get_node_or_null("HeadAttachment")
+	_expect_true(failures, "first-playable head has rounded silhouette", head_attachment != null and head_attachment.get_node("Head").mesh is SphereMesh)
+	_expect_true(failures, "first-playable face has readable eye details", head_attachment != null and head_attachment.get_node("EyeL") != null and head_attachment.get_node("EyeR") != null)
+	var torso_attachment: Node = mannequin.skeleton.get_node_or_null("TorsoAttachment")
+	var arm_attachment: Node = mannequin.skeleton.get_node_or_null("UpperArmRAttachment")
+	_expect_true(failures, "first-playable torso uses rounded volume", torso_attachment != null and torso_attachment.get_node("Torso").mesh is CapsuleMesh)
+	_expect_true(failures, "first-playable limbs use rounded volumes", arm_attachment != null and arm_attachment.get_node("UpperArmR").mesh is CapsuleMesh)
 
 	# Exercise every placeholder pose in headless Godot. These are contract tests,
 	# not visual-quality tests.

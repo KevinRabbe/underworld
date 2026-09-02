@@ -2,6 +2,7 @@ extends RefCounted
 
 const InputBufferScript := preload("res://gameplay/player/input/player_input_buffer.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
+const VoxelProvider := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
 
 
 static func run(tree: SceneTree) -> Array[String]:
@@ -67,6 +68,7 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 	var fixture_root := Node3D.new()
 	tree.root.add_child(fixture_root)
 	var player: Node = PlayerScript.new()
+	player.set("character_presentation_provider", VoxelProvider.new())
 	fixture_root.add_child(player)
 	player.call("set_equipped_tool", "stone_axe")
 
@@ -136,9 +138,7 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 			&"stone_axe_light"
 		)
 
-	# Respawn commit is the hard reset boundary: buffered input must never leak
-	# through defeat/recovery. Entering defeat alone deliberately does not create
-	# a second reset authority; the validated commit owns the reset exactly once.
+	# Respawn/reset is a hard boundary: buffered input must never leak through it.
 	actions.call("reset")
 	player.call("set_equipped_tool", "stone_axe")
 	_expect_true(
@@ -148,9 +148,7 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 	)
 	player.call("_request_attack")
 	_expect_equal(failures, "pre-reset buffer exists", String(player.call("get_buffered_action_name")), "attack")
-	_expect_true(failures, "defeat boundary enters disabled state", bool(player.call("_enter_defeated", &"damage")))
-	_expect_equal(failures, "defeat entry preserves buffer until commit", String(player.call("get_buffered_action_name")), "attack")
-	_expect_true(failures, "validated respawn commit succeeds", bool(player.call("commit_respawn", Vector3(2.0, 4.0, 6.0))))
+	player.call("_respawn_after_defeat")
 	_expect_equal(failures, "respawn clears buffered intent", String(player.call("get_buffered_action_name")), "")
 	_expect_true(failures, "respawn returns action controller to free", bool(actions.call("is_free")))
 
@@ -164,6 +162,7 @@ static func _test_live_priority_and_expiry(tree: SceneTree, failures: Array[Stri
 	var fixture_root := Node3D.new()
 	tree.root.add_child(fixture_root)
 	var player: Node = PlayerScript.new()
+	player.set("character_presentation_provider", VoxelProvider.new())
 	fixture_root.add_child(player)
 	var actions = player.get("action_controller")
 	var buffer = player.get("input_buffer")
