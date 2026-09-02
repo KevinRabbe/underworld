@@ -74,29 +74,51 @@ static func _test_deterministic_independent_endpoints_and_link(failures: Array[S
 		_expect_equal(failures, "destination is order-independent", destination_first.data.canonical_text(), destination_a.data.canonical_text())
 		_expect_equal(failures, "link is order-independent", link_second.data.canonical_text(), link_a.data.canonical_text())
 
-	var changed_source = GatewayService.define_source_site(context, "DOMAIN_A", _source_candidates(700))
+	# A source-local semantic candidate perturbation must change the source identity
+	# and therefore the link, while the independently generated destination remains exact.
+	var changed_source = GatewayService.define_source_site(context, "DOMAIN_A", _source_identity_variant_candidates())
 	var unchanged_destination = GatewayService.define_destination_site(context, "DOMAIN_B", destination_candidates)
-	_expect_success(failures, "changed source fixture succeeds", changed_source)
-	_expect_success(failures, "destination after source perturbation succeeds", unchanged_destination)
+	_expect_success(failures, "changed source identity fixture succeeds", changed_source)
+	_expect_success(failures, "destination after source identity perturbation succeeds", unchanged_destination)
 	if changed_source.success and unchanged_destination.success:
+		_expect_true(failures, "source semantic perturbation changes source StableId", changed_source.data.stable_id != source_a.data.stable_id)
 		_expect_equal(
 			failures,
-			"source-only fixture perturbation cannot rewrite destination",
+			"source-only identity perturbation cannot rewrite destination",
 			unchanged_destination.data.canonical_text(),
 			destination_a.data.canonical_text()
 		)
+		var changed_source_link = GatewayService.define_paired_link(context, changed_source.data, unchanged_destination.data)
+		_expect_success(failures, "link after source identity perturbation succeeds", changed_source_link)
+		if changed_source_link.success:
+			_expect_true(failures, "link identity changes only after explicit source endpoint identity changes", changed_source_link.data.stable_id != link_a.data.stable_id)
 
+	# Mirror the contract for a destination-local semantic perturbation.
 	var unchanged_source = GatewayService.define_source_site(context, "DOMAIN_A", source_candidates)
-	var changed_destination = GatewayService.define_destination_site(context, "DOMAIN_B", _destination_candidates(900))
-	_expect_success(failures, "source after destination perturbation succeeds", unchanged_source)
-	_expect_success(failures, "changed destination fixture succeeds", changed_destination)
+	var changed_destination = GatewayService.define_destination_site(context, "DOMAIN_B", _destination_identity_variant_candidates())
+	_expect_success(failures, "source after destination identity perturbation succeeds", unchanged_source)
+	_expect_success(failures, "changed destination identity fixture succeeds", changed_destination)
 	if unchanged_source.success and changed_destination.success:
+		_expect_true(failures, "destination semantic perturbation changes destination StableId", changed_destination.data.stable_id != destination_a.data.stable_id)
 		_expect_equal(
 			failures,
-			"destination-only fixture perturbation cannot rewrite source",
+			"destination-only identity perturbation cannot rewrite source",
 			unchanged_source.data.canonical_text(),
 			source_a.data.canonical_text()
 		)
+		var changed_destination_link = GatewayService.define_paired_link(context, unchanged_source.data, changed_destination.data)
+		_expect_success(failures, "link after destination identity perturbation succeeds", changed_destination_link)
+		if changed_destination_link.success:
+			_expect_true(failures, "link identity changes only after explicit destination endpoint identity changes", changed_destination_link.data.stable_id != link_a.data.stable_id)
+
+	# Locator-only changes are domain-local data changes. They may change endpoint
+	# canonical bytes/fingerprint, but must never influence the opposite endpoint.
+	var relocated_source = GatewayService.define_source_site(context, "DOMAIN_A", _source_candidates(700))
+	var destination_after_relocation = GatewayService.define_destination_site(context, "DOMAIN_B", destination_candidates)
+	_expect_success(failures, "source locator perturbation succeeds", relocated_source)
+	_expect_success(failures, "destination after source locator perturbation succeeds", destination_after_relocation)
+	if relocated_source.success and destination_after_relocation.success:
+		_expect_equal(failures, "source locator perturbation cannot rewrite destination", destination_after_relocation.data.canonical_text(), destination_a.data.canonical_text())
 
 	var identical_locator: Dictionary = {"anchor": Vector3(12.0, 4.0, -8.0), "radius": 2.0}
 	var same_source = GatewayService.define_source_site(context, "DOMAIN_A", [{"candidate_key": "same", "locator": identical_locator}])
@@ -239,10 +261,24 @@ static func _source_candidates(offset: int) -> Array:
 	]
 
 
+static func _source_identity_variant_candidates() -> Array:
+	return [
+		{"candidate_key": "source-gamma", "locator": {"anchor": Vector3(10.0, 1.0, 20.0), "radius": 2.0}},
+		{"candidate_key": "source-delta", "locator": {"anchor": Vector3(40.0, 2.0, 60.0), "radius": 3.0}},
+	]
+
+
 static func _destination_candidates(offset: int) -> Array:
 	return [
 		{"candidate_key": "destination-alpha", "locator": {"anchor": Vector3(-80.0, -20.0 + offset, 14.0), "radius": 4.0}},
 		{"candidate_key": "destination-beta", "locator": {"anchor": Vector3(-30.0, -45.0 + offset, 90.0), "radius": 5.0}},
+	]
+
+
+static func _destination_identity_variant_candidates() -> Array:
+	return [
+		{"candidate_key": "destination-gamma", "locator": {"anchor": Vector3(-80.0, -20.0, 14.0), "radius": 4.0}},
+		{"candidate_key": "destination-delta", "locator": {"anchor": Vector3(-30.0, -45.0, 90.0), "radius": 5.0}},
 	]
 
 
