@@ -16,14 +16,14 @@ jobs:
       - name: Checkout exact reconciled candidate
         uses: actions/checkout@v6
         with:
-          ref: b85f9dcbf3e2f13e327ddba9cae9db679deb5866
+          ref: 08be66d66a7048361ffed34b8bf83e7726f41687
           fetch-depth: 0
 
       - name: Assert exact candidate identity
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "b85f9dcbf3e2f13e327ddba9cae9db679deb5866"
-          test "$(git rev-parse HEAD^{tree})" = "24dacb27a662ff9ef1b8a3f90755f20965dfb2c3"
+          test "$(git rev-parse HEAD)" = "08be66d66a7048361ffed34b8bf83e7726f41687"
+          test "$(git rev-parse HEAD^{tree})" = "11214b30c717a91ce4c529d2d83b91ccb6ae6c19"
 
       - name: Setup Godot 4.7.2
         uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
@@ -138,8 +138,8 @@ jobs:
             | tee character-evidence/character_metrics.txt
           grep -Fq '[CHARACTER VALIDATION] PASS' character-evidence/character_metrics.txt
           {
-            echo 'candidate_sha=b85f9dcbf3e2f13e327ddba9cae9db679deb5866'
-            echo 'candidate_tree=24dacb27a662ff9ef1b8a3f90755f20965dfb2c3'
+            echo 'candidate_sha=08be66d66a7048361ffed34b8bf83e7726f41687'
+            echo 'candidate_tree=11214b30c717a91ce4c529d2d83b91ccb6ae6c19'
             echo 'godot_version=4.7.2'
             echo 'gameplay_camera_distance=4.5'
             echo 'gameplay_camera_fov=75.0'
@@ -152,7 +152,7 @@ jobs:
       - name: Upload exact-candidate runtime evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: char514-runtime-evidence-b85f9dcb
+          name: char514-runtime-evidence-08be66d6
           path: character-evidence/*
           if-no-files-found: error
           retention-days: 7
