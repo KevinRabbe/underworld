@@ -3,6 +3,9 @@ extends RefCounted
 const CaveRuntimeController := preload("res://worldgen/runtime/underworld_cave_runtime_controller.gd")
 const CellAddress := preload("res://worldgen/geometry/geometry_cell_address.gd")
 const Observer := preload("res://gameplay/resources/runtime/underworld_resource_cell_observer.gd")
+const CompositionService := preload("res://gameplay/resources/runtime/underground_resource_composition_service.gd")
+const ContentEvidence := preload("res://gameplay/resources/runtime/underground_resource_content_evidence.gd")
+const Catalog := preload("res://gameplay/resources/runtime/underground_resource_composition_catalog.gd")
 
 
 class FakeFragment extends RefCounted:
@@ -134,9 +137,37 @@ static func _test_detached_owner_snapshot_and_stale_generation(failures: Array[S
 	var all_current: Array = Observer.current_snapshots(controller)
 	_expect_equal(failures, "bounded enumeration returns exact current render-ready cell", all_current.size(), 1)
 
+	var authority: Dictionary = ContentEvidence.build_first_iron_authority()
+	var composition: Dictionary = CompositionService.plan_current_cell(controller, address, authority)
+	_expect_true(
+		failures,
+		"current generated owner site composes through canonical assignment and placement services",
+		bool(composition.get("success", false))
+	)
+	if bool(composition.get("success", false)):
+		_expect_equal(failures, "one current owner site yields one placement", composition.get("placements", []).size(), 1)
+		if composition.get("placements", []).size() == 1:
+			_expect_equal(
+				failures,
+				"current-cell composition targets accepted iron resource",
+				composition["placements"][0].target_content_id,
+				Catalog.IRON_RESOURCE_CONTENT_ID
+			)
+		_expect_equal(
+			failures,
+			"composition preserves generated hook StableId rather than source descriptor identity",
+			str(composition.get("hooks", [])[0].get("stable_id", "")) if not composition.get("hooks", []).is_empty() else "",
+			str(owner.metadata.get("stable_id", ""))
+		)
+
 	controller.streamer.reconfigure("world:test", "manifest:test")
 	_expect_true(failures, "old snapshot becomes stale after generation advance", not Observer.snapshot_is_current(controller, snapshot))
 	_expect_true(failures, "unready reconfigured cell returns no current snapshot", Observer.current_snapshot(controller, address).is_empty())
+	_expect_true(
+		failures,
+		"unready reconfigured cell cannot publish a resource placement plan",
+		not bool(CompositionService.plan_current_cell(controller, address, authority).get("success", false))
+	)
 
 
 static func _test_identity_mismatch_fails_closed(failures: Array[String]) -> void:
