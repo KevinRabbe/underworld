@@ -1,0 +1,38 @@
+name: CHAR514 Reference Fetch
+
+on:
+  push:
+    branches:
+      - worker/char-reconcile-evidence-runner
+
+permissions:
+  contents: read
+
+jobs:
+  reference:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout evidence runner branch
+        uses: actions/checkout@v6
+        with:
+          ref: worker/char-reconcile-evidence-runner
+          fetch-depth: 0
+
+      - name: Extract locked survivor target from preserved Codex artifact
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git cat-file -e 8311f1ff6ea055888cbba1aade0d53bb66379c2f^{commit}
+          mkdir -p char514-reference
+          git show 8311f1ff6ea055888cbba1aade0d53bb66379c2f:docs/00_project/reference/frontier_underworld_faceted_survivor_v2.png \
+            > char514-reference/frontier_underworld_faceted_survivor_v2.png
+          test -s char514-reference/frontier_underworld_faceted_survivor_v2.png
+          sha256sum char514-reference/frontier_underworld_faceted_survivor_v2.png > char514-reference/sha256.txt
+
+      - name: Upload locked target
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: char514-locked-target
+          path: char514-reference/*
+          if-no-files-found: error
+          retention-days: 7
