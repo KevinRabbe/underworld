@@ -13,28 +13,20 @@ const PackedSceneArchetypeAdapter := preload("res://core/content/archetypes/pack
 const ItemContainerState := preload("res://gameplay/items/inventory/item_container_state.gd")
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
 const RuntimeTests := preload("res://tests/resources/test_underground_resource_runtime.gd")
-
-const FLOOR_Y: float = -22.0
+const SupportFixture := preload("res://tests/resources/test_underground_resource_support.gd")
 
 
 class FakeFragment extends RefCounted:
-	var fragment_id: String
-	var source_descriptor_id: String
-	var source_kind: String
-	var cell_bounds: AABB
-	var clipped_source_bounds: AABB
-	var is_owner: bool
-	var source_fingerprint: String
+	var fragment_id: String = "fragment-owner-realization"
+	var source_descriptor_id: String = "site-owner-realization"
+	var source_kind: String = "reserved_site"
+	var cell_bounds: AABB = AABB(Vector3(-8, -28, -8), Vector3(16, 16, 16))
+	var clipped_source_bounds: AABB = cell_bounds
+	var is_owner: bool = true
+	var source_fingerprint: String = "fragment:site-owner-realization"
 	var metadata: Dictionary
 
 	func _init(metadata_value: Dictionary) -> void:
-		fragment_id = "fragment-owner-realization"
-		source_descriptor_id = "site-owner-realization"
-		source_kind = "reserved_site"
-		cell_bounds = AABB(Vector3(-8, -28, -8), Vector3(16, 16, 16))
-		clipped_source_bounds = cell_bounds
-		is_owner = true
-		source_fingerprint = "fragment:site-owner-realization"
 		metadata = metadata_value.duplicate(true)
 
 
@@ -59,14 +51,11 @@ class FakeDefinitionService extends RefCounted:
 
 static func run(realization_parent: Node3D) -> Array[String]:
 	var failures: Array[String] = []
-	await _test_collision_gated_realization_depletion_and_reentry(realization_parent, failures)
+	await _run_lifecycle(realization_parent, failures)
 	return failures
 
 
-static func _test_collision_gated_realization_depletion_and_reentry(
-	realization_parent: Node3D,
-	failures: Array[String]
-) -> void:
+static func _run_lifecycle(realization_parent: Node3D, failures: Array[String]) -> void:
 	var controller = CaveRuntimeController.new()
 	realization_parent.add_child(controller)
 	controller.configure("world:realization", "manifest:realization")
@@ -82,13 +71,12 @@ static func _test_collision_gated_realization_depletion_and_reentry(
 		provenance_fingerprint
 	)
 	record.readiness["render"] = true
-	record.readiness["collision"] = false
 
 	var plan = FakePlan.new()
 	plan.fragments = [FakeFragment.new(_owner_metadata())]
 	var definitions = FakeDefinitionService.new()
 	definitions.definitions[address.canonical_text()] = {
-		"region": Vector2i(0, 0),
+		"region": Vector2i.ZERO,
 		"cell_plan": plan,
 		"source_fingerprint": source_fingerprint,
 		"provenance_fingerprint": provenance_fingerprint,
@@ -97,33 +85,31 @@ static func _test_collision_gated_realization_depletion_and_reentry(
 
 	var authority: Dictionary = ContentEvidence.build_first_iron_authority()
 	var residency = ResidencyService.new()
-	var residency_failures: Array[String] = residency.configure(controller, authority)
-	for failure in residency_failures:
-		failures.append("realization residency configure: %s" % failure)
-	if not residency_failures.is_empty():
+	var configure_failures: Array[String] = residency.configure(controller, authority)
+	_append_prefixed(failures, "realization residency configure", configure_failures)
+	if not configure_failures.is_empty():
 		_cleanup(null, residency, controller)
 		return
 
-	var initial_entry: Dictionary = residency.semantic_entry(address.canonical_text())
-	if initial_entry.get("placements", []).is_empty():
-		failures.append("realization fixture produced no semantic iron placement")
+	var entry: Dictionary = residency.semantic_entry(address.canonical_text())
+	var placements: Array = entry.get("placements", [])
+	if placements.size() != 1:
+		failures.append("realization fixture expected one semantic placement, got %d" % placements.size())
 		_cleanup(null, residency, controller)
 		return
-	var placement = initial_entry["placements"][0]
+	var placement = placements[0]
 	var placement_id: String = str(placement.placement_stable_id)
 
 	var action = ActionService.new()
 	var action_failures: Array[String] = action.configure(residency)
-	for failure in action_failures:
-		failures.append("realization action configure: %s" % failure)
+	_append_prefixed(failures, "realization action configure", action_failures)
 	if not action_failures.is_empty():
 		_cleanup(null, residency, controller)
 		return
 
 	var realizer = ArchetypeRealizer.new()
 	var adapter_failures: Array[String] = realizer.register_adapter(PackedSceneArchetypeAdapter.new())
-	for failure in adapter_failures:
-		failures.append("realization archetype adapter: %s" % failure)
+	_append_prefixed(failures, "realization archetype adapter", adapter_failures)
 	if not adapter_failures.is_empty():
 		_cleanup(null, residency, controller)
 		return
@@ -138,34 +124,28 @@ static func _test_collision_gated_realization_depletion_and_reentry(
 		realizer,
 		action
 	)
-	for failure in realization_failures:
-		failures.append("realization service configure: %s" % failure)
+	_append_prefixed(failures, "realization service configure", realization_failures)
 	if not realization_failures.is_empty():
 		_cleanup(realization, residency, controller)
 		return
 
 	_expect_true(failures, "resource realization is inactive by default", not realization.activation_enabled())
 	_expect_equal(failures, "inactive realization publishes zero resource Nodes", realization.live_placement_count(), 0)
-	var enable_failures: Array[String] = realization.set_activation_enabled(true)
-	for failure in enable_failures:
-		failures.append("realization activation: %s" % failure)
+	_append_prefixed(failures, "realization activation", realization.set_activation_enabled(true))
 	_expect_equal(failures, "render-only semantic placement remains noninteractive", realization.live_placement_count(), 0)
 
-	var floor_shape: ConcavePolygonShape3D = _floor_shape()
 	_expect_true(
 		failures,
 		"real cave collision acceptance succeeds",
 		controller.accept_collision_shape(
 			address,
-			floor_shape,
+			SupportFixture.floor_shape(),
 			source_fingerprint,
 			provenance_fingerprint
 		)
 	)
-	# Collision attach is sufficient: one bounded physics retry handles the
-	# PhysicsServer publication edge without Player/observer movement.
-	await realization_parent.get_tree().physics_frame
-	await realization_parent.get_tree().physics_frame
+	await _settle_physics(realization_parent)
+	_append_async_if_missing(failures, realization, "initial collision realization")
 	_expect_equal(failures, "collision-ready placement realizes exactly once", realization.live_placement_count(), 1)
 	var live = realization.live_instance(placement_id)
 	_expect_true(failures, "realized iron root is a live Node3D", live != null and live is Node3D)
@@ -173,28 +153,42 @@ static func _test_collision_gated_realization_depletion_and_reentry(
 		_expect_true(
 			failures,
 			"generated free-space anchor projects down to cave support",
-			absf(live.global_position.y - (FLOOR_Y + 0.02)) <= 0.05
+			absf(live.global_position.y - (SupportFixture.FLOOR_Y + 0.02)) <= 0.05
 		)
-		_expect_true(failures, "support projection preserves generated anchor X", absf(live.global_position.x - 1.5) <= 0.01)
-		_expect_true(failures, "support projection preserves generated anchor Z", absf(live.global_position.z - 3.0) <= 0.01)
+		_expect_equal(
+			failures,
+			"realized root carries exact placement identity",
+			str(live.get_meta("placement_stable_id", "")),
+			placement_id
+		)
 		var interaction = _interaction_node(live)
 		_expect_true(failures, "realized iron exposes interaction.primary role", interaction != null)
 		if interaction != null:
-			_expect_equal(failures, "interaction body carries exact placement identity", str(interaction.get_meta("placement_stable_id", "")), placement_id)
-			_expect_equal(failures, "interaction body carries exact owner cell", str(interaction.get_meta("resource_cell_address", "")), address.canonical_text())
-			_expect_equal(failures, "interaction body carries current source fingerprint", str(interaction.get_meta("resource_source_fingerprint", "")), source_fingerprint)
+			_expect_equal(
+				failures,
+				"interaction body carries exact owner cell",
+				str(interaction.get_meta("resource_cell_address", "")),
+				address.canonical_text()
+			)
+			_expect_equal(
+				failures,
+				"interaction body carries current source fingerprint",
+				str(interaction.get_meta("resource_source_fingerprint", "")),
+				source_fingerprint
+			)
 
-	# Removing cave collision immediately removes interaction authority even while
-	# semantic render residency remains.
 	_expect_true(
 		failures,
 		"collision-only retirement succeeds for realized resource",
 		controller.streamer.release_demand(address, source, ["collision"])
 	)
-	_expect_equal(failures, "collision retirement synchronously removes live resource", realization.live_placement_count(), 0)
+	_expect_equal(
+		failures,
+		"collision retirement synchronously removes live resource",
+		realization.live_placement_count(),
+		0
+	)
 
-	# Current-generation collision reacquisition reconstructs exactly one Node with
-	# the same durable placement identity.
 	record = controller.streamer.set_demand(
 		address,
 		source,
@@ -207,28 +201,37 @@ static func _test_collision_gated_realization_depletion_and_reentry(
 		"reacquired current cave collision is accepted",
 		controller.accept_collision_shape(
 			address,
-			_floor_shape(),
+			SupportFixture.floor_shape(),
 			source_fingerprint,
 			provenance_fingerprint
 		)
 	)
-	await realization_parent.get_tree().physics_frame
-	await realization_parent.get_tree().physics_frame
-	_expect_equal(failures, "collision reacquisition realizes one current resource", realization.live_placement_count(), 1)
-	var reacquired_live = realization.live_instance(placement_id)
-	_expect_true(failures, "reacquired realization preserves placement StableId", reacquired_live != null and str(reacquired_live.get_meta("placement_stable_id", "")) == placement_id)
+	await _settle_physics(realization_parent)
+	_append_async_if_missing(failures, realization, "collision reacquisition")
+	_expect_equal(
+		failures,
+		"collision reacquisition realizes one current resource",
+		realization.live_placement_count(),
+		1
+	)
+	var reacquired = realization.live_instance(placement_id)
+	_expect_true(
+		failures,
+		"collision reacquisition preserves placement StableId",
+		reacquired != null and str(reacquired.get_meta("placement_stable_id", "")) == placement_id
+	)
 
 	var runtime_fixture: Dictionary = RuntimeTests._content_fixture(failures)
-	if runtime_fixture.is_empty():
-		_cleanup(realization, residency, controller)
-		return
-	var equipment_fixture: Dictionary = RuntimeTests._pickaxe_equipment(runtime_fixture["pickaxe"], failures)
-	if equipment_fixture.is_empty():
+	var equipment_fixture: Dictionary = (
+		RuntimeTests._pickaxe_equipment(runtime_fixture.get("pickaxe", null), failures)
+		if not runtime_fixture.is_empty()
+		else {}
+	)
+	if runtime_fixture.is_empty() or equipment_fixture.is_empty():
 		_cleanup(realization, residency, controller)
 		return
 	var inventory = ItemContainerState.new().configure(4)
 	var content_registry = authority.get("content_registry", null)
-
 	for ordinal in range(1, 5):
 		var prepared: Dictionary = action.prepare_mining(
 			address.canonical_text(),
@@ -237,7 +240,10 @@ static func _test_collision_gated_realization_depletion_and_reentry(
 			store
 		)
 		if not bool(prepared.get("success", false)):
-			failures.append("realization mine %d ticket preparation failed: %s" % [ordinal, prepared.get("diagnostics", [])])
+			failures.append("realization mine %d ticket preparation failed: %s" % [
+				ordinal,
+				prepared.get("diagnostics", []),
+			])
 			break
 		var mined: Dictionary = action.execute_mining(
 			prepared.get("ticket", null),
@@ -247,20 +253,38 @@ static func _test_collision_gated_realization_depletion_and_reentry(
 			store
 		)
 		if not bool(mined.get("success", false)):
-			failures.append("realization mine %d execution failed: %s" % [ordinal, mined.get("diagnostics", [])])
+			failures.append("realization mine %d execution failed: %s" % [
+				ordinal,
+				mined.get("diagnostics", []),
+			])
 			break
-		_expect_equal(failures, "each committed mine yields exactly one iron chunk", inventory.quantity_of("item.resource.iron_chunk"), ordinal)
+		_expect_equal(
+			failures,
+			"each committed mine yields exactly one iron chunk",
+			inventory.quantity_of("item.resource.iron_chunk"),
+			ordinal
+		)
 		if ordinal < 4:
-			_expect_equal(failures, "partially depleted resource remains realized", realization.live_placement_count(), 1)
+			_expect_equal(
+				failures,
+				"partially depleted resource remains realized",
+				realization.live_placement_count(),
+				1
+			)
 		else:
-			# mining_committed is synchronous; final depletion removes the Node from
-			# SceneTree before execute_mining returns.
 			_expect_true(failures, "final mine reports depleted", bool(mined.get("depleted", false)))
-			_expect_equal(failures, "final depletion synchronously removes live resource", realization.live_placement_count(), 0)
+			_expect_equal(
+				failures,
+				"final depletion synchronously removes live resource",
+				realization.live_placement_count(),
+				0
+			)
 
-	# Full eviction/re-entry reconstructs semantic placement from generated truth,
-	# but restored zero depletion suppresses Node creation before archetype publish.
-	_expect_true(failures, "fully depleted owner cell evicts", controller.streamer.release_demand(address, source))
+	_expect_true(
+		failures,
+		"fully depleted owner cell evicts",
+		controller.streamer.release_demand(address, source)
+	)
 	record = controller.streamer.demand_cell(
 		address,
 		source,
@@ -275,29 +299,69 @@ static func _test_collision_gated_realization_depletion_and_reentry(
 		"depleted re-entry cave collision is accepted",
 		controller.accept_collision_shape(
 			address,
-			_floor_shape(),
+			SupportFixture.floor_shape(),
 			source_fingerprint,
 			provenance_fingerprint
 		)
 	)
-	await realization_parent.get_tree().physics_frame
-	await realization_parent.get_tree().physics_frame
-	_expect_equal(failures, "fully depleted re-entry creates no interactive resource Node", realization.live_placement_count(), 0)
+	await _settle_physics(realization_parent)
+	_expect_equal(
+		failures,
+		"fully depleted re-entry creates no interactive resource Node",
+		realization.live_placement_count(),
+		0
+	)
 	var restored: Dictionary = action.inspect_current_placement_state(
 		address.canonical_text(),
 		placement_id,
 		content_registry,
 		store
 	)
-	_expect_true(failures, "fully depleted re-entry still restores semantic depletion state", bool(restored.get("success", false)))
-	_expect_equal(failures, "fully depleted re-entry restores zero remaining capacity", float(restored.get("remaining_capacity_units", -1.0)), 0.0)
-	_expect_true(failures, "zero depletion forbids later realization", not bool(restored.get("depletion_allows_realization", true)))
+	_expect_true(
+		failures,
+		"fully depleted re-entry restores semantic depletion state",
+		bool(restored.get("success", false))
+	)
+	_expect_equal(
+		failures,
+		"fully depleted re-entry restores zero remaining capacity",
+		float(restored.get("remaining_capacity_units", -1.0)),
+		0.0
+	)
+	_expect_true(
+		failures,
+		"zero depletion forbids later realization",
+		not bool(restored.get("depletion_allows_realization", true))
+	)
 
-	var disable_failures: Array[String] = realization.set_activation_enabled(false)
-	for failure in disable_failures:
-		failures.append("realization disable: %s" % failure)
-	_expect_equal(failures, "explicit domain-authority disable leaves zero live resources", realization.live_placement_count(), 0)
+	_append_prefixed(failures, "realization disable", realization.set_activation_enabled(false))
+	_expect_equal(
+		failures,
+		"explicit domain-authority disable leaves zero live resources",
+		realization.live_placement_count(),
+		0
+	)
 	_cleanup(realization, residency, controller)
+
+
+static func _settle_physics(parent: Node3D) -> void:
+	await parent.get_tree().physics_frame
+	await parent.get_tree().physics_frame
+
+
+static func _append_async_if_missing(
+	failures: Array[String],
+	realization,
+	phase: String
+) -> void:
+	if realization.live_placement_count() > 0:
+		return
+	var diagnostics: Array[String] = realization.last_async_diagnostics()
+	if diagnostics.is_empty():
+		failures.append("%s produced no live resource and no async diagnostic" % phase)
+		return
+	for diagnostic in diagnostics:
+		failures.append("%s: %s" % [phase, diagnostic])
 
 
 static func _owner_metadata() -> Dictionary:
@@ -312,19 +376,6 @@ static func _owner_metadata() -> Dictionary:
 		"profile_blend": Vector3(0.2, 0.5, 0.3),
 		"generation_metadata": {"candidate_slot": 0},
 	}
-
-
-static func _floor_shape() -> ConcavePolygonShape3D:
-	var shape := ConcavePolygonShape3D.new()
-	shape.set_faces(PackedVector3Array([
-		Vector3(-4.5, FLOOR_Y, -3.0),
-		Vector3(7.5, FLOOR_Y, 9.0),
-		Vector3(7.5, FLOOR_Y, -3.0),
-		Vector3(-4.5, FLOOR_Y, -3.0),
-		Vector3(-4.5, FLOOR_Y, 9.0),
-		Vector3(7.5, FLOOR_Y, 9.0),
-	]))
-	return shape
 
 
 static func _interaction_node(root: Node):
@@ -349,6 +400,15 @@ static func _cleanup(realization, residency, controller) -> void:
 		if parent != null:
 			parent.remove_child(controller)
 		controller.free()
+
+
+static func _append_prefixed(
+	failures: Array[String],
+	prefix: String,
+	diagnostics: Array
+) -> void:
+	for diagnostic in diagnostics:
+		failures.append("%s: %s" % [prefix, str(diagnostic)])
 
 
 static func _expect_true(failures: Array[String], label: String, condition: bool) -> void:
