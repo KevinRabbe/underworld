@@ -103,9 +103,10 @@ jobs:
         run: |
           set -o pipefail
           validation_log="$(mktemp)"
-          # The realization regression awaits real physics frames. Let its
-          # SceneTree runner own quit(0/1) rather than truncating the proof.
-          godot --headless --path . \
+          # Successful physics-backed tests own quit(0/1). The generous safety
+          # cap prevents an unexpected script error from stranding SceneTree and
+          # hiding the diagnostic until the 10-minute workflow timeout.
+          godot --headless --path . --quit-after 600 \
             --script res://tests/run_resource_composition.gd 2>&1 \
             | tee "$validation_log"
           if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
