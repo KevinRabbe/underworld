@@ -1,0 +1,87 @@
+name: Character Reconcile Sync Main Once
+
+on:
+  push:
+    branches:
+      - worker/char-reconcile-001
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout governed worker branch
+        uses: actions/checkout@v6
+        with:
+          ref: worker/char-reconcile-001
+          fetch-depth: 0
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Merge exact newly accepted main without committing runner
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "958ec18c26429d6843d7ed5afbb3e03922d8f381"
+          git merge --no-ff --no-commit 958ec18c26429d6843d7ed5afbb3e03922d8f381
+          git rm .github/workflows/char-reconcile-sync-main-once.yml
+          git diff --check --cached
+
+      - name: Import merged project resources
+        run: godot --headless --editor --path . --quit
+
+      - name: Repository layout contracts
+        run: python3 tools/ci/validate_repository_layout.py
+
+      - name: App shell contracts
+        run: |
+          set -o pipefail
+          log="$(mktemp)"
+          godot --headless --path . --script res://tests/run_app_shell.gd 2>&1 | tee "$log"
+          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
+          grep -Fq '[APP SHELL VALIDATION] PASS' "$log"
+
+      - name: Latest persistence, Continue, death and SAVE contracts
+        run: |
+          set -o pipefail
+          log="$(mktemp)"
+          godot --headless --path . --quit-after 1 --script res://tests/run_persistence_state.gd 2>&1 | tee "$log"
+          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
+          grep -Fq '[PERSISTENCE STATE VALIDATION] PASS' "$log"
+
+      - name: Content contracts
+        run: |
+          set -o pipefail
+          log="$(mktemp)"
+          godot --headless --path . --quit-after 1 --script res://tests/run_content.gd 2>&1 | tee "$log"
+          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
+          grep -Fq '[VALIDATION] PASS content' "$log"
+
+      - name: Character contracts
+        run: |
+          set -o pipefail
+          log="$(mktemp)"
+          godot --headless --path . --quit-after 1 --script res://tests/run_character.gd 2>&1 | tee "$log"
+          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
+          grep -Fq '[CHARACTER VALIDATION] PASS' "$log"
+
+      - name: Commit clean latest-main reconciliation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test ! -e .github/workflows/char-reconcile-sync-main-once.yml
+          git diff --check
+          git diff --check --cached
+          git commit -m 'merge: reconcile #514 onto accepted main 958ec18c'
+          git push origin HEAD:worker/char-reconcile-001
