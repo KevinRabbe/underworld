@@ -1,0 +1,131 @@
+name: CHAR514 Visual Pass 3 Once
+
+on:
+  push:
+    branches:
+      - worker/char-reconcile-001
+
+permissions:
+  contents: write
+
+jobs:
+  visual-pass-3:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout governed worker branch
+        uses: actions/checkout@v6
+        with:
+          ref: worker/char-reconcile-001
+          fetch-depth: 0
+
+      - name: Assert exact pass-2 source base and accepted-main ancestry
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test "$(git rev-parse HEAD^)" = "08be66d66a7048361ffed34b8bf83e7726f41687"
+          git merge-base --is-ancestor 2948912830c21a0f3e1578bc2dbd48da032368b3 HEAD
+          git diff --exit-code 08be66d66a7048361ffed34b8bf83e7726f41687 -- \
+            presentation/characters/faceted/faceted_body_compiler.gd \
+            presentation/characters/voxel/baseline_survivor_factory.gd \
+            presentation/characters/faceted/faceted_humanoid_body_profile.gd
+
+      - name: Apply face-pack-axe readability convergence
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, got {count}: {old!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          compiler = "presentation/characters/faceted/faceted_body_compiler.gd"
+          replace_once(compiler, "const COMPILER_REVISION := 13", "const COMPILER_REVISION := 14")
+
+          # At the real preview/gameplay scale the old eye triangles sub-pixel out.
+          # Use a few stronger planar marks instead of adding dense facial geometry.
+          replace_once(compiler,
+              '''\t# Strong eyebrow/brow planes are the most important facial read at gameplay\n\t# distance. Small eye slits sit underneath rather than becoming black boxes.\n\tfor side_value in [-1.0, 1.0]:\n\t\tvar side: float = float(side_value)\n\t\tvar brow_inner := Vector2(side * 0.010, eye_y + 0.020)\n\t\tvar brow_outer := Vector2(side * 0.074, eye_y + 0.018)\n\t\t_add_ribbon_z(builders, FACE, brow_inner, brow_outer, face_front - 0.024, 0.010, skin, skin, -1.0)\n\t\tvar eye_inner: Vector3 = Vector3(side * 0.016, eye_y - 0.002, face_front - 0.020)\n\t\tvar eye_outer: Vector3 = Vector3(side * 0.054, eye_y - 0.004, face_front - 0.019)\n\t\tvar eye_low: Vector3 = Vector3(side * 0.046, eye_y - 0.011, face_front - 0.017)\n\t\t_emit_triangle(builders, FACE, eye_inner, eye_outer, eye_low, Vector3(0, 0, -1), skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2(0.8,1))''',
+              '''\t# Sparse but deliberately overscale facial marks survive the preview and\n\t# gameplay cameras. They remain faceted planes rather than texture decals.\n\tfor side_value in [-1.0, 1.0]:\n\t\tvar side: float = float(side_value)\n\t\tvar brow_inner := Vector2(side * 0.010, eye_y + 0.022)\n\t\tvar brow_outer := Vector2(side * 0.078, eye_y + 0.016)\n\t\t_add_ribbon_z(builders, FACE, brow_inner, brow_outer, face_front - 0.030, 0.014, skin, skin, -1.0)\n\t\tvar eye_inner := Vector2(side * 0.018, eye_y - 0.006)\n\t\tvar eye_outer := Vector2(side * 0.060, eye_y - 0.007)\n\t\t_add_ribbon_z(builders, FACE, eye_inner, eye_outer, face_front - 0.031, 0.009, skin, skin, -1.0)''')
+          replace_once(compiler,
+              '_add_ribbon_z(builders, FACE, Vector2(-0.040, mouth_y), Vector2(0.040, mouth_y), face_front - 0.024, 0.0050, skin, skin, -1.0)',
+              '_add_ribbon_z(builders, FACE, Vector2(-0.043, mouth_y), Vector2(0.043, mouth_y), face_front - 0.028, 0.0090, skin, skin, -1.0)')
+
+          # The pack body already tapers; the old flap/pocket layers were the boxy
+          # silhouette. Keep them subordinate to the loft and closer to its surface.
+          replace_once(compiler,
+              '''\t_add_quad_prism_z(builders, CLOTH,\n\t\tVector2(-0.190, chest_y + 0.060),\n\t\tVector2(0.190, chest_y + 0.060),\n\t\tVector2(0.165, chest_y - 0.112),\n\t\tVector2(-0.165, chest_y - 0.112),\n\t\t0.364, 0.392, _weights(BONE.chest))\n\t_add_quad_prism_z(builders, CANVAS_DARK,\n\t\tVector2(-0.150, waist_y + 0.185),\n\t\tVector2(0.150, waist_y + 0.185),\n\t\tVector2(0.130, waist_y + 0.025),\n\t\tVector2(-0.130, waist_y + 0.025),\n\t\t0.370, 0.398, _weights(BONE.chest))''',
+              '''\t_add_quad_prism_z(builders, CLOTH,\n\t\tVector2(-0.160, chest_y + 0.045),\n\t\tVector2(0.160, chest_y + 0.045),\n\t\tVector2(0.132, chest_y - 0.100),\n\t\tVector2(-0.132, chest_y - 0.100),\n\t\t0.346, 0.370, _weights(BONE.chest))\n\t_add_quad_prism_z(builders, CANVAS_DARK,\n\t\tVector2(-0.115, waist_y + 0.145),\n\t\tVector2(0.115, waist_y + 0.145),\n\t\tVector2(0.098, waist_y + 0.038),\n\t\tVector2(-0.098, waist_y + 0.038),\n\t\t0.350, 0.374, _weights(BONE.chest))''')
+          for old, new in [
+              ('for strap_x in [-0.125, 0.125]:', 'for strap_x in [-0.110, 0.110]:'),
+              ('\t\t\t0.402, 0.016, _weights(BONE.chest), _weights(BONE.chest), 1.0)', '\t\t\t0.378, 0.014, _weights(BONE.chest), _weights(BONE.chest), 1.0)'),
+              ('Vector3(strap_x - 0.018, lower_chest_y - 0.010, 0.400)', 'Vector3(strap_x - 0.016, lower_chest_y - 0.010, 0.376)'),
+              ('Vector3(strap_x + 0.018, lower_chest_y + 0.024, 0.414)', 'Vector3(strap_x + 0.016, lower_chest_y + 0.020, 0.388)'),
+              ('_ring_x(Vector3(-0.220, shoulder_y - 0.025, 0.306), 0.066, 0.072, _weights(BONE.chest))', '_ring_x(Vector3(-0.205, shoulder_y - 0.030, 0.300), 0.060, 0.064, _weights(BONE.chest))'),
+              ('_ring_x(Vector3(0.220, shoulder_y - 0.025, 0.306), 0.066, 0.072, _weights(BONE.chest))', '_ring_x(Vector3(0.205, shoulder_y - 0.030, 0.300), 0.060, 0.064, _weights(BONE.chest))'),
+              ('for roll_strap_x in [-0.125, 0.125]:', 'for roll_strap_x in [-0.110, 0.110]:'),
+              ('\t\t\t0.394, 0.014, _weights(BONE.chest), _weights(BONE.chest), 1.0)', '\t\t\t0.374, 0.012, _weights(BONE.chest), _weights(BONE.chest), 1.0)'),
+              ('Vector3(roll_strap_x - 0.014, shoulder_y - 0.030, 0.392)', 'Vector3(roll_strap_x - 0.012, shoulder_y - 0.034, 0.372)'),
+              ('Vector3(roll_strap_x + 0.014, shoulder_y - 0.002, 0.406)', 'Vector3(roll_strap_x + 0.012, shoulder_y - 0.006, 0.384)'),
+          ]:
+              replace_once(compiler, old, new)
+
+          factory = "presentation/characters/voxel/baseline_survivor_factory.gd"
+          replace_once(factory,
+              '_tool_part("axe_handle", "stone_axe", _box(Vector3i(0,-11,0), Vector3i(0,5,0), LEATHER), Vector3i.ZERO)',
+              '_tool_part("axe_handle", "stone_axe", _box(Vector3i(0,-8,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO)')
+          replace_once(factory,
+              '''\tvar rows := {\n\t\t0: [-2, 0],\n\t\t1: [-4, 1],\n\t\t2: [-5, 1],\n\t\t3: [-5, 0],\n\t\t4: [-4, -1],\n\t\t5: [-2, -1],\n\t}\n\tfor z in range(0, 2):''',
+              '''\tvar rows := {\n\t\t0: [-1, 0],\n\t\t1: [-3, 1],\n\t\t2: [-3, 0],\n\t\t3: [-2, -1],\n\t\t4: [-1, -1],\n\t}\n\tfor z in range(0, 1):''')
+          replace_once(factory, 'var is_lash: bool = x == 0 and y in [1, 2, 3]', 'var is_lash: bool = x == 0 and y in [1, 2]')
+          PY
+
+          git diff --check
+          changed="$(git diff --name-only)"
+          printf '%s\n' "$changed"
+          test "$(printf '%s\n' "$changed" | sed '/^$/d' | wc -l)" -eq 2
+          printf '%s\n' "$changed" | grep -Fxq 'presentation/characters/faceted/faceted_body_compiler.gd'
+          printf '%s\n' "$changed" | grep -Fxq 'presentation/characters/voxel/baseline_survivor_factory.gd'
+          git diff --exit-code -- presentation/characters/faceted/faceted_humanoid_body_profile.gd
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Import changed presentation resources
+        run: godot --headless --editor --path . --quit
+
+      - name: Character contracts
+        shell: bash
+        run: |
+          set -o pipefail
+          log="$(mktemp)"
+          godot --headless --path . --quit-after 1 --script res://tests/run_character.gd 2>&1 | tee "$log"
+          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
+          grep -Fq '[CHARACTER VALIDATION] PASS' "$log"
+
+      - name: Repository layout
+        run: python3 tools/ci/validate_repository_layout.py
+
+      - name: Commit validated pass-3 delta and remove disposable runner
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/char514-visual-pass3-once.yml
+          git add presentation/characters/faceted/faceted_body_compiler.gd \
+                  presentation/characters/voxel/baseline_survivor_factory.gd
+          git diff --check --cached
+          test ! -e .github/workflows/char514-visual-pass3-once.yml
+          git diff --exit-code --cached -- presentation/characters/faceted/faceted_humanoid_body_profile.gd
+          git commit -m 'character: refine survivor face pack and field axe'
+          git push origin HEAD:worker/char-reconcile-001
