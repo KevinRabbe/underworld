@@ -7,6 +7,7 @@ on:
       - 'presentation/ui/**'
       - 'project.godot'
       - 'tests/presentation/test_app_shell_contract.gd'
+      - 'tests/presentation/test_release_debug_contract.gd'
       - 'tests/run_app_shell.gd'
       - '.github/workflows/app-shell-validation.yml'
   push:
@@ -17,6 +18,7 @@ on:
       - 'presentation/ui/**'
       - 'project.godot'
       - 'tests/presentation/test_app_shell_contract.gd'
+      - 'tests/presentation/test_release_debug_contract.gd'
       - 'tests/run_app_shell.gd'
       - '.github/workflows/app-shell-validation.yml'
 

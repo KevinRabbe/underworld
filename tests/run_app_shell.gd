@@ -2,6 +2,7 @@ extends SceneTree
 
 const AppShellTests := preload("res://tests/presentation/test_app_shell_contract.gd")
 const GameFlowTests := preload("res://tests/presentation/test_game_flow_contract.gd")
+const ReleaseDebugTests := preload("res://tests/presentation/test_release_debug_contract.gd")
 
 
 func _init() -> void:
@@ -15,9 +16,11 @@ func _run() -> void:
 	failures.append_array(runtime_failures)
 	var gameflow_runtime_failures: Array[String] = await GameFlowTests.run_runtime(self)
 	failures.append_array(gameflow_runtime_failures)
+	var release_debug_failures: Array[String] = await ReleaseDebugTests.run_runtime(self)
+	failures.append_array(release_debug_failures)
 	if failures.is_empty():
 		print("[APP SHELL VALIDATION] PASS")
-		print("  routing / off-tree NEW+CONTINUE / pause-resume / Save & Quit / teardown / theme boundary passed")
+		print("  routing / off-tree NEW+CONTINUE / pause-resume / Save & Quit / teardown / theme boundary / release-safe DebugHUD isolation passed")
 		quit(0)
 		return
 	printerr("[APP SHELL VALIDATION] FAIL — %d failure(s)" % failures.size())
