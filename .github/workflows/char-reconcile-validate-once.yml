@@ -24,17 +24,26 @@ jobs:
           version: 4.7.2
           use-dotnet: false
           include-templates: false
-      - name: Lock authored minus-Z locomotion semantics
+      - name: Reconcile current-main character regressions
         run: |
           python - <<'PY'
           from pathlib import Path
-          path = Path('tests/character/test_semantic_animation_layer.gd')
-          text = path.read_text()
+
+          semantic = Path('tests/character/test_semantic_animation_layer.gd')
+          text = semantic.read_text()
           old = '''\tcontroller_a.update_locomotion(1.0 / 60.0, Vector3(0.0, 0.0, 4.0), 0.0, true, false)\n\tcontroller_b.update_locomotion(1.0 / 60.0, Vector3(0.0, 0.0, 4.0), 0.0, true, false)\n\t_expect_equal(failures, "set A locomotion binding", adapter_a.last_locomotion, "pack_a.walk_forward")\n\t_expect_equal(failures, "set B locomotion binding", adapter_b.last_locomotion, "pack_b.walk_forward")\n'''
           new = '''\tcontroller_a.update_locomotion(1.0 / 60.0, Vector3(0.0, 0.0, -4.0), 0.0, true, false)\n\tcontroller_b.update_locomotion(1.0 / 60.0, Vector3(0.0, 0.0, -4.0), 0.0, true, false)\n\t_expect_equal(failures, "set A local -Z locomotion maps to forward", adapter_a.last_locomotion, "pack_a.walk_forward")\n\t_expect_equal(failures, "set B local -Z locomotion maps to forward", adapter_b.last_locomotion, "pack_b.walk_forward")\n\tcontroller_a.update_locomotion(1.0 / 60.0, Vector3(0.0, 0.0, 4.0), 0.0, true, false)\n\tcontroller_b.update_locomotion(1.0 / 60.0, Vector3(0.0, 0.0, 4.0), 0.0, true, false)\n\t_expect_equal(failures, "set A local +Z locomotion maps to backward", adapter_a.last_locomotion, "pack_a.walk_backward")\n\t_expect_equal(failures, "set B local +Z locomotion maps to backward", adapter_b.last_locomotion, "pack_b.walk_backward")\n'''
           if text.count(old) != 1:
               raise SystemExit(f'expected one locomotion expectation block, found {text.count(old)}')
-          path.write_text(text.replace(old, new, 1))
+          semantic.write_text(text.replace(old, new, 1))
+
+          buffer_test = Path('tests/character/test_input_buffer.gd')
+          text = buffer_test.read_text()
+          old = '''\tplayer.call("_respawn_after_defeat")\n\t_expect_equal(failures, "respawn clears buffered intent", String(player.call("get_buffered_action_name")), "")\n\t_expect_true(failures, "respawn returns action controller to free", bool(actions.call("is_free")))\n'''
+          new = '''\t_expect_true(failures, "defeat boundary commits before respawn", bool(player.call("_enter_defeated", &"damage")))\n\t_expect_true(failures, "accepted respawn commits", bool(player.call("commit_respawn", player.global_position)))\n\t_expect_equal(failures, "respawn clears buffered intent", String(player.call("get_buffered_action_name")), "")\n\t_expect_true(failures, "respawn returns action controller to free", bool(actions.call("is_free")))\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one retired respawn seam, found {text.count(old)}')
+          buffer_test.write_text(text.replace(old, new, 1))
           PY
           git diff --check
       - name: Run character contracts
@@ -48,11 +57,11 @@ jobs:
             exit 1
           fi
           grep -Fq '[CHARACTER VALIDATION] PASS' "$validation_log"
-      - name: Commit regression and retire one-shot workflow
+      - name: Commit regressions and retire one-shot workflow
         run: |
           rm -f .github/workflows/char-reconcile-validate-once.yml
           git add -A
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "test: lock faceted minus-Z facing semantics"
+          git commit -m "test: reconcile faceted character with current lifecycle"
           git push origin HEAD:worker/char-reconcile-001
