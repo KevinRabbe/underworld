@@ -3,21 +3,28 @@ name: Generator Manifest Validation
 on:
   pull_request:
     paths:
-      - 'worldgen/versioning/generator_manifest.gd'
+      - 'worldgen/versioning/**'
+      - 'worldgen/pipeline/world_generation_context.gd'
+      - 'worldgen/identity/world_id.gd'
       - 'worldgen/random/seed_domain.gd'
       - 'worldgen/random/seed_domains.gd'
       - 'tests/generator_manifest/**'
+      - 'tests/foundation/test_generation_provenance.gd'
       - 'tests/run_generator_manifest.gd'
       - '.github/workflows/generator-manifest-validation.yml'
   push:
     branches:
       - main
       - 'validation/generator-manifest-*'
+      - 'worldgen/gen-manifest-package-*'
     paths:
-      - 'worldgen/versioning/generator_manifest.gd'
+      - 'worldgen/versioning/**'
+      - 'worldgen/pipeline/world_generation_context.gd'
+      - 'worldgen/identity/world_id.gd'
       - 'worldgen/random/seed_domain.gd'
       - 'worldgen/random/seed_domains.gd'
       - 'tests/generator_manifest/**'
+      - 'tests/foundation/test_generation_provenance.gd'
       - 'tests/run_generator_manifest.gd'
       - '.github/workflows/generator-manifest-validation.yml'
 
