@@ -4,9 +4,24 @@ const ItemContainerState := preload("res://gameplay/items/inventory/item_contain
 const RuntimeService := preload("res://gameplay/resources/runtime/underground_resource_runtime_service.gd")
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
 const RuntimeTests := preload("res://tests/resources/test_underground_resource_runtime.gd")
+const MiningTicketTests := preload("res://tests/resources/test_underground_resource_mining_ticket.gd")
 const REQUIRED_RESOURCE_RUNTIME_DEPENDENCY_PATHS: Array[String] = [
 	"worldgen/identity/stable_id.gd",
+	"worldgen/geometry/geometry_cell_address.gd",
+	"worldgen/runtime/underworld_cave_runtime_controller.gd",
+	"worldgen/runtime/underworld_runtime_cell_definition_service.gd",
+	"worldgen/runtime/underworld_runtime_cell_source_query.gd",
+	"worldgen/runtime/underworld_runtime_cell_lifecycle_relay.gd",
+	"worldgen/runtime/underworld_runtime_cell_executor.gd",
+	"worldgen/runtime/underworld_runtime_streamer.gd",
+	"worldgen/runtime/runtime_cell_record.gd",
+	"content/placement/underground_placement_candidate.gd",
+	"content/placement/underground_placement_policy.gd",
 	"content/placement/underground_placement_record.gd",
+	"content/placement/underground_placement_service.gd",
+	"content/reserved_sites/reserved_site_assignment.gd",
+	"content/reserved_sites/reserved_site_assignment_service.gd",
+	"content/reserved_sites/reserved_site_content_definition.gd",
 	"gameplay/resources/definitions/resource_definition.gd",
 	"gameplay/resources/definitions/resource_yield_rule.gd",
 	"gameplay/resources/state/resource_depletion_state.gd",
@@ -27,6 +42,13 @@ const REQUIRED_RESOURCE_RUNTIME_DEPENDENCY_PATHS: Array[String] = [
 	"gameplay/items/inventory/inventory_state_codec.gd",
 	"gameplay/items/inventory/item_stack_state.gd",
 	"gameplay/items/inventory/item_instance_state.gd",
+	"tests/resources/test_underground_resource_runtime.gd",
+	"tests/resources/test_underground_resource_cell_observer.gd",
+	"tests/resources/test_underground_resource_composition.gd",
+	"tests/resources/test_underground_resource_residency.gd",
+	"tests/resources/test_underground_resource_mining_ticket.gd",
+	"tests/run_resource_runtime.gd",
+	"tests/run_resource_composition.gd",
 ]
 
 
@@ -44,12 +66,13 @@ class CommitFailingInventory extends ItemContainerState:
 
 func _init() -> void:
 	var failures: Array[String] = RuntimeTests.run()
+	failures.append_array(MiningTicketTests.run())
 	_test_workflow_dependency_triggers(failures)
 	_test_pull_request_path_parser_false_positives(failures)
 	_test_commit_phase_failure_restores_world_delta(failures)
 	if failures.is_empty():
 		print("[RESOURCE RUNTIME VALIDATION] PASS")
-		print("  iron content / archetype realization / semantic pickaxe eligibility / atomic inventory yield / persistent depletion / idempotence / strict restore compatibility / commit-phase rollback / workflow dependency triggers passed")
+		print("  iron content / archetype realization / semantic pickaxe eligibility / atomic inventory yield / persistent depletion / retry-stable mining tickets / depletion-before-realization / strict restore compatibility / commit-phase rollback / workflow dependency triggers passed")
 		quit(0)
 		return
 
