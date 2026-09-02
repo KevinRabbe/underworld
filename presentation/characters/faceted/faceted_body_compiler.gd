@@ -3,7 +3,7 @@ class_name UnderworldFacetedBodyCompiler
 
 const MeshDataScript := preload("res://presentation/characters/faceted/faceted_skinned_mesh_data.gd")
 
-const COMPILER_REVISION := 12
+const COMPILER_REVISION := 13
 const SKIN := 0
 const CLOTH := 1
 const LEATHER := 2
@@ -228,8 +228,8 @@ static func _build_head(builders: Dictionary, profile) -> void:
 	for side_value in [-1.0, 1.0]:
 		var side: float = float(side_value)
 		var brow_inner := Vector2(side * 0.010, eye_y + 0.020)
-		var brow_outer := Vector2(side * 0.068, eye_y + 0.018)
-		_add_ribbon_z(builders, FACE, brow_inner, brow_outer, face_front - 0.022, 0.008, skin, skin, -1.0)
+		var brow_outer := Vector2(side * 0.074, eye_y + 0.018)
+		_add_ribbon_z(builders, FACE, brow_inner, brow_outer, face_front - 0.024, 0.010, skin, skin, -1.0)
 		var eye_inner: Vector3 = Vector3(side * 0.016, eye_y - 0.002, face_front - 0.020)
 		var eye_outer: Vector3 = Vector3(side * 0.054, eye_y - 0.004, face_front - 0.019)
 		var eye_low: Vector3 = Vector3(side * 0.046, eye_y - 0.011, face_front - 0.017)
@@ -260,10 +260,10 @@ static func _build_head(builders: Dictionary, profile) -> void:
 	var nose_top_r := Vector3(0.010, nose_top_y, face_front - 0.010)
 	var nose_mid_l := Vector3(-0.014, nose_mid_y, face_front - 0.032)
 	var nose_mid_r := Vector3(0.014, nose_mid_y, face_front - 0.032)
-	var nose_tip_l := Vector3(-0.021, nose_tip_y, face_front - 0.064)
-	var nose_tip_r := Vector3(0.021, nose_tip_y, face_front - 0.064)
-	var nose_base_l := Vector3(-0.025, nose_base_y, face_front - 0.028)
-	var nose_base_r := Vector3(0.025, nose_base_y, face_front - 0.028)
+	var nose_tip_l := Vector3(-0.022, nose_tip_y, face_front - 0.072)
+	var nose_tip_r := Vector3(0.022, nose_tip_y, face_front - 0.072)
+	var nose_base_l := Vector3(-0.027, nose_base_y, face_front - 0.034)
+	var nose_base_r := Vector3(0.027, nose_base_y, face_front - 0.034)
 	for quad_value in [
 		[nose_top_l, nose_top_r, nose_mid_r, nose_mid_l],
 		[nose_mid_l, nose_mid_r, nose_tip_r, nose_tip_l],
@@ -288,11 +288,11 @@ static func _build_head(builders: Dictionary, profile) -> void:
 
 	# Chin/lower lip planes keep the expression neutral but human-readable.
 	_add_tri_prism_z(builders, SKIN,
-		Vector2(-0.050, mouth_y - 0.007),
-		Vector2(0.050, mouth_y - 0.007),
+		Vector2(-0.056, mouth_y - 0.007),
+		Vector2(0.056, mouth_y - 0.007),
 		Vector2(0.0, jaw_y - 0.025),
 		face_front - 0.016, face_front + 0.004, skin)
-	_add_ribbon_z(builders, FACE, Vector2(-0.034, mouth_y), Vector2(0.034, mouth_y), face_front - 0.020, 0.0040, skin, skin, -1.0)
+	_add_ribbon_z(builders, FACE, Vector2(-0.040, mouth_y), Vector2(0.040, mouth_y), face_front - 0.024, 0.0050, skin, skin, -1.0)
 
 	# Undercut: a narrow dark rear/crown shell leaves the temporal sides exposed.
 	# A chain of swept faceted tufts then supplies the distinctive top silhouette
@@ -406,22 +406,22 @@ static func _build_leg(builders: Dictionary, profile, left: bool, outfit: Resour
 	# Asymmetric front/back depth gives the thigh and calf a human side profile:
 	# restrained knee, fuller rear thigh, and the characteristic rear calf bulge.
 	var trouser_rings: Array[Dictionary] = [
-		_ring_y_asym(Vector3(x, hip_y, 0.006), profile.thigh_diameter * 0.67, profile.thigh_diameter * 0.60, profile.thigh_diameter * 0.70, _weights(thigh_bone)),
-		_ring_y_asym(Vector3(x, lerpf(hip_y, thigh_mass_y, 0.42), 0.004), profile.thigh_diameter * 0.70, profile.thigh_diameter * 0.62, profile.thigh_diameter * 0.72, _weights(thigh_bone)),
-		_ring_y_asym(Vector3(x, thigh_mass_y, 0.002), profile.thigh_diameter * 0.65, profile.thigh_diameter * 0.59, profile.thigh_diameter * 0.67, _weights(thigh_bone)),
-		_ring_y_asym(Vector3(x, lerpf(thigh_mass_y, knee_y, 0.58), 0.001), profile.thigh_diameter * 0.55, profile.thigh_diameter * 0.51, profile.thigh_diameter * 0.57, _weights2(thigh_bone, calf_bone, 0.18)),
-		_ring_y_asym(Vector3(x, knee_y, -0.002), profile.thigh_diameter * 0.485, profile.thigh_diameter * 0.46, profile.thigh_diameter * 0.50, _weights2(thigh_bone, calf_bone, 0.50)),
-		_ring_y_asym(Vector3(x, lerpf(knee_y, calf_mass_y, 0.38), 0.004), profile.calf_diameter * 0.68, profile.calf_diameter * 0.61, profile.calf_diameter * 0.74, _weights(calf_bone)),
-		_ring_y_asym(Vector3(x, calf_mass_y, 0.010), profile.calf_diameter * 0.75, profile.calf_diameter * 0.64, profile.calf_diameter * 0.82, _weights(calf_bone)),
-		_ring_y_asym(Vector3(x, calf_low_y, 0.003), profile.calf_diameter * 0.59, profile.calf_diameter * 0.55, profile.calf_diameter * 0.64, _weights(calf_bone)),
-		_ring_y_asym(Vector3(x, lerpf(calf_low_y, ankle_y, 0.65), 0.000), profile.ankle_width * 0.62, profile.ankle_width * 0.60, profile.ankle_width * 0.65, _weights2(calf_bone, foot_bone, 0.18)),
+		_ring_y_asym(Vector3(x, hip_y, 0.006), profile.thigh_diameter * 0.72, profile.thigh_diameter * 0.65, profile.thigh_diameter * 0.76, _weights(thigh_bone)),
+		_ring_y_asym(Vector3(x, lerpf(hip_y, thigh_mass_y, 0.42), 0.004), profile.thigh_diameter * 0.76, profile.thigh_diameter * 0.68, profile.thigh_diameter * 0.79, _weights(thigh_bone)),
+		_ring_y_asym(Vector3(x, thigh_mass_y, 0.002), profile.thigh_diameter * 0.71, profile.thigh_diameter * 0.65, profile.thigh_diameter * 0.74, _weights(thigh_bone)),
+		_ring_y_asym(Vector3(x, lerpf(thigh_mass_y, knee_y, 0.58), 0.001), profile.thigh_diameter * 0.60, profile.thigh_diameter * 0.56, profile.thigh_diameter * 0.62, _weights2(thigh_bone, calf_bone, 0.18)),
+		_ring_y_asym(Vector3(x, knee_y, -0.002), profile.thigh_diameter * 0.52, profile.thigh_diameter * 0.50, profile.thigh_diameter * 0.54, _weights2(thigh_bone, calf_bone, 0.50)),
+		_ring_y_asym(Vector3(x, lerpf(knee_y, calf_mass_y, 0.38), 0.004), profile.calf_diameter * 0.73, profile.calf_diameter * 0.66, profile.calf_diameter * 0.80, _weights(calf_bone)),
+		_ring_y_asym(Vector3(x, calf_mass_y, 0.010), profile.calf_diameter * 0.81, profile.calf_diameter * 0.70, profile.calf_diameter * 0.88, _weights(calf_bone)),
+		_ring_y_asym(Vector3(x, calf_low_y, 0.003), profile.calf_diameter * 0.65, profile.calf_diameter * 0.61, profile.calf_diameter * 0.70, _weights(calf_bone)),
+		_ring_y_asym(Vector3(x, lerpf(calf_low_y, ankle_y, 0.65), 0.000), profile.ankle_width * 0.68, profile.ankle_width * 0.66, profile.ankle_width * 0.71, _weights2(calf_bone, foot_bone, 0.18)),
 	]
 	_add_y_loft(builders, SKIN if outfit == null else TROUSER, trouser_rings, 8, true, true)
 
 	var boot_rings: Array[Dictionary] = [
-		_ring_y_asym(Vector3(x, calf_mass_y - 0.010, 0.008), profile.calf_diameter * 0.70, profile.calf_diameter * 0.65, profile.calf_diameter * 0.73, _weights(calf_bone)),
-		_ring_y_asym(Vector3(x, calf_low_y - 0.020, 0.000), profile.ankle_width * 0.62, profile.ankle_width * 0.62, profile.ankle_width * 0.68, _weights(calf_bone)),
-		_ring_y_asym(Vector3(x, ankle_y, -0.005), profile.ankle_width * 0.56, profile.ankle_width * 0.59, profile.ankle_width * 0.62, _weights2(calf_bone, foot_bone, 0.65)),
+		_ring_y_asym(Vector3(x, calf_mass_y - 0.010, 0.008), profile.calf_diameter * 0.76, profile.calf_diameter * 0.70, profile.calf_diameter * 0.79, _weights(calf_bone)),
+		_ring_y_asym(Vector3(x, calf_low_y - 0.020, 0.000), profile.ankle_width * 0.68, profile.ankle_width * 0.67, profile.ankle_width * 0.73, _weights(calf_bone)),
+		_ring_y_asym(Vector3(x, ankle_y, -0.005), profile.ankle_width * 0.62, profile.ankle_width * 0.64, profile.ankle_width * 0.68, _weights2(calf_bone, foot_bone, 0.65)),
 	]
 	_add_y_loft(builders, SKIN if outfit == null else LEATHER, boot_rings, 8, true, true)
 	# Compact rugged boot last.  Rev10 removed the rectangular slab, but its
@@ -437,11 +437,11 @@ static func _build_leg(builders: Dictionary, profile, left: bool, outfit: Resour
 	var toe_base_z: float = -float(profile.foot_length) * 0.53
 	var toe_z: float = -float(profile.foot_length) * 0.64
 	var foot_rings: Array[Dictionary] = [
-		_ring_z(Vector3(x, sole_y + 0.067, heel_z), profile.foot_width * 0.47, 0.047, foot_skin),
-		_ring_z(Vector3(x, sole_y + 0.081, instep_z), profile.foot_width * 0.53, minf(0.066, foot_top_y - sole_y - 0.018), foot_skin),
-		_ring_z(Vector3(x, sole_y + 0.069, ball_z), profile.foot_width * 0.60, 0.055, foot_skin),
-		_ring_z(Vector3(x, sole_y + 0.062, toe_base_z), profile.foot_width * 0.56, 0.047, foot_skin),
-		_ring_z(Vector3(x, sole_y + 0.058, toe_z), profile.foot_width * 0.48, 0.040, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.067, heel_z), profile.foot_width * 0.53, 0.050, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.081, instep_z), profile.foot_width * 0.60, minf(0.070, foot_top_y - sole_y - 0.016), foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.069, ball_z), profile.foot_width * 0.68, 0.059, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.062, toe_base_z), profile.foot_width * 0.64, 0.051, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.058, toe_z), profile.foot_width * 0.56, 0.044, foot_skin),
 	]
 	_add_z_loft(builders, SKIN if outfit == null else LEATHER, foot_rings, 8, true, true, -1.0)
 
@@ -449,11 +449,11 @@ static func _build_leg(builders: Dictionary, profile, left: bool, outfit: Resour
 	# pointed platform.  A wide ball and toe-base keep the planted read at
 	# gameplay distance while the final cap remains visibly faceted.
 	var sole_rings: Array[Dictionary] = [
-		_ring_z(Vector3(x, sole_y + 0.018, heel_z + 0.005), profile.foot_width * 0.52, 0.018, foot_skin),
-		_ring_z(Vector3(x, sole_y + 0.018, instep_z), profile.foot_width * 0.58, 0.018, foot_skin),
-		_ring_z(Vector3(x, sole_y + 0.018, ball_z - 0.003), profile.foot_width * 0.64, 0.018, foot_skin),
-		_ring_z(Vector3(x, sole_y + 0.018, toe_base_z - 0.004), profile.foot_width * 0.60, 0.018, foot_skin),
-		_ring_z(Vector3(x, sole_y + 0.018, toe_z - 0.005), profile.foot_width * 0.52, 0.018, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.018, heel_z + 0.005), profile.foot_width * 0.58, 0.018, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.018, instep_z), profile.foot_width * 0.64, 0.018, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.018, ball_z - 0.003), profile.foot_width * 0.71, 0.018, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.018, toe_base_z - 0.004), profile.foot_width * 0.68, 0.018, foot_skin),
+		_ring_z(Vector3(x, sole_y + 0.018, toe_z - 0.005), profile.foot_width * 0.60, 0.018, foot_skin),
 	]
 	_add_z_loft(builders, SKIN if outfit == null else SOLE, sole_rings, 8, true, true, -1.0)
 
@@ -491,6 +491,17 @@ static func _build_outfit_details(builders: Dictionary, profile) -> void:
 		Vector2(0.030, pelvis_y + 0.035),
 		Vector2(0.220, pelvis_y + 0.015),
 		vest_front_z, vest_back_z, _weights2(BONE.chest, BONE.spine_02, 0.25))
+	# The target jacket reads as one rugged closed garment below the neck wrap.
+	_add_quad_prism_z(builders, CLOTH,
+		Vector2(-0.058, chest_y - 0.078),
+		Vector2(0.058, chest_y - 0.078),
+		Vector2(0.026, pelvis_y + 0.030),
+		Vector2(-0.026, pelvis_y + 0.030),
+		vest_front_z - 0.004, vest_back_z, _weights2(BONE.chest, BONE.spine_02, 0.42))
+	_add_ribbon_z(builders, CANVAS_DARK,
+		Vector2(0.0, chest_y - 0.082), Vector2(0.0, pelvis_y + 0.028),
+		vest_front_z - 0.014, 0.008,
+		_weights(BONE.chest), _weights2(BONE.spine_02, BONE.pelvis, 0.32), -1.0)
 
 	# Raised darker lapel edges make the V readable at normal camera distance.
 	_add_ribbon_z(builders, CANVAS_DARK, Vector2(-0.172, shoulder_y - 0.062), Vector2(-0.046, chest_y - 0.078), vest_front_z - 0.010, 0.018, _weights(BONE.chest), _weights(BONE.chest), -1.0)
@@ -525,11 +536,11 @@ static func _build_outfit_details(builders: Dictionary, profile) -> void:
 	# tapered shoulders, a raised flap and lower pocket, visible straps/buckles,
 	# and a bedroll that reads as attached gear rather than the entire rear mass.
 	_add_y_loft(builders, CANVAS_DARK, [
-		_ring_y(Vector3(0, waist_y - 0.030, 0.228), 0.165, 0.080, _weights(BONE.chest)),
-		_ring_y(Vector3(0, lerpf(waist_y, lower_chest_y, 0.48), 0.250), 0.215, 0.115, _weights(BONE.chest)),
-		_ring_y(Vector3(0, chest_y - 0.045, 0.260), 0.235, 0.125, _weights(BONE.chest)),
-		_ring_y(Vector3(0, shoulder_y - 0.155, 0.252), 0.225, 0.115, _weights(BONE.chest)),
-		_ring_y(Vector3(0, shoulder_y - 0.070, 0.232), 0.185, 0.090, _weights(BONE.chest)),
+		_ring_y(Vector3(0, waist_y - 0.030, 0.220), 0.160, 0.075, _weights(BONE.chest)),
+		_ring_y(Vector3(0, lerpf(waist_y, lower_chest_y, 0.48), 0.240), 0.205, 0.105, _weights(BONE.chest)),
+		_ring_y(Vector3(0, chest_y - 0.045, 0.248), 0.225, 0.115, _weights(BONE.chest)),
+		_ring_y(Vector3(0, shoulder_y - 0.155, 0.242), 0.215, 0.108, _weights(BONE.chest)),
+		_ring_y(Vector3(0, shoulder_y - 0.070, 0.225), 0.175, 0.085, _weights(BONE.chest)),
 	], 8, true, true)
 
 	# Tapered rear flap and lower pocket are separate prismatic garment layers,
@@ -539,38 +550,38 @@ static func _build_outfit_details(builders: Dictionary, profile) -> void:
 		Vector2(0.190, chest_y + 0.060),
 		Vector2(0.165, chest_y - 0.112),
 		Vector2(-0.165, chest_y - 0.112),
-		0.386, 0.416, _weights(BONE.chest))
+		0.364, 0.392, _weights(BONE.chest))
 	_add_quad_prism_z(builders, CANVAS_DARK,
 		Vector2(-0.150, waist_y + 0.185),
 		Vector2(0.150, waist_y + 0.185),
 		Vector2(0.130, waist_y + 0.025),
 		Vector2(-0.130, waist_y + 0.025),
-		0.392, 0.425, _weights(BONE.chest))
+		0.370, 0.398, _weights(BONE.chest))
 
 	for strap_x in [-0.125, 0.125]:
 		_add_ribbon_z(builders, LEATHER_LIGHT,
 			Vector2(strap_x, waist_y + 0.030),
 			Vector2(strap_x, shoulder_y - 0.085),
-			0.430, 0.016, _weights(BONE.chest), _weights(BONE.chest), 1.0)
+			0.402, 0.016, _weights(BONE.chest), _weights(BONE.chest), 1.0)
 		_add_box(builders, METAL,
-			Vector3(strap_x - 0.018, lower_chest_y - 0.010, 0.428),
-			Vector3(strap_x + 0.018, lower_chest_y + 0.024, 0.442),
+			Vector3(strap_x - 0.018, lower_chest_y - 0.010, 0.400),
+			Vector3(strap_x + 0.018, lower_chest_y + 0.024, 0.414),
 			_weights(BONE.chest), 0.004)
 
 	# Teal bedroll sits across the pack crown and extends just beyond the pack
 	# shoulders, matching the locked turnaround's recognizable rear silhouette.
 	_add_x_loft(builders, ACCENT, [
-		_ring_x(Vector3(-0.235, shoulder_y - 0.010, 0.340), 0.073, 0.078, _weights(BONE.chest)),
-		_ring_x(Vector3(0.235, shoulder_y - 0.010, 0.340), 0.073, 0.078, _weights(BONE.chest)),
+		_ring_x(Vector3(-0.220, shoulder_y - 0.025, 0.306), 0.066, 0.072, _weights(BONE.chest)),
+		_ring_x(Vector3(0.220, shoulder_y - 0.025, 0.306), 0.066, 0.072, _weights(BONE.chest)),
 	], 8, true, true, 1.0)
 	for roll_strap_x in [-0.125, 0.125]:
 		_add_ribbon_z(builders, LEATHER,
 			Vector2(roll_strap_x, shoulder_y - 0.072),
 			Vector2(roll_strap_x, shoulder_y + 0.052),
-			0.432, 0.014, _weights(BONE.chest), _weights(BONE.chest), 1.0)
+			0.394, 0.014, _weights(BONE.chest), _weights(BONE.chest), 1.0)
 		_add_box(builders, METAL,
-			Vector3(roll_strap_x - 0.014, shoulder_y - 0.016, 0.430),
-			Vector3(roll_strap_x + 0.014, shoulder_y + 0.012, 0.444),
+			Vector3(roll_strap_x - 0.014, shoulder_y - 0.030, 0.392),
+			Vector3(roll_strap_x + 0.014, shoulder_y - 0.002, 0.406),
 			_weights(BONE.chest), 0.003)
 
 	# Two balanced utility pouches stay clear of hand sockets/collision.
