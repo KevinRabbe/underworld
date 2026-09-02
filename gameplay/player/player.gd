@@ -8,8 +8,7 @@ signal parry_succeeded(source_position: Vector3)
 signal damage_committed(amount: int, remaining_health: int, source_position: Vector3)
 signal defeat_requested(reason: StringName)
 
-const PrototypeMannequinScript := preload("res://presentation/characters/player/prototype_mannequin/prototype_mannequin.gd")
-const PrototypeAnimationRuntimeFactoryScript := preload("res://presentation/characters/player/prototype_mannequin/prototype_animation_runtime_factory.gd")
+const PrototypeMannequinPresentationProviderScript := preload("res://presentation/characters/player/prototype_mannequin/prototype_mannequin_presentation_provider.gd")
 const StaminaComponentScript := preload("res://gameplay/player/components/stamina_component.gd")
 const PlayerActionControllerScript := preload("res://gameplay/player/actions/player_action_controller.gd")
 const PlayerInputBufferScript := preload("res://gameplay/player/input/player_input_buffer.gd")
@@ -74,6 +73,8 @@ var equipped_weapon_attack_set
 var equipped_weapon_attack_resolver
 
 var visual_root: Node3D
+var character_presentation_provider = PrototypeMannequinPresentationProviderScript.new()
+var character_presentation
 var mannequin
 var animation_controller
 var tool_visual_root: Node3D
@@ -810,12 +811,22 @@ func _build_character_visual() -> void:
 	visual_root.name = "VisualRoot"
 	add_child(visual_root)
 
-	mannequin = PrototypeMannequinScript.new()
-	mannequin.name = "PrototypeMannequin"
-	visual_root.add_child(mannequin)
-	mannequin.build()
+	if character_presentation_provider == null:
+		push_error("Player requires a character presentation provider")
+		return
+	character_presentation = character_presentation_provider.create_presentation()
+	if character_presentation == null:
+		push_error("Character presentation provider returned no presentation")
+		return
+	# Keep the historical field as a compatibility alias for gameplay tests and
+	# callers that only need the presentation's public pose surface.
+	mannequin = character_presentation
+	visual_root.add_child(character_presentation)
+	character_presentation.build()
 
-	var animation_runtime: Dictionary = PrototypeAnimationRuntimeFactoryScript.build(mannequin)
+	var animation_runtime: Dictionary = character_presentation_provider.build_animation_runtime(
+		character_presentation
+	)
 	if bool(animation_runtime.get("success", false)):
 		animation_controller = animation_runtime.get("controller")
 	else:
@@ -828,42 +839,19 @@ func _build_character_visual() -> void:
 	if tool_visual_root == null:
 		# Explicit presentation-only fallback keeps the prototype tool visible if
 		# semantic animation configuration fails; diagnostics above remain loud.
-		tool_visual_root = mannequin.get_tool_visual_root()
+		tool_visual_root = character_presentation.get_tool_visual_root()
 	_rebuild_tool_visual()
 
 
 func _rebuild_tool_visual() -> void:
 	if tool_visual_root == null:
 		return
-	for child in tool_visual_root.get_children():
-		child.queue_free()
-
-	if equipped_tool_visual == "hands":
-		return
-
-	var handle_material := StandardMaterial3D.new()
-	handle_material.albedo_color = Color(0.30, 0.17, 0.07)
-	var stone_material := StandardMaterial3D.new()
-	stone_material.albedo_color = Color(0.36, 0.37, 0.34)
-
-	var handle := MeshInstance3D.new()
-	var handle_mesh := BoxMesh.new()
-	handle_mesh.size = Vector3(0.10, 0.72, 0.10)
-	handle.mesh = handle_mesh
-	handle.material_override = handle_material
-	tool_visual_root.add_child(handle)
-
-	var head := MeshInstance3D.new()
-	var head_mesh := BoxMesh.new()
-	if equipped_tool_visual == "stone_axe":
-		head_mesh.size = Vector3(0.38, 0.28, 0.13)
-	else:
-		head_mesh.size = Vector3(0.62, 0.16, 0.13)
-	head.mesh = head_mesh
-	head.material_override = stone_material
-	head.position = Vector3(-0.10, 0.31, 0.0)
-	head.rotation_degrees.z = -18.0
-	tool_visual_root.add_child(head)
+	if not character_presentation_provider.realize_held_item(
+		character_presentation,
+		tool_visual_root,
+		equipped_tool_visual
+	):
+		push_error("Character presentation provider could not realize held item: %s" % equipped_tool_visual)
 
 
 func _build_camera() -> void:
