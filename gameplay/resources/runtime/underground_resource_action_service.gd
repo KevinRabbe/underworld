@@ -6,6 +6,8 @@ const ResidencyService := preload("res://gameplay/resources/runtime/underground_
 const MiningTicket := preload("res://gameplay/resources/runtime/underground_resource_mining_ticket.gd")
 const MiningTicketService := preload("res://gameplay/resources/runtime/underground_resource_mining_ticket_service.gd")
 
+signal mining_committed(cell_address: String, placement_stable_id: String, depleted: bool)
+
 var _residency = null
 var _ticket_service = MiningTicketService.new()
 
@@ -56,7 +58,7 @@ func execute_mining(
 	)
 	if not bool(target.get("success", false)):
 		return target
-	return _ticket_service.execute_ticket(
+	var result: Dictionary = _ticket_service.execute_ticket(
 		ticket,
 		target.get("placement", null),
 		content_registry,
@@ -65,6 +67,16 @@ func execute_mining(
 		delta_store,
 		target.get("entry", {})
 	)
+	if (
+		bool(result.get("success", false))
+		and not bool(result.get("duplicate", false))
+	):
+		mining_committed.emit(
+			ticket.cell_address(),
+			ticket.placement_stable_id(),
+			bool(result.get("depleted", false))
+		)
+	return result
 
 
 ## Depletion is restored before later realization composition can create a Node.
