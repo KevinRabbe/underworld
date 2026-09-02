@@ -26,6 +26,8 @@ static func run() -> Array[String]:
 	_test_equipment_round_trip_uses_current_authored_rules(failures)
 	_test_equipment_incompatible_current_rule_fails_closed(failures)
 	_test_equipment_selected_binding_compatibility(failures)
+	_test_player_vitals_round_trip_and_zero_stamina(failures)
+	_test_player_vitals_fail_closed(failures)
 	_test_pending_and_consumed_loot_round_trip(failures)
 	_test_malformed_pending_reward_never_reconstructs(failures)
 	_test_pending_loot_structural_keys_fail_closed(failures)
@@ -370,6 +372,88 @@ static func _test_equipment_selected_binding_compatibility(failures: Array[Strin
 		failures.append("changed selected binding exposed partial equipment state")
 
 
+static func _test_player_vitals_round_trip_and_zero_stamina(failures: Array[String]) -> void:
+	var encoded: Dictionary = GameplayStateCodec.encode_player_vitals(37, 42.5)
+	if not _require_success(encoded, "player vitals encode", failures):
+		return
+	var snapshot: Dictionary = encoded.get("snapshot", {})
+	if _sorted_keys(snapshot) != ["current_health", "current_stamina", "schema"]:
+		failures.append("player-vitals snapshot keys are not exact and bounded")
+	if int(snapshot.get("current_health", -1)) != 37:
+		failures.append("player-vitals snapshot changed current Health")
+	if not is_equal_approx(float(snapshot.get("current_stamina", -1.0)), 42.5):
+		failures.append("player-vitals snapshot changed current Stamina")
+	var decoded: Dictionary = GameplayStateCodec.decode_player_vitals(snapshot)
+	if not _require_success(decoded, "player vitals decode", failures):
+		return
+	var state: Dictionary = decoded.get("state", {})
+	if int(state.get("current_health", -1)) != 37:
+		failures.append("player-vitals round-trip changed current Health")
+	if not is_equal_approx(float(state.get("current_stamina", -1.0)), 42.5):
+		failures.append("player-vitals round-trip changed current Stamina")
+
+	var zero_encoded: Dictionary = GameplayStateCodec.encode_player_vitals(37, 0.0)
+	if not _require_success(zero_encoded, "zero-Stamina vitals encode", failures):
+		return
+	var zero_decoded: Dictionary = GameplayStateCodec.decode_player_vitals(
+		zero_encoded.get("snapshot", {})
+	)
+	if not _require_success(zero_decoded, "zero-Stamina vitals decode", failures):
+		return
+	if not is_zero_approx(float(zero_decoded.get("state", {}).get("current_stamina", -1.0))):
+		failures.append("zero Stamina did not survive player-vitals round-trip")
+
+
+static func _test_player_vitals_fail_closed(failures: Array[String]) -> void:
+	for invalid_health in [0, -1, 37.5]:
+		var encoded: Dictionary = GameplayStateCodec.encode_player_vitals(invalid_health, 20.0)
+		if bool(encoded.get("success", false)):
+			failures.append("invalid current Health unexpectedly encoded: %s" % str(invalid_health))
+	for invalid_stamina in [-0.01, NAN, INF, -INF]:
+		var encoded: Dictionary = GameplayStateCodec.encode_player_vitals(37, invalid_stamina)
+		if bool(encoded.get("success", false)):
+			failures.append("invalid current Stamina unexpectedly encoded: %s" % str(invalid_stamina))
+
+	var baseline: Dictionary = GameplayStateCodec.encode_player_vitals(37, 20.0)
+	if not _require_success(baseline, "player-vitals malformed fixture", failures):
+		return
+	var snapshot: Dictionary = baseline.get("snapshot", {})
+
+	var unknown_key: Dictionary = snapshot.duplicate(true)
+	unknown_key["regen_lock_timer"] = 1.0
+	var unknown_result: Dictionary = GameplayStateCodec.decode_player_vitals(unknown_key)
+	if bool(unknown_result.get("success", false)):
+		failures.append("unknown player-vitals field did not fail closed")
+	if unknown_result.has("state"):
+		failures.append("failed player-vitals unknown-field decode exposed partial state")
+
+	var wrong_schema: Dictionary = snapshot.duplicate(true)
+	wrong_schema["schema"] = "persistence.player_vitals.v999"
+	if bool(GameplayStateCodec.decode_player_vitals(wrong_schema).get("success", false)):
+		failures.append("unknown player-vitals schema unexpectedly decoded")
+
+	var zero_health: Dictionary = snapshot.duplicate(true)
+	zero_health["current_health"] = 0
+	var zero_result: Dictionary = GameplayStateCodec.decode_player_vitals(zero_health)
+	if bool(zero_result.get("success", false)):
+		failures.append("zero Health unexpectedly decoded as alive player vitals")
+	if zero_result.has("state"):
+		failures.append("zero-Health vitals failure exposed partial state")
+
+	var fractional_health: Dictionary = snapshot.duplicate(true)
+	fractional_health["current_health"] = 37.5
+	if bool(GameplayStateCodec.decode_player_vitals(fractional_health).get("success", false)):
+		failures.append("fractional Health unexpectedly decoded")
+
+	var nan_stamina: Dictionary = snapshot.duplicate(true)
+	nan_stamina["current_stamina"] = NAN
+	var nan_result: Dictionary = GameplayStateCodec.decode_player_vitals(nan_stamina)
+	if bool(nan_result.get("success", false)):
+		failures.append("NaN Stamina unexpectedly decoded")
+	if nan_result.has("state"):
+		failures.append("NaN Stamina failure exposed partial state")
+
+
 static func _test_pending_and_consumed_loot_round_trip(failures: Array[String]) -> void:
 	var authored = _definitions()
 	var registry = _registry(authored.values())
@@ -568,6 +652,14 @@ static func _equipment_config(required_capabilities: Array) -> Dictionary:
 		))
 		bindings[index] = key
 	return {"rules": rules, "bindings": bindings}
+
+
+static func _sorted_keys(value: Dictionary) -> Array[String]:
+	var keys: Array[String] = []
+	for raw_key in value.keys():
+		keys.append(str(raw_key))
+	keys.sort()
+	return keys
 
 
 static func _require_success(
