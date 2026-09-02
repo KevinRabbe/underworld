@@ -63,13 +63,16 @@ static func run(realization_parent: Node3D) -> Array[String]:
 
 static func _floor_shape() -> ConcavePolygonShape3D:
 	var shape := ConcavePolygonShape3D.new()
+	# Godot uses clockwise front-face winding for triangle collision. These two
+	# triangles deliberately face upward so a downward support ray hits the floor
+	# front face without enabling backface collision on the production cave shape.
 	shape.set_faces(PackedVector3Array([
 		Vector3(-4.5, FLOOR_Y, -3.0),
-		Vector3(7.5, FLOOR_Y, 9.0),
 		Vector3(7.5, FLOOR_Y, -3.0),
-		Vector3(-4.5, FLOOR_Y, -3.0),
-		Vector3(-4.5, FLOOR_Y, 9.0),
 		Vector3(7.5, FLOOR_Y, 9.0),
+		Vector3(-4.5, FLOOR_Y, -3.0),
+		Vector3(7.5, FLOOR_Y, 9.0),
+		Vector3(-4.5, FLOOR_Y, 9.0),
 	]))
 	return shape
 
