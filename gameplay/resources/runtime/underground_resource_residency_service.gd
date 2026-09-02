@@ -132,10 +132,19 @@ func semantic_entry(cell_address: String) -> Dictionary:
 	if not entry_variant is Dictionary:
 		return {}
 	var entry: Dictionary = entry_variant
-	if not CellObserver.snapshot_is_current(_controller, entry.get("snapshot", {})):
-		_entries_by_cell.erase(cell_address)
-		return {}
-	return _entry_copy(entry)
+	if CellObserver.snapshot_is_current(_controller, entry.get("snapshot", {})):
+		return _entry_copy(entry)
+
+	# A partial-tier retirement advances #372's cell generation token even when
+	# render remains relevant. Refresh from current render truth on demand rather
+	# than keeping stale generation authority or scanning historical placements.
+	var coordinate_variant = entry.get("cell_coordinate", null)
+	if coordinate_variant is Vector3i:
+		var refreshed: Dictionary = prepare_current_cell(CellAddress.new(coordinate_variant))
+		if bool(refreshed.get("success", false)):
+			return refreshed.get("entry", {}).duplicate(true)
+	_entries_by_cell.erase(cell_address)
+	return {}
 
 
 func semantic_entries() -> Array[Dictionary]:
