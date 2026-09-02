@@ -1,0 +1,68 @@
+name: CHAR514 Reconcile Accepted UI Input
+
+on:
+  push:
+    branches: [worker/char-reconcile-001]
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: worker/char-reconcile-001
+          fetch-depth: 0
+      - uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+      - name: Merge exact accepted main
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "2948912830c21a0f3e1578bc2dbd48da032368b3"
+          git merge --no-ff --no-commit 2948912830c21a0f3e1578bc2dbd48da032368b3
+          git rm .github/workflows/char514-reconcile-ui-input.yml
+          git diff --check --cached
+      - name: Import
+        run: godot --headless --editor --path . --quit
+      - name: Repository layout
+        run: python3 tools/ci/validate_repository_layout.py
+      - name: App shell
+        run: |
+          set -o pipefail
+          log="$(mktemp)"
+          godot --headless --path . --script res://tests/run_app_shell.gd 2>&1 | tee "$log"
+          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
+          grep -Fq '[APP SHELL VALIDATION] PASS' "$log"
+      - name: Persistence
+        run: |
+          set -o pipefail
+          log="$(mktemp)"
+          godot --headless --path . --script res://tests/run_persistence_state.gd 2>&1 | tee "$log"
+          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
+          grep -Fq '[PERSISTENCE STATE VALIDATION] PASS' "$log"
+      - name: Character
+        run: |
+          set -o pipefail
+          log="$(mktemp)"
+          godot --headless --path . --quit-after 1 --script res://tests/run_character.gd 2>&1 | tee "$log"
+          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
+          grep -Fq '[CHARACTER VALIDATION] PASS' "$log"
+      - name: Commit clean reconciliation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test ! -e .github/workflows/char514-reconcile-ui-input.yml
+          git diff --check
+          git diff --check --cached
+          git commit -m 'merge: reconcile #514 with accepted UI-INPUT-001'
+          git push origin HEAD:worker/char-reconcile-001
