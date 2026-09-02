@@ -3,7 +3,7 @@ class_name UnderworldFacetedBodyCompiler
 
 const MeshDataScript := preload("res://presentation/characters/faceted/faceted_skinned_mesh_data.gd")
 
-const COMPILER_REVISION := 13
+const COMPILER_REVISION := 14
 const SKIN := 0
 const CLOTH := 1
 const LEATHER := 2
@@ -223,17 +223,16 @@ static func _build_head(builders: Dictionary, profile) -> void:
 			_ring_y(Vector3(ear_x, jaw_y + face_span * 0.73, 0.010), 0.010, 0.015, skin),
 		], 6, true, true)
 
-	# Strong eyebrow/brow planes are the most important facial read at gameplay
-	# distance. Small eye slits sit underneath rather than becoming black boxes.
+	# Sparse but deliberately overscale facial marks survive the preview and
+	# gameplay cameras. They remain faceted planes rather than texture decals.
 	for side_value in [-1.0, 1.0]:
 		var side: float = float(side_value)
-		var brow_inner := Vector2(side * 0.010, eye_y + 0.020)
-		var brow_outer := Vector2(side * 0.074, eye_y + 0.018)
-		_add_ribbon_z(builders, FACE, brow_inner, brow_outer, face_front - 0.024, 0.010, skin, skin, -1.0)
-		var eye_inner: Vector3 = Vector3(side * 0.016, eye_y - 0.002, face_front - 0.020)
-		var eye_outer: Vector3 = Vector3(side * 0.054, eye_y - 0.004, face_front - 0.019)
-		var eye_low: Vector3 = Vector3(side * 0.046, eye_y - 0.011, face_front - 0.017)
-		_emit_triangle(builders, FACE, eye_inner, eye_outer, eye_low, Vector3(0, 0, -1), skin, skin, skin, Vector2.ZERO, Vector2(1,0), Vector2(0.8,1))
+		var brow_inner := Vector2(side * 0.010, eye_y + 0.022)
+		var brow_outer := Vector2(side * 0.078, eye_y + 0.016)
+		_add_ribbon_z(builders, FACE, brow_inner, brow_outer, face_front - 0.030, 0.014, skin, skin, -1.0)
+		var eye_inner := Vector2(side * 0.018, eye_y - 0.006)
+		var eye_outer := Vector2(side * 0.060, eye_y - 0.007)
+		_add_ribbon_z(builders, FACE, eye_inner, eye_outer, face_front - 0.031, 0.009, skin, skin, -1.0)
 
 	# Zygomatic and jaw planes give 3/4 view a cheek hollow and mandibular angle.
 	for side_value in [-1.0, 1.0]:
@@ -292,7 +291,7 @@ static func _build_head(builders: Dictionary, profile) -> void:
 		Vector2(0.056, mouth_y - 0.007),
 		Vector2(0.0, jaw_y - 0.025),
 		face_front - 0.016, face_front + 0.004, skin)
-	_add_ribbon_z(builders, FACE, Vector2(-0.040, mouth_y), Vector2(0.040, mouth_y), face_front - 0.024, 0.0050, skin, skin, -1.0)
+	_add_ribbon_z(builders, FACE, Vector2(-0.043, mouth_y), Vector2(0.043, mouth_y), face_front - 0.028, 0.0090, skin, skin, -1.0)
 
 	# Undercut: a narrow dark rear/crown shell leaves the temporal sides exposed.
 	# A chain of swept faceted tufts then supplies the distinctive top silhouette
@@ -546,42 +545,42 @@ static func _build_outfit_details(builders: Dictionary, profile) -> void:
 	# Tapered rear flap and lower pocket are separate prismatic garment layers,
 	# producing useful planes in back/3-4 views instead of rectangular blocks.
 	_add_quad_prism_z(builders, CLOTH,
-		Vector2(-0.190, chest_y + 0.060),
-		Vector2(0.190, chest_y + 0.060),
-		Vector2(0.165, chest_y - 0.112),
-		Vector2(-0.165, chest_y - 0.112),
-		0.364, 0.392, _weights(BONE.chest))
+		Vector2(-0.160, chest_y + 0.045),
+		Vector2(0.160, chest_y + 0.045),
+		Vector2(0.132, chest_y - 0.100),
+		Vector2(-0.132, chest_y - 0.100),
+		0.346, 0.370, _weights(BONE.chest))
 	_add_quad_prism_z(builders, CANVAS_DARK,
-		Vector2(-0.150, waist_y + 0.185),
-		Vector2(0.150, waist_y + 0.185),
-		Vector2(0.130, waist_y + 0.025),
-		Vector2(-0.130, waist_y + 0.025),
-		0.370, 0.398, _weights(BONE.chest))
+		Vector2(-0.115, waist_y + 0.145),
+		Vector2(0.115, waist_y + 0.145),
+		Vector2(0.098, waist_y + 0.038),
+		Vector2(-0.098, waist_y + 0.038),
+		0.350, 0.374, _weights(BONE.chest))
 
-	for strap_x in [-0.125, 0.125]:
+	for strap_x in [-0.110, 0.110]:
 		_add_ribbon_z(builders, LEATHER_LIGHT,
 			Vector2(strap_x, waist_y + 0.030),
 			Vector2(strap_x, shoulder_y - 0.085),
-			0.402, 0.016, _weights(BONE.chest), _weights(BONE.chest), 1.0)
+			0.378, 0.014, _weights(BONE.chest), _weights(BONE.chest), 1.0)
 		_add_box(builders, METAL,
-			Vector3(strap_x - 0.018, lower_chest_y - 0.010, 0.400),
-			Vector3(strap_x + 0.018, lower_chest_y + 0.024, 0.414),
+			Vector3(strap_x - 0.016, lower_chest_y - 0.010, 0.376),
+			Vector3(strap_x + 0.016, lower_chest_y + 0.020, 0.388),
 			_weights(BONE.chest), 0.004)
 
 	# Teal bedroll sits across the pack crown and extends just beyond the pack
 	# shoulders, matching the locked turnaround's recognizable rear silhouette.
 	_add_x_loft(builders, ACCENT, [
-		_ring_x(Vector3(-0.220, shoulder_y - 0.025, 0.306), 0.066, 0.072, _weights(BONE.chest)),
-		_ring_x(Vector3(0.220, shoulder_y - 0.025, 0.306), 0.066, 0.072, _weights(BONE.chest)),
+		_ring_x(Vector3(-0.205, shoulder_y - 0.030, 0.300), 0.060, 0.064, _weights(BONE.chest)),
+		_ring_x(Vector3(0.205, shoulder_y - 0.030, 0.300), 0.060, 0.064, _weights(BONE.chest)),
 	], 8, true, true, 1.0)
-	for roll_strap_x in [-0.125, 0.125]:
+	for roll_strap_x in [-0.110, 0.110]:
 		_add_ribbon_z(builders, LEATHER,
 			Vector2(roll_strap_x, shoulder_y - 0.072),
 			Vector2(roll_strap_x, shoulder_y + 0.052),
-			0.394, 0.014, _weights(BONE.chest), _weights(BONE.chest), 1.0)
+			0.374, 0.012, _weights(BONE.chest), _weights(BONE.chest), 1.0)
 		_add_box(builders, METAL,
-			Vector3(roll_strap_x - 0.014, shoulder_y - 0.030, 0.392),
-			Vector3(roll_strap_x + 0.014, shoulder_y - 0.002, 0.406),
+			Vector3(roll_strap_x - 0.012, shoulder_y - 0.034, 0.372),
+			Vector3(roll_strap_x + 0.012, shoulder_y - 0.006, 0.384),
 			_weights(BONE.chest), 0.003)
 
 	# Two balanced utility pouches stay clear of hand sockets/collision.

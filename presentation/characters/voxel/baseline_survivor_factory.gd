@@ -85,7 +85,7 @@ static func build() -> Resource:
 			_slice_overlay_part("pack_buckles", "rig_role.chest", 36, 43, 40, METAL, 5),
 		]),
 		_module("tools", &"held_item", [
-			_tool_part("axe_handle", "stone_axe", _box(Vector3i(0,-11,0), Vector3i(0,5,0), LEATHER), Vector3i.ZERO),
+			_tool_part("axe_handle", "stone_axe", _box(Vector3i(0,-8,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO),
 			_tool_part("axe_head", "stone_axe", _axe_head_cells(), Vector3i.ZERO),
 			_tool_part("pickaxe_handle", "stone_pickaxe", _box(Vector3i(0,-9,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO),
 			_tool_part("pickaxe_head", "stone_pickaxe", _pickaxe_head_cells(), Vector3i.ZERO),
@@ -531,19 +531,18 @@ static func _axe_head_cells() -> Array[Dictionary]:
 	# the tool subordinate to the character silhouette and matches the locked
 	# turnaround much more closely than rev10's oversized two-lobed head.
 	var rows := {
-		0: [-2, 0],
-		1: [-4, 1],
-		2: [-5, 1],
-		3: [-5, 0],
-		4: [-4, -1],
-		5: [-2, -1],
+		0: [-1, 0],
+		1: [-3, 1],
+		2: [-3, 0],
+		3: [-2, -1],
+		4: [-1, -1],
 	}
-	for z in range(0, 2):
+	for z in range(0, 1):
 		for y_value in rows.keys():
 			var y: int = int(y_value)
 			var span: Array = rows[y_value]
 			for x in range(int(span[0]), int(span[1]) + 1):
-				var is_lash: bool = x == 0 and y in [1, 2, 3]
+				var is_lash: bool = x == 0 and y in [1, 2]
 				var palette_index: int = LEATHER_LIGHT if is_lash else METAL
 				cells.append({"position": Vector3i(x, y, z), "palette_index": palette_index})
 	return cells
