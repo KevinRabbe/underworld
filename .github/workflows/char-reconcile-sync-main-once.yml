@@ -56,7 +56,7 @@ jobs:
         run: |
           set -o pipefail
           log="$(mktemp)"
-          godot --headless --path . --quit-after 1 --script res://tests/run_persistence_state.gd 2>&1 | tee "$log"
+          godot --headless --path . --script res://tests/run_persistence_state.gd 2>&1 | tee "$log"
           ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
           grep -Fq '[PERSISTENCE STATE VALIDATION] PASS' "$log"
 
