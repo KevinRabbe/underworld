@@ -231,8 +231,25 @@ func validate() -> Array[String]:
 		failures.append("Gateway link requires StableAddress")
 	else:
 		var segments: Array[String] = _stable_address.segments()
-		if segments.size() < 4 or segments[0] != "gateway" or segments[1] != "link":
-			failures.append("Gateway link StableAddress namespace mismatch")
+		var endpoint_ids: Array[String] = [_source_endpoint_id, _destination_endpoint_id]
+		endpoint_ids.sort()
+		if segments.size() != 12:
+			failures.append("Gateway link StableAddress must have the exact semantic shape")
+		elif (
+			segments[0] != "gateway"
+			or segments[1] != "link"
+			or segments[2] != "policy"
+			or segments[3] != _policy_id
+			or segments[4] != "policy-revision"
+			or segments[5] != str(_policy_revision)
+			or segments[6] != "stage-revision"
+			or segments[7] != str(_semantic_revision)
+			or segments[8] != "endpoint-a"
+			or segments[9] != endpoint_ids[0]
+			or segments[10] != "endpoint-b"
+			or segments[11] != endpoint_ids[1]
+		):
+			failures.append("Gateway link StableAddress semantic payload mismatch")
 	var parsed_id = StableId.parse(_stable_id)
 	if parsed_id == null:
 		failures.append("Gateway link StableId is not canonical")
