@@ -24,7 +24,7 @@ static func run(realization_parent: Node3D) -> Array[String]:
 	)
 	if not controller.accept_collision_shape(
 		address,
-		_floor_shape(),
+		floor_shape(),
 		source_fingerprint,
 		provenance_fingerprint
 	):
@@ -61,7 +61,7 @@ static func run(realization_parent: Node3D) -> Array[String]:
 	return failures
 
 
-static func _floor_shape() -> ConcavePolygonShape3D:
+static func floor_shape() -> ConcavePolygonShape3D:
 	var shape := ConcavePolygonShape3D.new()
 	# Godot uses clockwise front-face winding for triangle collision. These two
 	# triangles deliberately face upward so a downward support ray hits the floor
