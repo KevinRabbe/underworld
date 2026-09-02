@@ -63,6 +63,8 @@ var equipped_tool_visual: String = "hands"
 var sprinting_this_frame: bool = false
 var defeated: bool = false
 var _defeat_reason: StringName = &""
+var _gameplay_input_gate: Node = null
+var _input_was_allowed_last_physics: bool = true
 
 var stamina := StaminaComponentScript.new(100.0, 0.75, 20.0)
 var action_controller := PlayerActionControllerScript.new(stamina)
@@ -92,7 +94,7 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if defeated:
+	if not _allows_new_player_input():
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		camera_yaw.rotate_y(-event.relative.x * look_sensitivity)
@@ -155,6 +157,7 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector3.ZERO
 		sprinting_this_frame = false
 		return
+	_sync_input_suppression()
 	damage_invulnerability_timer = maxf(0.0, damage_invulnerability_timer - delta)
 	_handle_action_inputs()
 	_update_jump_timers(delta)
@@ -179,6 +182,20 @@ func set_harvest_range(distance: float) -> void:
 
 func set_tool_use_cooldown(duration: float) -> void:
 	tool_use_cooldown_duration = maxf(duration, 0.05)
+
+
+func configure_gameplay_input_gate(gate: Node) -> bool:
+	if is_inside_tree() or _gameplay_input_gate != null:
+		return false
+	if gate == null or not is_instance_valid(gate) or not gate.has_method("allows_player_input"):
+		return false
+	_gameplay_input_gate = gate
+	_input_was_allowed_last_physics = bool(gate.call("allows_player_input"))
+	return true
+
+
+func gameplay_input_enabled() -> bool:
+	return _allows_new_player_input()
 
 
 func set_equipped_tool(tool_id: String) -> void:
@@ -451,13 +468,22 @@ func _queue_buffered_action(
 	payload: Dictionary = {},
 	lifetime: float = PlayerInputBufferScript.DEFAULT_LIFETIME
 ) -> bool:
-	if defeated or not action_controller.can_replace_buffered_action(action, input_buffer.peek_action()):
+	if (
+		defeated
+		or not _allows_new_player_input()
+		or not action_controller.can_replace_buffered_action(action, input_buffer.peek_action())
+	):
 		return false
 	return input_buffer.push(action, payload, lifetime)
 
 
 func _try_consume_buffered_action() -> void:
-	if defeated or not action_controller.is_free() or not input_buffer.has_pending():
+	if (
+		defeated
+		or not _allows_new_player_input()
+		or not action_controller.is_free()
+		or not input_buffer.has_pending()
+	):
 		return
 	var buffered_action: StringName = input_buffer.peek_action()
 	if (
@@ -506,8 +532,35 @@ func _get_camera_action_ray(reach_from_player: float) -> Dictionary:
 	}
 
 
+func _allows_new_player_input() -> bool:
+	if defeated:
+		return false
+	if _gameplay_input_gate == null:
+		return true
+	if not is_instance_valid(_gameplay_input_gate) or not _gameplay_input_gate.has_method("allows_player_input"):
+		return false
+	return bool(_gameplay_input_gate.call("allows_player_input"))
+
+
+func _sync_input_suppression() -> void:
+	var input_allowed := _allows_new_player_input()
+	if not input_allowed and _input_was_allowed_last_physics:
+		# These are uncommitted input intents, not combat/lifecycle truth. Drop them
+		# once when capture begins so a short-lived buffer cannot execute behind UI
+		# or replay immediately after the UI closes.
+		jump_buffer_timer = 0.0
+		input_buffer.clear()
+		if action_controller.is_blocking():
+			action_controller.stop_block()
+	_input_was_allowed_last_physics = input_allowed
+
+
 func _handle_action_inputs() -> void:
 	if defeated:
+		return
+	if not _allows_new_player_input():
+		if action_controller.is_blocking():
+			action_controller.stop_block()
 		return
 	if action_controller.is_blocking():
 		if not is_on_floor() or not Input.is_action_pressed("block"):
@@ -536,7 +589,7 @@ func _handle_action_inputs() -> void:
 
 
 func _buffer_pressed_defensive_inputs() -> void:
-	if defeated or not is_on_floor():
+	if defeated or not _allows_new_player_input() or not is_on_floor():
 		return
 	if Input.is_action_just_pressed("dodge"):
 		var dodge_direction: Vector3 = _get_requested_dodge_direction()
@@ -547,6 +600,8 @@ func _buffer_pressed_defensive_inputs() -> void:
 
 
 func _get_requested_dodge_direction() -> Vector3:
+	if not _allows_new_player_input():
+		return Vector3.ZERO
 	var input_vector: Vector2 = Input.get_vector(
 		"move_left", "move_right", "move_forward", "move_backward"
 	)
@@ -605,14 +660,21 @@ func _update_jump_timers(delta: float) -> void:
 	else:
 		coyote_timer = maxf(0.0, coyote_timer - delta)
 
-	if Input.is_action_just_pressed("jump") and action_controller.is_free():
+	if not _allows_new_player_input():
+		jump_buffer_timer = 0.0
+	elif Input.is_action_just_pressed("jump") and action_controller.is_free():
 		jump_buffer_timer = JUMP_BUFFER_TIME
 	else:
 		jump_buffer_timer = maxf(0.0, jump_buffer_timer - delta)
 
 
 func _update_vertical_velocity(delta: float) -> void:
-	if jump_buffer_timer > 0.0 and coyote_timer > 0.0 and action_controller.is_free():
+	if (
+		_allows_new_player_input()
+		and jump_buffer_timer > 0.0
+		and coyote_timer > 0.0
+		and action_controller.is_free()
+	):
 		velocity.y = JUMP_VELOCITY
 		jump_buffer_timer = 0.0
 		coyote_timer = 0.0
@@ -641,16 +703,19 @@ func _update_horizontal_velocity(delta: float) -> void:
 		velocity.z = move_toward(velocity.z, 0.0, GROUND_DECELERATION * 1.4 * delta)
 		return
 
-	var input_vector: Vector2 = Input.get_vector(
-		"move_left",
-		"move_right",
-		"move_forward",
-		"move_backward"
-	)
+	var input_vector := Vector2.ZERO
+	if _allows_new_player_input():
+		input_vector = Input.get_vector(
+			"move_left",
+			"move_right",
+			"move_forward",
+			"move_backward"
+		)
 	var move_direction: Vector3 = _camera_relative_direction(input_vector)
 	var target_speed: float = BLOCK_MOVE_SPEED if action_controller.is_blocking() else WALK_SPEED
 	if (
-		is_on_floor()
+		_allows_new_player_input()
+		and is_on_floor()
 		and action_controller.is_free()
 		and not move_direction.is_zero_approx()
 		and Input.is_action_pressed("sprint")
@@ -781,6 +846,7 @@ func commit_respawn(position: Vector3) -> bool:
 	sprinting_this_frame = false
 	defeated = false
 	_defeat_reason = &""
+	_input_was_allowed_last_physics = _allows_new_player_input()
 	if animation_controller != null:
 		animation_controller.reset_presentation()
 	elif mannequin != null:

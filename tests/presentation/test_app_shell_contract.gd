@@ -100,6 +100,12 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			failures.append("New Game did not realize the injected game route under SceneHost")
 		elif str(first_game.get("prepared_mode")) != "new":
 			failures.append("New Game route was not prepared with NEW semantics before commit")
+		else:
+			var app_gate: Node = app.call("get_gameplay_input_gate") as Node
+			if first_game.get("gameplay_input_gate") != app_gate:
+				failures.append("New Game fixture did not receive the exact AppRoot GameplayInputGate authority")
+			if bool(first_game.get("gate_configured_inside_tree")):
+				failures.append("New Game fixture gameplay-input authority must be configured off-tree before route commit")
 		if scene_host.get_child_count() != 1:
 			failures.append("SceneHost retained overlapping title/game route children")
 		if title.get_parent() != null or not title.is_queued_for_deletion():
@@ -176,6 +182,11 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			var prepared_candidate: Variant = continued_game.get("prepared_candidate")
 			if not prepared_candidate is Dictionary or prepared_candidate != fixture_candidate:
 				failures.append("CONTINUE preparation did not receive the exact detached candidate")
+			var continue_gate: Node = continue_app.call("get_gameplay_input_gate") as Node
+			if continued_game.get("gameplay_input_gate") != continue_gate:
+				failures.append("CONTINUE fixture did not receive the exact AppRoot GameplayInputGate authority")
+			if bool(continued_game.get("gate_configured_inside_tree")):
+				failures.append("CONTINUE fixture gameplay-input authority must be configured off-tree before route commit")
 		if str(continue_app.call("current_route_id")) != "game":
 			failures.append("successful CONTINUE did not commit semantic game route identity")
 		if continue_host.get_child_count() != 1:
