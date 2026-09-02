@@ -1,6 +1,7 @@
 extends RefCounted
 
 const PlayerScript := preload("res://gameplay/player/player.gd")
+const GameplayInputGateScript := preload("res://app/input/gameplay_input_gate.gd")
 
 
 static func run(tree: SceneTree) -> Array[String]:
@@ -15,7 +16,14 @@ static func run(tree: SceneTree) -> Array[String]:
 	# Keep player.gd preloaded so the full integration script must compile, but
 	# invoke custom members dynamically. Fresh Godot headless imports can otherwise
 	# reject statically inferred custom members on a preloaded external script.
+	var gameplay_input_gate: Node = GameplayInputGateScript.new()
+	fixture_root.add_child(gameplay_input_gate)
 	var player: Node = PlayerScript.new()
+	_expect_true(
+		failures,
+		"player accepts explicit gameplay input gate before entering SceneTree",
+		bool(player.call("configure_gameplay_input_gate", gameplay_input_gate))
+	)
 	fixture_root.add_child(player)
 	var mannequin = player.call("get_mannequin")
 	_expect_true(
@@ -276,6 +284,78 @@ static func run(tree: SceneTree) -> Array[String]:
 		float(player.get("tool_use_cooldown_timer")),
 		0.0
 	)
+
+	# Interactive UI capture is tokenized and suppresses both event-driven and
+	# frame-polled Player intent without becoming a second pause/simulation gate.
+	actions.call("reset")
+	stamina.call("reset")
+	player.set("velocity", Vector3.ZERO)
+	player.set("jump_buffer_timer", 0.08)
+	var input_buffer = player.get("input_buffer")
+	_expect_true(
+		failures,
+		"input-gate fixture can seed one uncommitted buffered action",
+		input_buffer != null and bool(input_buffer.call("push", &"parry", {}, 0.12))
+	)
+	var hotbar_requests: Array[int] = []
+	player.hotbar_slot_requested.connect(func(slot: int) -> void: hotbar_requests.append(slot))
+
+	var inventory_token: int = int(gameplay_input_gate.call("acquire", &"inventory"))
+	var modal_token: int = int(gameplay_input_gate.call("acquire", &"modal"))
+	_expect_true(failures, "nested UI captures allocate distinct positive tokens", inventory_token > 0 and modal_token > 0 and inventory_token != modal_token)
+	_expect_equal(failures, "nested UI captures remain independently owned", int(gameplay_input_gate.call("active_capture_count")), 2)
+	_expect_true(failures, "captured UI suppresses Player input", not bool(player.call("gameplay_input_enabled")))
+	player.call("_sync_input_suppression")
+	_expect_equal(failures, "capture clears uncommitted jump buffer", float(player.get("jump_buffer_timer")), 0.0)
+	_expect_true(failures, "capture clears uncommitted action buffer", input_buffer != null and not bool(input_buffer.call("has_pending")))
+
+	var hotbar_event := InputEventAction.new()
+	hotbar_event.action = &"hotbar_slot_1"
+	hotbar_event.pressed = true
+	hotbar_event.strength = 1.0
+	player.call("_unhandled_input", hotbar_event)
+	_expect_equal(failures, "captured UI blocks event-driven hotbar request", hotbar_requests.size(), 0)
+
+	Input.action_press(&"move_right")
+	player.set("velocity", Vector3.ZERO)
+	player.call("_update_horizontal_velocity", 0.1)
+	_expect_close(failures, "captured UI blocks frame-polled movement", float(player.call("get_horizontal_speed")), 0.0)
+	Input.action_release(&"move_right")
+
+	_expect_true(failures, "releasing one nested capture succeeds", bool(gameplay_input_gate.call("release", inventory_token)))
+	_expect_equal(failures, "remaining nested capture keeps gate blocked", int(gameplay_input_gate.call("active_capture_count")), 1)
+	_expect_true(failures, "one remaining capture still suppresses Player input", not bool(player.call("gameplay_input_enabled")))
+	_expect_true(failures, "releasing final nested capture succeeds", bool(gameplay_input_gate.call("release", modal_token)))
+	_expect_equal(failures, "final release clears capture ownership", int(gameplay_input_gate.call("active_capture_count")), 0)
+	_expect_true(failures, "final release guard prevents same-tick gameplay replay", not bool(player.call("gameplay_input_enabled")))
+	gameplay_input_gate.call("_physics_process", 0.0)
+	_expect_true(failures, "release guard spans one complete physics tick", not bool(player.call("gameplay_input_enabled")))
+	gameplay_input_gate.call("_physics_process", 0.0)
+	_expect_true(failures, "Player input resumes after bounded release guard", bool(player.call("gameplay_input_enabled")))
+	player.call("_unhandled_input", hotbar_event)
+	_expect_equal(failures, "same hotbar event reaches Player after release guard", hotbar_requests, [1])
+
+	Input.action_press(&"move_right")
+	player.set("velocity", Vector3.ZERO)
+	player.call("_update_horizontal_velocity", 0.1)
+	_expect_true(failures, "frame-polled movement resumes after capture release", float(player.call("get_horizontal_speed")) > 0.0)
+	Input.action_release(&"move_right")
+	player.set("velocity", Vector3.ZERO)
+
+	# Capture begins after a committed action starts: it must block new intent but
+	# must not cancel the already-authoritative action timeline.
+	actions.call("reset")
+	player.set("tool_use_cooldown_timer", 0.0)
+	_expect_true(failures, "pre-capture committed tool action starts", bool(player.call("_begin_tool_action")))
+	var committed_token: int = int(gameplay_input_gate.call("acquire", &"inventory"))
+	player.call("_sync_input_suppression")
+	_expect_true(failures, "UI capture does not cancel committed tool action", bool(actions.call("is_using_tool")))
+	actions.call("tick", 0.40)
+	player.call("_update_tool_use_feedback", 0.40)
+	_expect_true(failures, "committed action completes normally under UI capture", bool(actions.call("is_free")))
+	_expect_true(failures, "committed-action capture releases exactly once", bool(gameplay_input_gate.call("release", committed_token)))
+	gameplay_input_gate.call("_physics_process", 0.0)
+	gameplay_input_gate.call("_physics_process", 0.0)
 
 	fixture_root.free()
 	return failures
