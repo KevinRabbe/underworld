@@ -396,7 +396,7 @@ static func capture_v2_request(source: Dictionary) -> Dictionary:
 		return _failure(catalog_result.get("diagnostics", []))
 	var registry = catalog_result.get("registry", null)
 
-	var map_result: Dictionary = MapSerializationContract.encode(
+	var map_result: Dictionary = MapSerializationContract.encode_against_context(
 		context,
 		source.get("delta_store", null)
 	)
