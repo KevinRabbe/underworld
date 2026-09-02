@@ -6,7 +6,7 @@ var saw_candidate_before_replacement: bool = false
 var replacement_failed: bool = false
 
 
-func configure_replacement(json_text: String) -> RefCounted:
+func configure_replacement(json_text: String):
 	replacement_json = json_text
 	return self
 
