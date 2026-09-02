@@ -151,7 +151,7 @@ static func _test_collision_gated_realization_depletion_and_reentry(
 		failures.append("realization activation: %s" % failure)
 	_expect_equal(failures, "render-only semantic placement remains noninteractive", realization.live_placement_count(), 0)
 
-	var floor_shape := _floor_shape()
+	var floor_shape: ConcavePolygonShape3D = _floor_shape()
 	_expect_true(
 		failures,
 		"real cave collision acceptance succeeds",
@@ -314,7 +314,7 @@ static func _owner_metadata() -> Dictionary:
 	}
 
 
-static func _floor_shape():
+static func _floor_shape() -> ConcavePolygonShape3D:
 	var shape := ConcavePolygonShape3D.new()
 	shape.set_faces(PackedVector3Array([
 		Vector3(-4.5, FLOOR_Y, -3.0),
