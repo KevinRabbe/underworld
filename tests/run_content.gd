@@ -15,6 +15,7 @@ const WeaponContractTests := preload("res://tests/content/test_weapon_contract.g
 const WeaponRuntimeProductionTests := preload("res://tests/content/test_weapon_runtime_production.gd")
 const WeaponRuntimeFailureTests := preload("res://tests/content/test_weapon_runtime_failure_contract.gd")
 const WeaponRuntimeSessionCompositionTests := preload("res://tests/content/test_weapon_runtime_session_composition.gd")
+const WeaponRuntimeSessionFailureCompositionTests := preload("res://tests/content/test_weapon_runtime_session_failure_composition.gd")
 const ReservedSiteAssignmentTests := preload("res://tests/content/test_reserved_site_assignment.gd")
 const UndergroundPlacementTests := preload("res://tests/content/test_underground_placement.gd")
 const SurfaceHarvestContentTests := preload("res://tests/content/test_surface_harvest_content.gd")
@@ -39,6 +40,7 @@ func _init() -> void:
 	failures.append_array(WeaponRuntimeProductionTests.run())
 	failures.append_array(WeaponRuntimeFailureTests.run())
 	failures.append_array(WeaponRuntimeSessionCompositionTests.run())
+	failures.append_array(WeaponRuntimeSessionFailureCompositionTests.run())
 	failures.append_array(ReservedSiteAssignmentTests.run())
 	failures.append_array(UndergroundPlacementTests.run())
 	failures.append_array(SurfaceHarvestContentTests.run())
@@ -46,7 +48,7 @@ func _init() -> void:
 	failures.append_array(CraftingContractTests.run())
 	if failures.is_empty():
 		print("[VALIDATION] PASS content")
-		print("  semantic content ids / deterministic registry / category-capability-role schemas / headless validation + snapshot evidence + stale-consumer guards / archetype realization / item / resource / creature / weapon / production weapon runtime + session composition + failure atomicity / reserved-site assignment / underground placement / surface-harvest / loot / crafting rulebook contracts passed")
+		print("  semantic content ids / deterministic registry / category-capability-role schemas / headless validation + snapshot evidence + stale-consumer guards / archetype realization / item / resource / creature / weapon / production weapon runtime + session composition + presentation-failure boundary + failure atomicity / reserved-site assignment / underground placement / surface-harvest / loot / crafting rulebook contracts passed")
 		quit(0)
 		return
 
