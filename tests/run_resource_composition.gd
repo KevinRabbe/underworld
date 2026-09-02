@@ -3,6 +3,7 @@ extends SceneTree
 const CellObserverTests := preload("res://tests/resources/test_underground_resource_cell_observer.gd")
 const CompositionTests := preload("res://tests/resources/test_underground_resource_composition.gd")
 const ResidencyTests := preload("res://tests/resources/test_underground_resource_residency.gd")
+const RootAliasTests := preload("res://tests/resources/test_underground_resource_root_alias.gd")
 const SupportTests := preload("res://tests/resources/test_underground_resource_support.gd")
 const HarvestSinkTests := preload("res://tests/resources/test_underground_resource_harvest_sink.gd")
 const RuntimeCompositionTests := preload("res://tests/resources/test_underground_resource_runtime_composition.gd")
@@ -18,6 +19,7 @@ func _run() -> void:
 	failures.append_array(CellObserverTests.run())
 	failures.append_array(CompositionTests.run())
 	failures.append_array(ResidencyTests.run())
+	failures.append_array(RootAliasTests.run())
 
 	var realization_parent := Node3D.new()
 	root.add_child(realization_parent)
@@ -30,7 +32,7 @@ func _run() -> void:
 
 	if failures.is_empty():
 		print("[RESOURCE COMPOSITION VALIDATION] PASS")
-		print("  detached runtime source boundary / generated reserved-site assignment / channel-scoped candidate identity / canonical iron placement / bounded semantic residency / direct current-cave support projection / target-aware Player-ray mining ticket sink / ordered domain-internal resource lifecycle composition / collision-gated support projection + realization / immediate retirement + depleted re-entry / stale-cell rejection passed")
+		print("  detached runtime source boundary / generated reserved-site assignment / channel-scoped candidate identity / canonical iron placement / bounded semantic residency / cross-root generation-alias freshness / direct current-cave support projection / target-aware Player-ray mining ticket sink / ordered domain-internal resource lifecycle composition / collision-gated support projection + realization / immediate retirement + depleted re-entry / stale-cell rejection passed")
 		quit(0)
 		return
 
