@@ -5,6 +5,11 @@ const Address := preload("res://worldgen/geometry/geometry_cell_address.gd")
 const CaveMeshData := preload("res://worldgen/geometry/cave_mesh_data.gd")
 const PlanData := preload("res://worldgen/surface/surface_entrance_chunk_plan_data.gd")
 const Demand := preload("res://worldgen/surface/entrance_runtime_demand.gd")
+const WorldId := preload("res://worldgen/identity/world_id.gd")
+const Manifest := preload("res://worldgen/versioning/generator_manifest.gd")
+const Map015Fixture := preload("res://worldgen/validation/map015_fixture.gd")
+const DefinitionService := preload("res://worldgen/runtime/underworld_runtime_cell_definition_service.gd")
+const RuntimeExecutor := preload("res://worldgen/runtime/underworld_runtime_cell_executor.gd")
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -37,6 +42,8 @@ static func run() -> Array[String]:
 	_test_tier_retirement_and_replacement(failures)
 	_test_full_controller_world_swap_clears_entrance_state(failures)
 	_test_bounded_observer_nodes(failures)
+	_test_secondary_runtime_bookkeeping_is_bounded(failures)
+	_test_production_observer_execution_and_reentry(failures)
 	return failures
 
 
@@ -60,12 +67,11 @@ static func _test_tier_retirement_and_replacement(failures: Array[String]) -> vo
 	_expect(failures, "render tier retirement clears readiness handle and node", record.demand_count("render") == 0 and not record.readiness["render"] and record.runtime_handle == null and not controller.render_nodes.has(key) and first_render.get_parent() == null)
 	_expect(failures, "collision remains independently realized", record.readiness["collision"] and controller.collision_nodes.get(key) == first_collision)
 
-	var queued_before: int = controller.streamer.queued_count
 	controller.streamer.demand_cell(address, "source:a", ["render"])
 	var renewed_generation: int = record.generation
-	_expect(failures, "renewed render queues once", record.queued.get("render", false) and controller.streamer.queued_count == queued_before + 1)
+	_expect(failures, "renewed render demand is singular before realization", record.demand_count("render") == 1 and not record.readiness["render"])
 	controller.streamer.set_demand(address, "source:a", ["definition", "fragment_plan", "voxel_geometry", "render", "collision"])
-	_expect(failures, "idempotent demand refresh does not double queue render", controller.streamer.queued_count == queued_before + 1 and record.generation == renewed_generation)
+	_expect(failures, "idempotent demand refresh preserves generation and singular render demand", record.generation == renewed_generation and record.demand_count("render") == 1 and record.demand_count("collision") == 1)
 	_expect(failures, "renewed render realizes", controller.accept_mesh_data(mesh_data) and record.readiness["render"])
 	var renewed_render = controller.render_nodes[key]
 	_expect(failures, "second accepted render replaces rather than orphans", controller.accept_mesh_data(mesh_data) and controller.render_nodes.size() == 1 and controller.get_child_count() == 2 and renewed_render.get_parent() == null)
@@ -73,12 +79,12 @@ static func _test_tier_retirement_and_replacement(failures: Array[String]) -> vo
 	controller.streamer.release_demand(address, "source:a", ["collision"])
 	_expect(failures, "collision retirement removes physics body and handle", record.demand_count("collision") == 0 and not record.readiness["collision"] and record.collision_handle == null and not controller.collision_nodes.has(key) and first_collision.get_parent() == null)
 
-	controller.streamer.release_demand(address, "source:a")
-	_expect(failures, "whole demand release removes remaining render", controller.render_nodes.is_empty() and controller.collision_nodes.is_empty() and controller.get_child_count() == 0 and record.state == "release_pending")
 	var released_before: int = controller.streamer.released_count
-	_expect(failures, "whole cell release succeeds", controller.streamer.release_cell(address) and record.state == "dormant")
+	controller.streamer.release_demand(address, "source:a")
+	_expect(failures, "whole demand release retires realizations and evicts record", controller.render_nodes.is_empty() and controller.collision_nodes.is_empty() and controller.get_child_count() == 0 and record.state == "dormant" and not controller.streamer.records.has(key) and controller.streamer.released_count == released_before + 1)
 	var generation_after_release: int = record.generation
-	_expect(failures, "repeated whole cell release is idempotent", controller.streamer.release_cell(address) and record.generation == generation_after_release and controller.streamer.released_count == released_before + 1)
+	var count_after_release: int = controller.streamer.records.size()
+	_expect(failures, "stale whole-cell release is non-creating", not controller.streamer.release_cell(address) and record.generation == generation_after_release and controller.streamer.records.size() == count_after_release and controller.streamer.released_count == released_before + 1)
 
 	record = controller.streamer.set_demand(address, "source:c", ["render", "collision"], "source:reconfigure", "provenance:reconfigure")
 	var reconfigure_mesh = _mesh_data(address, "mesh:reconfigure")
@@ -158,6 +164,267 @@ static func _test_bounded_observer_nodes(failures: Array[String]) -> void:
 		_expect(failures, "bounded observer render realizes step %d" % x, controller.accept_mesh_data(_mesh_data(address, "mesh:window:%d" % x)))
 		_expect(failures, "bounded observer live render count step %d" % x, controller.render_nodes.size() == 1 and controller.get_child_count() == 1)
 	controller.free()
+
+
+static func _test_secondary_runtime_bookkeeping_is_bounded(failures: Array[String]) -> void:
+	var controller := Controller.new()
+	controller.configure("world:bookkeeping", "manifest:bookkeeping")
+	var definitions := DefinitionService.new()
+	var definition_failures: Array[String] = definitions.configure(1)
+	_expect(failures, "secondary bookkeeping definition service configures", definition_failures.is_empty())
+	if not definition_failures.is_empty():
+		controller.free()
+		return
+	var executor := RuntimeExecutor.new()
+	var executor_failures: Array[String] = executor.configure(
+		controller.streamer,
+		definitions,
+		controller
+	)
+	_expect(failures, "secondary bookkeeping executor configures", executor_failures.is_empty())
+	if not executor_failures.is_empty():
+		controller.free()
+		return
+	controller._definition_service = definitions
+	controller._runtime_executor = executor
+	controller.streamer.executor = executor
+
+	# Exercise far more retired addresses than any live observer window without
+	# running expensive voxel extraction. Real set/release ownership queues and
+	# cancels executor work; synthetic cache entries stand in for already-computed
+	# deterministic definitions/meshes so pruning can be validated directly.
+	for step in range(200):
+		var address := Address.new(Vector3i(step, -1, step % 7))
+		var key: String = address.canonical_text()
+		var record = controller.streamer.set_demand(
+			address,
+			"player",
+			["definition"],
+			"source:history:%d" % step,
+			"provenance:history:%d" % step
+		)
+		_expect(failures, "historical bookkeeping record exists step %d" % step, record != null)
+		if record == null:
+			continue
+		definitions._cells[key] = {"historical": step}
+		var region: Vector2i = definitions.region_for_address(address)
+		var region_key: String = _region_key(region)
+		definitions._regions[region_key] = {"historical": step}
+		definitions._base_regions[region_key] = {"historical": step}
+		for offset in DefinitionService.NEIGHBOR_OFFSETS:
+			definitions._base_regions[_region_key(region + offset)] = {"historical": step}
+		controller._observer_binding_failures[key] = ["synthetic historical failure"]
+		executor._mesh_cache["%s|%d|synthetic|synthetic" % [key, record.generation]] = "mesh"
+		controller.streamer.release_demand(address, "player")
+
+	_expect(failures, "retired history leaves no runtime records", controller.streamer.records.is_empty())
+	_expect(failures, "retired history cancels executor jobs", executor.queued_job_count() == 0)
+	_expect(failures, "retired history cancels executor mesh cache", executor.mesh_cache_count() == 0)
+	controller._prune_observer_binding_failures()
+	controller._prune_definition_cache()
+	_expect(failures, "retired history prunes observer binding failures", controller.observer_binding_failure_count() == 0)
+	_expect(failures, "retired history prunes definition cell cache", definitions.cached_cell_count() == 0)
+	_expect(failures, "retired history prunes definition region cache", definitions.cached_region_count() == 0)
+	_expect(failures, "retired history prunes definition base-region cache", definitions._base_regions.size() == 0)
+
+	var active_addresses: Array = [
+		Address.new(Vector3i(0, -1, 0)),
+		Address.new(Vector3i(17, -1, 0)),
+		Address.new(Vector3i(34, -1, 0)),
+		Address.new(Vector3i(51, -1, 0)),
+	]
+	for index in range(active_addresses.size()):
+		var address = active_addresses[index]
+		var key: String = address.canonical_text()
+		var record = controller.streamer.set_demand(
+			address,
+			"player",
+			["definition"],
+			"source:active:%d" % index,
+			"provenance:active:%d" % index
+		)
+		definitions._cells[key] = {"active": index}
+		var region: Vector2i = definitions.region_for_address(address)
+		definitions._regions[_region_key(region)] = {"active": index}
+		definitions._base_regions[_region_key(region)] = {"active": index}
+		for offset in DefinitionService.NEIGHBOR_OFFSETS:
+			definitions._base_regions[_region_key(region + offset)] = {"active": index}
+		controller._observer_binding_failures[key] = ["synthetic current failure"]
+		if record != null:
+			executor._mesh_cache["%s|%d|synthetic|synthetic" % [key, record.generation]] = "mesh"
+
+	# Re-seed a stale cache/failure after the live set exists to prove pruning is
+	# keyed to current relevance rather than merely benefiting from an empty table.
+	var stale_address := Address.new(Vector3i(999, -1, 999))
+	var stale_key: String = stale_address.canonical_text()
+	definitions._cells[stale_key] = {"stale": true}
+	var stale_region: Vector2i = definitions.region_for_address(stale_address)
+	definitions._regions[_region_key(stale_region)] = {"stale": true}
+	definitions._base_regions[_region_key(stale_region)] = {"stale": true}
+	controller._observer_binding_failures[stale_key] = ["stale"]
+	executor._mesh_cache["%s|1|synthetic|synthetic" % stale_key] = "mesh"
+
+	controller._prune_observer_binding_failures()
+	controller._prune_definition_cache()
+	executor.prune_runtime_cache()
+	_expect(failures, "binding failure table follows current player relevance", controller.observer_binding_failure_count() == active_addresses.size())
+	_expect(failures, "definition cell cache follows current records", definitions.cached_cell_count() == active_addresses.size())
+	_expect(failures, "definition region cache is bounded by current regions", definitions.cached_region_count() <= active_addresses.size())
+	_expect(failures, "definition base cache is bounded by current region neighborhoods", definitions._base_regions.size() <= active_addresses.size() * 5)
+	_expect(failures, "executor queue is bounded by current records", executor.queued_job_count() <= controller.streamer.records.size())
+	_expect(failures, "executor mesh cache follows current records", executor.mesh_cache_count() <= controller.streamer.records.size())
+	controller.free()
+
+
+static func _test_production_observer_execution_and_reentry(failures: Array[String]) -> void:
+	var controller := Controller.new()
+	controller.configure(
+		WorldId.from_seed(1).value(),
+		Manifest.foundation_default().manifest_id()
+	)
+	var diagnostics: Array[String] = controller.bootstrap_fixture(
+		1,
+		Map015Fixture.REGION,
+		Map015Fixture.ENTRANCE_ID
+	)
+	_expect(failures, "production observer fixture bootstrap succeeds", diagnostics.is_empty())
+	if not diagnostics.is_empty():
+		controller.free()
+		return
+
+	var handoff = controller.entrance_plans.get(Map015Fixture.ENTRANCE_ID, null)
+	_expect(failures, "production observer fixture exposes entrance handoff", handoff != null)
+	if handoff == null or handoff.cell_addresses.is_empty():
+		controller.free()
+		return
+	var initial_handoff_keys: Dictionary = {}
+	for handoff_address in handoff.cell_addresses:
+		initial_handoff_keys[handoff_address.canonical_text()] = true
+
+	var anchor_address = handoff.cell_addresses[0]
+	var anchor_position: Vector3 = (
+		Vector3(anchor_address.coordinate) * controller.streamer.cell_size
+		+ controller.streamer.cell_size * 0.5
+	)
+	var target_record = null
+	var target_key: String = ""
+	for _step in range(24):
+		controller.update_player_position(anchor_position)
+		var keys: Array = controller.streamer.records.keys()
+		keys.sort()
+		for raw_key in keys:
+			var key := str(raw_key)
+			if initial_handoff_keys.has(key):
+				continue
+			var candidate = controller.streamer.records.get(key, null)
+			if candidate == null:
+				continue
+			if candidate.source_fingerprint.is_empty() or candidate.provenance_fingerprint.is_empty():
+				continue
+			if not bool(candidate.readiness.get("render", false)) or not bool(candidate.readiness.get("collision", false)):
+				continue
+			if not controller.render_nodes.has(key) or not controller.collision_nodes.has(key):
+				continue
+			target_record = candidate
+			target_key = key
+			break
+		if target_record != null:
+			break
+
+	_expect(failures, "observer demand realizes a cell outside entrance handoff", target_record != null)
+	if target_record == null:
+		controller.free()
+		return
+	var target_address = target_record.cell_address
+	var target_position: Vector3 = (
+		Vector3(target_address.coordinate) * controller.streamer.cell_size
+		+ controller.streamer.cell_size * 0.5
+	)
+	for _step in range(4):
+		controller.update_player_position(target_position)
+	var first_source: String = target_record.source_fingerprint
+	var first_provenance: String = target_record.provenance_fingerprint
+	var first_generation: int = target_record.generation
+	_expect(
+		failures,
+		"outside observer cell carries canonical runtime identity",
+		not first_source.is_empty() and not first_provenance.is_empty()
+	)
+
+	var target_region: Vector2i = controller._definition_service.region_for_address(target_address)
+	var far_position := target_position + Vector3(controller.streamer.cell_size.x * 20.0, 0.0, 0.0)
+	var far_address := Address.new(controller.streamer.observer_cell(far_position))
+	var far_region: Vector2i = controller._definition_service.region_for_address(far_address)
+	_expect(failures, "observer excursion crosses a canonical region boundary", far_region != target_region)
+	for _step in range(4):
+		controller.update_player_position(far_position)
+	_expect(
+		failures,
+		"cross-region observer demand binds canonical runtime identity",
+		_has_bound_player_record_in_region(controller, far_region)
+	)
+	var released_record = controller.streamer.records.get(target_key, null)
+	_expect(
+		failures,
+		"outside observer cell is evicted after bounded release",
+		released_record == null and target_record.state == "dormant" and target_record.generation > first_generation
+	)
+	_expect(
+		failures,
+		"released observer cell retires render and collision nodes",
+		not controller.render_nodes.has(target_key) and not controller.collision_nodes.has(target_key)
+	)
+
+	for _step in range(24):
+		controller.update_player_position(target_position)
+	var returned_record = controller.streamer.records.get(target_key, null)
+	_expect(
+		failures,
+		"returning observer cell reproduces canonical source and provenance",
+		returned_record != null
+		and returned_record.source_fingerprint == first_source
+		and returned_record.provenance_fingerprint == first_provenance
+	)
+	_expect(
+		failures,
+		"returning observer cell gets a new incarnation token",
+		returned_record != null and returned_record.generation > first_generation
+	)
+	_expect(
+		failures,
+		"returning observer cell re-realizes render and collision through streamer",
+		returned_record != null
+		and bool(returned_record.readiness.get("render", false))
+		and bool(returned_record.readiness.get("collision", false))
+		and controller.render_nodes.has(target_key)
+		and controller.collision_nodes.has(target_key)
+	)
+	_expect(
+		failures,
+		"observer release and re-entry produce no stale-result resurrection",
+		controller.streamer.stale_result_count == 0
+	)
+	_expect(
+		failures,
+		"observer realization window remains bounded",
+		controller.render_nodes.size() <= 27 and controller.collision_nodes.size() <= 27
+	)
+	controller.free()
+
+
+static func _has_bound_player_record_in_region(controller, region: Vector2i) -> bool:
+	for record in controller.streamer.records.values():
+		if record == null or not record.demands.has("player"):
+			continue
+		if controller._definition_service.region_for_address(record.cell_address) != region:
+			continue
+		if not record.source_fingerprint.is_empty() and not record.provenance_fingerprint.is_empty():
+			return true
+	return false
+
+
+static func _region_key(region: Vector2i) -> String:
+	return "%d:%d" % [region.x, region.y]
 
 
 static func _has_demand_source(records: Dictionary, source: String) -> bool:
