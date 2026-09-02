@@ -5,7 +5,16 @@ on:
     paths:
       - 'gameplay/resources/runtime/**'
       - 'worldgen/identity/stable_id.gd'
+      - 'worldgen/geometry/geometry_cell_address.gd'
+      - 'worldgen/runtime/underworld_cave_runtime_controller.gd'
+      - 'worldgen/runtime/underworld_runtime_cell_definition_service.gd'
+      - 'content/placement/underground_placement_candidate.gd'
+      - 'content/placement/underground_placement_policy.gd'
       - 'content/placement/underground_placement_record.gd'
+      - 'content/placement/underground_placement_service.gd'
+      - 'content/reserved_sites/reserved_site_assignment.gd'
+      - 'content/reserved_sites/reserved_site_assignment_service.gd'
+      - 'content/reserved_sites/reserved_site_content_definition.gd'
       - 'gameplay/resources/definitions/resource_definition.gd'
       - 'gameplay/resources/definitions/resource_yield_rule.gd'
       - 'gameplay/resources/definitions/authored_harvestable_resource_definition.gd'
@@ -31,7 +40,10 @@ on:
       - 'gameplay/items/inventory/item_stack_state.gd'
       - 'gameplay/items/inventory/item_instance_state.gd'
       - 'tests/resources/test_underground_resource_runtime.gd'
+      - 'tests/resources/test_underground_resource_cell_observer.gd'
+      - 'tests/resources/test_underground_resource_composition.gd'
       - 'tests/run_resource_runtime.gd'
+      - 'tests/run_resource_composition.gd'
       - '.github/workflows/resource-runtime-validation.yml'
   push:
     branches:
@@ -78,6 +90,18 @@ jobs:
             exit 1
           fi
           grep -Fq '[RESOURCE RUNTIME VALIDATION] PASS' "$validation_log"
+
+      - name: Run resource composition bridge contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          godot --headless --path . --quit-after 1 \
+            --script res://tests/run_resource_composition.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[RESOURCE COMPOSITION VALIDATION] PASS' "$validation_log"
 
       - name: Run accepted numeric contracts
         run: |
