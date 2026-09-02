@@ -16,6 +16,7 @@ const WeaponRuntimeProductionTests := preload("res://tests/content/test_weapon_r
 const WeaponRuntimeFailureTests := preload("res://tests/content/test_weapon_runtime_failure_contract.gd")
 const ReservedSiteAssignmentTests := preload("res://tests/content/test_reserved_site_assignment.gd")
 const UndergroundPlacementTests := preload("res://tests/content/test_underground_placement.gd")
+const UndergroundPlacementChannelTests := preload("res://tests/content/test_underground_placement_channels.gd")
 const SurfaceHarvestContentTests := preload("res://tests/content/test_surface_harvest_content.gd")
 const LootContractTests := preload("res://tests/content/test_loot_contract.gd")
 const CraftingContractTests := preload("res://tests/crafting/test_crafting_contract.gd")
@@ -39,12 +40,13 @@ func _init() -> void:
 	failures.append_array(WeaponRuntimeFailureTests.run())
 	failures.append_array(ReservedSiteAssignmentTests.run())
 	failures.append_array(UndergroundPlacementTests.run())
+	failures.append_array(UndergroundPlacementChannelTests.run())
 	failures.append_array(SurfaceHarvestContentTests.run())
 	failures.append_array(LootContractTests.run())
 	failures.append_array(CraftingContractTests.run())
 	if failures.is_empty():
 		print("[VALIDATION] PASS content")
-		print("  semantic content ids / deterministic registry / category-capability-role schemas / headless validation + snapshot evidence + stale-consumer guards / archetype realization / item / resource / creature / weapon / production weapon runtime + failure atomicity / reserved-site assignment / underground placement / surface-harvest / loot / crafting rulebook contracts passed")
+		print("  semantic content ids / deterministic registry / category-capability-role schemas / headless validation + snapshot evidence + stale-consumer guards / archetype realization / item / resource / creature / weapon / production weapon runtime + failure atomicity / reserved-site assignment / underground placement + channel identity / surface-harvest / loot / crafting rulebook contracts passed")
 		quit(0)
 		return
 
