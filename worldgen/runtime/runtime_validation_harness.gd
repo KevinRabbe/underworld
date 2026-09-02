@@ -15,9 +15,10 @@ const CollisionBoundary := preload("res://worldgen/runtime/cave_collision_realiz
 class ManualExecutor extends RefCounted:
 	var requests: Array = []
 	var queued: int = 0
-	func submit(request, tier: String) -> void:
+	func submit(request, tier: String) -> bool:
 		requests.append({"request": request, "tier": tier})
 		queued += 1
+		return true
 	func take_reversed() -> Array:
 		var result := requests.duplicate(); result.reverse(); requests.clear(); return result
 
@@ -54,11 +55,7 @@ static func run() -> Report:
 	_expect(report, "gate starts closed", not gate.update(streamer)); report.counters["queued"] = executor.queued
 	var mesh := MeshData.new(cells[0], AABB(Vector3.ZERO, Vector3.ONE), PackedVector3Array([Vector3.ZERO, Vector3.RIGHT, Vector3.FORWARD]), PackedInt32Array([0, 1, 2]), PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP]), PackedVector2Array([Vector2.ZERO, Vector2.RIGHT, Vector2.DOWN]), ["descriptor:fixture"], [], "mesh-input:map014")
 	var collision_stage = CollisionBuilder.prepare(mesh, provenance); var realized := CollisionBoundary.realize_main_thread(collision_stage.data, mesh.output_fingerprint); var collision_payload = realized.shape if realized.success else null
-	for item in executor.take_reversed():
-		var request = item["request"]; var tier: String = item["tier"]; var payload = collision_payload if tier == "collision" else {"tier": tier, "event": "ready"}
-		var result := Result.new(request.cell_address, request.generation, tier, source, provenance, payload, true, [], "world:map014", "manifest:map014")
-		if streamer.accept_result(result):
-			report.counters["ready"] += 1; report.events.append("ready|" + request.cell_address.canonical_text() + "|" + tier + "|" + str(request.generation)); if tier == "render": report.counters["attached"] += 1
+	_drain_frontier(executor, streamer, source, provenance, collision_payload, report)
 	_expect(report, "gate opens only after realized collision readiness", gate.update(streamer))
 	var stale := Result.new(cells[0], streamer.records[cells[0].canonical_text()].generation - 1, "collision", source, provenance, collision_payload, true, [], "world:map014", "manifest:map014")
 	_expect(report, "stale completion is rejected", not streamer.accept_result(stale))
@@ -71,13 +68,13 @@ static func run() -> Report:
 	_expect(report, "old source completion is rejected", not streamer.accept_result(old_result)); report.counters["stale_discarded"] = streamer.stale_result_count
 	for address in cells:
 		streamer.release_demand(address, "fixture")
-		streamer.set_demand(address, "route", [])
-		streamer.release_cell(address)
+		streamer.release_demand(address, "route")
+		if streamer.records.has(address.canonical_text()):
+			streamer.release_cell(address)
 	report.counters["released"] = streamer.released_count
 	var fixture_released := true
 	for address in cells:
-		var fixture_record = streamer.records.get(address.canonical_text())
-		fixture_released = fixture_released and fixture_record != null and fixture_record.demands.is_empty() and fixture_record.state == "dormant"
+		fixture_released = fixture_released and not streamer.records.has(address.canonical_text())
 	_expect(report, "fixture cells release after normal demand transition", fixture_released)
 	var movement := Streamer.new("world:movement", "manifest:movement")
 	movement.collision_activate_radius = 1
@@ -90,6 +87,25 @@ static func run() -> Report:
 	_expect(report, "normal movement keeps destination collision demanded", next_record.demand_count("collision") == 1)
 	report.events.append("movement-collision|" + str(next_record.demand_count("collision")))
 	report.events.append("gate|" + str(gate.is_open())); report.fingerprint = _fingerprint({"counters": report.counters, "events": report.events}); return report
+
+static func _drain_frontier(executor: ManualExecutor, streamer, source: String, provenance: String, collision_payload, report: Report) -> void:
+	# Frontier scheduling exposes dependent tiers only after their predecessor was
+	# accepted. Drain bounded waves rather than assuming every tier was prequeued.
+	var waves: int = 0
+	while not executor.requests.is_empty() and waves < 16:
+		waves += 1
+		for item in executor.take_reversed():
+			var request = item["request"]
+			var tier: String = item["tier"]
+			var payload = collision_payload if tier == "collision" else {"tier": tier, "event": "ready"}
+			var result := Result.new(request.cell_address, request.generation, tier, source, provenance, payload, true, [], "world:map014", "manifest:map014")
+			if streamer.accept_result(result):
+				report.counters["ready"] += 1
+				report.events.append("ready|" + request.cell_address.canonical_text() + "|" + tier + "|" + str(request.generation))
+				if tier == "render":
+					report.counters["attached"] += 1
+	if not executor.requests.is_empty():
+		report.failures.append("frontier executor did not settle within bounded waves")
 
 static func _fingerprint(value: Dictionary) -> String:
 	var CanonicalValue = preload("res://worldgen/validation/canonical_value.gd"); return "runtime-harness2:" + CanonicalValue.fingerprint(value)

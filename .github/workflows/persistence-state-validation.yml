@@ -37,7 +37,11 @@ jobs:
         run: |
           set -o pipefail
           validation_log="$(mktemp)"
-          godot --headless --path . --quit-after 1 \
+          # Runtime persistence contracts deliberately advance real SceneTree
+          # physics frames. The SceneTree test runner owns quit(0/1); imposing
+          # --quit-after 1 would terminate an awaited physics-frame proof before
+          # the coroutine can resume and report its verdict.
+          godot --headless --path . \
             --script res://tests/run_persistence_state.gd 2>&1 \
             | tee "$validation_log"
           if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
