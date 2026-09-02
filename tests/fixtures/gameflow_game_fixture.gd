@@ -5,6 +5,19 @@ var prepared_candidate: Dictionary = {}
 var process_ticks: int = 0
 var unhandled_cancel_count: int = 0
 var save_request_count: int = 0
+@export var reject_gameplay_input_gate: bool = false
+var configured_gameplay_input_gate: Node = null
+var gate_configured_inside_tree: bool = false
+
+
+func configure_gameplay_input_gate(gate: Node) -> bool:
+	gate_configured_inside_tree = is_inside_tree()
+	if gate_configured_inside_tree or reject_gameplay_input_gate:
+		return false
+	if gate == null or not is_instance_valid(gate) or not gate.has_method("allows_player_input"):
+		return false
+	configured_gameplay_input_gate = gate
+	return true
 
 
 func prepare_new_game() -> bool:

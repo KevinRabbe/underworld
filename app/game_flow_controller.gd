@@ -7,15 +7,16 @@ const ROUTE_GAME: StringName = &"game"
 
 var _app_root: Node = null
 var _pause_menu: Control = null
+var _ui_focus_stack: Node = null
 var _pause_active: bool = false
 var _operation_in_progress: bool = false
 var _mouse_mode_before_pause: int = Input.MOUSE_MODE_CAPTURED
 
 
-func configure(app_root: Node, pause_menu: Control) -> bool:
-	if _app_root != null or _pause_menu != null:
+func configure(app_root: Node, pause_menu: Control, ui_focus_stack: Node = null) -> bool:
+	if _app_root != null or _pause_menu != null or _ui_focus_stack != null:
 		return false
-	if app_root == null or pause_menu == null:
+	if app_root == null or pause_menu == null or ui_focus_stack == null:
 		return false
 	for method_name in ["current_route_id", "save_current_game", "show_title", "quit_application"]:
 		if not app_root.has_method(method_name):
@@ -28,9 +29,13 @@ func configure(app_root: Node, pause_menu: Control) -> bool:
 	for method_name in ["set_open", "set_feedback"]:
 		if not pause_menu.has_method(method_name):
 			return false
+	for method_name in ["has_back_owner", "dispatch_back"]:
+		if not ui_focus_stack.has_method(method_name):
+			return false
 
 	_app_root = app_root
 	_pause_menu = pause_menu
+	_ui_focus_stack = ui_focus_stack
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_pause_menu.call("set_open", false)
 	_pause_menu.connect("resume_requested", Callable(self, "request_resume"))
@@ -47,6 +52,17 @@ func _input(event: InputEvent) -> void:
 		return
 	if not event.is_action_pressed("ui_cancel"):
 		return
+
+	# `_input` runs before ordinary GUI handling. Explicitly delegate Back to the
+	# top interactive UI surface first so Settings/Modal/overlay ownership never
+	# depends on sibling callback or GUI propagation order.
+	if _ui_focus_stack != null and bool(_ui_focus_stack.call("has_back_owner")):
+		var ui_viewport := get_viewport()
+		if ui_viewport != null:
+			ui_viewport.set_input_as_handled()
+		_ui_focus_stack.call("dispatch_back")
+		return
+
 	if str(_app_root.call("current_route_id")) != str(ROUTE_GAME):
 		return
 	var viewport := get_viewport()
