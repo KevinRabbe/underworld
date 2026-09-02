@@ -52,6 +52,8 @@ var loot_collection_poll_timer: float = 0.0
 @export var enable_map015_fixture: bool = false
 @export var enable_debug_hud: bool = true
 
+var _gameplay_input_gate: Node = null
+var _prepared_player: Node = null
 var _startup_prepared: bool = false
 var _startup_mode: StringName = STARTUP_NEW
 var _startup_candidate: Dictionary = {}
@@ -60,6 +62,33 @@ var _selected_entrance_route: Dictionary = {}
 var _natural_route_diagnostics: Array[String] = []
 var _surface_initial_bootstrap_count: int = 0
 var _natural_route_runtime_bootstrapped: bool = false
+
+
+func configure_gameplay_input_gate(gate: Node) -> bool:
+	if is_inside_tree() or _gameplay_input_gate != null or _prepared_player != null:
+		return false
+	if gate == null or not is_instance_valid(gate) or not gate.has_method("allows_player_input"):
+		return false
+	var candidate: Node = PlayerScript.new()
+	if not _bind_player_input_authority(candidate, gate):
+		if candidate != null and is_instance_valid(candidate):
+			candidate.free()
+		return false
+	_gameplay_input_gate = gate
+	_prepared_player = candidate
+	return true
+
+
+func _bind_player_input_authority(candidate: Node, gate: Node) -> bool:
+	if candidate == null or not is_instance_valid(candidate) or candidate.is_inside_tree():
+		return false
+	if gate == null or not is_instance_valid(gate) or not gate.has_method("allows_player_input"):
+		return false
+	if not candidate.has_method("configure_gameplay_input_gate"):
+		return false
+	if not bool(candidate.call("configure_gameplay_input_gate", gate)):
+		return false
+	return candidate.get("_gameplay_input_gate") == gate
 
 
 func prepare_new_game() -> bool:
@@ -176,13 +205,25 @@ func _ready() -> void:
 		_startup_prepared = true
 	_setup_environment()
 	_create_world()
-	_create_player()
+	if not _create_player():
+		push_error("Game startup aborted because Player gameplay-input authority was not safely composed")
+		set_process(false)
+		set_physics_process(false)
+		return
 	_create_death_recovery()
 	_create_underworld_runtime()
 	_create_combat()
 	_bind_gameplay_audio()
 	_create_gameplay_hud()
 	_create_debug_hud()
+
+
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_PREDELETE:
+		return
+	if _prepared_player != null and is_instance_valid(_prepared_player) and _prepared_player.get_parent() == null:
+		_prepared_player.free()
+	_prepared_player = null
 
 
 func _process(delta: float) -> void:
@@ -417,8 +458,22 @@ func _create_water_surface() -> void:
 	add_child(water_surface)
 
 
-func _create_player() -> void:
-	player = PlayerScript.new()
+func _create_player() -> bool:
+	if _gameplay_input_gate != null:
+		if _prepared_player == null or not is_instance_valid(_prepared_player):
+			push_error("Production Game has no pre-bound Player input authority")
+			return false
+		player = _prepared_player
+		_prepared_player = null
+		if player.get("_gameplay_input_gate") != _gameplay_input_gate:
+			push_error("Prepared Player does not retain exact Game gameplay-input authority")
+			player.free()
+			player = null
+			return false
+	else:
+		# Direct isolated Game fixtures may still create an unbound Player. AppRoot
+		# production composition never reaches this path because it requires the gate.
+		player = PlayerScript.new()
 	player.name = "Player"
 	add_child(player)
 	var spawn_position: Vector3
@@ -437,6 +492,7 @@ func _create_player() -> void:
 	world.set_player(player)
 	survival.set_player(player)
 	player.set_equipped_tool(survival.get_equipped_tool())
+	return true
 
 
 func _create_death_recovery() -> void:
