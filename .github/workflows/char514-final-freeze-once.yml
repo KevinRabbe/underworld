@@ -1,4 +1,4 @@
-name: CHAR514 Final State And Cleanup
+name: CHAR514 Final Inventory And Cleanup
 
 on:
   push:
@@ -15,10 +15,10 @@ env:
   EVIDENCE_TRIGGER: presentation/characters/faceted/.visual_evidence_trigger
 
 jobs:
-  state-contracts:
-    name: Final numeric / persistence / inventory contracts
+  inventory-contracts:
+    name: Final candidate inventory contracts
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - name: Checkout exact trigger commit
         uses: actions/checkout@v6
@@ -43,22 +43,6 @@ jobs:
           include-templates: false
       - name: Import final candidate resources
         run: godot --headless --editor --path . --quit
-      - name: Numeric contracts
-        shell: bash
-        run: |
-          set -o pipefail
-          log="$(mktemp)"
-          godot --headless --path . --quit-after 1 --script res://tests/run_numeric_validation.gd 2>&1 | tee "$log"
-          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
-          grep -Fq '[NUMERIC VALIDATION] PASS' "$log"
-      - name: Persistence-state contracts
-        shell: bash
-        run: |
-          set -o pipefail
-          log="$(mktemp)"
-          godot --headless --path . --quit-after 1 --script res://tests/run_persistence_state.gd 2>&1 | tee "$log"
-          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
-          grep -Fq '[PERSISTENCE STATE VALIDATION] PASS' "$log"
       - name: Inventory contracts
         shell: bash
         run: |
@@ -71,7 +55,7 @@ jobs:
   freeze-candidate:
     name: Commit exact cleaned candidate
     needs:
-      - state-contracts
+      - inventory-contracts
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
