@@ -1,0 +1,76 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://tools/character_preview/voxel_character_preview.gd" id="1_script"]
+
+[sub_resource type="Environment" id="Environment_preview"]
+background_mode = 1
+background_color = Color(0.32, 0.37, 0.38, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.75, 0.79, 0.76, 1)
+ambient_light_energy = 0.7
+
+[sub_resource type="BoxMesh" id="BoxMesh_floor"]
+size = Vector3(8, 0.05, 8)
+
+[sub_resource type="StandardMaterial3D" id="Material_floor"]
+albedo_color = Color(0.21, 0.25, 0.22, 1)
+roughness = 1.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_status"]
+bg_color = Color(0.035, 0.045, 0.045, 0.88)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.18, 0.45, 0.5, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="VoxelCharacterPreview" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_preview")
+
+[node name="Floor" type="MeshInstance3D" parent="."]
+position = Vector3(0, -0.05, 0)
+mesh = SubResource("BoxMesh_floor")
+material_override = SubResource("Material_floor")
+
+[node name="CharacterRoot" type="Node3D" parent="."]
+
+[node name="KeyLight" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-48, -32, 0)
+light_energy = 1.15
+shadow_enabled = true
+
+[node name="FillLight" type="OmniLight3D" parent="."]
+position = Vector3(-2, 2.4, -2)
+light_energy = 2.0
+omni_range = 7.0
+
+[node name="RimLight" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-38, 142, 0)
+light_color = Color(0.62, 0.78, 0.8, 1)
+light_energy = 0.8
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(0.840386, -0.092323, 0.53405, 0, 0.985389, 0.170319, -0.542, -0.143137, 0.828107, 2.7, 1.35, -4.2)
+fov = 34.0
+current = true
+
+[node name="Interface" type="CanvasLayer" parent="."]
+
+[node name="Status" type="Label" parent="Interface"]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 1260.0
+offset_bottom = 84.0
+theme_override_colors/font_color = Color(0.92, 0.95, 0.92, 1)
+theme_override_font_sizes/font_size = 16
+theme_override_styles/normal = SubResource("StyleBox_status")
+text = "FRONTIER UNDERWORLD EXPEDITION — LOADING"
+horizontal_alignment = 1
+vertical_alignment = 1
