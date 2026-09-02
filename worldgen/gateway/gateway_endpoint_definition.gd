@@ -157,15 +157,19 @@ func validate() -> Array[String]:
 		failures.append("Gateway endpoint requires StableAddress")
 	else:
 		var segments: Array[String] = _stable_address.segments()
-		if segments.size() < 8:
-			failures.append("Gateway endpoint StableAddress is incomplete")
+		if segments.size() != 8:
+			failures.append("Gateway endpoint StableAddress must have the exact semantic shape")
 		elif (
 			segments[0] != "gateway"
 			or segments[1] != _endpoint_kind
 			or segments[2] != "domain"
 			or segments[3] != _domain_id
+			or segments[4] != "candidate"
+			or segments[5] != _candidate_key
+			or segments[6] != "revision"
+			or segments[7] != str(_semantic_revision)
 		):
-			failures.append("Gateway endpoint StableAddress namespace/domain mismatch")
+			failures.append("Gateway endpoint StableAddress semantic payload mismatch")
 	var parsed_id = StableId.parse(_stable_id)
 	if parsed_id == null:
 		failures.append("Gateway endpoint StableId is not canonical")
