@@ -21,7 +21,7 @@ jobs:
           version: 4.7.2
           use-dotnet: false
           include-templates: false
-      - name: Merge exact accepted main
+      - name: Merge exact accepted main and compose sole test conflict
         shell: bash
         run: |
           set -euxo pipefail
@@ -29,7 +29,60 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           test "$(git rev-parse origin/main)" = "2948912830c21a0f3e1578bc2dbd48da032368b3"
+          set +e
           git merge --no-ff --no-commit 2948912830c21a0f3e1578bc2dbd48da032368b3
+          merge_status=$?
+          set -e
+          test "$merge_status" -ne 0
+          unmerged="$(git diff --name-only --diff-filter=U)"
+          test "$unmerged" = "tests/character/test_player_integration.gd"
+
+          # Accepted UI-INPUT owns input-gate behavior. Start from its expanded
+          # integration test, then restore only #514 presentation injection and
+          # the authored -Z presentation-forward convention.
+          git checkout --theirs -- tests/character/test_player_integration.gd
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tests/character/test_player_integration.gd')
+          text = p.read_text()
+
+          def replace_once(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected one match, got {count}: {old!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              'const GameplayInputGateScript := preload("res://app/input/gameplay_input_gate.gd")\n',
+              'const GameplayInputGateScript := preload("res://app/input/gameplay_input_gate.gd")\nconst VoxelProvider := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")\n'
+          )
+          replace_once(
+              '\tvar player: Node = PlayerScript.new()\n',
+              '\tvar player: Node = PlayerScript.new()\n\tplayer.set("character_presentation_provider", VoxelProvider.new())\n'
+          )
+          replace_once(
+              '\tvar combat_forward: Vector3 = visual_root.global_transform.basis.z\n',
+              '\tvar combat_forward: Vector3 = -visual_root.global_transform.basis.z\n'
+          )
+          replace_once(
+              '\tvar attack_forward: Vector3 = visual_root.global_transform.basis.z\n',
+              '\tvar attack_forward: Vector3 = -visual_root.global_transform.basis.z\n'
+          )
+          p.write_text(text)
+          PY
+          git add tests/character/test_player_integration.gd
+          test -z "$(git diff --name-only --diff-filter=U)"
+
+          # Production merge must retain both accepted UI-input authority and
+          # #514's neutral presentation-provider boundary.
+          grep -Fq 'var _gameplay_input_gate: Node = null' gameplay/player/player.gd
+          grep -Fq 'var character_presentation_provider' gameplay/player/player.gd
+          ! grep -Fq 'const PrototypeMannequinScript' gameplay/player/player.gd
+          grep -Fq 'const GameplayInputGateScript' tests/character/test_player_integration.gd
+          grep -Fq 'const VoxelProvider' tests/character/test_player_integration.gd
+          grep -Fq 'var combat_forward: Vector3 = -visual_root.global_transform.basis.z' tests/character/test_player_integration.gd
+
           git rm .github/workflows/char514-reconcile-ui-input.yml
           git diff --check --cached
       - name: Import
