@@ -111,9 +111,61 @@ static func run() -> Array[String]:
 	if player.animation_controller.hand_root.get_child_count() != 1:
 		failures.append("weapon runtime repeated resync created duplicate hand presentations")
 
+	var canonical_selected_hotbar: int = equipment.selected_hotbar()
+	var canonical_selected_item_id: String = str(equipment.selected_definition().content_id)
+	var canonical_wood_quantity: int = inventory.quantity_of(WOOD_ID)
+	var canonical_iron_quantity: int = inventory.quantity_of(IRON_ID)
+
 	session.clear()
+	if (
+		player.equipped_weapon_definition != null
+		or player.equipped_weapon_attack_set != null
+		or player.equipped_weapon_attack_resolver != null
+	):
+		failures.append("weapon runtime teardown retained semantic sword attack source")
 	if player.animation_controller.hand_root.get_child_count() != 0:
 		failures.append("weapon runtime teardown retained hand presentation")
+	if (
+		equipment.selected_hotbar() != canonical_selected_hotbar
+		or equipment.selected_definition() == null
+		or str(equipment.selected_definition().content_id) != canonical_selected_item_id
+	):
+		failures.append("weapon runtime teardown mutated canonical equipment selection")
+	if (
+		inventory.quantity_of(WOOD_ID) != canonical_wood_quantity
+		or inventory.quantity_of(IRON_ID) != canonical_iron_quantity
+	):
+		failures.append("weapon runtime teardown mutated canonical inventory truth")
+
+	var reconfigured: Dictionary = session.configure(player, inventory, equipment)
+	if not bool(reconfigured.get("success", false)):
+		failures.append("weapon runtime could not reconfigure restored selected sword after teardown")
+	elif player.equipped_weapon_definition == null or str(player.equipped_weapon_definition.content_id) != SWORD_ID:
+		failures.append("weapon runtime reconfigure did not restore canonical sword source")
+
+	var invalid_reconfigure: Dictionary = session.configure(player, null, equipment)
+	if bool(invalid_reconfigure.get("success", true)):
+		failures.append("weapon runtime unexpectedly accepted invalid replacement inventory")
+	if (
+		player.equipped_weapon_definition != null
+		or player.equipped_weapon_attack_set != null
+		or player.equipped_weapon_attack_resolver != null
+	):
+		failures.append("failed replacement configure retained old semantic sword source")
+	if session.presented_weapon_instance() != null or player.animation_controller.hand_root.get_child_count() != 0:
+		failures.append("failed replacement configure retained old sword presentation")
+	if (
+		equipment.selected_hotbar() != canonical_selected_hotbar
+		or equipment.selected_definition() == null
+		or str(equipment.selected_definition().content_id) != canonical_selected_item_id
+	):
+		failures.append("failed replacement configure mutated canonical equipment selection")
+	if (
+		inventory.quantity_of(WOOD_ID) != canonical_wood_quantity
+		or inventory.quantity_of(IRON_ID) != canonical_iron_quantity
+	):
+		failures.append("failed replacement configure mutated canonical inventory truth")
+
 	player.animation_controller.hand_root.free()
 	player.free()
 	failures.sort()
