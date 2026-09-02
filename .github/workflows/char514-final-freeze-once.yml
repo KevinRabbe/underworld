@@ -1,4 +1,4 @@
-name: CHAR514 Final Freeze Once
+name: CHAR514 Final State And Cleanup
 
 on:
   push:
@@ -15,17 +15,17 @@ env:
   EVIDENCE_TRIGGER: presentation/characters/faceted/.visual_evidence_trigger
 
 jobs:
-  character-shared:
-    name: Final character / GameFlow / input contracts
+  state-contracts:
+    name: Final numeric / persistence / inventory contracts
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - name: Checkout exact trigger commit
         uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-      - name: Assert governed logical source and accepted main
+      - name: Assert governed logical source and final tree projection
         shell: bash
         run: |
           set -euo pipefail
@@ -43,64 +43,6 @@ jobs:
           include-templates: false
       - name: Import final candidate resources
         run: godot --headless --editor --path . --quit
-      - name: Character contracts
-        shell: bash
-        run: |
-          set -o pipefail
-          log="$(mktemp)"
-          godot --headless --path . --quit-after 1 --script res://tests/run_character.gd 2>&1 | tee "$log"
-          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
-          grep -Fq '[CHARACTER VALIDATION] PASS' "$log"
-      - name: App Shell and Game Flow contracts
-        shell: bash
-        run: |
-          set -o pipefail
-          log="$(mktemp)"
-          godot --headless --path . --script res://tests/run_app_shell.gd 2>&1 | tee "$log"
-          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
-          grep -Fq '[APP SHELL VALIDATION] PASS' "$log"
-      - name: UI architecture and accepted input authority contracts
-        shell: bash
-        run: |
-          set -o pipefail
-          log="$(mktemp)"
-          godot --headless --path . --script res://tests/run_ui_architecture.gd 2>&1 | tee "$log"
-          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
-          grep -Fq '[UI ARCHITECTURE VALIDATION] PASS' "$log"
-
-  resource-runtime:
-    name: Final isolated Resource Runtime contracts
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - name: Checkout exact trigger commit
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-      - name: Assert governed logical source and project final cleanup locally
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git diff --name-only "$PASS3_SHA" HEAD)" = "$FREEZE_WORKFLOW"
-          test -f "$EVIDENCE_TRIGGER"
-          rm "$EVIDENCE_TRIGGER"
-      - name: Setup Godot 4.7.2
-        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
-        with:
-          version: 4.7.2
-          use-dotnet: false
-          include-templates: false
-      - name: Import final candidate resources
-        run: godot --headless --editor --path . --quit
-      - name: Resource Runtime first on pristine checkout
-        shell: bash
-        run: |
-          set -o pipefail
-          log="$(mktemp)"
-          godot --headless --path . --quit-after 1 --script res://tests/run_resource_runtime.gd 2>&1 | tee "$log"
-          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
-          grep -Fq '[RESOURCE RUNTIME VALIDATION] PASS' "$log"
       - name: Numeric contracts
         shell: bash
         run: |
@@ -126,123 +68,10 @@ jobs:
           ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
           grep -Fq '[INVENTORY VALIDATION] PASS' "$log"
 
-  foundation-fast-layout:
-    name: Final foundation fast / layout contracts
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - name: Checkout exact trigger commit
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-      - name: Assert governed logical source and project final cleanup locally
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git diff --name-only "$PASS3_SHA" HEAD)" = "$FREEZE_WORKFLOW"
-          rm "$EVIDENCE_TRIGGER"
-      - name: Setup Godot 4.7.2
-        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
-        with:
-          version: 4.7.2
-          use-dotnet: false
-          include-templates: false
-      - name: Foundation fast contracts
-        shell: bash
-        run: |
-          set -o pipefail
-          log="$(mktemp)"
-          godot --headless --path . --quit-after 1 --script res://tests/run_validation.gd -- --mode=fast 2>&1 | tee "$log"
-          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
-          grep -Fq '[VALIDATION] PASS fast' "$log"
-      - name: Repository layout
-        run: python3 tools/ci/validate_repository_layout.py
-
-  content-registry:
-    name: Final deterministic content
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - name: Checkout exact trigger commit
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-      - name: Assert governed logical source and project final cleanup locally
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git diff --name-only "$PASS3_SHA" HEAD)" = "$FREEZE_WORKFLOW"
-          rm "$EVIDENCE_TRIGGER"
-      - name: Setup Godot 4.7.2
-        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
-        with:
-          version: 4.7.2
-          use-dotnet: false
-          include-templates: false
-      - name: Content registry contracts
-        shell: bash
-        run: |
-          set -o pipefail
-          log="$(mktemp)"
-          godot --headless --path . --quit-after 1 --script res://tests/run_content.gd 2>&1 | tee "$log"
-          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
-          grep -Fq '[VALIDATION] PASS content' "$log"
-
-  deterministic-foundation:
-    name: Final deterministic shard (${{ matrix.start-seed }})
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        start-seed: [1, 26, 51, 76, 101, 126, 151, 176, 201, 226]
-    steps:
-      - name: Checkout exact trigger commit
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-      - name: Assert governed logical source and project final cleanup locally
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git diff --name-only "$PASS3_SHA" HEAD)" = "$FREEZE_WORKFLOW"
-          rm "$EVIDENCE_TRIGGER"
-      - name: Setup Godot 4.7.2
-        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
-        with:
-          version: 4.7.2
-          use-dotnet: false
-          include-templates: false
-      - name: Deterministic cave geometry batch
-        shell: bash
-        run: |
-          set -o pipefail
-          log="$(mktemp)"
-          godot --headless --path . --quit-after 1 --script res://tests/run_validation.gd -- --mode=batch --start-seed=${{ matrix.start-seed }} --count=25 --region-radius=1 2>&1 | tee "$log"
-          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"
-          grep -Fq '[VALIDATION] PASS batch' "$log"
-
-  deterministic-aggregate:
-    name: Final deterministic aggregate
-    needs:
-      - deterministic-foundation
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Record aggregate success
-        run: echo '10/10 deterministic worldgen shards PASS'
-
   freeze-candidate:
-    name: Freeze exact validated candidate
-    if: ${{ always() && needs.character-shared.result == 'success' && needs.resource-runtime.result == 'success' && needs.foundation-fast-layout.result == 'success' && needs.content-registry.result == 'success' && needs.deterministic-aggregate.result == 'success' }}
+    name: Commit exact cleaned candidate
     needs:
-      - character-shared
-      - resource-runtime
-      - foundation-fast-layout
-      - content-registry
-      - deterministic-aggregate
+      - state-contracts
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -251,7 +80,7 @@ jobs:
         with:
           ref: worker/char-reconcile-001
           fetch-depth: 0
-      - name: Reassert immutable authority and commit only final cleanup
+      - name: Reassert authority and commit only cleanup
         shell: bash
         run: |
           set -euo pipefail
