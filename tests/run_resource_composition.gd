@@ -5,6 +5,7 @@ const CompositionTests := preload("res://tests/resources/test_underground_resour
 const ResidencyTests := preload("res://tests/resources/test_underground_resource_residency.gd")
 const SupportTests := preload("res://tests/resources/test_underground_resource_support.gd")
 const HarvestSinkTests := preload("res://tests/resources/test_underground_resource_harvest_sink.gd")
+const RuntimeCompositionTests := preload("res://tests/resources/test_underground_resource_runtime_composition.gd")
 const RealizationTests := preload("res://tests/resources/test_underground_resource_realization.gd")
 
 
@@ -22,13 +23,14 @@ func _run() -> void:
 	root.add_child(realization_parent)
 	failures.append_array(await SupportTests.run(realization_parent))
 	failures.append_array(await HarvestSinkTests.run(realization_parent))
+	failures.append_array(RuntimeCompositionTests.run(realization_parent))
 	failures.append_array(await RealizationTests.run(realization_parent))
 	root.remove_child(realization_parent)
 	realization_parent.free()
 
 	if failures.is_empty():
 		print("[RESOURCE COMPOSITION VALIDATION] PASS")
-		print("  detached runtime source boundary / generated reserved-site assignment / channel-scoped candidate identity / canonical iron placement / bounded semantic residency / direct current-cave support projection / target-aware Player-ray mining ticket sink / collision-gated support projection + realization / immediate retirement + depleted re-entry / stale-cell rejection passed")
+		print("  detached runtime source boundary / generated reserved-site assignment / channel-scoped candidate identity / canonical iron placement / bounded semantic residency / direct current-cave support projection / target-aware Player-ray mining ticket sink / ordered domain-internal resource lifecycle composition / collision-gated support projection + realization / immediate retirement + depleted re-entry / stale-cell rejection passed")
 		quit(0)
 		return
 
