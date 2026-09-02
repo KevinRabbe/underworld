@@ -229,6 +229,38 @@ func get_stamina() -> float:
 func get_max_stamina() -> float:
 	return stamina.max_stamina
 
+
+func restore_current_vitals(current_health: Variant, current_stamina: Variant) -> Dictionary:
+	var failures: Array[String] = []
+	if defeated:
+		failures.append("Continue vitals hydration rejects defeated Player")
+	if typeof(current_health) != TYPE_INT:
+		failures.append("Continue current_health must be int")
+	else:
+		var health_value: int = int(current_health)
+		if health_value <= 0:
+			failures.append("Continue current_health must be > 0")
+		elif health_value > get_max_health():
+			failures.append("Continue current_health exceeds current effective max Health")
+	if typeof(current_stamina) != TYPE_INT and typeof(current_stamina) != TYPE_FLOAT:
+		failures.append("Continue current_stamina must be numeric")
+	else:
+		var stamina_value: float = float(current_stamina)
+		if is_nan(stamina_value) or is_inf(stamina_value):
+			failures.append("Continue current_stamina must be finite")
+		elif stamina_value < 0.0:
+			failures.append("Continue current_stamina must be >= 0")
+		elif stamina_value > get_max_stamina() + 0.0001:
+			failures.append("Continue current_stamina exceeds current effective max Stamina")
+	if not failures.is_empty():
+		failures.sort()
+		return {"success": false, "diagnostics": failures}
+
+	health = int(current_health)
+	stamina.current_stamina = float(current_stamina)
+	return {"success": true, "diagnostics": []}
+
+
 func get_action_state_name() -> String:
 	return action_controller.state_name()
 

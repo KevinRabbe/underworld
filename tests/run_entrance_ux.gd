@@ -120,15 +120,7 @@ func _run_live_new_game(failures: Array[String]) -> Dictionary:
 		return {}
 	var request: Dictionary = request_variant
 	var service = GameSaveSlotService.new()
-	var saved: Dictionary = service.save_slot(
-		request.get("context", null),
-		request.get("delta_store", null),
-		request.get("inventory_state", null),
-		request.get("equipment_state", null),
-		request.get("pending_loot_states", []),
-		request.get("resume_position", Vector3.ZERO),
-		TEST_SLOT
-	)
+	var saved: Dictionary = service.save_slot(request, TEST_SLOT)
 	if not bool(saved.get("success", false)):
 		failures.append("live/new entrance SAVE fixture failed atomically: %s" % [saved.get("diagnostics", [])])
 		_teardown_game(game)

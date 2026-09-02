@@ -11,6 +11,7 @@ const WorldGenerationContextScript := preload("res://worldgen/pipeline/world_gen
 const IntegratedGameSaveContractScript := preload("res://gameplay/persistence/integrated_game_save_contract.gd")
 const GameplayStateCodecScript := preload("res://gameplay/persistence/gameplay_state_codec.gd")
 const GameplaySaveCatalogScript := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
+const WorldDomainSessionStateScript := preload("res://gameplay/world_session/world_domain_session_state.gd")
 const IntegratedSurvivalControllerScript := preload("res://gameplay/survival/integrated_survival_controller.gd")
 const ItemContainerStateScript := preload("res://gameplay/items/inventory/item_container_state.gd")
 const EquipmentHotbarStateScript := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
@@ -22,8 +23,6 @@ const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spa
 const GameplayHudScript := preload("res://presentation/ui/hud/gameplay_hud.gd")
 const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
 const UnderworldRuntimeControllerScript := preload("res://worldgen/runtime/underworld_cave_runtime_controller.gd")
-const WorldIdScript := preload("res://worldgen/identity/world_id.gd")
-const GeneratorManifestScript := preload("res://worldgen/versioning/generator_manifest.gd")
 const Map015FixtureScript := preload("res://worldgen/validation/map015_fixture.gd")
 const NaturalEntranceRouteSelectorScript := preload("res://worldgen/surface/natural_entrance_route_selector.gd")
 
@@ -62,6 +61,8 @@ var _selected_entrance_route: Dictionary = {}
 var _natural_route_diagnostics: Array[String] = []
 var _surface_initial_bootstrap_count: int = 0
 var _natural_route_runtime_bootstrapped: bool = false
+var _session_world_context = null
+var _world_session_state = null
 
 
 func configure_gameplay_input_gate(gate: Node) -> bool:
@@ -95,6 +96,26 @@ func prepare_new_game() -> bool:
 	if is_inside_tree():
 		push_error("Game startup must be prepared before entering the SceneTree")
 		return false
+	return _prepare_new_game_state()
+
+
+func _prepare_new_game_state() -> bool:
+	var initial_settings = WorldSettingsScript.new()
+	if enable_map015_fixture:
+		initial_settings.world_seed = 1
+	var context = WorldGenerationContextScript.new(int(initial_settings.world_seed))
+	var failures: Array[String] = []
+	for failure in context.validate():
+		failures.append("NEW root world context: %s" % failure)
+	if not failures.is_empty():
+		for failure in failures:
+			push_error(failure)
+		return false
+	_session_world_context = context
+	_world_session_state = WorldDomainSessionStateScript.new(
+		WorldDomainSessionStateScript.DOMAIN_OVERWORLD,
+		{}
+	)
 	_startup_mode = STARTUP_NEW
 	_startup_candidate.clear()
 	_restored_pending_loot_states.clear()
@@ -110,7 +131,7 @@ func prepare_continue(candidate: Dictionary) -> bool:
 		push_error("MAP-015 developer fixture cannot be combined with durable Continue state")
 		return false
 
-	var clone_result: Dictionary = IntegratedGameSaveContractScript.clone_candidate(candidate)
+	var clone_result: Dictionary = IntegratedGameSaveContractScript.clone_v2_candidate(candidate)
 	if not bool(clone_result.get("success", false)):
 		for diagnostic in clone_result.get("diagnostics", []):
 			push_error("Continue preparation clone rejected: %s" % diagnostic)
@@ -126,6 +147,8 @@ func prepare_continue(candidate: Dictionary) -> bool:
 		for failure in failures:
 			push_error("Continue preparation rejected: %s" % failure)
 		return false
+	_session_world_context = owned_candidate.get("world_context", null)
+	_world_session_state = owned_candidate.get("world_session_state", null)
 	_startup_mode = STARTUP_CONTINUE
 	_startup_candidate = owned_candidate
 	_restored_pending_loot_states = owned_candidate.get("pending_loot_states", []).duplicate()
@@ -157,6 +180,14 @@ func build_save_request() -> Dictionary:
 	var failures: Array[String] = []
 	if world_settings == null:
 		failures.append("SAVE runtime snapshot requires WorldSettings")
+	if _session_world_context == null or not _session_world_context.has_method("validate"):
+		failures.append("SAVE runtime snapshot requires exact session root context")
+	elif not _session_world_context.validate().is_empty():
+		failures.append("SAVE runtime session root context is invalid")
+	elif world_settings != null and int(world_settings.world_seed) != int(_session_world_context.world_seed):
+		failures.append("SAVE runtime WorldSettings seed drifted from session root context")
+	if _world_session_state == null or not _world_session_state is WorldDomainSessionStateScript:
+		failures.append("SAVE runtime snapshot requires WorldDomainSessionState authority")
 	if world_delta_store == null or not world_delta_store is WorldDeltaStoreScript:
 		failures.append("SAVE runtime snapshot requires WorldDeltaStore")
 	if survival == null:
@@ -165,15 +196,14 @@ func build_save_request() -> Dictionary:
 		failures.append("SAVE runtime snapshot requires live Player")
 	elif player.has_method("is_defeated") and bool(player.call("is_defeated")):
 		failures.append("SAVE runtime snapshot rejects defeated Player")
+	elif not player.has_method("get_health") or not player.has_method("get_stamina"):
+		failures.append("SAVE runtime Player does not expose current vitals")
 	if not failures.is_empty():
 		return _failure(failures)
 
 	var pending_result: Dictionary = _capture_pending_loot_states()
 	if not bool(pending_result.get("success", false)):
 		return pending_result
-	var context = WorldGenerationContextScript.new(int(world_settings.world_seed))
-	for failure in context.validate():
-		failures.append("SAVE runtime world context: %s" % failure)
 	var inventory_state = survival.get_inventory_state()
 	var equipment_state = survival.get_equipment_state()
 	if inventory_state == null or not inventory_state is ItemContainerStateScript:
@@ -185,24 +215,26 @@ func build_save_request() -> Dictionary:
 		failures.append("SAVE runtime Player resume position must be finite")
 	if not failures.is_empty():
 		return _failure(failures)
-	return {
-		"success": true,
-		"context": context,
+	return IntegratedGameSaveContractScript.capture_v2_request({
+		"world_context": _session_world_context,
+		"world_session_state": _world_session_state,
 		"delta_store": world_delta_store,
 		"inventory_state": inventory_state,
 		"equipment_state": equipment_state,
 		"pending_loot_states": pending_result.get("states", []).duplicate(),
 		"resume_position": resume_position,
-		"diagnostics": [],
-	}
+		"current_health": int(player.call("get_health")),
+		"current_stamina": float(player.call("get_stamina")),
+	})
 
 
 func _ready() -> void:
 	if not _startup_prepared:
-		_startup_mode = STARTUP_NEW
-		_startup_candidate.clear()
-		_restored_pending_loot_states.clear()
-		_startup_prepared = true
+		if not _prepare_new_game_state():
+			push_error("Game startup aborted because NEW root/session preparation failed")
+			set_process(false)
+			set_physics_process(false)
+			return
 	_setup_environment()
 	_create_world()
 	if not _create_player():
@@ -266,9 +298,14 @@ func _create_underworld_runtime() -> void:
 	underworld_runtime = UnderworldRuntimeControllerScript.new()
 	underworld_runtime.name = "UnderworldRuntime"
 	add_child(underworld_runtime)
-	var world_id: String = WorldIdScript.from_seed(world_settings.world_seed).value()
-	var manifest_id: String = GeneratorManifestScript.foundation_default().manifest_id()
-	underworld_runtime.configure(world_id, manifest_id, player)
+	if _session_world_context == null:
+		push_error("Underworld runtime requires retained exact session root context")
+		return
+	underworld_runtime.configure(
+		str(_session_world_context.world_id),
+		str(_session_world_context.generator_manifest_id),
+		player
+	)
 
 	cave_presentation = CavePresentationControllerScript.new()
 	cave_presentation.name = "CavePresentation"
@@ -344,8 +381,8 @@ func _setup_environment() -> void:
 
 func _create_world() -> void:
 	world_settings = WorldSettingsScript.new()
-	if _startup_mode == STARTUP_CONTINUE:
-		world_settings.world_seed = int(_startup_candidate.get("world_seed", 0))
+	if _session_world_context != null:
+		world_settings.world_seed = int(_session_world_context.world_seed)
 	elif enable_map015_fixture:
 		world_settings.world_seed = 1
 	survival_settings = SurvivalSettingsScript.new()
@@ -471,8 +508,6 @@ func _create_player() -> bool:
 			player = null
 			return false
 	else:
-		# Direct isolated Game fixtures may still create an unbound Player. AppRoot
-		# production composition never reaches this path because it requires the gate.
 		player = PlayerScript.new()
 	player.name = "Player"
 	add_child(player)
@@ -492,6 +527,19 @@ func _create_player() -> bool:
 	world.set_player(player)
 	survival.set_player(player)
 	player.set_equipped_tool(survival.get_equipped_tool())
+	if _startup_mode == STARTUP_CONTINUE:
+		if not player.has_method("restore_current_vitals"):
+			push_error("Continue Player is missing current-vitals hydration seam")
+			return false
+		var vitals: Dictionary = _startup_candidate.get("player_vitals", {})
+		var hydration: Dictionary = player.call(
+			"restore_current_vitals",
+			vitals.get("current_health", null),
+			vitals.get("current_stamina", null)
+		)
+		if not bool(hydration.get("success", false)):
+			push_error("Continue Player vitals hydration rejected: %s" % [hydration.get("diagnostics", [])])
+			return false
 	return true
 
 
@@ -601,9 +649,6 @@ func _capture_pending_loot_states() -> Dictionary:
 		var state_failures: Array[String] = state.validate_state()
 		if not state_failures.is_empty():
 			return _prefixed_failure("SAVE runtime pending loot %s" % occurrence_id, state_failures)
-		# The runtime-native snapshot is never treated as a durable payload. Passing
-		# the reconstructed semantic state through #259's encoder validates current
-		# authored profile/item contracts before the outer SAVE contract serializes it.
 		var durable_validation: Dictionary = GameplayStateCodecScript.encode_pending_loot(state, registry)
 		if not bool(durable_validation.get("success", false)):
 			return _prefixed_failure(
@@ -644,24 +689,37 @@ func _validate_continue_candidate(candidate: Dictionary) -> Array[String]:
 	var world_context = candidate.get("world_context", null)
 	var world_seed_variant: Variant = candidate.get("world_seed", null)
 	var world_id: String = str(candidate.get("world_id", ""))
+	var world_session = candidate.get("world_session_state", null)
+	var active_domain: String = str(candidate.get("active_domain", ""))
 	var delta_store = candidate.get("delta_store", null)
 	var inventory_state = candidate.get("inventory_state", null)
 	var equipment_state = candidate.get("equipment_state", null)
 	var pending_variant: Variant = candidate.get("pending_loot_states", null)
 	var resume_variant: Variant = candidate.get("resume_position", null)
+	var vitals_variant: Variant = candidate.get("player_vitals", null)
 
 	if world_context == null or not world_context.has_method("validate"):
 		failures.append("candidate world context is missing")
-	elif not world_context.validate().is_empty():
-		failures.append("candidate world context is invalid")
+	else:
+		for failure in world_context.validate():
+			failures.append("candidate world context: %s" % failure)
 	if typeof(world_seed_variant) != TYPE_INT:
 		failures.append("candidate world seed must be exact int")
 	elif world_context != null and int(world_seed_variant) != int(world_context.world_seed):
 		failures.append("candidate world seed does not match world context")
-	if world_id.is_empty() or WorldIdScript.parse(world_id) == null:
-		failures.append("candidate WorldId is invalid")
-	elif typeof(world_seed_variant) == TYPE_INT and WorldIdScript.from_seed(int(world_seed_variant)).value() != world_id:
-		failures.append("candidate WorldId does not match world seed")
+	if world_id.is_empty():
+		failures.append("candidate WorldId is empty")
+	elif world_context != null and world_id != str(world_context.world_id):
+		failures.append("candidate WorldId does not match exact world context")
+	if world_session == null or not world_session is WorldDomainSessionStateScript:
+		failures.append("candidate world-session state is invalid")
+	else:
+		if world_session.has_active_attempt():
+			failures.append("candidate world-session state contains in-flight attempt")
+		if str(world_session.transition_phase()) != WorldDomainSessionStateScript.PHASE_ACTIVE:
+			failures.append("candidate world-session state is not ACTIVE")
+		if str(world_session.active_domain()) != active_domain:
+			failures.append("candidate active domain does not match world-session state")
 	if delta_store == null or not delta_store is WorldDeltaStoreScript:
 		failures.append("candidate WorldDeltaStore is invalid")
 	if inventory_state == null or not inventory_state is ItemContainerStateScript:
@@ -692,6 +750,16 @@ func _validate_continue_candidate(candidate: Dictionary) -> Array[String]:
 		failures.append("candidate resume position must be Vector3")
 	elif not _is_finite_vector3(resume_variant):
 		failures.append("candidate resume position must be finite")
+	if not vitals_variant is Dictionary:
+		failures.append("candidate player vitals must be Dictionary")
+	else:
+		var vitals_validation: Dictionary = GameplayStateCodecScript.encode_player_vitals(
+			vitals_variant.get("current_health", null),
+			vitals_variant.get("current_stamina", null)
+		)
+		if not bool(vitals_validation.get("success", false)):
+			for diagnostic in vitals_validation.get("diagnostics", []):
+				failures.append("candidate player vitals: %s" % diagnostic)
 	failures.sort()
 	return failures
 
