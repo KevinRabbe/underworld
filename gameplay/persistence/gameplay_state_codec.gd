@@ -13,6 +13,7 @@ const RestoredEquipmentHotbarState := preload("res://gameplay/persistence/restor
 const INVENTORY_SCHEMA := "persistence.inventory.v1"
 const EQUIPMENT_SCHEMA := "persistence.equipment.v1"
 const PENDING_LOOT_SCHEMA := "persistence.pending_loot.v1"
+const PLAYER_VITALS_SCHEMA := "persistence.player_vitals.v1"
 const ITEM_FAMILY := "item"
 const LOOT_PROFILE_FAMILY := "loot_profile"
 
@@ -22,6 +23,7 @@ const EQUIPMENT_ROOT_KEYS := ["schema", "selected_hotbar", "selected_slot_key", 
 const EQUIPMENT_RECORD_KEYS := ["slot_key", "kind", "state", "definition_contract"]
 const PENDING_LOOT_ROOT_KEYS := ["schema", "occurrence_id", "profile_id", "rewards", "consumed"]
 const PENDING_LOOT_REWARD_KEYS := ["item_id", "quantity", "definition_contract"]
+const PLAYER_VITALS_ROOT_KEYS := ["schema", "current_health", "current_stamina"]
 
 
 static func encode_inventory(container, content_registry) -> Dictionary:
@@ -361,6 +363,64 @@ static func decode_equipment(
 	if not failures.is_empty():
 		return _failure(failures)
 	return _success({"state": restored})
+
+
+static func encode_player_vitals(current_health: Variant, current_stamina: Variant) -> Dictionary:
+	var failures: Array[String] = []
+	if typeof(current_health) != TYPE_INT:
+		failures.append("player-vitals current_health must be int")
+	elif int(current_health) <= 0:
+		failures.append("player-vitals current_health must be > 0 for an alive save")
+	if typeof(current_stamina) != TYPE_INT and typeof(current_stamina) != TYPE_FLOAT:
+		failures.append("player-vitals current_stamina must be numeric")
+	else:
+		var stamina_value: float = float(current_stamina)
+		if is_nan(stamina_value) or is_inf(stamina_value):
+			failures.append("player-vitals current_stamina must be finite")
+		elif stamina_value < 0.0:
+			failures.append("player-vitals current_stamina must be >= 0")
+	if not failures.is_empty():
+		return _failure(failures)
+	return _encoded({
+		"schema": PLAYER_VITALS_SCHEMA,
+		"current_health": int(current_health),
+		"current_stamina": float(current_stamina),
+	}, "player-vitals snapshot")
+
+
+static func decode_player_vitals(snapshot: Variant) -> Dictionary:
+	var failures: Array[String] = []
+	var source: Dictionary = _require_snapshot(
+		snapshot,
+		PLAYER_VITALS_SCHEMA,
+		"player-vitals",
+		PLAYER_VITALS_ROOT_KEYS,
+		failures
+	)
+	if source.is_empty() and not failures.is_empty():
+		return _failure(failures)
+	var raw_health: Variant = source.get("current_health", null)
+	var raw_stamina: Variant = source.get("current_stamina", null)
+	if typeof(raw_health) != TYPE_INT:
+		failures.append("player-vitals snapshot current_health must be int")
+	elif int(raw_health) <= 0:
+		failures.append("player-vitals snapshot current_health must be > 0 for an alive save")
+	if typeof(raw_stamina) != TYPE_INT and typeof(raw_stamina) != TYPE_FLOAT:
+		failures.append("player-vitals snapshot current_stamina must be numeric")
+	else:
+		var stamina_value: float = float(raw_stamina)
+		if is_nan(stamina_value) or is_inf(stamina_value):
+			failures.append("player-vitals snapshot current_stamina must be finite")
+		elif stamina_value < 0.0:
+			failures.append("player-vitals snapshot current_stamina must be >= 0")
+	if not failures.is_empty():
+		return _failure(failures)
+	return _success({
+		"state": {
+			"current_health": int(raw_health),
+			"current_stamina": float(raw_stamina),
+		},
+	})
 
 
 static func encode_pending_loot(pending, content_registry) -> Dictionary:
