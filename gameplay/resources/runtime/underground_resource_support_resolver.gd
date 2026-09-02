@@ -47,34 +47,44 @@ func resolve(realization_parent, current_entry: Dictionary, hook: Dictionary) ->
 	var tree = realization_parent.get_tree()
 	if tree == null:
 		return _failure(["resource support resolution requires realization parent inside SceneTree"])
+	var world = realization_parent.get_world_3d()
+	if world == null:
+		return _failure(["resource support resolution requires active World3D"])
+	var space_state = world.direct_space_state
+	if space_state == null:
+		return _failure(["resource support resolution requires current physics space"])
 
-	var ray := RayCast3D.new()
-	ray.enabled = true
-	ray.collide_with_areas = false
-	ray.collide_with_bodies = true
-	ray.hit_from_inside = false
-	ray.collision_mask = CAVE_SUPPORT_COLLISION_MASK
-	var local_start: Vector3 = realization_parent.to_local(anchor)
-	var local_end: Vector3 = realization_parent.to_local(Vector3(anchor.x, end_y, anchor.z))
-	ray.position = local_start
-	ray.target_position = local_end - local_start
-	realization_parent.add_child(ray)
-	ray.force_raycast_update()
-
-	var collided: bool = ray.is_colliding()
-	var collider = ray.get_collider() if collided else null
-	var collision_point: Vector3 = ray.get_collision_point() if collided else Vector3.ZERO
-	var collision_normal: Vector3 = ray.get_collision_normal() if collided else Vector3.ZERO
-	_remove_query_ray(ray)
-
-	if not collided:
+	# A temporary RayCast3D is intentionally not used here. A newly-entered query
+	# Node is not guaranteed to be registered in PhysicsServer before an immediate
+	# force_raycast_update(), which can turn a valid freshly-published cave floor
+	# into a repeatable false negative. Query the current physics space directly;
+	# RealizationService already retries once on physics_frame when collision was
+	# only just published by the cave runtime.
+	var query := PhysicsRayQueryParameters3D.create(
+		anchor,
+		Vector3(anchor.x, end_y, anchor.z),
+		CAVE_SUPPORT_COLLISION_MASK
+	)
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+	query.hit_from_inside = false
+	var hit: Dictionary = space_state.intersect_ray(query)
+	if hit.is_empty():
 		return _failure(["resource support query found no current cave support"])
+
+	var collider = hit.get("collider", null)
+	var collision_point_variant = hit.get("position", null)
+	var collision_normal_variant = hit.get("normal", null)
 	if collider == null or not collider is Node:
 		return _failure(["resource support query did not resolve a semantic cave collider"])
 	if str(collider.get_meta("cell_address", "")) != str(cell_address_variant):
 		return _failure(["resource support query first hit is not the current owner-cell cave collider"])
 	if str(collider.get_meta("source_fingerprint", "")) != str(source_fingerprint_variant):
 		return _failure(["resource support query cave collider source fingerprint is stale"])
+	if typeof(collision_point_variant) != TYPE_VECTOR3 or typeof(collision_normal_variant) != TYPE_VECTOR3:
+		return _failure(["resource support query returned invalid hit data"])
+	var collision_point: Vector3 = collision_point_variant
+	var collision_normal: Vector3 = collision_normal_variant
 	if not _finite_vector3(collision_point) or not _finite_vector3(collision_normal):
 		return _failure(["resource support query returned non-finite hit data"])
 	if collision_normal.length_squared() <= 0.0:
@@ -88,15 +98,6 @@ func resolve(realization_parent, current_entry: Dictionary, hook: Dictionary) ->
 		"source_fingerprint": str(source_fingerprint_variant),
 		"diagnostics": [],
 	}
-
-
-static func _remove_query_ray(ray) -> void:
-	if ray == null or not is_instance_valid(ray):
-		return
-	var parent = ray.get_parent()
-	if parent != null:
-		parent.remove_child(ray)
-	ray.free()
 
 
 static func _valid_bounds(bounds: AABB) -> bool:
