@@ -1,0 +1,158 @@
+name: Character Reconcile Evidence Runner
+
+on:
+  push:
+    branches:
+      - worker/char-reconcile-evidence-runner
+
+permissions:
+  contents: read
+
+jobs:
+  capture-exact-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact reconciled candidate
+        uses: actions/checkout@v6
+        with:
+          ref: 8c582eeebdd3c3b8e994174fda5981e3497aab90
+          fetch-depth: 0
+
+      - name: Assert exact candidate identity
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "8c582eeebdd3c3b8e994174fda5981e3497aab90"
+          test "$(git rev-parse HEAD^{tree})" = "9cee27eb25211c5a2e476995d5dbb69981669029"
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Import project resources
+        run: godot --headless --editor --path . --quit
+
+      - name: Capture authored turnaround and action states
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p character-evidence
+          capture() {
+            local name="$1"
+            local angle="$2"
+            local state="$3"
+            local delay="${4:-0.12}"
+            xvfb-run -a godot --path . --rendering-method gl_compatibility \
+              res://tools/character_preview/voxel_character_preview.tscn -- \
+              --preview-capture="$PWD/character-evidence/${name}.png" \
+              --preview-angle="$angle" \
+              --preview-state="$state" \
+              --preview-delay="$delay"
+          }
+          capture idle_front 0 idle 0.15
+          capture idle_three_quarter -35 idle 0.15
+          capture idle_side -90 idle 0.15
+          capture idle_back 180 idle 0.15
+          capture sprint_front 0 sprint 0.10
+          capture dodge_forward_front 0 dodge_forward 0.08
+          capture dodge_left_three_quarter -35 dodge_left 0.08
+          capture attack_light_three_quarter -35 attack_light 0.10
+          capture attack_heavy_three_quarter -35 attack_heavy 0.12
+          capture block_three_quarter -35 block 0.12
+          capture parry_three_quarter -35 parry 0.08
+          capture tool_use_three_quarter -35 tool_use 0.10
+
+      - name: Create temporary real-Player gameplay-distance capture harness
+        shell: bash
+        run: |
+          cat > tests/character/_char514_gameplay_capture.gd <<'GDSCRIPT'
+          extends SceneTree
+
+          const PlayerScript := preload("res://gameplay/player/player.gd")
+          const VoxelProvider := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
+
+          func _init() -> void:
+              call_deferred("_capture")
+
+          func _capture() -> void:
+              var world := Node3D.new()
+              root.add_child(world)
+
+              var environment_node := WorldEnvironment.new()
+              var environment := Environment.new()
+              environment.background_mode = Environment.BG_COLOR
+              environment.background_color = Color(0.32, 0.38, 0.46)
+              environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+              environment.ambient_light_color = Color(0.72, 0.76, 0.82)
+              environment.ambient_light_energy = 0.9
+              environment_node.environment = environment
+              world.add_child(environment_node)
+
+              var sun := DirectionalLight3D.new()
+              sun.rotation_degrees = Vector3(-48.0, -28.0, 0.0)
+              sun.light_energy = 1.15
+              world.add_child(sun)
+
+              var floor := MeshInstance3D.new()
+              var floor_mesh := PlaneMesh.new()
+              floor_mesh.size = Vector2(18.0, 18.0)
+              floor.mesh = floor_mesh
+              world.add_child(floor)
+
+              var player: Node = PlayerScript.new()
+              player.set("character_presentation_provider", VoxelProvider.new())
+              world.add_child(player)
+              player.call("set_equipped_tool", "stone_axe")
+              player.set_physics_process(false)
+              player.set_process_unhandled_input(false)
+
+              await process_frame
+              await process_frame
+              await RenderingServer.frame_post_draw
+              var image := root.get_texture().get_image()
+              var error := image.save_png("character-evidence/gameplay_distance.png")
+              if error != OK:
+                  printerr("gameplay-distance capture failed: %s" % error)
+                  quit(1)
+                  return
+              quit(0)
+          GDSCRIPT
+
+      - name: Capture actual Player default camera distance/FOV
+        shell: bash
+        run: |
+          set -euxo pipefail
+          xvfb-run -a godot --path . --rendering-method gl_compatibility \
+            --script res://tests/character/_char514_gameplay_capture.gd
+          rm tests/character/_char514_gameplay_capture.gd
+          git diff --exit-code
+
+      - name: Record exact candidate metrics and evidence manifest
+        shell: bash
+        run: |
+          set -o pipefail
+          godot --headless --path . --quit-after 1 --script res://tests/run_character.gd 2>&1 \
+            | tee character-evidence/character_metrics.txt
+          grep -Fq '[CHARACTER VALIDATION] PASS' character-evidence/character_metrics.txt
+          {
+            echo 'candidate_sha=8c582eeebdd3c3b8e994174fda5981e3497aab90'
+            echo 'candidate_tree=9cee27eb25211c5a2e476995d5dbb69981669029'
+            echo 'godot_version=4.7.2'
+            echo 'gameplay_camera_distance=4.5'
+            echo 'gameplay_camera_fov=75.0'
+            echo 'files:'
+            sha256sum character-evidence/*.png
+          } > character-evidence/manifest.txt
+          cat character-evidence/manifest.txt
+          ls -lh character-evidence
+
+      - name: Upload exact-candidate runtime evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: char514-runtime-evidence-8c582eee
+          path: character-evidence/*
+          if-no-files-found: error
+          retention-days: 7
