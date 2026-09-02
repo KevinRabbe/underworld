@@ -47,6 +47,7 @@ const REQUIRED_RESOURCE_RUNTIME_DEPENDENCY_PATHS: Array[String] = [
 	"tests/resources/test_underground_resource_composition.gd",
 	"tests/resources/test_underground_resource_residency.gd",
 	"tests/resources/test_underground_resource_mining_ticket.gd",
+	"tests/resources/test_underground_resource_realization.gd",
 	"tests/run_resource_runtime.gd",
 	"tests/run_resource_composition.gd",
 ]
