@@ -53,9 +53,6 @@ func persist_candidate_json(
 	var condition_failures: Array[String] = _validate_save_condition(condition)
 	if not condition_failures.is_empty():
 		return _failure(condition_failures)
-	var precondition: Dictionary = _check_save_precondition(slot_path, condition)
-	if not bool(precondition.get("success", false)):
-		return precondition
 
 	var candidate_path: String = slot_path + CANDIDATE_SUFFIX
 	var backup_path: String = slot_path + BACKUP_SUFFIX
@@ -78,6 +75,15 @@ func persist_candidate_json(
 	if reread_text != candidate_json:
 		_remove_file_if_present(candidate_path)
 		return _failure(["SAVE candidate reread bytes differ from written candidate"])
+
+	# Conditional overwrite consent is a compare-and-swap check against the
+	# protected canonical bytes at the final mutation boundary. Candidate staging
+	# and exact reread may take time, so an earlier check cannot authorize later
+	# backup/promotion after another writer has replaced the slot.
+	var precondition: Dictionary = _check_save_precondition(slot_path, condition)
+	if not bool(precondition.get("success", false)):
+		_remove_file_if_present(candidate_path)
+		return precondition
 
 	var had_previous: bool = FileAccess.file_exists(slot_path)
 	_remove_file_if_present(backup_path)
