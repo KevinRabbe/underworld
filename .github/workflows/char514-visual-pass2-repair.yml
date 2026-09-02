@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          test "$(git rev-parse HEAD^)" = "75e28249854bd13d3a3d880ece5378faa8865e78"
+          test "$(git rev-parse HEAD^)" = "8dd73f6d38750348c61376eed6c15afe2dbc7fc2"
           git merge-base --is-ancestor 2948912830c21a0f3e1578bc2dbd48da032368b3 HEAD
           git diff --exit-code b85f9dcbf3e2f13e327ddba9cae9db679deb5866 -- \
             presentation/characters/faceted/faceted_humanoid_body_profile.gd \
@@ -44,16 +44,22 @@ jobs:
           end = workflow.index(end_marker, start)
           code = textwrap.dedent(workflow[start:end])
 
-          old = '''    ('profile.foot_width * 0.52, 0.018, foot_skin', 'profile.foot_width * 0.58, 0.019, foot_skin'),
-    ('profile.foot_width * 0.58, 0.018, foot_skin', 'profile.foot_width * 0.64, 0.019, foot_skin'),
-    ('profile.foot_width * 0.64, 0.018, foot_skin', 'profile.foot_width * 0.71, 0.019, foot_skin'),
-    ('profile.foot_width * 0.60, 0.018, foot_skin', 'profile.foot_width * 0.68, 0.019, foot_skin'),
-    ('profile.foot_width * 0.52, 0.018, foot_skin', 'profile.foot_width * 0.60, 0.019, foot_skin'),'''
-          new = '''    ('_ring_z(Vector3(x, sole_y + 0.018, heel_z + 0.005), profile.foot_width * 0.52, 0.018, foot_skin),', '_ring_z(Vector3(x, sole_y + 0.018, heel_z + 0.005), profile.foot_width * 0.58, 0.019, foot_skin),'),
-    ('_ring_z(Vector3(x, sole_y + 0.018, instep_z), profile.foot_width * 0.58, 0.018, foot_skin),', '_ring_z(Vector3(x, sole_y + 0.018, instep_z), profile.foot_width * 0.64, 0.019, foot_skin),'),
-    ('_ring_z(Vector3(x, sole_y + 0.018, ball_z - 0.003), profile.foot_width * 0.64, 0.018, foot_skin),', '_ring_z(Vector3(x, sole_y + 0.018, ball_z - 0.003), profile.foot_width * 0.71, 0.019, foot_skin),'),
-    ('_ring_z(Vector3(x, sole_y + 0.018, toe_base_z - 0.004), profile.foot_width * 0.60, 0.018, foot_skin),', '_ring_z(Vector3(x, sole_y + 0.018, toe_base_z - 0.004), profile.foot_width * 0.68, 0.019, foot_skin),'),
-    ('_ring_z(Vector3(x, sole_y + 0.018, toe_z - 0.005), profile.foot_width * 0.52, 0.018, foot_skin),', '_ring_z(Vector3(x, sole_y + 0.018, toe_z - 0.005), profile.foot_width * 0.60, 0.019, foot_skin),'),'''
+          old_lines = [
+              "    ('profile.foot_width * 0.52, 0.018, foot_skin', 'profile.foot_width * 0.58, 0.019, foot_skin'),",
+              "    ('profile.foot_width * 0.58, 0.018, foot_skin', 'profile.foot_width * 0.64, 0.019, foot_skin'),",
+              "    ('profile.foot_width * 0.64, 0.018, foot_skin', 'profile.foot_width * 0.71, 0.019, foot_skin'),",
+              "    ('profile.foot_width * 0.60, 0.018, foot_skin', 'profile.foot_width * 0.68, 0.019, foot_skin'),",
+              "    ('profile.foot_width * 0.52, 0.018, foot_skin', 'profile.foot_width * 0.60, 0.019, foot_skin'),",
+          ]
+          new_lines = [
+              "    ('_ring_z(Vector3(x, sole_y + 0.018, heel_z + 0.005), profile.foot_width * 0.52, 0.018, foot_skin),', '_ring_z(Vector3(x, sole_y + 0.018, heel_z + 0.005), profile.foot_width * 0.58, 0.019, foot_skin),'),",
+              "    ('_ring_z(Vector3(x, sole_y + 0.018, instep_z), profile.foot_width * 0.58, 0.018, foot_skin),', '_ring_z(Vector3(x, sole_y + 0.018, instep_z), profile.foot_width * 0.64, 0.019, foot_skin),'),",
+              "    ('_ring_z(Vector3(x, sole_y + 0.018, ball_z - 0.003), profile.foot_width * 0.64, 0.018, foot_skin),', '_ring_z(Vector3(x, sole_y + 0.018, ball_z - 0.003), profile.foot_width * 0.71, 0.019, foot_skin),'),",
+              "    ('_ring_z(Vector3(x, sole_y + 0.018, toe_base_z - 0.004), profile.foot_width * 0.60, 0.018, foot_skin),', '_ring_z(Vector3(x, sole_y + 0.018, toe_base_z - 0.004), profile.foot_width * 0.68, 0.019, foot_skin),'),",
+              "    ('_ring_z(Vector3(x, sole_y + 0.018, toe_z - 0.005), profile.foot_width * 0.52, 0.018, foot_skin),', '_ring_z(Vector3(x, sole_y + 0.018, toe_z - 0.005), profile.foot_width * 0.60, 0.019, foot_skin),'),",
+          ]
+          old = "\n".join(old_lines)
+          new = "\n".join(new_lines)
           if code.count(old) != 1:
               raise SystemExit(f'expected one ambiguous sole replacement block, got {code.count(old)}')
           code = code.replace(old, new, 1)
