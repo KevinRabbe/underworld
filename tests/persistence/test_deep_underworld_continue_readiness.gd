@@ -4,6 +4,7 @@ const GAME_SCENE_PATH := "res://app/game/game.tscn"
 const TEST_SLOT := "user://save_001_deep_underworld_continue.json"
 const WorldGenerationContext := preload("res://worldgen/pipeline/world_generation_context.gd")
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
+const WorldDomainSessionState := preload("res://gameplay/world_session/world_domain_session_state.gd")
 const ItemContainerState := preload("res://gameplay/items/inventory/item_container_state.gd")
 const EquipmentHotbarState := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
 const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
@@ -93,6 +94,37 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 					% key
 				)
 
+	# This regression starts from a safe OVERWORLD Continue candidate so the live
+	# runtime can discover a valid deep target. Once that target is authoritative,
+	# commit the existing session state through its normal transition protocol.
+	# The SAVE must then carry UNDERWORLD explicitly; depth/Y is never domain truth.
+	var session = game.get("_world_session_state")
+	if session == null or not session is WorldDomainSessionState:
+		failures.append("deep observer Game is missing WorldDomainSessionState authority")
+	else:
+		var began: Dictionary = session.begin_transition({
+			"source_domain": WorldDomainSessionState.DOMAIN_OVERWORLD,
+			"destination_domain": WorldDomainSessionState.DOMAIN_UNDERWORLD,
+			"gateway_identity": "test.deep-underworld.gateway",
+			"arrival_locator": target_position,
+			"return_context": {"position": safe_player_position},
+		})
+		if not bool(began.get("success", false)):
+			failures.append("deep observer session transition did not begin: %s" % [began.get("diagnostics", [])])
+		else:
+			var token: int = int(began.get("token", 0))
+			var ready: Dictionary = session.mark_destination_ready(token)
+			if not bool(ready.get("success", false)):
+				failures.append("deep observer session transition did not mark destination ready: %s" % [ready.get("diagnostics", [])])
+			else:
+				var committed: Dictionary = session.commit_transition(token)
+				if not bool(committed.get("success", false)):
+					failures.append("deep observer session transition did not commit: %s" % [committed.get("diagnostics", [])])
+	if not failures.is_empty():
+		_free_attached(game)
+		_cleanup_slot()
+		return failures
+
 	var request_variant: Variant = game.call("build_save_request")
 	if (
 		not request_variant is Dictionary
@@ -102,24 +134,31 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		_free_attached(game)
 		_cleanup_slot()
 		return failures
-	var request: Dictionary = request_variant
-	var saved_resume_variant: Variant = request.get("resume_position", null)
-	if (
-		not saved_resume_variant is Vector3
-		or not saved_resume_variant.is_equal_approx(target_position)
-	):
-		failures.append("deep observer SAVE did not preserve exact runtime Player position")
+	var request_object: Dictionary = request_variant
+	var request_inner_variant: Variant = request_object.get("request", null)
+	if not request_inner_variant is Dictionary:
+		failures.append("deep observer SAVE capture did not contain detached request payload")
+		_free_attached(game)
+		_cleanup_slot()
+		return failures
+	var request: Dictionary = request_inner_variant
+	var saved_resume_variant: Variant = request.get("player_resume", null)
+	if not saved_resume_variant is Dictionary:
+		failures.append("deep observer SAVE omitted player_resume wire snapshot")
+	else:
+		var saved_resume: Dictionary = saved_resume_variant
+		var saved_position := Vector3(
+			float(saved_resume.get("x", INF)),
+			float(saved_resume.get("y", INF)),
+			float(saved_resume.get("z", INF))
+		)
+		if not saved_position.is_equal_approx(target_position):
+			failures.append("deep observer SAVE did not preserve exact runtime Player position")
+		if str(saved_resume.get("domain", "")) != WorldDomainSessionState.DOMAIN_UNDERWORLD:
+			failures.append("deep observer SAVE did not persist explicit UNDERWORLD resume domain")
 
 	var service = GameSaveSlotService.new()
-	var saved: Dictionary = service.save_slot(
-		request.get("context", null),
-		request.get("delta_store", null),
-		request.get("inventory_state", null),
-		request.get("equipment_state", null),
-		request.get("pending_loot_states", []),
-		request.get("resume_position", Vector3.ZERO),
-		TEST_SLOT
-	)
+	var saved: Dictionary = service.save_slot(request_object, TEST_SLOT)
 	if not bool(saved.get("success", false)):
 		failures.append(
 			"deep observer production SAVE failed: %s"
@@ -144,6 +183,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		_cleanup_slot()
 		return failures
 	var loaded_candidate: Dictionary = loaded_candidate_variant
+	if str(loaded_candidate.get("active_domain", "")) != WorldDomainSessionState.DOMAIN_UNDERWORLD:
+		failures.append("deep observer detached slot load changed explicit UNDERWORLD domain")
 	_free_attached(game)
 
 	var resumed: Node = packed.instantiate()
@@ -708,15 +749,22 @@ static func _candidate(failures: Array[String]) -> Dictionary:
 			"deep Continue fixture world context is invalid: %s" % [context_failures]
 		)
 		return {}
+	var session = WorldDomainSessionState.new(WorldDomainSessionState.DOMAIN_OVERWORLD, {})
 	return {
 		"world_context": context,
 		"world_seed": TEST_SEED,
 		"world_id": context.world_id,
+		"world_session_state": session,
+		"active_domain": WorldDomainSessionState.DOMAIN_OVERWORLD,
 		"delta_store": WorldDeltaStore.new(),
 		"inventory_state": inventory,
 		"equipment_state": equipment,
 		"pending_loot_states": [],
 		"resume_position": Vector3(8.0, 44.0, 8.0),
+		"player_vitals": {
+			"current_health": 100,
+			"current_stamina": 100.0,
+		},
 	}
 
 

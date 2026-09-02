@@ -50,7 +50,7 @@ static func _test_valid_save_probe_and_load(failures: Array[String]) -> void:
 	if fixture.is_empty():
 		return
 	var service = GameSaveSlotService.new()
-	var saved: Dictionary = service.save_slot(fixture["request"], TEST_SLOT)
+	var saved: Dictionary = service.save_slot(fixture["request_object"], TEST_SLOT)
 	if not _require_success(saved, "atomic SAVE write", failures):
 		return
 	if str(saved.get("classification", "")) != GameSaveSlotService.CLASS_AVAILABLE:
@@ -115,7 +115,7 @@ static func _test_conditional_save_preconditions(failures: Array[String]) -> voi
 	var replacement_request: Dictionary = fixture["request"].duplicate(true)
 	replacement_request["player_resume"]["x"] = float(replacement_request["player_resume"]["x"]) + 2.0
 	var replaced: Dictionary = service.save_slot(
-		replacement_request,
+		_successful_request_object(replacement_request),
 		TEST_SLOT,
 		{
 			"mode": GameSaveSlotService.SAVE_CONDITION_REPLACE_EXACT_PROTECTED,
@@ -134,7 +134,7 @@ static func _test_conditional_save_preconditions(failures: Array[String]) -> voi
 	var stale_request: Dictionary = fixture["request"].duplicate(true)
 	stale_request["player_resume"]["z"] = float(stale_request["player_resume"]["z"]) - 3.0
 	var stale: Dictionary = service.save_slot(
-		stale_request,
+		_successful_request_object(stale_request),
 		TEST_SLOT,
 		{
 			"mode": GameSaveSlotService.SAVE_CONDITION_REPLACE_EXACT_PROTECTED,
@@ -148,7 +148,7 @@ static func _test_conditional_save_preconditions(failures: Array[String]) -> voi
 	_assert_no_internal_artifacts(failures, "stale exact-protected SAVE")
 
 	var protected_guard: Dictionary = service.save_slot(
-		stale_request,
+		_successful_request_object(stale_request),
 		TEST_SLOT,
 		{"mode": GameSaveSlotService.SAVE_CONDITION_REQUIRE_NO_PROTECTED_TARGET}
 	)
@@ -160,7 +160,7 @@ static func _test_conditional_save_preconditions(failures: Array[String]) -> voi
 
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_SLOT))
 	var no_target: Dictionary = service.save_slot(
-		fixture["request"],
+		fixture["request_object"],
 		TEST_SLOT,
 		{"mode": GameSaveSlotService.SAVE_CONDITION_REQUIRE_NO_PROTECTED_TARGET}
 	)
@@ -357,7 +357,16 @@ static func _fixture(failures: Array[String]) -> Dictionary:
 		"inventory": inventory,
 		"equipment": equipment,
 		"resume_position": resume_position,
+		"request_object": captured.duplicate(true),
 		"request": captured.get("request", {}).duplicate(true),
+	}
+
+
+static func _successful_request_object(request: Dictionary) -> Dictionary:
+	return {
+		"success": true,
+		"request": request.duplicate(true),
+		"diagnostics": [],
 	}
 
 

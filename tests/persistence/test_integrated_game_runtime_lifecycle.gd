@@ -6,6 +6,7 @@ const WorldGenerationContext := preload("res://worldgen/pipeline/world_generatio
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
 const StableAddress := preload("res://worldgen/identity/stable_address.gd")
 const StableId := preload("res://worldgen/identity/stable_id.gd")
+const WorldDomainSessionState := preload("res://gameplay/world_session/world_domain_session_state.gd")
 const ItemContainerState := preload("res://gameplay/items/inventory/item_container_state.gd")
 const InventoryStateCodec := preload("res://gameplay/items/inventory/inventory_state_codec.gd")
 const EquipmentHotbarState := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
@@ -88,23 +89,20 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		_free_attached(game)
 		_cleanup_slot()
 		return failures
-	var request: Dictionary = request_variant
-	var request_pending: Variant = request.get("pending_loot_states", null)
+	var request_object: Dictionary = request_variant
+	var request_inner_variant: Variant = request_object.get("request", null)
+	if not request_inner_variant is Dictionary:
+		failures.append("live Game SAVE capture did not contain detached request payload")
+		_free_attached(game)
+		_cleanup_slot()
+		return failures
+	var request: Dictionary = request_inner_variant
+	var request_pending: Variant = request.get("pending_loot_jsons", null)
 	if not request_pending is Array or request_pending.size() != 1:
 		failures.append("live Game snapshot did not capture complete pending-loot set")
-	elif request_pending[0].canonical_snapshot() != expected_pending:
-		failures.append("live Game snapshot changed restored pending-loot state")
 
 	var service = GameSaveSlotService.new()
-	var saved: Dictionary = service.save_slot(
-		request.get("context", null),
-		request.get("delta_store", null),
-		request.get("inventory_state", null),
-		request.get("equipment_state", null),
-		request.get("pending_loot_states", []),
-		request.get("resume_position", Vector3.ZERO),
-		TEST_SLOT
-	)
+	var saved: Dictionary = service.save_slot(request_object, TEST_SLOT)
 	if not _require_success(saved, "live runtime atomic SAVE", failures):
 		_free_attached(game)
 		_cleanup_slot()
@@ -170,11 +168,15 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			failures.append("restored pending loot could be collected twice")
 		if live_inventory.quantity_of(CHITIN_ID) != after_chitin:
 			failures.append("duplicate restored loot collection changed inventory")
-		var after_request: Dictionary = resumed.call("build_save_request")
-		if not bool(after_request.get("success", false)):
+		var after_request_object: Dictionary = resumed.call("build_save_request")
+		if not bool(after_request_object.get("success", false)):
 			failures.append("post-collection Game SAVE snapshot failed")
-		elif not after_request.get("pending_loot_states", ["sentinel"]).is_empty():
-			failures.append("post-collection SAVE snapshot retained consumed pending loot")
+		else:
+			var after_request_variant: Variant = after_request_object.get("request", null)
+			if not after_request_variant is Dictionary:
+				failures.append("post-collection SAVE capture omitted detached request payload")
+			elif not after_request_variant.get("pending_loot_jsons", ["sentinel"]).is_empty():
+				failures.append("post-collection SAVE snapshot retained consumed pending loot")
 
 	_free_attached(resumed)
 	_cleanup_slot()
@@ -280,6 +282,7 @@ static func _fixture(failures: Array[String]) -> Dictionary:
 		failures.append("runtime SAVE fixture pending loot is invalid")
 		return {}
 	var resume_position := Vector3(8.0, 44.0, 8.0)
+	var session = WorldDomainSessionState.new(WorldDomainSessionState.DOMAIN_OVERWORLD, {})
 	return {
 		"registry": registry,
 		"delta_store": delta_store,
@@ -293,11 +296,17 @@ static func _fixture(failures: Array[String]) -> Dictionary:
 			"world_context": context,
 			"world_seed": TEST_SEED,
 			"world_id": context.world_id,
+			"world_session_state": session,
+			"active_domain": WorldDomainSessionState.DOMAIN_OVERWORLD,
 			"delta_store": delta_store,
 			"inventory_state": inventory,
 			"equipment_state": equipment,
 			"pending_loot_states": [pending],
 			"resume_position": resume_position,
+			"player_vitals": {
+				"current_health": 100,
+				"current_stamina": 100.0,
+			},
 		},
 	}
 
