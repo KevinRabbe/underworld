@@ -66,7 +66,29 @@ static func run() -> Array[String]:
 	if session.presented_weapon_instance() != null:
 		failures.append("presentation failure retained a partial weapon presentation node")
 
+	var canonical_selected_hotbar: int = equipment.selected_hotbar()
+	var canonical_selected_item_id: String = str(equipment.selected_definition().content_id)
+	var canonical_wood_quantity: int = inventory.quantity_of(WOOD_ID)
+	var canonical_iron_quantity: int = inventory.quantity_of(IRON_ID)
 	session.clear()
+	if (
+		player.equipped_weapon_definition != null
+		or player.equipped_weapon_attack_set != null
+		or player.equipped_weapon_attack_resolver != null
+	):
+		failures.append("weapon teardown after presentation failure retained gameplay source")
+	if (
+		equipment.selected_hotbar() != canonical_selected_hotbar
+		or equipment.selected_definition() == null
+		or str(equipment.selected_definition().content_id) != canonical_selected_item_id
+	):
+		failures.append("weapon teardown after presentation failure mutated canonical equipment")
+	if (
+		inventory.quantity_of(WOOD_ID) != canonical_wood_quantity
+		or inventory.quantity_of(IRON_ID) != canonical_iron_quantity
+	):
+		failures.append("weapon teardown after presentation failure mutated canonical inventory")
+
 	player.free()
 	failures.sort()
 	return failures
