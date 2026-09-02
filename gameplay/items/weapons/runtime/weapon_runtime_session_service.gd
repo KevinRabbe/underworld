@@ -147,6 +147,12 @@ func presented_weapon_instance():
 
 
 func clear() -> void:
+	if (
+		_player != null
+		and is_instance_valid(_player)
+		and _player.has_method("configure_equipped_weapon_attack_source")
+	):
+		_player.call("configure_equipped_weapon_attack_source", null, null, null)
 	_composition.clear()
 	_player = null
 	_inventory = null
