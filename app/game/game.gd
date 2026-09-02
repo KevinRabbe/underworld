@@ -16,6 +16,7 @@ const ItemContainerStateScript := preload("res://gameplay/items/inventory/item_c
 const EquipmentHotbarStateScript := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
 const PendingLootStateScript := preload("res://gameplay/loot/runtime/pending_loot_state.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
+const VoxelCharacterPresentationProviderScript := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
 const PlayerDeathRecoveryControllerScript := preload("res://gameplay/player/lifecycle/player_death_recovery_controller.gd")
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
@@ -420,6 +421,8 @@ func _create_water_surface() -> void:
 func _create_player() -> void:
 	player = PlayerScript.new()
 	player.name = "Player"
+	# Presentation is injected before add_child(), so Player._ready() never owns a hard-coded body implementation.
+	player.character_presentation_provider = VoxelCharacterPresentationProviderScript.new()
 	add_child(player)
 	var spawn_position: Vector3
 	if _startup_mode == STARTUP_CONTINUE:

@@ -204,7 +204,8 @@ func semantic_role_for_locomotion(
 		return ROLE_SPRINT
 	if absf(horizontal.x) > absf(horizontal.y):
 		return ROLE_STRAFE_RIGHT if horizontal.x > 0.0 else ROLE_STRAFE_LEFT
-	return ROLE_WALK_FORWARD if horizontal.y >= 0.0 else ROLE_WALK_BACKWARD
+	# Neutral humanoid presentation faces local -Z; negative local Z is forward travel.
+	return ROLE_WALK_FORWARD if horizontal.y <= 0.0 else ROLE_WALK_BACKWARD
 
 
 func animation_binding_for_role(role_id: String) -> String:
