@@ -50,6 +50,7 @@ static func _test_integrated_startup_ignores_and_never_writes_legacy_v2(
 	var after: String = _read_text(LEGACY_PATH)
 	if after != legacy_text:
 		failures.append("integrated hotbar mutation wrote or altered prototype-v2 save data")
+	controller.free()
 
 
 static func _test_detached_state_activation(failures: Array[String]) -> void:
@@ -100,6 +101,7 @@ static func _test_detached_state_activation(failures: Array[String]) -> void:
 	var restore_failures: Array[String] = controller.activate_restored_state(inventory, equipment)
 	if not restore_failures.is_empty():
 		failures.append("integrated survival rejected detached restored state: %s" % [restore_failures])
+		controller.free()
 		return
 	if controller.get_inventory_state().canonical_json() != inventory_before:
 		failures.append("integrated survival activation changed restored inventory")
@@ -109,6 +111,7 @@ static func _test_detached_state_activation(failures: Array[String]) -> void:
 		failures.append("integrated survival activation lost selected hotbar")
 	if controller.get_equipped_tool() != "stone_axe":
 		failures.append("integrated survival activation did not resolve selected semantic tool")
+	controller.free()
 
 
 static func _read_text(path: String) -> String:

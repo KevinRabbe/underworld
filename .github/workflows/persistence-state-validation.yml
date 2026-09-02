@@ -33,17 +33,40 @@ jobs:
       - name: Import project resources
         run: godot --headless --editor --path . --quit
 
+      - name: Prove teardown leak detector
+        run: |
+          set -o pipefail
+          teardown_leak_pattern="ObjectDB instance(s)? (was|were) leaked at exit|resource(s)? still in use at exit|RID allocations of type .* were leaked at exit"
+          probe_log="$(mktemp)"
+          godot --headless --path . \
+            --script res://tests/persistence/run_teardown_leak_detector_probe.gd 2>&1 \
+            | tee "$probe_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$probe_log"; then
+            exit 1
+          fi
+          grep -Fq '[TEARDOWN LEAK DETECTOR PROBE] intentional retained Node + Resource armed' "$probe_log"
+          if ! grep -Eq "$teardown_leak_pattern" "$probe_log"; then
+            echo 'Expected deliberate teardown leak diagnostics were not detected.' >&2
+            exit 1
+          fi
+
       - name: Run persistence-state contracts
         run: |
           set -o pipefail
+          teardown_leak_pattern="ObjectDB instance(s)? (was|were) leaked at exit|resource(s)? still in use at exit|RID allocations of type .* were leaked at exit"
           validation_log="$(mktemp)"
-          godot --headless --path . --quit-after 1 \
+          godot --headless --path . \
             --script res://tests/run_persistence_state.gd 2>&1 \
             | tee "$validation_log"
           if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
             exit 1
           fi
           grep -Fq '[PERSISTENCE STATE VALIDATION] PASS' "$validation_log"
+          if grep -Eq "$teardown_leak_pattern" "$validation_log"; then
+            echo 'Persistence semantic PASS was followed by teardown leak diagnostics.' >&2
+            grep -E "$teardown_leak_pattern" "$validation_log" >&2 || true
+            exit 1
+          fi
 
       - name: Run content contracts
         run: |
