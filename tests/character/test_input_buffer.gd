@@ -148,7 +148,8 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 	)
 	player.call("_request_attack")
 	_expect_equal(failures, "pre-reset buffer exists", String(player.call("get_buffered_action_name")), "attack")
-	player.call("_respawn_after_defeat")
+	_expect_true(failures, "defeat boundary commits before respawn", bool(player.call("_enter_defeated", &"damage")))
+	_expect_true(failures, "accepted respawn commits", bool(player.call("commit_respawn", player.global_position)))
 	_expect_equal(failures, "respawn clears buffered intent", String(player.call("get_buffered_action_name")), "")
 	_expect_true(failures, "respawn returns action controller to free", bool(actions.call("is_free")))
 
