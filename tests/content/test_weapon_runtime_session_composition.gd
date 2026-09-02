@@ -25,6 +25,11 @@ class FakePlayer:
 	var equipped_weapon_definition = null
 	var equipped_weapon_attack_set = null
 	var equipped_weapon_attack_resolver = null
+	var legacy_tool_visual: String = "stone_axe"
+
+	func set_equipped_tool(tool_id: String) -> void:
+		legacy_tool_visual = tool_id
+		configure_equipped_weapon_attack_source(null, null, null)
 
 	func configure_equipped_weapon_attack_source(weapon, attack_set, resolver) -> void:
 		equipped_weapon_definition = weapon
@@ -72,6 +77,8 @@ static func run() -> Array[String]:
 			failures.append("weapon runtime craft/equip did not consume authored ingredients")
 		if equipment.selected_hotbar() != 4 or str(equipment.selected_definition().content_id) != SWORD_ID:
 			failures.append("weapon runtime craft/equip did not select canonical hotbar-4 sword")
+		if player.legacy_tool_visual != "hands":
+			failures.append("weapon runtime did not retire stale legacy tool presentation before sword binding")
 		if player.equipped_weapon_definition == null or str(player.equipped_weapon_definition.content_id) != SWORD_ID:
 			failures.append("weapon runtime did not bind canonical sword attack source")
 		if session.presented_weapon_instance() == null:
