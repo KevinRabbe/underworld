@@ -154,6 +154,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		"after recovery",
 		failures
 	)
+	var recovered_position: Vector3 = player.global_position
 
 	var request_variant: Variant = game.call("build_save_request")
 	if not request_variant is Dictionary or not bool(request_variant.get("success", false)):
@@ -164,7 +165,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		_cleanup_slot()
 		return failures
 	var request: Dictionary = request_variant
-	if request.get("resume_position", Vector3.ZERO) != player.global_position:
+	if request.get("resume_position", Vector3.ZERO) != recovered_position:
 		failures.append("post-respawn SAVE request did not capture committed recovery position")
 	var request_pending: Variant = request.get("pending_loot_states", null)
 	if not request_pending is Array or request_pending.size() != 1:
@@ -192,16 +193,17 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		_cleanup_slot()
 		return failures
 	var candidate_variant: Variant = loaded.get("candidate", null)
+	var loaded_candidate: Dictionary = {}
 	if not candidate_variant is Dictionary:
 		failures.append("post-respawn slot load did not return detached candidate")
 	else:
-		var candidate: Dictionary = candidate_variant
-		if candidate.get("resume_position", Vector3.ZERO) != player.global_position:
+		loaded_candidate = candidate_variant
+		if loaded_candidate.get("resume_position", Vector3.ZERO) != recovered_position:
 			failures.append("save/load round-trip changed post-respawn Player position")
-		var restored_inventory = candidate.get("inventory_state", null)
-		var restored_equipment = candidate.get("equipment_state", null)
-		var restored_store = candidate.get("delta_store", null)
-		var restored_pending: Variant = candidate.get("pending_loot_states", null)
+		var restored_inventory = loaded_candidate.get("inventory_state", null)
+		var restored_equipment = loaded_candidate.get("equipment_state", null)
+		var restored_store = loaded_candidate.get("delta_store", null)
+		var restored_pending: Variant = loaded_candidate.get("pending_loot_states", null)
 		if restored_inventory == null or restored_inventory.canonical_json() != inventory_before:
 			failures.append("save/load round-trip changed inventory across death")
 		if restored_equipment == null or restored_equipment.canonical_snapshot() != equipment_before:
@@ -213,7 +215,122 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		elif restored_pending[0].canonical_snapshot() != pending_before:
 			failures.append("save/load round-trip changed pending loot across death")
 
+	if loaded_candidate.is_empty():
+		_free_attached(game)
+		_cleanup_slot()
+		return failures
+
+	# Teardown the source runtime before Continue. The loaded candidate is detached
+	# durable state; a fresh production Game must recreate the full runtime graph
+	# exactly once and activate the recovered position without hidden lifecycle state.
 	_free_attached(game)
+	var resumed: Node = packed.instantiate()
+	resumed.set("enable_debug_hud", false)
+	if not bool(resumed.call("prepare_continue", loaded_candidate)):
+		failures.append("fresh Game rejected post-recovery Continue candidate")
+		resumed.free()
+		_cleanup_slot()
+		return failures
+	tree.root.add_child(resumed)
+
+	var resumed_player = resumed.get("player")
+	var resumed_survival = resumed.get("survival")
+	var resumed_encounter = resumed.get("encounter_controller")
+	var resumed_recovery = resumed.get("death_recovery_controller")
+	var resumed_store = resumed.get("world_delta_store")
+	var resumed_hud = resumed.get("gameplay_hud")
+	if (
+		resumed_player == null
+		or resumed_survival == null
+		or resumed_encounter == null
+		or resumed_recovery == null
+		or resumed_store == null
+		or resumed_hud == null
+	):
+		failures.append("fresh Continue Game is missing Player/Survival/encounter/recovery/WorldDelta/HUD composition")
+		_free_attached(resumed)
+		_cleanup_slot()
+		return failures
+	if str(resumed.call("startup_mode")) != "continue":
+		failures.append("fresh post-recovery Game did not activate Continue startup mode")
+	if resumed_player.global_position != recovered_position:
+		failures.append("fresh Continue Game did not restore exact recovered Player position")
+	if bool(resumed_player.call("is_defeated")):
+		failures.append("fresh Continue Game restored Player as defeated")
+	if String(resumed_player.call("get_action_state_name")) != "FREE":
+		failures.append("fresh Continue Game restored Player in non-gameplay-capable action state")
+	if _count_direct_named_children(resumed, "Player") != 1:
+		failures.append("fresh Continue Game created duplicate Player nodes")
+	if _count_direct_named_children(resumed, "GameplayHUD") != 1:
+		failures.append("fresh Continue Game created duplicate GameplayHUD nodes")
+	if _count_direct_named_children(resumed, "DeathRecovery") != 1:
+		failures.append("fresh Continue Game created duplicate DeathRecovery controllers")
+
+	var resumed_inventory = resumed_survival.get_inventory_state()
+	var resumed_equipment = resumed_survival.get_equipment_state()
+	_assert_durable_unchanged(
+		resumed_inventory,
+		resumed_equipment,
+		resumed_store,
+		resumed_encounter,
+		inventory_before,
+		equipment_before,
+		world_delta_before,
+		pending_before,
+		pending_count_before,
+		"after fresh Continue activation",
+		failures
+	)
+
+	# The resumed runtime must be reusable, not a one-shot activation artifact.
+	# Enter the same production defeat seam again and commit another safe recovery;
+	# this must not duplicate composition or mutate durable inventory/world/loot state.
+	var resumed_before_second_death: Vector3 = resumed_player.global_position
+	resumed_player.call("_apply_damage", 999, resumed_before_second_death + Vector3.RIGHT)
+	if not bool(resumed_player.call("is_defeated")):
+		failures.append("resumed Game second lethal damage did not enter defeated state")
+	if not bool(resumed_recovery.call("is_recovery_pending")):
+		failures.append("resumed Game second defeat did not arm recovery lifecycle")
+	var second_recovery: Dictionary = resumed_recovery.call("try_commit_recovery")
+	if not _require_success(second_recovery, "resumed Game repeated death recovery", failures):
+		_free_attached(resumed)
+		_cleanup_slot()
+		return failures
+	if bool(resumed_player.call("is_defeated")):
+		failures.append("resumed Game repeated recovery left Player defeated")
+	if not _is_finite_vector3(resumed_player.global_position):
+		failures.append("resumed Game repeated recovery committed non-finite Player position")
+	_assert_durable_unchanged(
+		resumed_inventory,
+		resumed_equipment,
+		resumed_store,
+		resumed_encounter,
+		inventory_before,
+		equipment_before,
+		world_delta_before,
+		pending_before,
+		pending_count_before,
+		"after repeated recovery on fresh Continue Game",
+		failures
+	)
+	if _count_direct_named_children(resumed, "Player") != 1:
+		failures.append("repeated recovery duplicated Player composition")
+	if _count_direct_named_children(resumed, "GameplayHUD") != 1:
+		failures.append("repeated recovery duplicated GameplayHUD composition")
+	if _count_direct_named_children(resumed, "DeathRecovery") != 1:
+		failures.append("repeated recovery duplicated DeathRecovery composition")
+
+	var resumed_request_variant: Variant = resumed.call("build_save_request")
+	if not resumed_request_variant is Dictionary or not bool(resumed_request_variant.get("success", false)):
+		failures.append("fresh Continue Game could not build SAVE request after repeated recovery")
+	else:
+		var resumed_pending: Variant = resumed_request_variant.get("pending_loot_states", null)
+		if not resumed_pending is Array or resumed_pending.size() != 1:
+			failures.append("fresh Continue repeated recovery changed unresolved pending-loot SAVE set")
+		elif resumed_pending[0].canonical_snapshot() != pending_before:
+			failures.append("fresh Continue repeated recovery changed pending-loot SAVE snapshot")
+
+	_free_attached(resumed)
 	_cleanup_slot()
 	return failures
 
@@ -241,6 +358,14 @@ static func _assert_durable_unchanged(
 		failures.append("DEATH changed pending-loot count %s" % label)
 	if encounter.get_pending_loot_snapshot(OCCURRENCE_ID) != pending_before:
 		failures.append("DEATH changed pending-loot state %s" % label)
+
+
+static func _count_direct_named_children(root: Node, node_name: String) -> int:
+	var count: int = 0
+	for child in root.get_children():
+		if str(child.name) == node_name:
+			count += 1
+	return count
 
 
 static func _is_finite_vector3(value: Vector3) -> bool:
