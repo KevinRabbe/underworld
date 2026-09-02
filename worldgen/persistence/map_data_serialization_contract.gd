@@ -64,32 +64,11 @@ static func build_envelope(context, delta_store) -> Dictionary:
 
 
 static func validate_envelope(envelope: Dictionary) -> Array[String]:
-	var failures: Array[String] = []
-	_validate_exact_keys("root", envelope, REQUIRED_TOP_LEVEL_KEYS, failures)
-	if str(envelope.get("schema", "")) != SCHEMA_NAME:
-		failures.append("Unsupported map save schema name")
-	var schema_version_variant = envelope.get("save_schema_version", null)
-	if not schema_version_variant is int:
-		failures.append("save_schema_version must be an integer")
-	elif int(schema_version_variant) != SAVE_SCHEMA_VERSION:
-		failures.append(
-			"Unsupported save_schema_version: %s" % str(schema_version_variant)
-		)
+	return _validate_envelope_internal(envelope, null, false)
 
-	var world_variant = envelope.get("world", null)
-	if not world_variant is Dictionary:
-		failures.append("Map save world header must be a Dictionary")
-	else:
-		_validate_world_header(world_variant, failures)
 
-	var deltas_variant = envelope.get("deltas", null)
-	if not deltas_variant is Dictionary:
-		failures.append("Map save deltas must be a Dictionary")
-	else:
-		_validate_exact_keys("deltas", deltas_variant, REQUIRED_DELTA_KEYS, failures)
-		_validate_json_value(deltas_variant, "deltas", failures)
-
-	return failures
+static func validate_envelope_against_context(envelope: Dictionary, context) -> Array[String]:
+	return _validate_envelope_internal(envelope, context, true)
 
 
 static func canonical_json(envelope: Dictionary) -> Dictionary:
@@ -125,6 +104,61 @@ static func encode(context, delta_store) -> Dictionary:
 
 
 static func decode(json_text: String) -> Dictionary:
+	return _decode_internal(json_text, null, false)
+
+
+static func decode_against_context(json_text: String, context) -> Dictionary:
+	return _decode_internal(json_text, context, true)
+
+
+static func load_delta_store(envelope: Dictionary) -> Dictionary:
+	return _load_delta_store_internal(envelope, null, false)
+
+
+static func load_delta_store_against_context(envelope: Dictionary, context) -> Dictionary:
+	return _load_delta_store_internal(envelope, context, true)
+
+
+static func _validate_envelope_internal(
+	envelope: Dictionary,
+	context,
+	use_supplied_context: bool
+) -> Array[String]:
+	var failures: Array[String] = []
+	_validate_exact_keys("root", envelope, REQUIRED_TOP_LEVEL_KEYS, failures)
+	if str(envelope.get("schema", "")) != SCHEMA_NAME:
+		failures.append("Unsupported map save schema name")
+	var schema_version_variant = envelope.get("save_schema_version", null)
+	if not schema_version_variant is int:
+		failures.append("save_schema_version must be an integer")
+	elif int(schema_version_variant) != SAVE_SCHEMA_VERSION:
+		failures.append(
+			"Unsupported save_schema_version: %s" % str(schema_version_variant)
+		)
+
+	var world_variant = envelope.get("world", null)
+	if not world_variant is Dictionary:
+		failures.append("Map save world header must be a Dictionary")
+	elif use_supplied_context:
+		_validate_world_header_against_context(world_variant, context, failures)
+	else:
+		_validate_world_header(world_variant, failures)
+
+	var deltas_variant = envelope.get("deltas", null)
+	if not deltas_variant is Dictionary:
+		failures.append("Map save deltas must be a Dictionary")
+	else:
+		_validate_exact_keys("deltas", deltas_variant, REQUIRED_DELTA_KEYS, failures)
+		_validate_json_value(deltas_variant, "deltas", failures)
+
+	return failures
+
+
+static func _decode_internal(
+	json_text: String,
+	context,
+	use_supplied_context: bool
+) -> Dictionary:
 	if json_text.is_empty():
 		return _failure(["Map save JSON is empty"])
 	var json := JSON.new()
@@ -151,7 +185,10 @@ static func decode(json_text: String) -> Dictionary:
 	if not failures.is_empty():
 		return _failure(failures)
 
-	failures.append_array(validate_envelope(envelope))
+	if use_supplied_context:
+		failures.append_array(validate_envelope_against_context(envelope, context))
+	else:
+		failures.append_array(validate_envelope(envelope))
 	if not failures.is_empty():
 		return _failure(failures)
 	return {
@@ -161,8 +198,16 @@ static func decode(json_text: String) -> Dictionary:
 	}
 
 
-static func load_delta_store(envelope: Dictionary) -> Dictionary:
-	var failures: Array[String] = validate_envelope(envelope)
+static func _load_delta_store_internal(
+	envelope: Dictionary,
+	context,
+	use_supplied_context: bool
+) -> Dictionary:
+	var failures: Array[String]
+	if use_supplied_context:
+		failures = validate_envelope_against_context(envelope, context)
+	else:
+		failures = validate_envelope(envelope)
 	if not failures.is_empty():
 		return _failure(failures)
 	var delta_store = WorldDeltaStoreScript.new()
@@ -206,6 +251,47 @@ static func _validate_world_header(world: Dictionary, failures: Array[String]) -
 		var expected_manifest_id: String = "gm-sha256:" + manifest_canonical.sha256_text()
 		if manifest_id != expected_manifest_id:
 			failures.append("world.generator_manifest_id does not match manifest contents")
+
+
+static func _validate_world_header_against_context(
+	world: Dictionary,
+	context,
+	failures: Array[String]
+) -> void:
+	_validate_exact_keys("world", world, REQUIRED_WORLD_KEYS, failures)
+	if context == null or not context.has_method("validate_structure") or not context.has_method("canonical_header"):
+		failures.append("Map save exact-context validation requires WorldGenerationContext")
+		return
+	for diagnostic in context.validate_structure():
+		failures.append("Map save supplied world context: %s" % diagnostic)
+	if not failures.is_empty():
+		return
+
+	var world_seed_variant = world.get("world_seed", null)
+	if not world_seed_variant is String:
+		failures.append("world.world_seed must be a canonical decimal string")
+		return
+	var world_seed_text: String = str(world_seed_variant)
+	if world_seed_text.is_empty() or not world_seed_text.is_valid_int():
+		failures.append("world.world_seed is not a valid 64-bit decimal integer")
+		return
+	var world_seed: int = int(world_seed_text)
+	if str(world_seed) != world_seed_text:
+		failures.append("world.world_seed is not in canonical decimal form")
+		return
+
+	var expected: Dictionary = context.canonical_header()
+	if world_seed != int(expected.get("world_seed", 0)):
+		failures.append("world.world_seed does not match supplied world context")
+	if str(world.get("world_id", "")) != str(expected.get("world_id", "")):
+		failures.append("world.world_id does not match supplied world context")
+	if str(world.get("generator_manifest_id", "")) != str(expected.get("generator_manifest_id", "")):
+		failures.append("world.generator_manifest_id does not match supplied world context")
+	if (
+		str(world.get("generator_manifest_canonical", ""))
+		!= str(expected.get("generator_manifest_canonical", ""))
+	):
+		failures.append("world.generator_manifest_canonical does not match supplied world context")
 
 
 static func _validate_exact_keys(
