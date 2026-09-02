@@ -3,9 +3,11 @@ extends RefCounted
 const StableAddress := preload("res://worldgen/identity/stable_address.gd")
 const StableId := preload("res://worldgen/identity/stable_id.gd")
 const ContentRegistry := preload("res://core/content/registry/content_registry.gd")
+const CategorySchema := preload("res://core/content/schema/category_schema.gd")
 const AssignmentService := preload("res://content/reserved_sites/reserved_site_assignment_service.gd")
 const PlacementService := preload("res://content/placement/underground_placement_service.gd")
 const Catalog := preload("res://gameplay/resources/runtime/underground_resource_composition_catalog.gd")
+const ContentEvidence := preload("res://gameplay/resources/runtime/underground_resource_content_evidence.gd")
 
 const RESOURCE_PATH := "res://content/resources/iron_outcrop_definition.tres"
 
@@ -14,6 +16,7 @@ static func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_production_iron_binding(failures)
 	_test_channel_metadata_fails_closed(failures)
+	_test_content_validation_evidence_is_snapshot_bound(failures)
 	return failures
 
 
@@ -110,6 +113,64 @@ static func _test_channel_metadata_fails_closed(failures: Array[String]) -> void
 		failures,
 		"resource catalog rejects unexpected site-local capacity",
 		Catalog.candidate_from_assignment(assignment, Vector2i.ZERO, 0) == null
+	)
+
+
+static func _test_content_validation_evidence_is_snapshot_bound(failures: Array[String]) -> void:
+	var authority: Dictionary = ContentEvidence.build_first_iron_authority()
+	_expect_true(
+		failures,
+		"first iron CONTENT-006 authority has no setup failures",
+		authority.get("setup_failures", []).is_empty()
+	)
+	var validation_result: Dictionary = authority.get("validation_result", {})
+	_expect_true(
+		failures,
+		"real validation pipeline accepts exact first iron closure",
+		bool(validation_result.get("success", false))
+	)
+	_expect_true(
+		failures,
+		"fresh first iron validation evidence verifies against current authorities",
+		ContentEvidence.verification_failures(authority).is_empty()
+	)
+	var evidence = validation_result.get("evidence", null)
+	_expect_true(
+		failures,
+		"validation evidence covers accepted iron resource identity",
+		evidence != null and evidence.has_method("covers") and evidence.covers(Catalog.IRON_RESOURCE_CONTENT_ID)
+	)
+
+	var definitions: Array = authority.get("definitions", [])
+	var content_registry = authority.get("content_registry", null)
+	if definitions.size() >= 2 and content_registry != null:
+		content_registry.index_definitions([definitions[0], definitions[1]])
+		_expect_true(
+			failures,
+			"content manifest mutation invalidates prior iron validation evidence",
+			not ContentEvidence.verification_failures(authority).is_empty()
+		)
+	else:
+		failures.append("content evidence mutation fixture is incomplete")
+
+	var schema_authority: Dictionary = ContentEvidence.build_first_iron_authority()
+	var category_registry = schema_authority.get("category_registry", null)
+	if category_registry == null:
+		failures.append("category evidence mutation fixture is missing registry")
+		return
+	var mutated_schemas: Array = [
+		CategorySchema.new().configure(ContentEvidence.IRON_RESOURCE_CATEGORY_ID, [], 2),
+		CategorySchema.new().configure(ContentEvidence.IRON_ITEM_CATEGORY_ID),
+	]
+	_expect_true(
+		failures,
+		"mutated category schema registry remains structurally valid",
+		category_registry.index_schemas(mutated_schemas).is_empty()
+	)
+	_expect_true(
+		failures,
+		"schema manifest mutation invalidates prior iron validation evidence",
+		not ContentEvidence.verification_failures(schema_authority).is_empty()
 	)
 
 
