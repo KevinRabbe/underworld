@@ -171,17 +171,23 @@ func _on_cell_attached(address, tier: String) -> void:
 	if tier != "collision" or address == null or not address is CellAddress:
 		return
 	var key: String = address.canonical_text()
-	if not _entries_by_cell.has(key):
+	var entry_variant = _entries_by_cell.get(key, null)
+	if not entry_variant is Dictionary:
 		# A service may bind after render but before collision. Preparing here keeps
 		# collision attach sufficient to complete semantic readiness without Player
 		# movement or another observer tick.
-		var prepared: Dictionary = prepare_current_cell(address)
-		if not bool(prepared.get("success", false)):
-			return
-	var entry_variant = _entries_by_cell.get(key, null)
-	if not entry_variant is Dictionary:
+		prepare_current_cell(address)
 		return
+
 	var entry: Dictionary = entry_variant
+	if not CellObserver.snapshot_is_current(_controller, entry.get("snapshot", {})):
+		# Partial-tier retirement advances the cell-scoped generation. A later
+		# collision attach must refresh that old semantic snapshot immediately;
+		# otherwise reacquisition would remain falsely unready until some unrelated
+		# semantic_entry() caller happened to poll it.
+		prepare_current_cell(address)
+		return
+
 	var ready: bool = CellObserver.collision_is_current(_controller, entry.get("snapshot", {}))
 	if bool(entry.get("collision_ready", false)) == ready:
 		return
