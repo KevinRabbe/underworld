@@ -9,6 +9,7 @@ const CapabilitySchemaRegistry := preload("res://core/content/schema/capability_
 const ContentValidationPipeline := preload("res://core/content/validation/content_validation_pipeline.gd")
 
 const IRON_RESOURCE_CONTENT_ID := "resource.deposit.iron_outcrop"
+const IRON_ARCHETYPE_CONTENT_ID := "archetype.resource.iron_outcrop.prototype"
 const IRON_RESOURCE_CATEGORY_ID := "category.resource.deposit"
 const IRON_ITEM_CATEGORY_ID := "category.item.resource"
 const EXCAVATABLE_CAPABILITY_ID := "capability.excavatable"
@@ -60,7 +61,7 @@ static func build_first_iron_authority() -> Dictionary:
 
 	var validation_result: Dictionary = ContentValidationPipeline.new().validate_ids(
 		definitions,
-		[IRON_RESOURCE_CONTENT_ID],
+		[IRON_RESOURCE_CONTENT_ID, IRON_ARCHETYPE_CONTENT_ID],
 		category_registry,
 		capability_registry
 	)
