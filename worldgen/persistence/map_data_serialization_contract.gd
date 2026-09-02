@@ -25,6 +25,58 @@ const REQUIRED_DELTA_KEYS: Array[String] = [
 
 
 static func build_envelope(context, delta_store) -> Dictionary:
+	return _build_envelope_internal(context, delta_store, false)
+
+
+static func build_envelope_against_context(context, delta_store) -> Dictionary:
+	return _build_envelope_internal(context, delta_store, true)
+
+
+static func validate_envelope(envelope: Dictionary) -> Array[String]:
+	return _validate_envelope_internal(envelope, null, false)
+
+
+static func validate_envelope_against_context(envelope: Dictionary, context) -> Array[String]:
+	return _validate_envelope_internal(envelope, context, true)
+
+
+static func canonical_json(envelope: Dictionary) -> Dictionary:
+	return _canonical_json_internal(envelope, null, false)
+
+
+static func canonical_json_against_context(envelope: Dictionary, context) -> Dictionary:
+	return _canonical_json_internal(envelope, context, true)
+
+
+static func encode(context, delta_store) -> Dictionary:
+	return _encode_internal(context, delta_store, false)
+
+
+static func encode_against_context(context, delta_store) -> Dictionary:
+	return _encode_internal(context, delta_store, true)
+
+
+static func decode(json_text: String) -> Dictionary:
+	return _decode_internal(json_text, null, false)
+
+
+static func decode_against_context(json_text: String, context) -> Dictionary:
+	return _decode_internal(json_text, context, true)
+
+
+static func load_delta_store(envelope: Dictionary) -> Dictionary:
+	return _load_delta_store_internal(envelope, null, false)
+
+
+static func load_delta_store_against_context(envelope: Dictionary, context) -> Dictionary:
+	return _load_delta_store_internal(envelope, context, true)
+
+
+static func _build_envelope_internal(
+	context,
+	delta_store,
+	use_supplied_context: bool
+) -> Dictionary:
 	var failures: Array[String] = []
 	if context == null:
 		failures.append("Map serialization requires WorldGenerationContext")
@@ -33,7 +85,13 @@ static func build_envelope(context, delta_store) -> Dictionary:
 	if not failures.is_empty():
 		return _failure(failures)
 
-	failures.append_array(context.validate())
+	if use_supplied_context:
+		if not context.has_method("validate_structure") or not context.has_method("canonical_header"):
+			failures.append("Map serialization exact-context build requires WorldGenerationContext")
+		else:
+			failures.append_array(context.validate_structure())
+	else:
+		failures.append_array(context.validate())
 	if not failures.is_empty():
 		return _failure(failures)
 
@@ -53,7 +111,10 @@ static func build_envelope(context, delta_store) -> Dictionary:
 		},
 		"deltas": delta_store.snapshot(),
 	}
-	failures.append_array(validate_envelope(envelope))
+	if use_supplied_context:
+		failures.append_array(validate_envelope_against_context(envelope, context))
+	else:
+		failures.append_array(validate_envelope(envelope))
 	if not failures.is_empty():
 		return _failure(failures)
 	return {
@@ -63,16 +124,16 @@ static func build_envelope(context, delta_store) -> Dictionary:
 	}
 
 
-static func validate_envelope(envelope: Dictionary) -> Array[String]:
-	return _validate_envelope_internal(envelope, null, false)
-
-
-static func validate_envelope_against_context(envelope: Dictionary, context) -> Array[String]:
-	return _validate_envelope_internal(envelope, context, true)
-
-
-static func canonical_json(envelope: Dictionary) -> Dictionary:
-	var failures: Array[String] = validate_envelope(envelope)
+static func _canonical_json_internal(
+	envelope: Dictionary,
+	context,
+	use_supplied_context: bool
+) -> Dictionary:
+	var failures: Array[String]
+	if use_supplied_context:
+		failures = validate_envelope_against_context(envelope, context)
+	else:
+		failures = validate_envelope(envelope)
 	if not failures.is_empty():
 		return _failure(failures)
 
@@ -88,11 +149,23 @@ static func canonical_json(envelope: Dictionary) -> Dictionary:
 	}
 
 
-static func encode(context, delta_store) -> Dictionary:
-	var built: Dictionary = build_envelope(context, delta_store)
+static func _encode_internal(
+	context,
+	delta_store,
+	use_supplied_context: bool
+) -> Dictionary:
+	var built: Dictionary
+	if use_supplied_context:
+		built = build_envelope_against_context(context, delta_store)
+	else:
+		built = build_envelope(context, delta_store)
 	if not bool(built.get("success", false)):
 		return built
-	var encoded: Dictionary = canonical_json(built["envelope"])
+	var encoded: Dictionary
+	if use_supplied_context:
+		encoded = canonical_json_against_context(built["envelope"], context)
+	else:
+		encoded = canonical_json(built["envelope"])
 	if not bool(encoded.get("success", false)):
 		return encoded
 	return {
@@ -101,22 +174,6 @@ static func encode(context, delta_store) -> Dictionary:
 		"json": encoded["json"],
 		"diagnostics": [],
 	}
-
-
-static func decode(json_text: String) -> Dictionary:
-	return _decode_internal(json_text, null, false)
-
-
-static func decode_against_context(json_text: String, context) -> Dictionary:
-	return _decode_internal(json_text, context, true)
-
-
-static func load_delta_store(envelope: Dictionary) -> Dictionary:
-	return _load_delta_store_internal(envelope, null, false)
-
-
-static func load_delta_store_against_context(envelope: Dictionary, context) -> Dictionary:
-	return _load_delta_store_internal(envelope, context, true)
 
 
 static func _validate_envelope_internal(
