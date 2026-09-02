@@ -33,8 +33,8 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
-          test "$(git rev-parse origin/main)" = "958ec18c26429d6843d7ed5afbb3e03922d8f381"
-          git merge --no-ff --no-commit 958ec18c26429d6843d7ed5afbb3e03922d8f381
+          test "$(git rev-parse origin/main)" = "610291acdb55e0db9d1ae5fe67a6ac01d03ff184"
+          git merge --no-ff --no-commit 610291acdb55e0db9d1ae5fe67a6ac01d03ff184
           git rm .github/workflows/char-reconcile-sync-main-once.yml
           git diff --check --cached
 
@@ -83,5 +83,5 @@ jobs:
           test ! -e .github/workflows/char-reconcile-sync-main-once.yml
           git diff --check
           git diff --check --cached
-          git commit -m 'merge: reconcile #514 onto accepted main 958ec18c'
+          git commit -m 'merge: reconcile #514 onto accepted main 610291ac'
           git push origin HEAD:worker/char-reconcile-001
