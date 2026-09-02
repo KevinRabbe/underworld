@@ -1,0 +1,40 @@
+name: Character Reconcile One Shot
+
+on:
+  push:
+    branches:
+      - worker/char-reconcile-001
+    paths:
+      - .github/workflows/char-reconcile-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: worker/char-reconcile-001
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply current-main character reconciliation
+        run: python tools/character_reconcile/apply_reconciliation.py
+      - name: Validate patch shape
+        run: |
+          git diff --check
+          git diff --exit-code -- presentation/characters/faceted presentation/characters/runtime presentation/characters/voxel tools/character_preview || true
+          git status --short
+      - name: Commit reconciled files and retire one-shot tooling
+        run: |
+          rm -f tools/character_reconcile/apply_reconciliation.py
+          rmdir tools/character_reconcile 2>/dev/null || true
+          rm -f .github/workflows/char-reconcile-once.yml
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "char: reconcile player presentation provider"
+          git push origin HEAD:worker/char-reconcile-001
