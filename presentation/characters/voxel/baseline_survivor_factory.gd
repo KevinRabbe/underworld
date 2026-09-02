@@ -26,16 +26,16 @@ const DETAIL_SCALE := 1.555555556 # 36 authored voxels -> 56-voxel presentation
 
 static func build() -> Resource:
 	var palette = PaletteScript.new().configure("palette.character.earth_teal", [
-		_entry("skin", Color("bf8b6a"), 0.80, 0.0),
-		_entry("cloth", Color("927958"), 0.93, 0.0),
+		_entry("skin", Color("b98361"), 0.80, 0.0),
+		_entry("cloth", Color("887257"), 0.93, 0.0),
 		_entry("leather", Color("4b3023"), 0.78, 0.0),
 		_entry("metal", Color("777d7b"), 0.82, 0.18),
 		_entry("hair", Color("211713"), 0.92, 0.0),
-		_entry("accent", Color("356f78"), 0.84, 0.0),
+		_entry("accent", Color("2f5e66"), 0.84, 0.0),
 		_entry("face", Color("211a17"), 0.76, 0.0),
-		_entry("canvas_light", Color("b5a486"), 0.95, 0.0),
-		_entry("trouser", Color("373c3b"), 0.92, 0.0),
-		_entry("canvas_dark", Color("6c624f"), 0.96, 0.0),
+		_entry("canvas_light", Color("aa9879"), 0.95, 0.0),
+		_entry("trouser", Color("323637"), 0.92, 0.0),
+		_entry("canvas_dark", Color("625a49"), 0.96, 0.0),
 		_entry("leather_light", Color("765037"), 0.84, 0.0),
 		_entry("sole", Color("252523"), 0.98, 0.0),
 	])
@@ -85,7 +85,7 @@ static func build() -> Resource:
 			_slice_overlay_part("pack_buckles", "rig_role.chest", 36, 43, 40, METAL, 5),
 		]),
 		_module("tools", &"held_item", [
-			_tool_part("axe_handle", "stone_axe", _box(Vector3i(0,-9,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO),
+			_tool_part("axe_handle", "stone_axe", _box(Vector3i(0,-12,0), Vector3i(0,5,0), LEATHER), Vector3i.ZERO),
 			_tool_part("axe_head", "stone_axe", _axe_head_cells(), Vector3i.ZERO),
 			_tool_part("pickaxe_handle", "stone_pickaxe", _box(Vector3i(0,-9,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO),
 			_tool_part("pickaxe_head", "stone_pickaxe", _pickaxe_head_cells(), Vector3i.ZERO),
@@ -531,10 +531,12 @@ static func _axe_head_cells() -> Array[Dictionary]:
 	# the tool subordinate to the character silhouette and matches the locked
 	# turnaround much more closely than rev10's oversized two-lobed head.
 	var rows := {
-		2: [-1, 1],
-		3: [-2, 1],
-		4: [-3, 1],
-		5: [-3, 0],
+		0: [-1, 1],
+		1: [-2, 1],
+		2: [-3, 1],
+		3: [-4, 1],
+		4: [-4, 0],
+		5: [-3, -1],
 		6: [-2, -1],
 	}
 	for z in range(0, 2):

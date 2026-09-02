@@ -13,24 +13,24 @@ const ROW_COUNT := 56
 # Preserve the accepted broad-neutral width controls while converging the
 # vertical silhouette on the locked turnaround: roughly 7.2 heads tall,
 # longer legs, a more compact torso, and less mannequin-like limb/head mass.
-@export var shoulder_width: float = 0.58
-@export var chest_width: float = 0.48
-@export var chest_depth: float = 0.285
-@export var waist_width: float = 0.355
-@export var pelvis_width: float = 0.42
-@export var thigh_diameter: float = 0.20
-@export var calf_diameter: float = 0.16
-@export var ankle_width: float = 0.095
-@export var foot_length: float = 0.275
-@export var foot_width: float = 0.115
-@export var head_width: float = 0.205
-@export var head_depth: float = 0.215
-@export var head_height: float = 0.250
-@export var torso_length: float = 0.650
-@export var leg_length: float = 0.900
-@export var arm_length: float = 0.715
-@export var arm_mass: float = 1.00
-@export var outfit_shell_offset: float = 0.018
+@export var shoulder_width: float = 0.62
+@export var chest_width: float = 0.515
+@export var chest_depth: float = 0.31
+@export var waist_width: float = 0.385
+@export var pelvis_width: float = 0.45
+@export var thigh_diameter: float = 0.225
+@export var calf_diameter: float = 0.18
+@export var ankle_width: float = 0.105
+@export var foot_length: float = 0.285
+@export var foot_width: float = 0.125
+@export var head_width: float = 0.218
+@export var head_depth: float = 0.232
+@export var head_height: float = 0.255
+@export var torso_length: float = 0.665
+@export var leg_length: float = 0.880
+@export var arm_length: float = 0.705
+@export var arm_mass: float = 1.06
+@export var outfit_shell_offset: float = 0.020
 
 
 func configure(id_value: String, values: Dictionary = {}) -> Resource:
