@@ -19,14 +19,18 @@ jobs:
           ref: worker/char-reconcile-001
           fetch-depth: 0
 
-      - name: Assert exact starting candidate and accepted-main ancestry
+      - name: Assert exact repair base and accepted-main ancestry
         shell: bash
         run: |
           set -euxo pipefail
-          test "$(git rev-parse HEAD^)" = "b85f9dcbf3e2f13e327ddba9cae9db679deb5866"
+          test "$(git rev-parse HEAD^)" = "dfafd575208dabfe9fc7affdbaf23201a8358dd1"
           git merge-base --is-ancestor 2948912830c21a0f3e1578bc2dbd48da032368b3 HEAD
+          git diff --exit-code b85f9dcbf3e2f13e327ddba9cae9db679deb5866 -- \
+            presentation/characters/faceted/faceted_humanoid_body_profile.gd \
+            presentation/characters/faceted/faceted_body_compiler.gd \
+            presentation/characters/voxel/baseline_survivor_factory.gd
 
-      - name: Apply bounded presentation-only convergence
+      - name: Apply bounded presentation-only convergence without profile drift
         shell: bash
         run: |
           python3 - <<'PY'
@@ -39,18 +43,6 @@ jobs:
               if count != 1:
                   raise SystemExit(f"{path}: expected exactly one match, got {count}: {old!r}")
               p.write_text(text.replace(old, new, 1))
-
-          profile = "presentation/characters/faceted/faceted_humanoid_body_profile.gd"
-          for old, new in [
-              ("@export var thigh_diameter: float = 0.225", "@export var thigh_diameter: float = 0.245"),
-              ("@export var calf_diameter: float = 0.18", "@export var calf_diameter: float = 0.195"),
-              ("@export var ankle_width: float = 0.105", "@export var ankle_width: float = 0.112"),
-              ("@export var foot_length: float = 0.285", "@export var foot_length: float = 0.295"),
-              ("@export var foot_width: float = 0.125", "@export var foot_width: float = 0.138"),
-              ("@export var head_width: float = 0.218", "@export var head_width: float = 0.225"),
-              ("@export var head_depth: float = 0.232", "@export var head_depth: float = 0.240"),
-          ]:
-              replace_once(profile, old, new)
 
           factory = "presentation/characters/voxel/baseline_survivor_factory.gd"
           for old, new in [
@@ -72,12 +64,45 @@ jobs:
           compiler = "presentation/characters/faceted/faceted_body_compiler.gd"
           replace_once(compiler, "const COMPILER_REVISION := 12", "const COMPILER_REVISION := 13")
 
-          # Close the jacket below the scarf while preserving a compact upper V.
+          # Keep the canonical body profile unchanged; loose rugged clothing owns
+          # the extra visual lower-body mass instead.
+          for old, new in [
+              ('profile.thigh_diameter * 0.67, profile.thigh_diameter * 0.60, profile.thigh_diameter * 0.70', 'profile.thigh_diameter * 0.72, profile.thigh_diameter * 0.65, profile.thigh_diameter * 0.76'),
+              ('profile.thigh_diameter * 0.70, profile.thigh_diameter * 0.62, profile.thigh_diameter * 0.72', 'profile.thigh_diameter * 0.76, profile.thigh_diameter * 0.68, profile.thigh_diameter * 0.79'),
+              ('profile.thigh_diameter * 0.65, profile.thigh_diameter * 0.59, profile.thigh_diameter * 0.67', 'profile.thigh_diameter * 0.71, profile.thigh_diameter * 0.65, profile.thigh_diameter * 0.74'),
+              ('profile.thigh_diameter * 0.55, profile.thigh_diameter * 0.51, profile.thigh_diameter * 0.57', 'profile.thigh_diameter * 0.60, profile.thigh_diameter * 0.56, profile.thigh_diameter * 0.62'),
+              ('profile.thigh_diameter * 0.485, profile.thigh_diameter * 0.46, profile.thigh_diameter * 0.50', 'profile.thigh_diameter * 0.52, profile.thigh_diameter * 0.50, profile.thigh_diameter * 0.54'),
+              ('profile.calf_diameter * 0.68, profile.calf_diameter * 0.61, profile.calf_diameter * 0.74', 'profile.calf_diameter * 0.73, profile.calf_diameter * 0.66, profile.calf_diameter * 0.80'),
+              ('profile.calf_diameter * 0.75, profile.calf_diameter * 0.64, profile.calf_diameter * 0.82', 'profile.calf_diameter * 0.81, profile.calf_diameter * 0.70, profile.calf_diameter * 0.88'),
+              ('profile.calf_diameter * 0.59, profile.calf_diameter * 0.55, profile.calf_diameter * 0.64', 'profile.calf_diameter * 0.65, profile.calf_diameter * 0.61, profile.calf_diameter * 0.70'),
+              ('profile.ankle_width * 0.62, profile.ankle_width * 0.60, profile.ankle_width * 0.65', 'profile.ankle_width * 0.68, profile.ankle_width * 0.66, profile.ankle_width * 0.71'),
+          ]:
+              replace_once(compiler, old, new)
+
+          # Broader boot shaft and last carry the target's planted silhouette.
+          for old, new in [
+              ('profile.calf_diameter * 0.70, profile.calf_diameter * 0.65, profile.calf_diameter * 0.73', 'profile.calf_diameter * 0.76, profile.calf_diameter * 0.70, profile.calf_diameter * 0.79'),
+              ('profile.ankle_width * 0.62, profile.ankle_width * 0.62, profile.ankle_width * 0.68', 'profile.ankle_width * 0.68, profile.ankle_width * 0.67, profile.ankle_width * 0.73'),
+              ('profile.ankle_width * 0.56, profile.ankle_width * 0.59, profile.ankle_width * 0.62', 'profile.ankle_width * 0.62, profile.ankle_width * 0.64, profile.ankle_width * 0.68'),
+              ('profile.foot_width * 0.47, 0.047, foot_skin', 'profile.foot_width * 0.53, 0.050, foot_skin'),
+              ('profile.foot_width * 0.53, minf(0.066, foot_top_y - sole_y - 0.018), foot_skin', 'profile.foot_width * 0.60, minf(0.070, foot_top_y - sole_y - 0.016), foot_skin'),
+              ('profile.foot_width * 0.60, 0.055, foot_skin', 'profile.foot_width * 0.68, 0.059, foot_skin'),
+              ('profile.foot_width * 0.56, 0.047, foot_skin', 'profile.foot_width * 0.64, 0.051, foot_skin'),
+              ('profile.foot_width * 0.48, 0.040, foot_skin', 'profile.foot_width * 0.56, 0.044, foot_skin'),
+              ('profile.foot_width * 0.52, 0.018, foot_skin', 'profile.foot_width * 0.58, 0.019, foot_skin'),
+              ('profile.foot_width * 0.58, 0.018, foot_skin', 'profile.foot_width * 0.64, 0.019, foot_skin'),
+              ('profile.foot_width * 0.64, 0.018, foot_skin', 'profile.foot_width * 0.71, 0.019, foot_skin'),
+              ('profile.foot_width * 0.60, 0.018, foot_skin', 'profile.foot_width * 0.68, 0.019, foot_skin'),
+              ('profile.foot_width * 0.52, 0.018, foot_skin', 'profile.foot_width * 0.60, 0.019, foot_skin'),
+          ]:
+              replace_once(compiler, old, new)
+
+          # Close the jacket below the scarf while preserving the short authored V.
           anchor = '''\t_add_quad_prism_z(builders, CLOTH,\n\t\tVector2(0.220, shoulder_y - 0.082),\n\t\tVector2(0.050, chest_y - 0.070),\n\t\tVector2(0.030, pelvis_y + 0.035),\n\t\tVector2(0.220, pelvis_y + 0.015),\n\t\tvest_front_z, vest_back_z, _weights2(BONE.chest, BONE.spine_02, 0.25))'''
-          replacement = anchor + '''\n\t# The target jacket reads as one rugged closed garment below the neck wrap.\n\t# A compact centre panel removes the bright full-height V without hiding the\n\t# authored scarf/lapel opening above it.\n\t_add_quad_prism_z(builders, CLOTH,\n\t\tVector2(-0.058, chest_y - 0.078),\n\t\tVector2(0.058, chest_y - 0.078),\n\t\tVector2(0.026, pelvis_y + 0.030),\n\t\tVector2(-0.026, pelvis_y + 0.030),\n\t\tvest_front_z - 0.004, vest_back_z, _weights2(BONE.chest, BONE.spine_02, 0.42))\n\t_add_ribbon_z(builders, CANVAS_DARK,\n\t\tVector2(0.0, chest_y - 0.082), Vector2(0.0, pelvis_y + 0.028),\n\t\tvest_front_z - 0.014, 0.008,\n\t\t_weights(BONE.chest), _weights2(BONE.spine_02, BONE.pelvis, 0.32), -1.0)'''
+          replacement = anchor + '''\n\t# The target jacket reads as one rugged closed garment below the neck wrap.\n\t_add_quad_prism_z(builders, CLOTH,\n\t\tVector2(-0.058, chest_y - 0.078),\n\t\tVector2(0.058, chest_y - 0.078),\n\t\tVector2(0.026, pelvis_y + 0.030),\n\t\tVector2(-0.026, pelvis_y + 0.030),\n\t\tvest_front_z - 0.004, vest_back_z, _weights2(BONE.chest, BONE.spine_02, 0.42))\n\t_add_ribbon_z(builders, CANVAS_DARK,\n\t\tVector2(0.0, chest_y - 0.082), Vector2(0.0, pelvis_y + 0.028),\n\t\tvest_front_z - 0.014, 0.008,\n\t\t_weights(BONE.chest), _weights2(BONE.spine_02, BONE.pelvis, 0.32), -1.0)'''
           replace_once(compiler, anchor, replacement)
 
-          # Stronger facial read at gameplay distance: broader brows, projected nose and mouth/chin plane.
+          # Stronger facial planes survive the real gameplay camera distance.
           replace_once(compiler, 'var brow_outer := Vector2(side * 0.068, eye_y + 0.018)', 'var brow_outer := Vector2(side * 0.074, eye_y + 0.018)')
           replace_once(compiler, 'face_front - 0.022, 0.008, skin, skin, -1.0)', 'face_front - 0.024, 0.010, skin, skin, -1.0)')
           replace_once(compiler, 'var nose_tip_l := Vector3(-0.021, nose_tip_y, face_front - 0.064)', 'var nose_tip_l := Vector3(-0.022, nose_tip_y, face_front - 0.072)')
@@ -88,7 +113,7 @@ jobs:
           replace_once(compiler, 'Vector2(0.050, mouth_y - 0.007)', 'Vector2(0.056, mouth_y - 0.007)')
           replace_once(compiler, '_add_ribbon_z(builders, FACE, Vector2(-0.034, mouth_y), Vector2(0.034, mouth_y), face_front - 0.020, 0.0040, skin, skin, -1.0)', '_add_ribbon_z(builders, FACE, Vector2(-0.040, mouth_y), Vector2(0.040, mouth_y), face_front - 0.024, 0.0050, skin, skin, -1.0)')
 
-          # Pull the pack and roll into one compact expedition silhouette.
+          # Pull the pack and bedroll closer so they read as attached gear.
           replace_once(compiler,
               '''\t_add_y_loft(builders, CANVAS_DARK, [\n\t\t_ring_y(Vector3(0, waist_y - 0.030, 0.228), 0.165, 0.080, _weights(BONE.chest)),\n\t\t_ring_y(Vector3(0, lerpf(waist_y, lower_chest_y, 0.48), 0.250), 0.215, 0.115, _weights(BONE.chest)),\n\t\t_ring_y(Vector3(0, chest_y - 0.045, 0.260), 0.235, 0.125, _weights(BONE.chest)),\n\t\t_ring_y(Vector3(0, shoulder_y - 0.155, 0.252), 0.225, 0.115, _weights(BONE.chest)),\n\t\t_ring_y(Vector3(0, shoulder_y - 0.070, 0.232), 0.185, 0.090, _weights(BONE.chest)),\n\t], 8, true, true)''',
               '''\t_add_y_loft(builders, CANVAS_DARK, [\n\t\t_ring_y(Vector3(0, waist_y - 0.030, 0.220), 0.160, 0.075, _weights(BONE.chest)),\n\t\t_ring_y(Vector3(0, lerpf(waist_y, lower_chest_y, 0.48), 0.240), 0.205, 0.105, _weights(BONE.chest)),\n\t\t_ring_y(Vector3(0, chest_y - 0.045, 0.248), 0.225, 0.115, _weights(BONE.chest)),\n\t\t_ring_y(Vector3(0, shoulder_y - 0.155, 0.242), 0.215, 0.108, _weights(BONE.chest)),\n\t\t_ring_y(Vector3(0, shoulder_y - 0.070, 0.225), 0.175, 0.085, _weights(BONE.chest)),\n\t], 8, true, true)''')
@@ -105,22 +130,15 @@ jobs:
               ('Vector3(roll_strap_x + 0.014, shoulder_y + 0.012, 0.444)', 'Vector3(roll_strap_x + 0.014, shoulder_y - 0.002, 0.406)'),
           ]:
               replace_once(compiler, old, new)
-
-          # Broaden the boot shaft around the newly heavier lower leg.
-          for old, new in [
-              ('profile.calf_diameter * 0.70, profile.calf_diameter * 0.65, profile.calf_diameter * 0.73', 'profile.calf_diameter * 0.76, profile.calf_diameter * 0.70, profile.calf_diameter * 0.79'),
-              ('profile.ankle_width * 0.62, profile.ankle_width * 0.62, profile.ankle_width * 0.68', 'profile.ankle_width * 0.68, profile.ankle_width * 0.67, profile.ankle_width * 0.73'),
-              ('profile.ankle_width * 0.56, profile.ankle_width * 0.59, profile.ankle_width * 0.62', 'profile.ankle_width * 0.62, profile.ankle_width * 0.64, profile.ankle_width * 0.68'),
-          ]:
-              replace_once(compiler, old, new)
           PY
+
           git diff --check
           changed="$(git diff --name-only)"
           printf '%s\n' "$changed"
-          test "$(printf '%s\n' "$changed" | sed '/^$/d' | wc -l)" -eq 3
-          printf '%s\n' "$changed" | grep -Fxq 'presentation/characters/faceted/faceted_humanoid_body_profile.gd'
+          test "$(printf '%s\n' "$changed" | sed '/^$/d' | wc -l)" -eq 2
           printf '%s\n' "$changed" | grep -Fxq 'presentation/characters/faceted/faceted_body_compiler.gd'
           printf '%s\n' "$changed" | grep -Fxq 'presentation/characters/voxel/baseline_survivor_factory.gd'
+          git diff --exit-code -- presentation/characters/faceted/faceted_humanoid_body_profile.gd
 
       - name: Setup Godot 4.7.2
         uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
@@ -144,17 +162,17 @@ jobs:
       - name: Repository layout
         run: python3 tools/ci/validate_repository_layout.py
 
-      - name: Commit validated presentation delta
+      - name: Commit validated presentation delta and remove disposable runner
         shell: bash
         run: |
           set -euxo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git rm .github/workflows/char514-visual-pass2-once.yml
-          git add presentation/characters/faceted/faceted_humanoid_body_profile.gd \
-                  presentation/characters/faceted/faceted_body_compiler.gd \
+          git add presentation/characters/faceted/faceted_body_compiler.gd \
                   presentation/characters/voxel/baseline_survivor_factory.gd
           git diff --check --cached
           test ! -e .github/workflows/char514-visual-pass2-once.yml
+          git diff --exit-code --cached -- presentation/characters/faceted/faceted_humanoid_body_profile.gd
           git commit -m 'character: converge survivor visual mass and readability'
           git push origin HEAD:worker/char-reconcile-001
