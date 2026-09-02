@@ -35,6 +35,20 @@ func sync_selected(
 		_release_presentation()
 		return _failure(failures)
 
+	var selected: Dictionary = _resolver.resolve_selected(equipment_state)
+	if not bool(selected.get("success", false)):
+		_release_presentation()
+		var selection_failure: Dictionary = _failure(selected.get("diagnostics", []))
+		selection_failure["stage"] = "selection"
+		return selection_failure
+	var definition = selected.get("definition", null)
+
+	# A canonical weapon selection must not inherit a stale legacy axe/pickaxe
+	# presentation. This is presentation compatibility only: equipment remains the
+	# sole selection authority, and the semantic weapon source is rebound below.
+	if definition != null and definition is WeaponDefinition and player.has_method("set_equipped_tool"):
+		player.call("set_equipped_tool", "hands")
+
 	var source_result: Dictionary = _attack_source_service.bind_selected(
 		equipment_state,
 		content_registry,
@@ -49,14 +63,6 @@ func sync_selected(
 		failed_source["stage"] = "weapon_source"
 		return failed_source
 
-	var selected: Dictionary = _resolver.resolve_selected(equipment_state)
-	if not bool(selected.get("success", false)):
-		_release_presentation()
-		var selection_failure: Dictionary = _failure(selected.get("diagnostics", []))
-		selection_failure["stage"] = "selection"
-		return selection_failure
-
-	var definition = selected.get("definition", null)
 	if definition == null or not definition is WeaponDefinition:
 		_release_presentation()
 		return {
