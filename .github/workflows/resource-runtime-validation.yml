@@ -52,6 +52,7 @@ on:
       - 'tests/resources/test_underground_resource_support.gd'
       - 'tests/resources/test_underground_resource_harvest_sink.gd'
       - 'tests/resources/test_underground_resource_runtime_composition.gd'
+      - 'tests/resources/test_underground_resource_root_alias.gd'
       - 'tests/resources/test_underground_resource_realization.gd'
       - 'tests/run_resource_runtime.gd'
       - 'tests/run_resource_composition.gd'
