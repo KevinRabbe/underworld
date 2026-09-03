@@ -1,0 +1,119 @@
+name: Character Reconciliation Repair
+
+on:
+  push:
+    branches:
+      - worker/char-reconcile-001
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]' && contains(github.event.head_commit.message, 'ci: arm governed character repair')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup Godot 4.7.2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Reconcile current main and apply bounded review repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_main="2dbde73949586bf3a2929f9173889915c426126c"
+          git fetch origin main
+          actual_main="$(git rev-parse origin/main)"
+          if [[ "$actual_main" != "$expected_main" ]]; then
+            echo "accepted main moved: expected $expected_main, got $actual_main" >&2
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          set +e
+          git merge --no-commit --no-ff origin/main
+          merge_rc=$?
+          set -e
+
+          mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+          for path in "${conflicts[@]}"; do
+            case "$path" in
+              app/game/game.gd|gameplay/player/player.gd)
+                # Accepted main owns lifecycle/SAVE/input. Character presentation is reapplied below.
+                git checkout --theirs -- "$path"
+                git add "$path"
+                ;;
+              *)
+                echo "unexpected merge conflict: $path" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          if [[ -n "$(git diff --name-only --diff-filter=U)" ]]; then
+            echo "unresolved merge conflicts remain" >&2
+            git diff --name-only --diff-filter=U >&2
+            exit 1
+          fi
+          if ! git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+            echo "expected a real current-main merge, merge exit was $merge_rc" >&2
+            exit 1
+          fi
+
+          python tools/ci/repair_char_reconcile.py
+
+          # Disposable repair machinery must not survive in the candidate tree.
+          rm -f tools/ci/repair_char_reconcile.py .github/workflows/char-reconcile-repair.yml
+          git add -A
+          git diff --cached --check
+          git commit -m "character: repair reconciliation on accepted main"
+
+      - name: Character validation
+        shell: bash
+        run: |
+          set -o pipefail
+          log="$(mktemp)"
+          godot --headless --path . --quit-after 1 --script res://tests/run_character.gd 2>&1 | tee "$log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"; then
+            exit 1
+          fi
+          grep -Fq '[CHARACTER VALIDATION] PASS' "$log"
+
+      - name: App shell validation
+        shell: bash
+        run: |
+          set -o pipefail
+          log="$(mktemp)"
+          godot --headless --path . --quit-after 1 --script res://tests/run_app_shell.gd 2>&1 | tee "$log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"; then
+            exit 1
+          fi
+          grep -Fq '[APP SHELL VALIDATION] PASS' "$log"
+
+      - name: Persistence state validation
+        shell: bash
+        run: |
+          set -o pipefail
+          log="$(mktemp)"
+          godot --headless --path . --script res://tests/run_persistence_state.gd 2>&1 | tee "$log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"; then
+            exit 1
+          fi
+          grep -Fq '[PERSISTENCE STATE VALIDATION] PASS' "$log"
+
+      - name: Push repaired candidate
+        shell: bash
+        run: git push origin HEAD:worker/char-reconcile-001
