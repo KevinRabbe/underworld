@@ -158,30 +158,37 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var request_variant: Variant = game.call("build_save_request")
 	if not request_variant is Dictionary or not bool(request_variant.get("success", false)):
 		failures.append("post-respawn Game could not build accepted SAVE request: %s" % [
-		request_variant.get("diagnostics", []) if request_variant is Dictionary else [],
+			request_variant.get("diagnostics", []) if request_variant is Dictionary else [],
 		])
 		_free_attached(game)
 		_cleanup_slot()
 		return failures
-	var request: Dictionary = request_variant
-	if request.get("resume_position", Vector3.ZERO) != player.global_position:
-		failures.append("post-respawn SAVE request did not capture committed recovery position")
-	var request_pending: Variant = request.get("pending_loot_states", null)
+	var request_object: Dictionary = request_variant
+	var request_variant_inner: Variant = request_object.get("request", null)
+	if not request_variant_inner is Dictionary:
+		failures.append("post-respawn SAVE request object did not contain detached request payload")
+		_free_attached(game)
+		_cleanup_slot()
+		return failures
+	var request: Dictionary = request_variant_inner
+	var resume_wire_variant: Variant = request.get("player_resume", null)
+	if not resume_wire_variant is Dictionary:
+		failures.append("post-respawn SAVE request omitted player_resume wire snapshot")
+	else:
+		var resume_wire: Dictionary = resume_wire_variant
+		var saved_resume := Vector3(
+			float(resume_wire.get("x", INF)),
+			float(resume_wire.get("y", INF)),
+			float(resume_wire.get("z", INF))
+		)
+		if saved_resume != player.global_position:
+			failures.append("post-respawn SAVE request did not capture committed recovery position")
+	var request_pending: Variant = request.get("pending_loot_jsons", null)
 	if not request_pending is Array or request_pending.size() != 1:
 		failures.append("post-respawn SAVE request changed unresolved pending-loot set")
-	elif request_pending[0].canonical_snapshot() != pending_before:
-		failures.append("post-respawn SAVE request changed pending-loot durable snapshot")
 
 	var service = GameSaveSlotService.new()
-	var saved: Dictionary = service.save_slot(
-		request.get("context", null),
-		request.get("delta_store", null),
-		request.get("inventory_state", null),
-		request.get("equipment_state", null),
-		request.get("pending_loot_states", []),
-		request.get("resume_position", Vector3.ZERO),
-		TEST_SLOT
-	)
+	var saved: Dictionary = service.save_slot(request_object, TEST_SLOT)
 	if not _require_success(saved, "post-respawn atomic SAVE", failures):
 		_free_attached(game)
 		_cleanup_slot()

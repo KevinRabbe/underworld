@@ -14,15 +14,26 @@ class FakeSaveSlotService:
 	var save_calls: int = 0
 	var slot_version: int = 0
 	var available: bool = false
+	var last_request: Dictionary = {}
 
 	func probe_slot(_slot_path: String) -> Dictionary:
-		return {"success": true, "available": available, "diagnostics": []}
+		return {
+			"success": true,
+			"available": available,
+			"classification": "AVAILABLE" if available else "NONE",
+			"diagnostics": [],
+		}
 
 	func load_slot(_slot_path: String) -> Dictionary:
-		return {"success": false, "diagnostics": ["fixture load not configured"]}
+		return {
+			"success": false,
+			"classification": "INVALID",
+			"diagnostics": ["fixture load not configured"],
+		}
 
-	func save_slot(_context, _delta_store, _inventory, _equipment, _pending, _position, _slot_path: String) -> Dictionary:
+	func save_slot(request_object: Dictionary, _slot_path: String, _condition: Dictionary = {}) -> Dictionary:
 		save_calls += 1
+		last_request = request_object.duplicate(true)
 		if fail_saves:
 			return {"success": false, "diagnostics": ["injected save failure"]}
 		slot_version += 1
