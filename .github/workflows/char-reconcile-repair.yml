@@ -89,6 +89,10 @@ jobs:
           git diff --cached --check
           git commit -m "character: repair reconciliation on accepted main"
 
+      - name: Import project resources
+        shell: bash
+        run: godot --headless --editor --path . --quit
+
       - name: Character validation
         shell: bash
         run: |
@@ -105,7 +109,7 @@ jobs:
         run: |
           set -o pipefail
           log="$(mktemp)"
-          godot --headless --path . --quit-after 1 --script res://tests/run_app_shell.gd 2>&1 | tee "$log"
+          godot --headless --path . --script res://tests/run_app_shell.gd 2>&1 | tee "$log"
           if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$log"; then
             exit 1
           fi
