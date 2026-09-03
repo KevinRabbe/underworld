@@ -298,8 +298,8 @@ static func _test_runtime_presentation(failures: Array[String]) -> void:
 	_expect_equal(failures, "directional locomotion blend owns five canonical points", locomotion.get_blend_point_count(), 5)
 	var forward_index: int = int(character.locomotion_point_indices.get(&"walk_forward", -1))
 	_expect_equal(failures, "project-owned forward locomotion point has stable index", forward_index, 1)
-	_expect_true(failures, "forward locomotion node and position resolve without engine-specific names", forward_index >= 0 and locomotion.get_blend_point_node(forward_index).animation == &"walk_forward" and locomotion.get_blend_point_position(forward_index).is_equal_approx(Vector2(0, 1)))
-	var expected_points := {&"idle": Vector2.ZERO, &"walk_forward": Vector2(0,1), &"walk_backward": Vector2(0,-1), &"strafe_left": Vector2(-1,0), &"strafe_right": Vector2(1,0)}
+	_expect_true(failures, "forward locomotion node and position resolve without engine-specific names", forward_index >= 0 and locomotion.get_blend_point_node(forward_index).animation == &"walk_forward" and locomotion.get_blend_point_position(forward_index).is_equal_approx(Vector2(0, -1)))
+	var expected_points := {&"idle": Vector2.ZERO, &"walk_forward": Vector2(0,-1), &"walk_backward": Vector2(0,1), &"strafe_left": Vector2(-1,0), &"strafe_right": Vector2(1,0)}
 	for point_name in expected_points.keys():
 		var point_index: int = int(character.locomotion_point_indices.get(point_name, -1))
 		_expect_true(failures, "%s locomotion point resolves canonically" % point_name, point_index >= 0 and locomotion.get_blend_point_node(point_index).animation == point_name and locomotion.get_blend_point_position(point_index).is_equal_approx(expected_points[point_name]))

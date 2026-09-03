@@ -87,11 +87,11 @@ func _set_locomotion(state: StringName) -> void:
 	vertical_velocity = 0.0
 	sprinting = state == &"sprint"
 	match state:
-		&"walk_forward": locomotion_velocity = Vector3(0.0, 0.0, 4.0)
-		&"walk_backward": locomotion_velocity = Vector3(0.0, 0.0, -4.0)
+		&"walk_forward": locomotion_velocity = Vector3(0.0, 0.0, -4.0)
+		&"walk_backward": locomotion_velocity = Vector3(0.0, 0.0, 4.0)
 		&"strafe_left": locomotion_velocity = Vector3(-4.0, 0.0, 0.0)
 		&"strafe_right": locomotion_velocity = Vector3(4.0, 0.0, 0.0)
-		&"sprint": locomotion_velocity = Vector3(0.0, 0.0, 8.5)
+		&"sprint": locomotion_velocity = Vector3(0.0, 0.0, -8.5)
 		_: locomotion_velocity = Vector3.ZERO
 	block_held = false
 	status_label.text = _status_text(str(state))
@@ -116,7 +116,7 @@ func _play_action(action: StringName) -> void:
 	block_held = false
 	match action:
 		&"dodge_left": character.play_dodge(Vector2.LEFT)
-		&"dodge_forward": character.play_dodge(Vector2.UP)
+		&"dodge_forward": character.play_dodge(Vector2.DOWN)
 		&"dodge_right": character.play_dodge(Vector2.RIGHT)
 		&"attack_light": character.play_attack(0.42, &"light")
 		&"attack_heavy": character.play_attack(0.78, &"heavy")

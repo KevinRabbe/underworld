@@ -305,7 +305,7 @@ func _build_animation_graph() -> void:
 	var locomotion := AnimationNodeBlendSpace2D.new()
 	locomotion.blend_mode = AnimationNodeBlendSpace2D.BLEND_MODE_DISCRETE_CARRY
 	locomotion_point_indices.clear()
-	for point_data in [["idle", Vector2.ZERO], ["walk_forward", Vector2(0,1)], ["walk_backward", Vector2(0,-1)], ["strafe_left", Vector2(-1,0)], ["strafe_right", Vector2(1,0)]]:
+	for point_data in [["idle", Vector2.ZERO], ["walk_forward", Vector2(0,-1)], ["walk_backward", Vector2(0,1)], ["strafe_left", Vector2(-1,0)], ["strafe_right", Vector2(1,0)]]:
 		var locomotion_node := AnimationNodeAnimation.new()
 		locomotion_node.resource_name = point_data[0]
 		locomotion_node.animation = point_data[0]

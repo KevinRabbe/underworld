@@ -48,6 +48,60 @@ static func run(tree: SceneTree) -> Array[String]:
 		fixture_root.free()
 		return failures
 
+	# The real Player/provider/controller chain must share one local -Z forward convention.
+	var directional_controller = player.get("animation_controller")
+	var directional_presentation = player.call("get_mannequin")
+	_expect_true(failures, "real Player exposes configured animation controller", directional_controller != null)
+	if directional_controller != null and directional_presentation != null:
+		_expect_true(
+			failures,
+			"real Player controller accepts local -Z forward locomotion",
+			bool(directional_controller.call("update_locomotion", 1.0 / 60.0, Vector3(0.0, 0.0, -4.0), 0.0, true, false))
+		)
+		_expect_equal(
+			failures,
+			"real Player local -Z resolves semantic walk-forward",
+			String(directional_controller.call("last_locomotion_role")),
+			"animation_role.locomotion.walk_forward"
+		)
+		var directional_tree = directional_presentation.get("animation_tree")
+		_expect_true(
+			failures,
+			"voxel adapter receives -Z forward blend",
+			directional_tree != null and Vector2(directional_tree.get("parameters/locomotion/blend_position")).is_equal_approx(Vector2(0.0, -1.0))
+		)
+		directional_controller.call("update_locomotion", 1.0 / 60.0, Vector3(0.0, 0.0, 4.0), 0.0, true, false)
+		_expect_equal(
+			failures,
+			"real Player local +Z resolves semantic walk-backward",
+			String(directional_controller.call("last_locomotion_role")),
+			"animation_role.locomotion.walk_backward"
+		)
+		_expect_true(
+			failures,
+			"voxel adapter receives +Z backward blend",
+			Vector2(directional_tree.get("parameters/locomotion/blend_position")).is_equal_approx(Vector2(0.0, 1.0))
+		)
+		actions.call("reset")
+		stamina.call("reset")
+		player.get("visual_root").set("rotation", Vector3.ZERO)
+		_expect_true(failures, "real Player forward dodge starts", bool(player.call("_start_dodge", Vector3.FORWARD)))
+		_expect_equal(
+			failures,
+			"real Player forward dodge resolves semantic forward role",
+			String(directional_controller.call("last_animation_role")),
+			"animation_role.action.dodge.forward"
+		)
+		_expect_equal(
+			failures,
+			"real Player forward dodge reaches voxel forward presentation",
+			String(directional_presentation.get("current_animation_state")),
+			"dodge_forward"
+		)
+		actions.call("reset")
+		stamina.call("reset")
+		directional_presentation.call("reset_pose")
+
 	# Combat actions establish a camera-facing direction. Directional defense then
 	# resolves against that visual forward rather than a fixed world axis.
 	var visual_root: Node3D = player.get("visual_root")

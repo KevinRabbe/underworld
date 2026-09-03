@@ -138,7 +138,9 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 			&"stone_axe_light"
 		)
 
-	# Respawn/reset is a hard boundary: buffered input must never leak through it.
+	# Respawn commit is the hard reset boundary: buffered input must never leak
+	# through defeat/recovery. Entering defeat alone deliberately does not create
+	# a second reset authority; the validated commit owns the reset exactly once.
 	actions.call("reset")
 	player.call("set_equipped_tool", "stone_axe")
 	_expect_true(
@@ -148,8 +150,9 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 	)
 	player.call("_request_attack")
 	_expect_equal(failures, "pre-reset buffer exists", String(player.call("get_buffered_action_name")), "attack")
-	_expect_true(failures, "defeat boundary commits before respawn", bool(player.call("_enter_defeated", &"damage")))
-	_expect_true(failures, "accepted respawn commits", bool(player.call("commit_respawn", player.global_position)))
+	_expect_true(failures, "defeat boundary enters disabled state", bool(player.call("_enter_defeated", &"damage")))
+	_expect_equal(failures, "defeat entry preserves buffer until commit", String(player.call("get_buffered_action_name")), "attack")
+	_expect_true(failures, "validated respawn commit succeeds", bool(player.call("commit_respawn", Vector3(2.0, 4.0, 6.0))))
 	_expect_equal(failures, "respawn clears buffered intent", String(player.call("get_buffered_action_name")), "")
 	_expect_true(failures, "respawn returns action controller to free", bool(actions.call("is_free")))
 

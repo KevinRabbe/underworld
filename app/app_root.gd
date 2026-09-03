@@ -84,7 +84,7 @@ func show_title() -> bool:
 		var probe: Dictionary = _save_slot_service.probe_slot(_save_slot_path)
 		current_scene.call(
 			"set_continue_available",
-			bool(probe.get("success", false)) and bool(probe.get("available", false))
+			str(probe.get("classification", GameSaveSlotService.CLASS_INVALID)) == GameSaveSlotService.CLASS_AVAILABLE
 		)
 	return true
 
@@ -108,15 +108,9 @@ func save_current_game() -> Dictionary:
 	var request: Dictionary = request_variant
 	if not bool(request.get("success", false)):
 		return request
-	return _save_slot_service.save_slot(
-		request.get("context", null),
-		request.get("delta_store", null),
-		request.get("inventory_state", null),
-		request.get("equipment_state", null),
-		request.get("pending_loot_states", []),
-		request.get("resume_position", Vector3.ZERO),
-		_save_slot_path
-	)
+	# The application boundary deliberately does not know the SAVE schema. The
+	# successful detached request object is forwarded byte-for-value unchanged.
+	return _save_slot_service.save_slot(request, _save_slot_path)
 
 
 func continue_game() -> bool:
@@ -125,7 +119,7 @@ func continue_game() -> bool:
 	if _transition_in_progress:
 		return false
 	var loaded: Dictionary = _save_slot_service.load_slot(_save_slot_path)
-	if not bool(loaded.get("success", false)):
+	if str(loaded.get("classification", GameSaveSlotService.CLASS_INVALID)) != GameSaveSlotService.CLASS_AVAILABLE:
 		return false
 	var candidate_variant: Variant = loaded.get("candidate", null)
 	if not candidate_variant is Dictionary:
@@ -219,10 +213,6 @@ func _commit_prepared_scene(next_scene: Node, route_id: StringName) -> bool:
 			next_scene.free()
 		_transition_in_progress = false
 		return false
-	# Route replacement is a hard ownership boundary. Presentation focus entries
-	# and gameplay-input captures may be owned by Nodes inside the outgoing route;
-	# clear both application-lived coordinators before detaching that route so no
-	# dead owner can poison Title or a later Game instance.
 	if ui_focus_stack != null and ui_focus_stack.has_method("clear"):
 		ui_focus_stack.call("clear", false)
 	if gameplay_input_gate != null and gameplay_input_gate.has_method("clear_captures"):

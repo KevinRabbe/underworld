@@ -1,6 +1,7 @@
 extends RefCounted
 
 const PlayerScript := preload("res://gameplay/player/player.gd")
+const VoxelProvider := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
 const DeathRecoveryControllerScript := preload("res://gameplay/player/lifecycle/player_death_recovery_controller.gd")
 
 
@@ -216,6 +217,7 @@ static func _spawn_player(tree: SceneTree, failures: Array[String]):
 	var fixture_root := Node3D.new()
 	tree.root.add_child(fixture_root)
 	var player = PlayerScript.new()
+	player.set("character_presentation_provider", VoxelProvider.new())
 	fixture_root.add_child(player)
 	return player
 
