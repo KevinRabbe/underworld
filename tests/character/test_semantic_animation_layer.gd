@@ -133,10 +133,14 @@ static func _test_two_sets_and_rigs_share_semantics(failures: Array[String]) -> 
 	_expect_true(failures, "set A block held", adapter_a.held_active)
 	_expect_true(failures, "set B block held", adapter_b.held_active)
 
+	controller_a.update_locomotion(1.0 / 60.0, Vector3(0.0, 0.0, -4.0), 0.0, true, false)
+	controller_b.update_locomotion(1.0 / 60.0, Vector3(0.0, 0.0, -4.0), 0.0, true, false)
+	_expect_equal(failures, "set A local -Z locomotion maps to forward", adapter_a.last_locomotion, "pack_a.walk_forward")
+	_expect_equal(failures, "set B local -Z locomotion maps to forward", adapter_b.last_locomotion, "pack_b.walk_forward")
 	controller_a.update_locomotion(1.0 / 60.0, Vector3(0.0, 0.0, 4.0), 0.0, true, false)
 	controller_b.update_locomotion(1.0 / 60.0, Vector3(0.0, 0.0, 4.0), 0.0, true, false)
-	_expect_equal(failures, "set A locomotion binding", adapter_a.last_locomotion, "pack_a.walk_forward")
-	_expect_equal(failures, "set B locomotion binding", adapter_b.last_locomotion, "pack_b.walk_forward")
+	_expect_equal(failures, "set A local +Z locomotion maps to backward", adapter_a.last_locomotion, "pack_a.walk_backward")
+	_expect_equal(failures, "set B local +Z locomotion maps to backward", adapter_b.last_locomotion, "pack_b.walk_backward")
 	_expect_true(failures, "rig A semantic socket resolves", controller_a.resolve_rig_node("rig_role.socket.hand.right") == adapter_a.socket_node)
 	_expect_true(failures, "rig B semantic socket resolves", controller_b.resolve_rig_node("rig_role.socket.hand.right") == adapter_b.socket_node)
 

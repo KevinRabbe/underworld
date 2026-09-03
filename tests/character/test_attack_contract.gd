@@ -5,6 +5,7 @@ const ActionControllerScript := preload("res://gameplay/player/actions/player_ac
 const AttackCatalogScript := preload("res://gameplay/combat/attacks/player_attack_catalog.gd")
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
+const VoxelProvider := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
 
 
 static func run(tree: SceneTree) -> Array[String]:
@@ -116,6 +117,7 @@ static func _test_live_player_activation(tree: SceneTree, failures: Array[String
 	var fixture_root := Node3D.new()
 	tree.root.add_child(fixture_root)
 	var player: Node = PlayerScript.new()
+	player.set("character_presentation_provider", VoxelProvider.new())
 	fixture_root.add_child(player)
 	player.call("set_equipped_tool", "stone_axe")
 

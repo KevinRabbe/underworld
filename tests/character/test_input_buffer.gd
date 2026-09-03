@@ -2,6 +2,7 @@ extends RefCounted
 
 const InputBufferScript := preload("res://gameplay/player/input/player_input_buffer.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
+const VoxelProvider := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
 
 
 static func run(tree: SceneTree) -> Array[String]:
@@ -67,6 +68,7 @@ static func _test_live_attack_buffer(tree: SceneTree, failures: Array[String]) -
 	var fixture_root := Node3D.new()
 	tree.root.add_child(fixture_root)
 	var player: Node = PlayerScript.new()
+	player.set("character_presentation_provider", VoxelProvider.new())
 	fixture_root.add_child(player)
 	player.call("set_equipped_tool", "stone_axe")
 
@@ -164,6 +166,7 @@ static func _test_live_priority_and_expiry(tree: SceneTree, failures: Array[Stri
 	var fixture_root := Node3D.new()
 	tree.root.add_child(fixture_root)
 	var player: Node = PlayerScript.new()
+	player.set("character_presentation_provider", VoxelProvider.new())
 	fixture_root.add_child(player)
 	var actions = player.get("action_controller")
 	var buffer = player.get("input_buffer")

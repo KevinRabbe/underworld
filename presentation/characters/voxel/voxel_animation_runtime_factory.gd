@@ -1,7 +1,8 @@
 extends RefCounted
+class_name UnderworldVoxelAnimationRuntimeFactory
 
 const CharacterAnimationRuntimeFactory := preload("res://presentation/characters/runtime/character_animation_runtime_factory.gd")
-const PrototypeMannequinPresentationAdapter := preload("res://presentation/characters/player/prototype_mannequin/prototype_mannequin_presentation_adapter.gd")
+const VoxelAdapter := preload("res://presentation/characters/voxel/voxel_character_presentation_adapter.gd")
 
 const ANIMATION_SET_ID := "animation_set.humanoid.prototype"
 const CONTENT_PATHS: Array[String] = [
@@ -10,5 +11,5 @@ const CONTENT_PATHS: Array[String] = [
 ]
 
 
-static func build(mannequin) -> Dictionary:
-	return CharacterAnimationRuntimeFactory.build(ANIMATION_SET_ID, CONTENT_PATHS, PrototypeMannequinPresentationAdapter.new(mannequin))
+static func build(character) -> Dictionary:
+	return CharacterAnimationRuntimeFactory.build(ANIMATION_SET_ID, CONTENT_PATHS, VoxelAdapter.new(character))
