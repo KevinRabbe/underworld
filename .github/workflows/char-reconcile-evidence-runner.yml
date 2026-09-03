@@ -16,14 +16,14 @@ jobs:
       - name: Checkout exact reconciled candidate
         uses: actions/checkout@v6
         with:
-          ref: 1e22bde42dad554d68c6beab5499210da201016b
+          ref: d78127cc613bfd85f1eab87c77af928a33f3a01f
           fetch-depth: 0
 
       - name: Assert exact candidate identity
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "1e22bde42dad554d68c6beab5499210da201016b"
-          test "$(git rev-parse HEAD^{tree})" = "27647177c2f26c52e74acaa5eb4ff90047c05a24"
+          test "$(git rev-parse HEAD)" = "d78127cc613bfd85f1eab87c77af928a33f3a01f"
+          test "$(git rev-parse HEAD^{tree})" = "bafc46f3d070e8fb0e87d8d5d326b8464ac76611"
           test ! -e presentation/characters/faceted/.visual_evidence_trigger
           test ! -e .github/workflows/char514-final-freeze-once.yml
 
@@ -141,8 +141,8 @@ jobs:
           grep -Fq '[CHARACTER VALIDATION] PASS' character-evidence/character_metrics.txt
           python3 tools/ci/validate_repository_layout.py | tee character-evidence/repository_layout.txt
           {
-            echo 'candidate_sha=1e22bde42dad554d68c6beab5499210da201016b'
-            echo 'candidate_tree=27647177c2f26c52e74acaa5eb4ff90047c05a24'
+            echo 'candidate_sha=d78127cc613bfd85f1eab87c77af928a33f3a01f'
+            echo 'candidate_tree=bafc46f3d070e8fb0e87d8d5d326b8464ac76611'
             echo 'godot_version=4.7.2'
             echo 'gameplay_camera_distance=4.5'
             echo 'gameplay_camera_fov=75.0'
@@ -155,7 +155,7 @@ jobs:
       - name: Upload exact-candidate runtime evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: char514-runtime-evidence-1e22bde4
+          name: char514-runtime-evidence-d78127cc
           path: character-evidence/*
           if-no-files-found: error
           retention-days: 7
