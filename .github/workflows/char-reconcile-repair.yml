@@ -71,15 +71,12 @@ jobs:
             exit 1
           fi
 
-          # The semantic patcher is deliberately idempotent for hunks Git can
-          # already combine cleanly during the main merge; review-only repairs
-          # still fail closed if neither old nor expected-new text is present.
           python - <<'PY'
           from pathlib import Path
           p = Path("tools/ci/repair_char_reconcile.py")
           text = p.read_text(encoding="utf-8")
           old = '''def replace_once(path: str, old: str, new: str) -> None:\n    p = Path(path)\n    text = p.read_text(encoding="utf-8")\n    count = text.count(old)\n    if count != 1:\n        raise RuntimeError(f"{path}: expected exactly one replacement target, found {count}: {old[:120]!r}")\n    p.write_text(text.replace(old, new, 1), encoding="utf-8")\n'''
-          new = '''def replace_once(path: str, old: str, new: str) -> None:\n    p = Path(path)\n    text = p.read_text(encoding="utf-8")\n    new_count = text.count(new)\n    if new_count == 1:\n        return\n    if new_count > 1:\n        raise RuntimeError(f"{path}: expected at most one already-repaired target, found {new_count}: {new[:120]!r}")\n    count = text.count(old)\n    if count != 1:\n        raise RuntimeError(f"{path}: expected exactly one repair target, found {count}: {old[:120]!r}")\n    p.write_text(text.replace(old, new, 1), encoding="utf-8")\n'''
+          new = '''def replace_once(path: str, old: str, new: str) -> None:\n    p = Path(path)\n    text = p.read_text(encoding="utf-8")\n    old_count = text.count(old)\n    if new == "":\n        if old_count == 0:\n            return\n        if old_count != 1:\n            raise RuntimeError(f"{path}: expected exactly one removable target, found {old_count}: {old[:120]!r}")\n        p.write_text(text.replace(old, new, 1), encoding="utf-8")\n        return\n    new_count = text.count(new)\n    if new_count == 1:\n        return\n    if new_count > 1:\n        raise RuntimeError(f"{path}: expected at most one already-repaired target, found {new_count}: {new[:120]!r}")\n    if old_count != 1:\n        raise RuntimeError(f"{path}: expected exactly one repair target, found {old_count}: {old[:120]!r}")\n    p.write_text(text.replace(old, new, 1), encoding="utf-8")\n'''
           if text.count(old) != 1:
               raise RuntimeError("repair helper function shape changed unexpectedly")
           p.write_text(text.replace(old, new, 1), encoding="utf-8")
