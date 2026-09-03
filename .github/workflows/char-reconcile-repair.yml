@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   repair:
-    if: github.actor != 'github-actions[bot]' && contains(github.event.head_commit.message, 'ci: arm governed character repair')
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -52,7 +51,6 @@ jobs:
           for path in "${conflicts[@]}"; do
             case "$path" in
               app/game/game.gd|gameplay/player/player.gd)
-                # Accepted main owns lifecycle/SAVE/input. Character presentation is reapplied below.
                 git checkout --theirs -- "$path"
                 git add "$path"
                 ;;
@@ -75,7 +73,6 @@ jobs:
 
           python tools/ci/repair_char_reconcile.py
 
-          # Disposable repair machinery must not survive in the candidate tree.
           rm -f tools/ci/repair_char_reconcile.py .github/workflows/char-reconcile-repair.yml
           git add -A
           git diff --cached --check
