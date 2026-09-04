@@ -19,6 +19,8 @@ const WeaponRuntimeSessionFailureCompositionTests := preload("res://tests/conten
 const WeaponRuntimeSessionRestoreCompositionTests := preload("res://tests/content/test_weapon_runtime_session_restore_composition.gd")
 const ReservedSiteAssignmentTests := preload("res://tests/content/test_reserved_site_assignment.gd")
 const UndergroundPlacementTests := preload("res://tests/content/test_underground_placement.gd")
+const UndergroundPlacementChannelTests := preload("res://tests/content/test_underground_placement_channels.gd")
+const UndergroundResourceCompositionTests := preload("res://tests/resources/test_underground_resource_composition.gd")
 const SurfaceHarvestContentTests := preload("res://tests/content/test_surface_harvest_content.gd")
 const LootContractTests := preload("res://tests/content/test_loot_contract.gd")
 const CraftingContractTests := preload("res://tests/crafting/test_crafting_contract.gd")
@@ -45,12 +47,14 @@ func _init() -> void:
 	failures.append_array(WeaponRuntimeSessionRestoreCompositionTests.run())
 	failures.append_array(ReservedSiteAssignmentTests.run())
 	failures.append_array(UndergroundPlacementTests.run())
+	failures.append_array(UndergroundPlacementChannelTests.run())
+	failures.append_array(UndergroundResourceCompositionTests.run())
 	failures.append_array(SurfaceHarvestContentTests.run())
 	failures.append_array(LootContractTests.run())
 	failures.append_array(CraftingContractTests.run())
 	if failures.is_empty():
 		print("[VALIDATION] PASS content")
-		print("  semantic content ids / deterministic registry / category-capability-role schemas / headless validation + snapshot evidence + stale-consumer guards / archetype realization / item / resource / creature / weapon / production weapon runtime + session composition + presentation-failure boundary + restored-selection reconstruction + failure atomicity / reserved-site assignment / underground placement / surface-harvest / loot / crafting rulebook contracts passed")
+		print("  semantic content ids / deterministic registry / category-capability-role schemas / headless validation + snapshot evidence + stale-consumer guards / archetype realization / item / resource / creature / weapon / production weapon runtime + session composition + presentation-failure boundary + restored-selection reconstruction + failure atomicity / reserved-site assignment / underground placement + channel identity / production iron placement composition / surface-harvest / loot / crafting rulebook contracts passed")
 		quit(0)
 		return
 

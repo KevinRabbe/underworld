@@ -5,7 +5,21 @@ on:
     paths:
       - 'gameplay/resources/runtime/**'
       - 'worldgen/identity/stable_id.gd'
+      - 'worldgen/geometry/geometry_cell_address.gd'
+      - 'worldgen/runtime/underworld_cave_runtime_controller.gd'
+      - 'worldgen/runtime/underworld_runtime_cell_definition_service.gd'
+      - 'worldgen/runtime/underworld_runtime_cell_source_query.gd'
+      - 'worldgen/runtime/underworld_runtime_cell_lifecycle_relay.gd'
+      - 'worldgen/runtime/underworld_runtime_cell_executor.gd'
+      - 'worldgen/runtime/underworld_runtime_streamer.gd'
+      - 'worldgen/runtime/runtime_cell_record.gd'
+      - 'content/placement/underground_placement_candidate.gd'
+      - 'content/placement/underground_placement_policy.gd'
       - 'content/placement/underground_placement_record.gd'
+      - 'content/placement/underground_placement_service.gd'
+      - 'content/reserved_sites/reserved_site_assignment.gd'
+      - 'content/reserved_sites/reserved_site_assignment_service.gd'
+      - 'content/reserved_sites/reserved_site_content_definition.gd'
       - 'gameplay/resources/definitions/resource_definition.gd'
       - 'gameplay/resources/definitions/resource_yield_rule.gd'
       - 'gameplay/resources/definitions/authored_harvestable_resource_definition.gd'
@@ -31,7 +45,17 @@ on:
       - 'gameplay/items/inventory/item_stack_state.gd'
       - 'gameplay/items/inventory/item_instance_state.gd'
       - 'tests/resources/test_underground_resource_runtime.gd'
+      - 'tests/resources/test_underground_resource_cell_observer.gd'
+      - 'tests/resources/test_underground_resource_composition.gd'
+      - 'tests/resources/test_underground_resource_residency.gd'
+      - 'tests/resources/test_underground_resource_mining_ticket.gd'
+      - 'tests/resources/test_underground_resource_support.gd'
+      - 'tests/resources/test_underground_resource_harvest_sink.gd'
+      - 'tests/resources/test_underground_resource_runtime_composition.gd'
+      - 'tests/resources/test_underground_resource_root_alias.gd'
+      - 'tests/resources/test_underground_resource_realization.gd'
       - 'tests/run_resource_runtime.gd'
+      - 'tests/run_resource_composition.gd'
       - '.github/workflows/resource-runtime-validation.yml'
   push:
     branches:
@@ -61,6 +85,12 @@ jobs:
       - name: Show Godot version
         run: godot --version
 
+      # Keep the embedded persistence contract on the same accepted invocation
+      # prerequisites as Persistence State Validation. Imported SVG/UI resources
+      # are required by the integrated Game lifecycle exercised later below.
+      - name: Import project resources
+        run: godot --headless --editor --path . --quit
+
       - name: Run resource runtime contracts
         run: |
           set -o pipefail
@@ -72,6 +102,21 @@ jobs:
             exit 1
           fi
           grep -Fq '[RESOURCE RUNTIME VALIDATION] PASS' "$validation_log"
+
+      - name: Run resource composition bridge contracts
+        run: |
+          set -o pipefail
+          validation_log="$(mktemp)"
+          # Successful physics-backed tests own quit(0/1). The generous safety
+          # cap prevents an unexpected script error from stranding SceneTree and
+          # hiding the diagnostic until the 10-minute workflow timeout.
+          godot --headless --path . --quit-after 600 \
+            --script res://tests/run_resource_composition.gd 2>&1 \
+            | tee "$validation_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
+            exit 1
+          fi
+          grep -Fq '[RESOURCE COMPOSITION VALIDATION] PASS' "$validation_log"
 
       - name: Run accepted numeric contracts
         run: |
@@ -89,7 +134,10 @@ jobs:
         run: |
           set -o pipefail
           validation_log="$(mktemp)"
-          godot --headless --path . --quit-after 1 \
+          # Persistence runtime contracts deliberately await real physics frames.
+          # Match the accepted Persistence State Validation runner and let its
+          # SceneTree runner own quit(0/1); --quit-after 1 truncates that proof.
+          godot --headless --path . \
             --script res://tests/run_persistence_state.gd 2>&1 \
             | tee "$validation_log"
           if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
