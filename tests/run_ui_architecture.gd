@@ -1,6 +1,7 @@
 extends SceneTree
 
 const UI_ARCHITECTURE_CONTRACT := preload("res://tests/presentation/test_ui_architecture_contract.gd")
+const UI_SCALE_CONTRACT := preload("res://tests/presentation/test_ui_scale_contract.gd")
 
 
 func _initialize() -> void:
@@ -8,7 +9,9 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	var failures: Array[String] = UI_ARCHITECTURE_CONTRACT.run()
+	var failures: Array[String] = []
+	failures.append_array(UI_ARCHITECTURE_CONTRACT.run())
+	failures.append_array(UI_SCALE_CONTRACT.run())
 	if failures.is_empty():
 		print("[UI ARCHITECTURE VALIDATION] PASS")
 		quit(0)
