@@ -12,7 +12,7 @@ const GOLDEN_CANONICAL: String = "gm1|15:manifest-schema|1:1|11:seed-schema|1:1|
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
-	_test_current_golden_round_trip(failures)
+	_test_historical_golden_and_current_extension(failures)
 	_test_deterministic_repeat_round_trip(failures)
 	_test_snapshot_alias_boundaries(failures)
 	_test_registry_compatibility_is_separate_from_identity(failures)
@@ -23,59 +23,56 @@ static func run() -> Array[String]:
 	return failures
 
 
-static func _test_current_golden_round_trip(failures: Array[String]) -> void:
-	var context = Context.new(424242)
-	_expect_empty(failures, "current context validates", context.validate())
+static func _test_historical_golden_and_current_extension(failures: Array[String]) -> void:
+	var current = Context.new(424242)
+	_expect_empty(failures, "current context validates", current.validate())
+	_expect_true(
+		failures,
+		"fresh gateway-aware manifest intentionally differs from pre-gateway golden",
+		current.generator_manifest_id != GOLDEN_MANIFEST_ID
+	)
+	var current_stages: Dictionary = current.generator_manifest.stage_revisions()
+	_expect_equal(failures, "fresh current manifest captures gateway source stage", int(current_stages.get("gateway.source_site", 0)), 1)
+	_expect_equal(failures, "fresh current manifest captures gateway destination stage", int(current_stages.get("gateway.destination_site", 0)), 1)
+	_expect_equal(failures, "fresh current manifest captures gateway link stage", int(current_stages.get("gateway.link", 0)), 1)
+
+	var historical = _pre_gateway_context(424242)
+	_expect_empty(failures, "pre-gateway historical context validates structurally", historical.validate_structure())
+	_expect_empty(
+		failures,
+		"pre-gateway historical manifest stays runtime compatible under expanded support",
+		historical.generator_manifest.runtime_compatibility_failures()
+	)
 	_expect_equal(
 		failures,
-		"pre-430 canonical manifest bytes remain exact",
-		context.generator_manifest.canonical_text(),
+		"pre-gateway canonical manifest bytes remain exact",
+		historical.generator_manifest.canonical_text(),
 		GOLDEN_CANONICAL
 	)
 	_expect_equal(
 		failures,
-		"pre-430 manifest ID remains exact",
-		context.generator_manifest_id,
+		"pre-gateway manifest ID remains exact",
+		historical.generator_manifest_id,
 		GOLDEN_MANIFEST_ID
 	)
 	_expect_equal(
 		failures,
-		"pre-430 WorldId remains exact",
-		context.world_id,
+		"pre-gateway WorldId remains exact",
+		historical.world_id,
 		GOLDEN_WORLD_ID_424242
 	)
 
-	var package: Dictionary = RootPackage.encode(context)
+	var package: Dictionary = RootPackage.encode(historical)
 	var rehydrated: Dictionary = RootPackage.rehydrate(424242, package)
-	_expect_true(failures, "current package rehydrates structurally", bool(rehydrated.get("success", false)))
-	_expect_true(failures, "current package is runtime compatible", bool(rehydrated.get("compatible", false)))
+	_expect_true(failures, "historical package rehydrates structurally", bool(rehydrated.get("success", false)))
+	_expect_true(failures, "historical package remains runtime compatible", bool(rehydrated.get("compatible", false)))
 	if not bool(rehydrated.get("success", false)):
 		return
 	var restored = rehydrated["context"]
-	_expect_equal(
-		failures,
-		"rehydrated canonical header is exact",
-		restored.canonical_header(),
-		context.canonical_header()
-	)
-	_expect_equal(
-		failures,
-		"rehydrated manifest bytes are exact",
-		restored.generator_manifest.canonical_text(),
-		GOLDEN_CANONICAL
-	)
-	_expect_equal(
-		failures,
-		"rehydrated manifest ID is exact",
-		restored.generator_manifest_id,
-		GOLDEN_MANIFEST_ID
-	)
-	_expect_equal(
-		failures,
-		"rehydrated WorldId is exact",
-		restored.world_id,
-		GOLDEN_WORLD_ID_424242
-	)
+	_expect_equal(failures, "rehydrated historical header is exact", restored.canonical_header(), historical.canonical_header())
+	_expect_equal(failures, "rehydrated historical manifest bytes are exact", restored.generator_manifest.canonical_text(), GOLDEN_CANONICAL)
+	_expect_equal(failures, "rehydrated historical manifest ID is exact", restored.generator_manifest_id, GOLDEN_MANIFEST_ID)
+	_expect_equal(failures, "rehydrated historical WorldId is exact", restored.world_id, GOLDEN_WORLD_ID_424242)
 
 
 static func _test_deterministic_repeat_round_trip(failures: Array[String]) -> void:
@@ -128,7 +125,8 @@ static func _test_snapshot_alias_boundaries(failures: Array[String]) -> void:
 
 
 static func _test_registry_compatibility_is_separate_from_identity(failures: Array[String]) -> void:
-	var manifest = GeneratorManifest.foundation_default()
+	var historical = _pre_gateway_context(424242)
+	var manifest = historical.generator_manifest
 	var baseline_text: String = manifest.canonical_text()
 	var baseline_id: String = manifest.manifest_id()
 	var support: Dictionary = GeneratorManifest.current_runtime_support()
@@ -150,7 +148,7 @@ static func _test_registry_compatibility_is_separate_from_identity(failures: Arr
 	_expect_equal(failures, "extra runtime domain cannot change manifest bytes", manifest.canonical_text(), baseline_text)
 	_expect_equal(failures, "extra runtime domain cannot change manifest ID", manifest.manifest_id(), baseline_id)
 
-	var package: Dictionary = RootPackage.encode(Context.new(424242))
+	var package: Dictionary = RootPackage.encode(historical)
 	var package_with_extra_support: Dictionary = RootPackage.rehydrate(
 		424242,
 		package,
@@ -158,49 +156,22 @@ static func _test_registry_compatibility_is_separate_from_identity(failures: Arr
 	)
 	_expect_true(
 		failures,
-		"package rehydrate stays compatible after extra runtime domain appears",
+		"historical package stays compatible after extra runtime domain appears",
 		bool(package_with_extra_support.get("compatible", false))
 	)
 	if bool(package_with_extra_support.get("success", false)):
-		_expect_equal(
-			failures,
-			"package rehydrate after extra runtime domain preserves exact manifest ID",
-			package_with_extra_support["context"].generator_manifest_id,
-			GOLDEN_MANIFEST_ID
-		)
-		_expect_equal(
-			failures,
-			"package rehydrate after extra runtime domain preserves exact canonical bytes",
-			package_with_extra_support["context"].generator_manifest.canonical_text(),
-			GOLDEN_CANONICAL
-		)
+		_expect_equal(failures, "historical package preserves exact manifest ID under superset support", package_with_extra_support["context"].generator_manifest_id, GOLDEN_MANIFEST_ID)
+		_expect_equal(failures, "historical package preserves exact canonical bytes under superset support", package_with_extra_support["context"].generator_manifest.canonical_text(), GOLDEN_CANONICAL)
 
 	var mismatch_support: Dictionary = GeneratorManifest.current_runtime_support()
 	mismatch_support["seed_domain_descriptors"][0]["revision"] = 2
 	mismatch_support["seed_domain_descriptors"][0]["readable_name"] = "fixture.changed.name"
 	var mismatch_failures: Array[String] = manifest.runtime_compatibility_failures(mismatch_support)
-	_expect_true(
-		failures,
-		"same domain ID with revision/name mismatch fails compatibility",
-		not mismatch_failures.is_empty()
-	)
-	var package_with_mismatch: Dictionary = RootPackage.rehydrate(
-		424242,
-		package,
-		mismatch_support
-	)
-	_expect_true(
-		failures,
-		"package rehydrate reports same-ID seed-domain mismatch",
-		not bool(package_with_mismatch.get("compatible", true))
-	)
+	_expect_true(failures, "same domain ID with revision/name mismatch fails compatibility", not mismatch_failures.is_empty())
+	var package_with_mismatch: Dictionary = RootPackage.rehydrate(424242, package, mismatch_support)
+	_expect_true(failures, "package rehydrate reports same-ID seed-domain mismatch", not bool(package_with_mismatch.get("compatible", true)))
 	if bool(package_with_mismatch.get("success", false)):
-		_expect_equal(
-			failures,
-			"package compatibility mismatch cannot rewrite exact manifest ID",
-			package_with_mismatch["context"].generator_manifest_id,
-			GOLDEN_MANIFEST_ID
-		)
+		_expect_equal(failures, "compatibility mismatch cannot rewrite exact historical manifest ID", package_with_mismatch["context"].generator_manifest_id, GOLDEN_MANIFEST_ID)
 	_expect_equal(failures, "compatibility failure cannot rewrite manifest identity", manifest.manifest_id(), baseline_id)
 
 
@@ -216,32 +187,15 @@ static func _test_historical_manifest_schema_identity(failures: Array[String]) -
 	)
 	var historical = GeneratorManifest.from_snapshot(historical_snapshot)
 	var historical_id: String = historical.manifest_id()
-	_expect_true(
-		failures,
-		"historical manifest canonicalization uses captured prefix",
-		historical.canonical_text().begins_with("gm7|")
-	)
-	_expect_true(
-		failures,
-		"historical manifest is explicitly runtime incompatible with current build",
-		not historical.runtime_compatibility_failures().is_empty()
-	)
+	_expect_true(failures, "historical manifest canonicalization uses captured prefix", historical.canonical_text().begins_with("gm7|"))
+	_expect_true(failures, "historical manifest is explicitly runtime incompatible with current build", not historical.runtime_compatibility_failures().is_empty())
 
 	var simulated_newer_support: Dictionary = GeneratorManifest.current_runtime_support()
 	simulated_newer_support["manifest_schema_version"] = 2
 	simulated_newer_support["manifest_schema_prefix"] = "gm2"
 	var baseline_current_id: String = current.manifest_id()
-	_expect_true(
-		failures,
-		"simulated newer default reports old gm1 support mismatch explicitly",
-		not current.runtime_compatibility_failures(simulated_newer_support).is_empty()
-	)
-	_expect_equal(
-		failures,
-		"simulated newer default cannot rewrite captured gm1 identity",
-		current.manifest_id(),
-		baseline_current_id
-	)
+	_expect_true(failures, "simulated newer default reports old gm1 support mismatch explicitly", not current.runtime_compatibility_failures(simulated_newer_support).is_empty())
+	_expect_equal(failures, "simulated newer default cannot rewrite captured gm1 identity", current.manifest_id(), baseline_current_id)
 
 	var package: Dictionary = {
 		"package_schema_version": RootPackage.PACKAGE_SCHEMA_VERSION,
@@ -253,17 +207,8 @@ static func _test_historical_manifest_schema_identity(failures: Array[String]) -
 	_expect_true(failures, "runtime-incompatible historical package remains structurally decodable", bool(result.get("success", false)))
 	_expect_true(failures, "runtime-incompatible historical package is classified incompatible", not bool(result.get("compatible", true)))
 	if bool(result.get("success", false)):
-		_expect_equal(
-			failures,
-			"runtime incompatibility preserves historical manifest ID",
-			result["context"].generator_manifest_id,
-			historical_id
-		)
-		_expect_true(
-			failures,
-			"runtime incompatibility preserves historical manifest prefix",
-			result["context"].generator_manifest.canonical_text().begins_with("gm7|")
-		)
+		_expect_equal(failures, "runtime incompatibility preserves historical manifest ID", result["context"].generator_manifest_id, historical_id)
+		_expect_true(failures, "runtime incompatibility preserves historical manifest prefix", result["context"].generator_manifest.canonical_text().begins_with("gm7|"))
 
 
 static func _test_world_id_contract_rehydration(failures: Array[String]) -> void:
@@ -275,24 +220,10 @@ static func _test_world_id_contract_rehydration(failures: Array[String]) -> void
 		"prefix": "wid2:",
 		"contract_tag": "underworld-world-id-v2",
 	}
-	var compatible_with_both: Dictionary = RootPackage.rehydrate(
-		424242,
-		package,
-		{},
-		[old_contract, simulated_new_contract]
-	)
-	_expect_true(
-		failures,
-		"historical wid1 remains compatible when a newer default is also supported",
-		bool(compatible_with_both.get("compatible", false))
-	)
+	var compatible_with_both: Dictionary = RootPackage.rehydrate(424242, package, {}, [old_contract, simulated_new_contract])
+	_expect_true(failures, "historical wid1 remains compatible when a newer default is also supported", bool(compatible_with_both.get("compatible", false)))
 	if bool(compatible_with_both.get("success", false)):
-		_expect_equal(
-			failures,
-			"newer supported WorldId contract cannot rewrite captured wid1",
-			compatible_with_both["context"].world_id,
-			GOLDEN_WORLD_ID_424242
-		)
+		_expect_equal(failures, "newer supported WorldId contract cannot rewrite captured wid1", compatible_with_both["context"].world_id, GOLDEN_WORLD_ID_424242)
 
 	var unsupported_contract: Dictionary = {
 		"revision": 99,
@@ -304,93 +235,38 @@ static func _test_world_id_contract_rehydration(failures: Array[String]) -> void
 	unsupported_package["world_id_contract"] = unsupported_contract
 	unsupported_package["world_id"] = unsupported_id
 	var unsupported: Dictionary = RootPackage.rehydrate(424242, unsupported_package)
-	_expect_true(
-		failures,
-		"unsupported WorldId contract remains structurally decodable",
-		bool(unsupported.get("success", false))
-	)
-	_expect_true(
-		failures,
-		"unsupported WorldId contract fails runtime compatibility",
-		not bool(unsupported.get("compatible", true))
-	)
+	_expect_true(failures, "unsupported WorldId contract remains structurally decodable", bool(unsupported.get("success", false)))
+	_expect_true(failures, "unsupported WorldId contract fails runtime compatibility", not bool(unsupported.get("compatible", true)))
 	if bool(unsupported.get("success", false)):
-		_expect_equal(
-			failures,
-			"unsupported WorldId compatibility failure cannot rewrite saved identity",
-			unsupported["context"].world_id,
-			unsupported_id
-		)
+		_expect_equal(failures, "unsupported WorldId compatibility failure cannot rewrite saved identity", unsupported["context"].world_id, unsupported_id)
 
 
 static func _test_malformed_and_duplicate_package_entries(failures: Array[String]) -> void:
 	var package: Dictionary = RootPackage.encode(Context.new(424242))
 
 	var duplicate_stage: Dictionary = package.duplicate(true)
-	duplicate_stage["manifest_snapshot"]["stage_entries"].append(
-		duplicate_stage["manifest_snapshot"]["stage_entries"][0].duplicate(true)
-	)
+	duplicate_stage["manifest_snapshot"]["stage_entries"].append(duplicate_stage["manifest_snapshot"]["stage_entries"][0].duplicate(true))
 	var duplicate_stage_result: Dictionary = RootPackage.decode(duplicate_stage)
-	_expect_true(
-		failures,
-		"duplicate stage package entry fails closed",
-		not bool(duplicate_stage_result.get("success", true))
-	)
-	_expect_contains(
-		failures,
-		"duplicate stage package diagnostic is deterministic",
-		duplicate_stage_result.get("failures", []),
-		"duplicate stage revision key"
-	)
+	_expect_true(failures, "duplicate stage package entry fails closed", not bool(duplicate_stage_result.get("success", true)))
+	_expect_contains(failures, "duplicate stage package diagnostic is deterministic", duplicate_stage_result.get("failures", []), "duplicate stage revision key")
 
 	var duplicate_profile: Dictionary = package.duplicate(true)
-	duplicate_profile["manifest_snapshot"]["profile_entries"].append(
-		duplicate_profile["manifest_snapshot"]["profile_entries"][0].duplicate(true)
-	)
+	duplicate_profile["manifest_snapshot"]["profile_entries"].append(duplicate_profile["manifest_snapshot"]["profile_entries"][0].duplicate(true))
 	var duplicate_profile_result: Dictionary = RootPackage.decode(duplicate_profile)
-	_expect_true(
-		failures,
-		"duplicate profile package entry fails closed",
-		not bool(duplicate_profile_result.get("success", true))
-	)
-	_expect_contains(
-		failures,
-		"duplicate profile package diagnostic is deterministic",
-		duplicate_profile_result.get("failures", []),
-		"duplicate profile revision key"
-	)
+	_expect_true(failures, "duplicate profile package entry fails closed", not bool(duplicate_profile_result.get("success", true)))
+	_expect_contains(failures, "duplicate profile package diagnostic is deterministic", duplicate_profile_result.get("failures", []), "duplicate profile revision key")
 
 	var duplicate_domain: Dictionary = package.duplicate(true)
-	duplicate_domain["manifest_snapshot"]["seed_domain_descriptors"].append(
-		duplicate_domain["manifest_snapshot"]["seed_domain_descriptors"][0].duplicate(true)
-	)
+	duplicate_domain["manifest_snapshot"]["seed_domain_descriptors"].append(duplicate_domain["manifest_snapshot"]["seed_domain_descriptors"][0].duplicate(true))
 	var duplicate_domain_result: Dictionary = RootPackage.decode(duplicate_domain)
-	_expect_true(
-		failures,
-		"duplicate seed-domain package entry fails closed",
-		not bool(duplicate_domain_result.get("success", true))
-	)
-	_expect_contains(
-		failures,
-		"duplicate seed-domain package diagnostic is deterministic",
-		duplicate_domain_result.get("failures", []),
-		"duplicate seed-domain ID"
-	)
+	_expect_true(failures, "duplicate seed-domain package entry fails closed", not bool(duplicate_domain_result.get("success", true)))
+	_expect_contains(failures, "duplicate seed-domain package diagnostic is deterministic", duplicate_domain_result.get("failures", []), "duplicate seed-domain ID")
 
 	var malformed: Dictionary = package.duplicate(true)
 	malformed.erase("world_id_contract")
 	var malformed_result: Dictionary = RootPackage.decode(malformed)
-	_expect_true(
-		failures,
-		"missing package entry fails closed",
-		not bool(malformed_result.get("success", true))
-	)
-	_expect_contains(
-		failures,
-		"missing package entry diagnostic is deterministic",
-		malformed_result.get("failures", []),
-		"missing field: world_id_contract"
-	)
+	_expect_true(failures, "missing package entry fails closed", not bool(malformed_result.get("success", true)))
+	_expect_contains(failures, "missing package entry diagnostic is deterministic", malformed_result.get("failures", []), "missing field: world_id_contract")
 
 
 static func _test_context_immutability_and_provenance(failures: Array[String]) -> void:
@@ -421,20 +297,35 @@ static func _test_context_immutability_and_provenance(failures: Array[String]) -
 		return
 	var restored = rehydrated["context"]
 	var provenance = restored.make_provenance("macro_region", "region:test", "address:test")
-	_expect_empty(
-		failures,
-		"provenance from rehydrated context validates against exact pinned identity",
-		restored.validate_provenance(provenance)
-	)
+	_expect_empty(failures, "provenance from rehydrated context validates against exact pinned identity", restored.validate_provenance(provenance))
 
 	var restored_header: Dictionary = restored.canonical_header()
 	package["world_id"] = "wid1:" + "b".repeat(64)
 	package["manifest_snapshot"]["manifest_schema_version"] = 999
-	_expect_equal(
-		failures,
-		"caller mutation of package after rehydrate cannot alter context",
-		restored.canonical_header(),
-		restored_header
+	_expect_equal(failures, "caller mutation of package after rehydrate cannot alter context", restored.canonical_header(), restored_header)
+
+
+static func _pre_gateway_context(seed: int):
+	var current = Context.new(seed)
+	var snapshot: Dictionary = current.manifest_snapshot()
+	var stages: Array = []
+	for entry_variant in snapshot["stage_entries"]:
+		var entry: Dictionary = entry_variant
+		if not str(entry.get("id", "")).begins_with("gateway."):
+			stages.append(entry.duplicate(true))
+	snapshot["stage_entries"] = stages
+	var domains: Array = []
+	for descriptor_variant in snapshot["seed_domain_descriptors"]:
+		var descriptor: Dictionary = descriptor_variant
+		if not str(descriptor.get("readable_name", "")).begins_with("gateway."):
+			domains.append(descriptor.duplicate(true))
+	snapshot["seed_domain_descriptors"] = domains
+	var historical_manifest = GeneratorManifest.from_snapshot(snapshot)
+	return Context.from_exact_identity(
+		seed,
+		current.world_id,
+		current.world_id_contract(),
+		historical_manifest
 	)
 
 
@@ -447,10 +338,7 @@ static func _expect_contains(
 	for failure in actual_failures:
 		if expected_fragment in str(failure):
 			return
-	failures.append(
-		"%s — expected diagnostic containing '%s', got %s"
-		% [label, expected_fragment, str(actual_failures)]
-	)
+	failures.append("%s — expected diagnostic containing '%s', got %s" % [label, expected_fragment, str(actual_failures)])
 
 
 static func _expect_empty(failures: Array[String], label: String, actual: Array[String]) -> void:
