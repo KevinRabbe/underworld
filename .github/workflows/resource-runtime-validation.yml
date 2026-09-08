@@ -4,8 +4,17 @@ on:
   pull_request:
     paths:
       - 'gameplay/resources/runtime/**'
+      - 'worldgen/identity/stable_address.gd'
       - 'worldgen/identity/stable_id.gd'
       - 'content/placement/underground_placement_record.gd'
+      - 'core/content/registry/content_registry.gd'
+      - 'core/content/archetypes/archetype_realizer.gd'
+      - 'core/content/archetypes/packed_scene_archetype_adapter.gd'
+      - 'core/content/archetypes/archetype_family_validator.gd'
+      - 'core/content/schema/category_schema_registry.gd'
+      - 'core/content/schema/capability_schema_registry.gd'
+      - 'core/content/validation/content_validation_pipeline.gd'
+      - 'core/content/validation/content_validation_evidence.gd'
       - 'gameplay/resources/definitions/resource_definition.gd'
       - 'gameplay/resources/definitions/resource_yield_rule.gd'
       - 'gameplay/resources/definitions/authored_harvestable_resource_definition.gd'
@@ -89,7 +98,7 @@ jobs:
         run: |
           set -o pipefail
           validation_log="$(mktemp)"
-          godot --headless --path . --quit-after 1 \
+          godot --headless --path . \
             --script res://tests/run_persistence_state.gd 2>&1 \
             | tee "$validation_log"
           if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then
