@@ -2,6 +2,7 @@ extends SceneTree
 
 const GameplayStateCodecTests := preload("res://tests/persistence/test_gameplay_state_codec.gd")
 const IntegratedGameSaveContractTests := preload("res://tests/persistence/test_integrated_game_save_contract.gd")
+const LegacyV1GameSaveCodecParityTests := preload("res://tests/persistence/test_legacy_v1_game_save_codec_parity.gd")
 const GameSaveSlotServiceTests := preload("res://tests/persistence/test_game_save_slot_service.gd")
 const SaveDomainReviewerRepairTests := preload("res://tests/persistence/test_save_domain_reviewer_repairs.gd")
 const IntegratedSurvivalPersistenceBoundaryTests := preload("res://tests/persistence/test_integrated_survival_persistence_boundary.gd")
@@ -19,6 +20,7 @@ func _run() -> void:
 	var failures: Array[String] = []
 	failures.append_array(GameplayStateCodecTests.run())
 	failures.append_array(IntegratedGameSaveContractTests.run())
+	failures.append_array(LegacyV1GameSaveCodecParityTests.run())
 	failures.append_array(GameSaveSlotServiceTests.run())
 	failures.append_array(SaveDomainReviewerRepairTests.run())
 	failures.append_array(IntegratedSurvivalPersistenceBoundaryTests.run())
@@ -28,7 +30,7 @@ func _run() -> void:
 	failures.append_array(DeathSaveCompatibilityTests.run_runtime(self))
 	if failures.is_empty():
 		print("[PERSISTENCE STATE VALIDATION] PASS")
-		print("  gameplay codecs / integrated detached save schema / typed wire / final mutation-boundary conditional SAVE CAS / transition-phase SAVE rejection / atomic slot lifecycle / source-level legacy retirement / restored loot allocator through real Game Continue activation / deep underworld exact-position multi-cell collision-safe Continue + real physics frames / death-recovery save compatibility passed")
+		print("  gameplay codecs / integrated detached save schema / legacy-v1 codec delegation parity / typed wire / final mutation-boundary conditional SAVE CAS / transition-phase SAVE rejection / atomic slot lifecycle / source-level legacy retirement / restored loot allocator through real Game Continue activation / deep underworld exact-position multi-cell collision-safe Continue + real physics frames / death-recovery save compatibility passed")
 		quit(0)
 		return
 
