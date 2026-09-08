@@ -5,6 +5,8 @@ const IntegratedGameSaveContract := preload("res://gameplay/persistence/integrat
 const LegacyV1GameSaveCodec := preload("res://gameplay/persistence/legacy_v1_game_save_codec.gd")
 const LegacyV1FixtureSource := preload("res://tests/persistence/test_integrated_game_save_contract.gd")
 
+const GOLDEN_PATH := "res://tests/persistence/fixtures/legacy_v1_valid_golden.json"
+
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -12,7 +14,7 @@ static func run() -> Array[String]:
 	_compare_validation_diagnostics(failures)
 	_compare_invalid_decode(failures)
 	_compare_invalid_clone(failures)
-	_probe_valid_golden(failures)
+	_compare_valid_golden_and_clone(failures)
 	_verify_v2_legacy_classification(failures)
 	return failures
 
@@ -89,12 +91,20 @@ static func _compare_invalid_clone(failures: Array[String]) -> void:
 		)
 
 
-static func _probe_valid_golden(failures: Array[String]) -> void:
+static func _compare_valid_golden_and_clone(failures: Array[String]) -> void:
+	var expected_json: String = FileAccess.get_file_as_string(GOLDEN_PATH)
+	if expected_json.is_empty():
+		failures.append("legacy v1 golden fixture could not be read")
+		return
+
 	var fixture_failures: Array[String] = []
 	var fixture: Dictionary = LegacyV1FixtureSource._fixture(fixture_failures)
 	if not fixture_failures.is_empty() or fixture.is_empty():
 		failures.append("legacy v1 golden fixture setup failed: %s" % [fixture_failures])
 		return
+
+	# Reverse the input order deliberately: accepted v1 canonicalization sorts
+	# pending loot by occurrence id before writing the outer wire.
 	var encoded: Dictionary = LegacyV1GameSaveCodec.encode(
 		fixture["context"],
 		fixture["delta_store"],
@@ -104,9 +114,136 @@ static func _probe_valid_golden(failures: Array[String]) -> void:
 		fixture["resume_position"]
 	)
 	if not bool(encoded.get("success", false)):
-		failures.append("legacy v1 golden fixture encode failed: %s" % [encoded.get("diagnostics", [])])
+		failures.append(
+			"legacy v1 golden fixture encode failed: %s" % [encoded.get("diagnostics", [])]
+		)
 		return
-	print("LEGACY_V1_GOLDEN_PROBE=" + str(encoded.get("json", "")))
+	_expect_equal(
+		failures,
+		"valid legacy v1 canonical JSON remains byte-identical to accepted pre-extraction golden",
+		str(encoded.get("json", "")),
+		expected_json
+	)
+
+	var decoded: Dictionary = LegacyV1GameSaveCodec.decode(expected_json)
+	if not bool(decoded.get("success", false)):
+		failures.append(
+			"accepted pre-extraction legacy v1 golden did not decode: %s"
+			% [decoded.get("diagnostics", [])]
+		)
+		return
+	var candidate_variant: Variant = decoded.get("candidate", null)
+	if not candidate_variant is Dictionary:
+		failures.append("valid legacy v1 golden decode did not return a Dictionary candidate")
+		return
+	var candidate: Dictionary = candidate_variant
+	_expect_equal(
+		failures,
+		"valid legacy v1 golden keeps resume position",
+		candidate.get("resume_position", Vector3.ZERO),
+		fixture["resume_position"]
+	)
+	_expect_pending_order(failures, candidate.get("pending_loot_states", []))
+	_expect_candidate_reencodes_to_golden(
+		failures,
+		"valid legacy v1 golden decode",
+		candidate,
+		expected_json
+	)
+
+	var legacy_clone: Dictionary = LegacyV1GameSaveCodec.clone_candidate(candidate)
+	if not bool(legacy_clone.get("success", false)):
+		failures.append(
+			"valid legacy v1 codec clone failed: %s" % [legacy_clone.get("diagnostics", [])]
+		)
+	else:
+		var legacy_clone_candidate: Variant = legacy_clone.get("candidate", null)
+		if not legacy_clone_candidate is Dictionary:
+			failures.append("valid legacy v1 codec clone did not return a Dictionary candidate")
+		else:
+			_expect_candidate_reencodes_to_golden(
+				failures,
+				"valid legacy v1 codec clone",
+				legacy_clone_candidate,
+				expected_json
+			)
+
+	var facade_clone: Dictionary = IntegratedGameSaveContract.clone_candidate(candidate)
+	if not bool(facade_clone.get("success", false)):
+		failures.append(
+			"valid legacy v1 facade clone failed: %s" % [facade_clone.get("diagnostics", [])]
+		)
+	else:
+		var facade_clone_candidate: Variant = facade_clone.get("candidate", null)
+		if not facade_clone_candidate is Dictionary:
+			failures.append("valid legacy v1 facade clone did not return a Dictionary candidate")
+		else:
+			_expect_candidate_reencodes_to_golden(
+				failures,
+				"valid legacy v1 facade clone",
+				facade_clone_candidate,
+				expected_json
+			)
+
+
+static func _expect_pending_order(failures: Array[String], pending_variant: Variant) -> void:
+	if not pending_variant is Array:
+		failures.append("valid legacy v1 golden pending-loot candidate is not an Array")
+		return
+	var pending_states: Array = pending_variant
+	_expect_equal(
+		failures,
+		"valid legacy v1 golden keeps pending-loot count",
+		pending_states.size(),
+		2
+	)
+	if pending_states.size() != 2:
+		return
+	_expect_equal(
+		failures,
+		"valid legacy v1 golden canonicalizes first pending occurrence",
+		str(pending_states[0].occurrence_id),
+		"burrower_41"
+	)
+	_expect_equal(
+		failures,
+		"valid legacy v1 golden canonicalizes second pending occurrence",
+		str(pending_states[1].occurrence_id),
+		"burrower_43"
+	)
+
+
+static func _expect_candidate_reencodes_to_golden(
+	failures: Array[String],
+	label: String,
+	candidate: Dictionary,
+	expected_json: String
+) -> void:
+	var pending_variant: Variant = candidate.get("pending_loot_states", null)
+	if not pending_variant is Array:
+		failures.append("%s pending_loot_states is not an Array" % label)
+		return
+	var resume_variant: Variant = candidate.get("resume_position", null)
+	if not resume_variant is Vector3:
+		failures.append("%s resume_position is not Vector3" % label)
+		return
+	var encoded: Dictionary = LegacyV1GameSaveCodec.encode(
+		candidate.get("world_context", null),
+		candidate.get("delta_store", null),
+		candidate.get("inventory_state", null),
+		candidate.get("equipment_state", null),
+		pending_variant,
+		resume_variant
+	)
+	if not bool(encoded.get("success", false)):
+		failures.append("%s re-encode failed: %s" % [label, encoded.get("diagnostics", [])])
+		return
+	_expect_equal(
+		failures,
+		"%s preserves the accepted pre-extraction canonical JSON" % label,
+		str(encoded.get("json", "")),
+		expected_json
+	)
 
 
 static func _verify_v2_legacy_classification(failures: Array[String]) -> void:
