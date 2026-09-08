@@ -11,24 +11,25 @@ signal defeat_requested(reason: StringName)
 const StaminaComponentScript := preload("res://gameplay/player/components/stamina_component.gd")
 const PlayerActionControllerScript := preload("res://gameplay/player/actions/player_action_controller.gd")
 const PlayerInputBufferScript := preload("res://gameplay/player/input/player_input_buffer.gd")
+const PlayerLocomotionControllerScript := preload("res://gameplay/player/movement/player_locomotion_controller.gd")
 const AttackCatalogScript := preload("res://gameplay/combat/attacks/player_attack_catalog.gd")
 
-const WALK_SPEED := 6.0
-const SPRINT_SPEED := 10.0
+const WALK_SPEED := PlayerLocomotionControllerScript.WALK_SPEED
+const SPRINT_SPEED := PlayerLocomotionControllerScript.SPRINT_SPEED
 const SPRINT_STAMINA_DRAIN := 12.0
-const BLOCK_MOVE_SPEED := 2.4
+const BLOCK_MOVE_SPEED := PlayerLocomotionControllerScript.BLOCK_MOVE_SPEED
 const BLOCK_FRONT_DOT := 0.342
 const PARRY_FRONT_DOT := 0.174
 const BLOCK_STAMINA_BASE := 5.0
 const BLOCK_STAMINA_PER_DAMAGE := 1.25
-const GROUND_ACCELERATION := 30.0
-const GROUND_DECELERATION := 38.0
-const AIR_ACCELERATION := 7.0
-const JUMP_VELOCITY := 7.0
-const GRAVITY := 24.0
-const TERMINAL_VELOCITY := 55.0
-const COYOTE_TIME := 0.12
-const JUMP_BUFFER_TIME := 0.12
+const GROUND_ACCELERATION := PlayerLocomotionControllerScript.GROUND_ACCELERATION
+const GROUND_DECELERATION := PlayerLocomotionControllerScript.GROUND_DECELERATION
+const AIR_ACCELERATION := PlayerLocomotionControllerScript.AIR_ACCELERATION
+const JUMP_VELOCITY := PlayerLocomotionControllerScript.JUMP_VELOCITY
+const GRAVITY := PlayerLocomotionControllerScript.GRAVITY
+const TERMINAL_VELOCITY := PlayerLocomotionControllerScript.TERMINAL_VELOCITY
+const COYOTE_TIME := PlayerLocomotionControllerScript.COYOTE_TIME
+const JUMP_BUFFER_TIME := PlayerLocomotionControllerScript.JUMP_BUFFER_TIME
 const TURN_SPEED := 12.0
 const CAMERA_MIN_PITCH := deg_to_rad(-70.0)
 const CAMERA_MAX_PITCH := deg_to_rad(45.0)
@@ -49,8 +50,6 @@ const TOOL_HAND_RIG_ROLE := "rig_role.socket.hand.right"
 var look_sensitivity: float = 0.0025
 var camera_pitch: float = deg_to_rad(-12.0)
 var camera_distance: float = DEFAULT_CAMERA_DISTANCE
-var coyote_timer: float = 0.0
-var jump_buffer_timer: float = 0.0
 var harvest_range: float = 4.5
 var tool_use_cooldown_duration: float = 0.38
 var tool_use_cooldown_timer: float = 0.0
@@ -67,6 +66,7 @@ var _input_was_allowed_last_physics: bool = true
 var stamina := StaminaComponentScript.new(100.0, 0.75, 20.0)
 var action_controller := PlayerActionControllerScript.new(stamina)
 var input_buffer := PlayerInputBufferScript.new()
+var locomotion := PlayerLocomotionControllerScript.new()
 var pending_attack_definition
 var pending_attack_direction: Vector3 = Vector3.ZERO
 var equipped_weapon_definition
@@ -581,7 +581,7 @@ func _sync_input_suppression() -> void:
 		# These are uncommitted input intents, not combat/lifecycle truth. Drop them
 		# once when capture begins so a short-lived buffer cannot execute behind UI
 		# or replay immediately after the UI closes.
-		jump_buffer_timer = 0.0
+		locomotion.clear_jump_buffer()
 		input_buffer.clear()
 		if action_controller.is_blocking():
 			action_controller.stop_block()
@@ -617,7 +617,7 @@ func _handle_action_inputs() -> void:
 			return
 
 	if Input.is_action_pressed("block") and action_controller.try_start_block():
-		jump_buffer_timer = 0.0
+		locomotion.clear_jump_buffer()
 		_face_combat_camera()
 
 
@@ -656,7 +656,7 @@ func _start_dodge(dodge_direction: Vector3) -> bool:
 	horizontal = horizontal.normalized()
 	if not action_controller.try_start_dodge(horizontal):
 		return false
-	jump_buffer_timer = 0.0
+	locomotion.clear_jump_buffer()
 	if animation_controller != null and visual_root != null:
 		var local: Vector3 = visual_root.global_transform.basis.inverse() * horizontal
 		# Presentation dodge space uses +Y for forward; Godot character forward is local -Z.
@@ -667,7 +667,7 @@ func _start_dodge(dodge_direction: Vector3) -> bool:
 func _start_parry() -> bool:
 	if defeated or not action_controller.try_start_parry():
 		return false
-	jump_buffer_timer = 0.0
+	locomotion.clear_jump_buffer()
 	_face_combat_camera()
 	if animation_controller != null:
 		animation_controller.present_parry()
@@ -689,56 +689,74 @@ func _configure_character_body() -> void:
 
 
 func _update_jump_timers(delta: float) -> void:
-	if is_on_floor():
-		coyote_timer = COYOTE_TIME
-	else:
-		coyote_timer = maxf(0.0, coyote_timer - delta)
-
-	if not _allows_new_player_input():
-		jump_buffer_timer = 0.0
-	elif Input.is_action_just_pressed("jump") and action_controller.is_free():
-		jump_buffer_timer = JUMP_BUFFER_TIME
-	else:
-		jump_buffer_timer = maxf(0.0, jump_buffer_timer - delta)
+	var input_allowed := _allows_new_player_input()
+	var jump_buffer_requested := (
+		input_allowed
+		and Input.is_action_just_pressed("jump")
+		and action_controller.is_free()
+	)
+	locomotion.update_jump_timers(
+		delta,
+		is_on_floor(),
+		input_allowed,
+		jump_buffer_requested
+	)
 
 
 func _update_vertical_velocity(delta: float) -> void:
+	var input_allowed := _allows_new_player_input()
+	var action_free := false
 	if (
-		_allows_new_player_input()
-		and jump_buffer_timer > 0.0
-		and coyote_timer > 0.0
-		and action_controller.is_free()
+		input_allowed
+		and locomotion.jump_buffer_timer > 0.0
+		and locomotion.coyote_timer > 0.0
 	):
-		velocity.y = JUMP_VELOCITY
-		jump_buffer_timer = 0.0
-		coyote_timer = 0.0
-		return
-
-	if not is_on_floor():
-		velocity.y = maxf(velocity.y - GRAVITY * delta, -TERMINAL_VELOCITY)
-	elif velocity.y < 0.0:
-		velocity.y = 0.0
+		action_free = action_controller.is_free()
+	velocity.y = locomotion.update_vertical_velocity(
+		velocity.y,
+		delta,
+		is_on_floor(),
+		input_allowed,
+		action_free
+	)
 
 
 func _update_horizontal_velocity(delta: float) -> void:
 	sprinting_this_frame = false
 
 	if action_controller.is_dodging():
-		var dodge_velocity: Vector3 = (
-			action_controller.dodge_direction_world
-			* action_controller.get_dodge_speed()
+		velocity = locomotion.update_horizontal_velocity(
+			velocity,
+			delta,
+			is_on_floor(),
+			Vector3.ZERO,
+			false,
+			false,
+			true,
+			action_controller.dodge_direction_world,
+			action_controller.get_dodge_speed(),
+			false
 		)
-		velocity.x = dodge_velocity.x
-		velocity.z = dodge_velocity.z
 		return
 
 	if action_controller.is_parrying():
-		velocity.x = move_toward(velocity.x, 0.0, GROUND_DECELERATION * 1.4 * delta)
-		velocity.z = move_toward(velocity.z, 0.0, GROUND_DECELERATION * 1.4 * delta)
+		velocity = locomotion.update_horizontal_velocity(
+			velocity,
+			delta,
+			is_on_floor(),
+			Vector3.ZERO,
+			false,
+			false,
+			false,
+			Vector3.ZERO,
+			0.0,
+			true
+		)
 		return
 
 	var input_vector := Vector2.ZERO
-	if _allows_new_player_input():
+	var input_allowed := _allows_new_player_input()
+	if input_allowed:
 		input_vector = Input.get_vector(
 			"move_left",
 			"move_right",
@@ -746,25 +764,27 @@ func _update_horizontal_velocity(delta: float) -> void:
 			"move_backward"
 		)
 	var move_direction: Vector3 = _camera_relative_direction(input_vector)
-	var target_speed: float = BLOCK_MOVE_SPEED if action_controller.is_blocking() else WALK_SPEED
-	if (
-		_allows_new_player_input()
+	var sprint_granted := (
+		input_allowed
 		and is_on_floor()
 		and action_controller.is_free()
 		and not move_direction.is_zero_approx()
 		and Input.is_action_pressed("sprint")
 		and stamina.spend(SPRINT_STAMINA_DRAIN * delta)
-	):
-		target_speed = SPRINT_SPEED
-		sprinting_this_frame = true
-
-	var target_velocity: Vector3 = move_direction * target_speed
-	var acceleration: float = GROUND_ACCELERATION if is_on_floor() else AIR_ACCELERATION
-	if is_on_floor() and move_direction.is_zero_approx():
-		acceleration = GROUND_DECELERATION
-
-	velocity.x = move_toward(velocity.x, target_velocity.x, acceleration * delta)
-	velocity.z = move_toward(velocity.z, target_velocity.z, acceleration * delta)
+	)
+	velocity = locomotion.update_horizontal_velocity(
+		velocity,
+		delta,
+		is_on_floor(),
+		move_direction,
+		action_controller.is_blocking(),
+		sprint_granted,
+		false,
+		Vector3.ZERO,
+		0.0,
+		false
+	)
+	sprinting_this_frame = sprint_granted
 
 
 func _camera_relative_direction(input_vector: Vector2) -> Vector3:
@@ -874,8 +894,7 @@ func commit_respawn(position: Vector3) -> bool:
 	input_buffer.reset()
 	pending_attack_definition = null
 	pending_attack_direction = Vector3.ZERO
-	jump_buffer_timer = 0.0
-	coyote_timer = 0.0
+	locomotion.reset()
 	tool_use_cooldown_timer = 0.0
 	tool_swing_timer = 0.0
 	sprinting_this_frame = false
