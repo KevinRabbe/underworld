@@ -5,12 +5,12 @@ const TerrainChunkScript := preload("res://world/terrain_chunk.gd")
 const PickupGeneratorScript := preload("res://worldgen/surface/pickup_generator.gd")
 const StableIdScript := preload("res://worldgen/identity/stable_id.gd")
 const WorldDeltaStoreScript := preload("res://worldgen/persistence/world_delta_store.gd")
+const SurfaceChunkGenerationWorkerScript := preload("res://world/runtime/streaming/surface_chunk_generation_worker.gd")
 
 var settings
 var main_generator
-var worker_generator
 var main_pickup_generator
-var worker_pickup_generator
+var generation_worker := SurfaceChunkGenerationWorkerScript.new()
 var player: Node3D
 
 var chunks: Dictionary = {}
@@ -31,15 +31,6 @@ var world_object_update_timer: float = 0.0
 # surface-domain lookup cache used while realizing/reloading chunks.
 var destroyed_object_ids: Dictionary = {}
 var _world_delta_store = WorldDeltaStoreScript.new()
-
-# Terrain + pickup transform data is generated on one background worker.
-# Scene-tree, meshes, and physics remain main-thread only.
-var worker_task_id: int = -1
-var worker_coord: Vector2i = Vector2i.ZERO
-var worker_mutex: Mutex = Mutex.new()
-var worker_result_coord: Vector2i = Vector2i.ZERO
-var worker_result_data: Dictionary = {}
-var worker_result_ms: float = 0.0
 
 var terrain_material: StandardMaterial3D = StandardMaterial3D.new()
 var decoration_assets: Dictionary = {}
@@ -64,13 +55,9 @@ func configure(world_settings) -> void:
 
 	main_generator = TerrainGeneratorScript.new()
 	main_generator.configure(settings)
-	worker_generator = TerrainGeneratorScript.new()
-	worker_generator.configure(settings)
-
 	main_pickup_generator = PickupGeneratorScript.new()
 	main_pickup_generator.configure(settings)
-	worker_pickup_generator = PickupGeneratorScript.new()
-	worker_pickup_generator.configure(settings)
+	generation_worker.configure(settings)
 
 	terrain_material.albedo_color = Color.WHITE
 	terrain_material.vertex_color_use_as_albedo = true
@@ -151,9 +138,7 @@ func _process(delta: float) -> void:
 
 
 func _exit_tree() -> void:
-	if worker_task_id != -1:
-		WorkerThreadPool.wait_for_task_completion(worker_task_id)
-		worker_task_id = -1
+	generation_worker.shutdown()
 
 
 func load_destroyed_object_ids(object_ids: Array) -> void:
@@ -322,7 +307,7 @@ func get_loaded_chunk_count() -> int:
 
 
 func get_pending_chunk_count() -> int:
-	return pending_chunks.size() + (1 if worker_task_id != -1 else 0)
+	return pending_chunks.size() + (1 if generation_worker.is_busy() else 0)
 
 
 func get_current_player_chunk() -> Vector2i:
@@ -378,7 +363,7 @@ func get_total_chunks_generated() -> int:
 
 
 func is_worker_busy() -> bool:
-	return worker_task_id != -1
+	return generation_worker.is_busy()
 
 
 func _update_desired_chunks(center: Vector2i) -> void:
@@ -407,7 +392,7 @@ func _rebuild_generation_queue(center: Vector2i) -> void:
 		var coord: Vector2i = key
 		if chunks.has(coord):
 			continue
-		if worker_task_id != -1 and coord == worker_coord:
+		if generation_worker.is_busy() and coord == generation_worker.active_coord():
 			continue
 		pending_chunks.append(coord)
 
@@ -425,61 +410,30 @@ func _chunk_distance_squared(a: Vector2i, b: Vector2i) -> int:
 
 
 func _start_next_worker_task() -> void:
-	if worker_task_id != -1:
+	if generation_worker.is_busy():
 		return
 
 	while not pending_chunks.is_empty():
 		var coord: Vector2i = pending_chunks.pop_front()
 		if not desired_chunks.has(coord) or chunks.has(coord):
 			continue
-		if worker_task_id != -1 and coord == worker_coord:
+		if generation_worker.is_busy() and coord == generation_worker.active_coord():
 			continue
 
-		worker_coord = coord
-		var task_callable: Callable = Callable(self, "_worker_generate_chunk").bind(coord)
-		worker_task_id = WorkerThreadPool.add_task(
-			task_callable,
-			false,
-			"Underworld terrain %d,%d" % [coord.x, coord.y]
-		)
-
-		if worker_task_id < 0:
-			worker_task_id = -1
+		if not generation_worker.start(coord):
 			_create_chunk_sync(coord)
 			continue
 		return
 
 
-func _worker_generate_chunk(coord: Vector2i) -> void:
-	var started_usec: int = Time.get_ticks_usec()
-	var data: Dictionary = worker_generator.generate_chunk_data(coord)
-	worker_pickup_generator.add_pickups_to_chunk_data(coord, data)
-	var elapsed_ms: float = float(Time.get_ticks_usec() - started_usec) / 1000.0
-
-	worker_mutex.lock()
-	worker_result_coord = coord
-	worker_result_data = data
-	worker_result_ms = elapsed_ms
-	worker_mutex.unlock()
-
-
 func _collect_completed_worker_task() -> void:
-	if worker_task_id == -1:
-		return
-	if not WorkerThreadPool.is_task_completed(worker_task_id):
+	var result: Dictionary = generation_worker.collect_completed()
+	if not bool(result.get("completed", false)):
 		return
 
-	var finished_task_id: int = worker_task_id
-	WorkerThreadPool.wait_for_task_completion(finished_task_id)
-	worker_task_id = -1
-
-	worker_mutex.lock()
-	var coord: Vector2i = worker_result_coord
-	var data: Dictionary = worker_result_data
-	var data_ms: float = worker_result_ms
-	worker_result_data = {}
-	worker_result_ms = 0.0
-	worker_mutex.unlock()
+	var coord: Vector2i = result.get("coord", Vector2i.ZERO)
+	var data: Dictionary = result.get("data", {})
+	var data_ms: float = float(result.get("data_ms", 0.0))
 
 	last_data_generation_ms = data_ms
 	max_data_generation_ms = maxf(max_data_generation_ms, data_ms)
