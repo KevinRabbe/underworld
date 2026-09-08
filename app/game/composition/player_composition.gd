@@ -15,7 +15,7 @@ static func compose(
 	is_continue: bool,
 	startup_candidate: Dictionary
 ) -> Dictionary:
-	var player: Node
+	var player
 	if gameplay_input_gate != null:
 		player = prepared_player
 		if player == null or not is_instance_valid(player):
