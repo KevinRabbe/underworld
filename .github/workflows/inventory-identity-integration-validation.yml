@@ -40,6 +40,9 @@ jobs:
       - name: Show Godot version
         run: godot --version
 
+      - name: Import project resources
+        run: godot --headless --editor --path . --quit
+
       - name: Run accepted app shell contracts
         run: |
           set -o pipefail
