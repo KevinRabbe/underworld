@@ -67,6 +67,16 @@ var stamina := StaminaComponentScript.new(100.0, 0.75, 20.0)
 var action_controller := PlayerActionControllerScript.new(stamina)
 var input_buffer := PlayerInputBufferScript.new()
 var locomotion := PlayerLocomotionControllerScript.new()
+var coyote_timer: float:
+	get:
+		return locomotion.coyote_timer
+	set(value):
+		locomotion.coyote_timer = value
+var jump_buffer_timer: float:
+	get:
+		return locomotion.jump_buffer_timer
+	set(value):
+		locomotion.jump_buffer_timer = value
 var pending_attack_definition
 var pending_attack_direction: Vector3 = Vector3.ZERO
 var equipped_weapon_definition
@@ -755,8 +765,7 @@ func _update_horizontal_velocity(delta: float) -> void:
 		return
 
 	var input_vector := Vector2.ZERO
-	var input_allowed := _allows_new_player_input()
-	if input_allowed:
+	if _allows_new_player_input():
 		input_vector = Input.get_vector(
 			"move_left",
 			"move_right",
@@ -764,8 +773,9 @@ func _update_horizontal_velocity(delta: float) -> void:
 			"move_backward"
 		)
 	var move_direction: Vector3 = _camera_relative_direction(input_vector)
+	var blocking := action_controller.is_blocking()
 	var sprint_granted := (
-		input_allowed
+		_allows_new_player_input()
 		and is_on_floor()
 		and action_controller.is_free()
 		and not move_direction.is_zero_approx()
@@ -777,7 +787,7 @@ func _update_horizontal_velocity(delta: float) -> void:
 		delta,
 		is_on_floor(),
 		move_direction,
-		action_controller.is_blocking(),
+		blocking,
 		sprint_granted,
 		false,
 		Vector3.ZERO,
