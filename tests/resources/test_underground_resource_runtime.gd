@@ -12,6 +12,7 @@ const EquipmentService := preload("res://gameplay/items/equipment/equipment_serv
 const ItemContainerState := preload("res://gameplay/items/inventory/item_container_state.gd")
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
 const RuntimeService := preload("res://gameplay/resources/runtime/underground_resource_runtime_service.gd")
+const ContentEvidence := preload("res://gameplay/resources/runtime/underground_resource_content_evidence.gd")
 
 const RESOURCE_PATH := "res://content/resources/iron_outcrop_definition.tres"
 const IRON_ITEM_PATH := "res://content/items/resources/iron_chunk_definition.tres"
@@ -50,13 +51,23 @@ static func _test_production_content_and_realization(failures: Array[String]) ->
 	if not adapter_failures.is_empty():
 		failures.append("iron resource realizer rejected packed.scene adapter: %s" % [adapter_failures])
 		return
-	var validation: Dictionary = {
-		"success": true,
-		"diagnostics": [],
-		"validated_definition_ids": [archetype.content_id],
-	}
+	var authority: Dictionary = ContentEvidence.build_first_iron_authority()
+	var evidence_failures: Array[String] = ContentEvidence.verification_failures(
+		authority,
+		archetype.content_id
+	)
+	if not evidence_failures.is_empty():
+		failures.append("iron content evidence rejected production closure: %s" % [evidence_failures])
+		return
+	var validation: Dictionary = authority["validation_result"]
+	var evidence_registry = authority["content_registry"]
 	var service = RuntimeService.new()
-	var result: Dictionary = service.realize_placement(_placement(), fixture["registry"], validation, realizer)
+	var result: Dictionary = service.realize_placement(
+		_placement(),
+		evidence_registry,
+		validation,
+		realizer
+	)
 	_expect_true(failures, "iron placement realizes through semantic archetype", bool(result.get("success", false)))
 	var instance = result.get("instance", null)
 	if instance != null and instance is Node:

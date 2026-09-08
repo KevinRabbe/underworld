@@ -63,6 +63,42 @@ static func from_reserved_site_assignment(
 	return candidate
 
 
+## Produces a family-neutral placement candidate namespace beneath one generated
+## reserved-site occurrence. The legacy adapter above intentionally preserves the
+## site StableId for CONTENT-002 compatibility; production composition that may
+## host multiple placement families on the same site must use an explicit channel.
+static func from_reserved_site_assignment_channel(
+	assignment,
+	semantic_channel: String,
+	region_coord_value: Vector2i,
+	depth_band_value: int,
+	trait_ids_value: Array = [],
+	local_capacity_value: int = 1
+):
+	if assignment == null or not assignment is ReservedSiteAssignment:
+		return null
+	if not _valid_source_kind(semantic_channel):
+		return null
+	var site_id = StableId.parse(assignment.site_stable_id)
+	if site_id == null:
+		return null
+	var candidate_address = site_id.address().child(["channel", semantic_channel])
+	var candidate_id = StableId.from_address(candidate_address)
+	if candidate_id == null:
+		return null
+	var candidate = load(SCRIPT_PATH).new()
+	candidate.configure(
+		candidate_id.value(),
+		"reserved_site",
+		region_coord_value,
+		depth_band_value,
+		assignment.category_ids,
+		trait_ids_value,
+		local_capacity_value
+	)
+	return candidate
+
+
 func validate_candidate() -> Array[String]:
 	var failures: Array[String] = []
 	if StableId.parse(stable_id) == null:
