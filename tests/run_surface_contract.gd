@@ -6,6 +6,7 @@ const SurfacePersistenceIdentityTests := preload("res://tests/surface_contract/t
 const SurfaceWorldDeltaAuthorityTests := preload("res://tests/surface_contract/test_surface_world_delta_authority.gd")
 const SurfaceCandidateIdentityOrderTests := preload("res://tests/surface_contract/test_surface_candidate_identity_order.gd")
 const SurfaceChunkGenerationWorkerTests := preload("res://tests/surface_contract/test_surface_chunk_generation_worker.gd")
+const TerrainChunkGeneratedObjectRuntimeTests := preload("res://tests/surface_contract/test_terrain_chunk_generated_object_runtime.gd")
 
 
 func _init() -> void:
@@ -16,6 +17,7 @@ func _init() -> void:
 	failures.append_array(SurfaceWorldDeltaAuthorityTests.run())
 	failures.append_array(SurfaceCandidateIdentityOrderTests.run())
 	failures.append_array(SurfaceChunkGenerationWorkerTests.run())
+	failures.append_array(TerrainChunkGeneratedObjectRuntimeTests.run())
 
 	if failures.is_empty():
 		print("[SURFACE CONTRACT VALIDATION] PASS")
@@ -27,6 +29,7 @@ func _init() -> void:
 		print("  WorldDeltaStore is authoritative for durable surface destruction")
 		print("  accepted-array compaction cannot renumber later semantic StableIds")
 		print("  one-worker scheduling, candidate equivalence, value-only results, and teardown passed")
+		print("  TerrainChunk generated-object facade, destruction, proxies, pickups, and collision isolation passed")
 		quit(0)
 		return
 
