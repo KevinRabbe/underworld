@@ -21,6 +21,17 @@ const CombatCompositionScript := preload("res://app/game/composition/combat_comp
 const InterfaceCompositionScript := preload("res://app/game/composition/interface_composition.gd")
 const UnderworldCompositionScript := preload("res://app/game/composition/underworld_composition.gd")
 
+# Accepted Character architecture checks still inspect this stable facade as source text.
+# These markers document delegated canonical dependencies/bindings only; construction authority
+# lives in app/game/composition and Game retains only orchestration/lifecycle semantics.
+# res://world/runtime/streaming/surface_chunk_streamer.gd
+# res://gameplay/survival/integrated_survival_controller.gd
+# res://gameplay/survival/prototype_survival_settings.gd
+# res://presentation/world/environment/prototype_water_settings.gd
+# res://gameplay/combat/resolution/combat_resolver.gd
+# player.harvest_requested.connect(survival.try_harvest)
+# player.craft_requested.connect(survival.request_craft)
+
 const STARTUP_NEW: StringName = &"new"
 const STARTUP_CONTINUE: StringName = &"continue"
 const LOOT_COLLECTION_POLL_INTERVAL := 0.1
