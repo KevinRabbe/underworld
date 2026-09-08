@@ -53,7 +53,7 @@ static func compose(
 			diagnostics.append("Detached Continue state failed during activation: %s" % [restore_failures])
 
 	return {
-		"success": true,
+		"success": diagnostics.is_empty(),
 		"diagnostics": diagnostics,
 		"world_settings": world_settings,
 		"survival_settings": survival_settings,
