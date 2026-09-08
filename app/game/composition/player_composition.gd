@@ -11,7 +11,7 @@ static func compose(
 	world,
 	survival,
 	survival_settings,
-	spawn_position: Vector3,
+	spawn_xz: Vector3,
 	is_continue: bool,
 	startup_candidate: Dictionary
 ) -> Dictionary:
@@ -30,6 +30,12 @@ static func compose(
 	# Presentation must be injected before add_child(), so Player._ready() never owns a hard-coded body implementation.
 	player.character_presentation_provider = VoxelCharacterPresentationProviderScript.new()
 	root.add_child(player)
+	var spawn_position: Vector3
+	if is_continue:
+		spawn_position = startup_candidate.get("resume_position", Vector3.ZERO)
+	else:
+		var spawn_height: float = world.get_height_at_world(spawn_xz.x, spawn_xz.z)
+		spawn_position = Vector3(spawn_xz.x, spawn_height + 3.0, spawn_xz.z)
 	player.global_position = spawn_position
 	player.set_harvest_range(survival_settings.harvest_range)
 	player.set_tool_use_cooldown(survival_settings.tool_use_cooldown)
