@@ -3,6 +3,7 @@ extends Node3D
 const WorldSettingsScript := preload("res://world/runtime/config/world_settings.gd")
 const SurvivalSettingsScript := preload("res://gameplay/survival/prototype_survival_settings.gd")
 const WaterSettingsScript := preload("res://presentation/world/environment/prototype_water_settings.gd")
+const EnvironmentPresentationBuilderScript := preload("res://app/game/composition/environment_presentation_builder.gd")
 const CavePresentationControllerScript := preload("res://presentation/world/caves/cave_presentation_controller.gd")
 const PrototypeCavePresentationCatalog := preload("res://content/presentation/caves/prototype_cave_presentation_catalog.tres")
 const SurfaceChunkStreamerScript := preload("res://world/runtime/streaming/surface_chunk_streamer.gd")
@@ -362,22 +363,7 @@ func _create_underworld_runtime() -> void:
 
 
 func _setup_environment() -> void:
-	var world_environment: WorldEnvironment = WorldEnvironment.new()
-	world_environment.name = "WorldEnvironment"
-	var environment: Environment = Environment.new()
-	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.56, 0.72, 0.86)
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.72, 0.76, 0.82)
-	environment.ambient_light_energy = 0.8
-	world_environment.environment = environment
-	add_child(world_environment)
-	var sun: DirectionalLight3D = DirectionalLight3D.new()
-	sun.name = "Sun"
-	sun.rotation_degrees = Vector3(-55.0, -30.0, 0.0)
-	sun.light_energy = 1.1
-	sun.shadow_enabled = true
-	add_child(sun)
+	EnvironmentPresentationBuilderScript.build_environment(self)
 
 
 func _create_world() -> void:
@@ -481,19 +467,13 @@ func _record_route_failure(raw_diagnostics: Array) -> void:
 
 
 func _create_water_surface() -> void:
-	water_surface = MeshInstance3D.new()
-	water_surface.name = "PrototypeSea"
-	var plane: PlaneMesh = PlaneMesh.new()
-	plane.size = Vector2(water_settings.water_plane_size, water_settings.water_plane_size)
-	water_surface.mesh = plane
-	var water_material: StandardMaterial3D = StandardMaterial3D.new()
-	water_material.albedo_color = Color(0.08, 0.30, 0.48, 0.72)
-	water_material.roughness = 0.18
-	water_material.metallic = 0.05
-	water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	water_surface.material_override = water_material
-	water_surface.position = Vector3(spawn_xz.x, world_settings.sea_level + 0.03, spawn_xz.z)
-	add_child(water_surface)
+	var result: Dictionary = EnvironmentPresentationBuilderScript.build_water_surface(
+		self,
+		water_settings,
+		world_settings,
+		spawn_xz
+	)
+	water_surface = result.get("water_surface", null)
 
 
 func _create_player() -> bool:
