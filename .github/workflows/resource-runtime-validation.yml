@@ -70,6 +70,9 @@ jobs:
       - name: Show Godot version
         run: godot --version
 
+      - name: Import project resources
+        run: godot --headless --editor --path . --quit
+
       - name: Run resource runtime contracts
         run: |
           set -o pipefail
