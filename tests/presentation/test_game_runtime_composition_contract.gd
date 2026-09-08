@@ -1,8 +1,85 @@
 extends RefCounted
 
 const EnvironmentPresentationBuilderScript := preload("res://app/game/composition/environment_presentation_builder.gd")
+const WorldCompositionScript := preload("res://app/game/composition/world_composition.gd")
+const PlayerCompositionScript := preload("res://app/game/composition/player_composition.gd")
+const CombatCompositionScript := preload("res://app/game/composition/combat_composition.gd")
+const InterfaceCompositionScript := preload("res://app/game/composition/interface_composition.gd")
+const UnderworldCompositionScript := preload("res://app/game/composition/underworld_composition.gd")
+const WorldDeltaStoreScript := preload("res://worldgen/persistence/world_delta_store.gd")
+const WorldGenerationContextScript := preload("res://worldgen/pipeline/world_generation_context.gd")
 const WaterSettingsScript := preload("res://presentation/world/environment/prototype_water_settings.gd")
 const WorldSettingsScript := preload("res://world/runtime/config/world_settings.gd")
+
+
+class AudioBindingProbe:
+	extends Node
+	var bound_game: Node = null
+	var injected_failures: Array[String] = []
+
+	func bind_game(game: Node) -> Array[String]:
+		bound_game = game
+		return injected_failures.duplicate()
+
+
+class PreparedPlayerProbe:
+	extends Node3D
+	signal harvest_requested
+	signal hotbar_slot_requested
+	signal craft_requested
+	var _gameplay_input_gate: Node = null
+	var character_presentation_provider = null
+	var harvest_range: float = 0.0
+	var tool_use_cooldown: float = 0.0
+	var equipped_tool = null
+
+	func set_harvest_range(value: float) -> void:
+		harvest_range = value
+
+	func set_tool_use_cooldown(value: float) -> void:
+		tool_use_cooldown = value
+
+	func set_equipped_tool(value) -> void:
+		equipped_tool = value
+
+
+class PlayerWorldProbe:
+	extends RefCounted
+	var bound_player = null
+
+	func get_height_at_world(_x: float, _z: float) -> float:
+		return 10.0
+
+	func set_player(value) -> void:
+		bound_player = value
+
+
+class PlayerSurvivalProbe:
+	extends RefCounted
+	signal equipped_tool_changed(tool)
+	var bound_player = null
+	var equipped_tool: StringName = &"probe_tool"
+
+	func try_harvest(_world_position = Vector3.ZERO) -> void:
+		pass
+
+	func select_hotbar_slot(_slot: int = 0) -> void:
+		pass
+
+	func request_craft(_recipe_id: StringName = &"") -> void:
+		pass
+
+	func set_player(value) -> void:
+		bound_player = value
+
+	func get_equipped_tool() -> StringName:
+		return equipped_tool
+
+
+class PlayerSettingsProbe:
+	extends RefCounted
+	var harvest_range: float = 6.5
+	var tool_use_cooldown: float = 0.35
 
 
 static func run_runtime(tree: SceneTree) -> Array[String]:
@@ -11,6 +88,18 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	host.name = "CompositionHost"
 	tree.root.add_child(host)
 
+	_test_environment_and_water(host, failures)
+	_test_audio_identity(host, failures)
+	_test_world_identity_and_failure_propagation(failures)
+	_test_prepared_player_identity(failures)
+	_test_leaf_failure_propagation(failures)
+
+	host.queue_free()
+	await tree.process_frame
+	return failures
+
+
+static func _test_environment_and_water(host: Node3D, failures: Array[String]) -> void:
 	var environment_result: Dictionary = EnvironmentPresentationBuilderScript.build_environment(host)
 	if not bool(environment_result.get("success", false)):
 		failures.append("environment builder did not report success")
@@ -90,6 +179,132 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			if material.transparency != BaseMaterial3D.TRANSPARENCY_ALPHA:
 				failures.append("water builder changed alpha transparency mode")
 
-	host.queue_free()
-	await tree.process_frame
-	return failures
+
+static func _test_audio_identity(host: Node3D, failures: Array[String]) -> void:
+	var audio := AudioBindingProbe.new()
+	audio.name = "GameplayAudio"
+	host.add_child(audio)
+	var result: Dictionary = InterfaceCompositionScript.bind_gameplay_audio(host)
+	if not bool(result.get("success", false)):
+		failures.append("audio composition unexpectedly failed")
+	if result.get("binding", null) != audio or audio.bound_game != host:
+		failures.append("audio composition did not preserve exact Game/binding identity")
+
+	audio.injected_failures = ["injected audio failure"]
+	var rejected: Dictionary = InterfaceCompositionScript.bind_gameplay_audio(host)
+	if bool(rejected.get("success", true)):
+		failures.append("audio composition did not propagate binding failure")
+	elif rejected.get("diagnostics", []) != ["injected audio failure"]:
+		failures.append("audio composition changed binding diagnostics")
+
+
+static func _test_world_identity_and_failure_propagation(failures: Array[String]) -> void:
+	var host := Node3D.new()
+	var context = WorldGenerationContextScript.new(73)
+	var delta_store = WorldDeltaStoreScript.new()
+	var result: Dictionary = WorldCompositionScript.compose(
+		host,
+		context,
+		{"delta_store": delta_store},
+		true,
+		false
+	)
+	if result.get("world_delta_store", null) != delta_store:
+		failures.append("world composition replaced exact Continue WorldDeltaStore identity")
+	var world = result.get("world", null)
+	var survival = result.get("survival", null)
+	if world == null or survival == null:
+		failures.append("world composition did not return Surface/Survival graph")
+	elif host.get_child_count() != 2 or host.get_child(0) != world or host.get_child(1) != survival:
+		failures.append("world composition changed Surface/Survival construction order")
+	var diagnostics: Array = result.get("diagnostics", [])
+	if diagnostics.is_empty() or not str(diagnostics[0]).begins_with("Detached Continue state failed during activation:"):
+		failures.append("world composition did not return Continue activation failure to Game")
+	host.free()
+
+
+static func _test_prepared_player_identity(failures: Array[String]) -> void:
+	var host := Node3D.new()
+	var gate := Node.new()
+	var prepared := PreparedPlayerProbe.new()
+	prepared._gameplay_input_gate = gate
+	var world := PlayerWorldProbe.new()
+	var survival := PlayerSurvivalProbe.new()
+	var settings := PlayerSettingsProbe.new()
+	var result: Dictionary = PlayerCompositionScript.compose(
+		host,
+		prepared,
+		gate,
+		world,
+		survival,
+		settings,
+		Vector3(2.0, 0.0, 3.0),
+		false,
+		{}
+	)
+	if not bool(result.get("success", false)):
+		failures.append("prepared Player composition unexpectedly failed: %s" % [result.get("diagnostics", [])])
+	elif result.get("player", null) != prepared:
+		failures.append("Player composition replaced the exact prepared Player instance")
+	elif prepared.get_parent() != host or world.bound_player != prepared or survival.bound_player != prepared:
+		failures.append("Player composition changed exact Player dependency binding")
+	elif prepared.global_position != Vector3(2.0, 13.0, 3.0):
+		failures.append("Player composition changed post-add spawn placement")
+
+	var mismatched := PreparedPlayerProbe.new()
+	var wrong_gate := Node.new()
+	mismatched._gameplay_input_gate = wrong_gate
+	var rejected: Dictionary = PlayerCompositionScript.compose(
+		host,
+		mismatched,
+		gate,
+		null,
+		null,
+		null,
+		Vector3.ZERO,
+		false,
+		{}
+	)
+	if bool(rejected.get("success", true)):
+		failures.append("Player composition accepted mismatched pre-tree input authority")
+	elif rejected.get("diagnostics", []) != ["Prepared Player does not retain exact Game gameplay-input authority"]:
+		failures.append("Player composition changed pre-tree authority failure diagnostics")
+	elif is_instance_valid(mismatched):
+		failures.append("Player composition did not fail closed before tree entry on authority mismatch")
+
+	host.free()
+	gate.free()
+	wrong_gate.free()
+
+
+static func _test_leaf_failure_propagation(failures: Array[String]) -> void:
+	var combat_host := Node3D.new()
+	var death_result: Dictionary = CombatCompositionScript.compose_death_recovery(
+		combat_host,
+		null,
+		null,
+		null
+	)
+	if bool(death_result.get("success", true)):
+		failures.append("death-recovery composition accepted missing authorities")
+	var death_diagnostics: Array = death_result.get("diagnostics", [])
+	if death_diagnostics.size() != 3:
+		failures.append("death-recovery composition did not propagate configure diagnostics")
+	combat_host.free()
+
+	var underworld_host := Node3D.new()
+	var underworld_result: Dictionary = UnderworldCompositionScript.compose(
+		underworld_host,
+		null,
+		null
+	)
+	if bool(underworld_result.get("success", true)):
+		failures.append("Underworld composition accepted missing session context")
+	elif underworld_result.get("diagnostics", []) != ["Underworld runtime requires retained exact session root context"]:
+		failures.append("Underworld composition changed missing-context diagnostic")
+	var runtime = underworld_result.get("underworld_runtime", null)
+	if runtime == null or runtime.get_parent() != underworld_host:
+		failures.append("Underworld composition changed runtime construction-before-context-check order")
+	if underworld_result.get("cave_presentation", null) != null:
+		failures.append("Underworld composition created cave presentation after context failure")
+	underworld_host.free()
