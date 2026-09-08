@@ -2,6 +2,7 @@ extends SceneTree
 
 const GameplayStateCodecTests := preload("res://tests/persistence/test_gameplay_state_codec.gd")
 const IntegratedGameSaveContractTests := preload("res://tests/persistence/test_integrated_game_save_contract.gd")
+const LegacyV1GoldenProbe := preload("res://tests/persistence/probe_legacy_v1_golden.gd")
 const GameSaveSlotServiceTests := preload("res://tests/persistence/test_game_save_slot_service.gd")
 const SaveDomainReviewerRepairTests := preload("res://tests/persistence/test_save_domain_reviewer_repairs.gd")
 const IntegratedSurvivalPersistenceBoundaryTests := preload("res://tests/persistence/test_integrated_survival_persistence_boundary.gd")
@@ -19,6 +20,7 @@ func _run() -> void:
 	var failures: Array[String] = []
 	failures.append_array(GameplayStateCodecTests.run())
 	failures.append_array(IntegratedGameSaveContractTests.run())
+	failures.append_array(LegacyV1GoldenProbe.run())
 	failures.append_array(GameSaveSlotServiceTests.run())
 	failures.append_array(SaveDomainReviewerRepairTests.run())
 	failures.append_array(IntegratedSurvivalPersistenceBoundaryTests.run())
