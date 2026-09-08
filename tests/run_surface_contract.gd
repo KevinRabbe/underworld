@@ -5,6 +5,7 @@ const SurfacePickupRuntimeTests := preload("res://tests/surface_contract/test_su
 const SurfacePersistenceIdentityTests := preload("res://tests/surface_contract/test_surface_persistence_identity_boundary.gd")
 const SurfaceWorldDeltaAuthorityTests := preload("res://tests/surface_contract/test_surface_world_delta_authority.gd")
 const SurfaceCandidateIdentityOrderTests := preload("res://tests/surface_contract/test_surface_candidate_identity_order.gd")
+const SurfaceChunkGenerationWorkerTests := preload("res://tests/surface_contract/test_surface_chunk_generation_worker.gd")
 
 
 func _init() -> void:
@@ -14,6 +15,7 @@ func _init() -> void:
 	failures.append_array(SurfacePersistenceIdentityTests.run())
 	failures.append_array(SurfaceWorldDeltaAuthorityTests.run())
 	failures.append_array(SurfaceCandidateIdentityOrderTests.run())
+	failures.append_array(SurfaceChunkGenerationWorkerTests.run())
 
 	if failures.is_empty():
 		print("[SURFACE CONTRACT VALIDATION] PASS")
@@ -24,6 +26,7 @@ func _init() -> void:
 		print("  malformed, legacy, foreign, and type-mismatched persistence identity fails closed")
 		print("  WorldDeltaStore is authoritative for durable surface destruction")
 		print("  accepted-array compaction cannot renumber later semantic StableIds")
+		print("  one-worker scheduling, candidate equivalence, value-only results, and teardown passed")
 		quit(0)
 		return
 
