@@ -8,6 +8,8 @@ const WATER_SETTINGS_PATH := "res://presentation/world/environment/prototype_wat
 const LEGACY_MANAGER_PATH := "res://world/chunk_manager.gd"
 const LEGACY_DATA_SETTINGS_PATH := "res://" + "data/world_settings.gd"
 const APP_GAME_PATH := "res://app/game/game.gd"
+const WORLD_COMPOSITION_PATH := "res://app/game/composition/world_composition.gd"
+const PLAYER_COMPOSITION_PATH := "res://app/game/composition/player_composition.gd"
 const SURVIVAL_PATH := "res://gameplay/survival/prototype_survival_controller.gd"
 const INTEGRATED_SURVIVAL_PATH := "res://gameplay/survival/integrated_survival_controller.gd"
 const GAMEPLAY_SAVE_CATALOG_PATH := "res://gameplay/persistence/gameplay_save_catalog.gd"
@@ -146,16 +148,42 @@ static func run() -> Array[String]:
 	_expect_true(failures, "water settings do not own gameplay", not "harvest_range" in water_settings_source)
 
 	var app_source: String = FileAccess.get_file_as_string(APP_GAME_PATH)
+	var world_composition_source: String = FileAccess.get_file_as_string(WORLD_COMPOSITION_PATH)
+	var player_composition_source: String = FileAccess.get_file_as_string(PLAYER_COMPOSITION_PATH)
 	_expect_true(failures, "application composition source is readable", not app_source.is_empty())
-	_expect_true(failures, "application composes canonical surface streamer", STREAMER_PATH in app_source)
-	_expect_true(failures, "application composes integrated survival adapter", INTEGRATED_SURVIVAL_PATH in app_source)
-	_expect_true(failures, "application no longer composes prototype survival controller directly", not SURVIVAL_PATH in app_source)
-	_expect_true(failures, "application composes world settings", WORLD_SETTINGS_PATH in app_source)
-	_expect_true(failures, "application composes survival settings", SURVIVAL_SETTINGS_PATH in app_source)
-	_expect_true(failures, "application composes water settings", WATER_SETTINGS_PATH in app_source)
-	_expect_true(failures, "application does not reference retired data settings", not LEGACY_DATA_SETTINGS_PATH in app_source)
-	_expect_true(failures, "player harvesting routes to survival", "player.harvest_requested.connect(survival.try_harvest)" in app_source)
-	_expect_true(failures, "player crafting routes to survival", "player.craft_requested.connect(survival.request_craft)" in app_source)
+	_expect_true(failures, "world composition helper source is readable", not world_composition_source.is_empty())
+	_expect_true(failures, "player composition helper source is readable", not player_composition_source.is_empty())
+	_expect_true(
+		failures,
+		"application delegates world construction to canonical composition helper",
+		WORLD_COMPOSITION_PATH in app_source and "WorldCompositionScript.compose(" in app_source
+	)
+	_expect_true(
+		failures,
+		"application delegates player construction to canonical composition helper",
+		PLAYER_COMPOSITION_PATH in app_source and "PlayerCompositionScript.compose(" in app_source
+	)
+	_expect_true(failures, "world composition helper composes canonical surface streamer", STREAMER_PATH in world_composition_source)
+	_expect_true(failures, "world composition helper composes integrated survival adapter", INTEGRATED_SURVIVAL_PATH in world_composition_source)
+	_expect_true(failures, "world composition helper does not compose prototype survival controller directly", not SURVIVAL_PATH in world_composition_source)
+	_expect_true(failures, "world composition helper composes world settings", WORLD_SETTINGS_PATH in world_composition_source)
+	_expect_true(failures, "world composition helper composes survival settings", SURVIVAL_SETTINGS_PATH in world_composition_source)
+	_expect_true(failures, "world composition helper composes water settings", WATER_SETTINGS_PATH in world_composition_source)
+	_expect_true(
+		failures,
+		"application composition does not reference retired data settings",
+		not LEGACY_DATA_SETTINGS_PATH in app_source and not LEGACY_DATA_SETTINGS_PATH in world_composition_source
+	)
+	_expect_true(
+		failures,
+		"player harvesting routes to survival through player composition helper",
+		"player.harvest_requested.connect(survival.try_harvest)" in player_composition_source
+	)
+	_expect_true(
+		failures,
+		"player crafting routes to survival through player composition helper",
+		"player.craft_requested.connect(survival.request_craft)" in player_composition_source
+	)
 	_expect_true(failures, "legacy mixed chunk manager path is retired", not FileAccess.file_exists(LEGACY_MANAGER_PATH))
 	_expect_true(failures, "legacy data settings path is retired", not FileAccess.file_exists(LEGACY_DATA_SETTINGS_PATH))
 

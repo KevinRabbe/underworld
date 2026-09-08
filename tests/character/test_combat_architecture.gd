@@ -3,6 +3,9 @@ extends RefCounted
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const EncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
 const APP_GAME_PATH := "res://app/game/game.gd"
+const COMBAT_COMPOSITION_PATH := "res://app/game/composition/combat_composition.gd"
+const COMBAT_RESOLVER_PATH := "res://gameplay/combat/resolution/combat_resolver.gd"
+const ENCOUNTER_CONTROLLER_PATH := "res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd"
 
 
 static func run() -> Array[String]:
@@ -33,16 +36,23 @@ static func run() -> Array[String]:
 	)
 
 	var app_source: String = FileAccess.get_file_as_string(APP_GAME_PATH)
+	var composition_source: String = FileAccess.get_file_as_string(COMBAT_COMPOSITION_PATH)
 	_expect_true(failures, "application composition source is readable", not app_source.is_empty())
+	_expect_true(failures, "combat composition helper source is readable", not composition_source.is_empty())
 	_expect_true(
 		failures,
-		"application composes canonical combat resolver",
-		"res://gameplay/combat/resolution/combat_resolver.gd" in app_source
+		"application delegates combat construction to canonical composition helper",
+		COMBAT_COMPOSITION_PATH in app_source and "CombatCompositionScript.compose_combat(" in app_source
 	)
 	_expect_true(
 		failures,
-		"application composes canonical encounter controller",
-		"res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd" in app_source
+		"combat composition helper owns canonical combat resolver dependency",
+		COMBAT_RESOLVER_PATH in composition_source
+	)
+	_expect_true(
+		failures,
+		"combat composition helper owns canonical encounter controller dependency",
+		ENCOUNTER_CONTROLLER_PATH in composition_source
 	)
 
 	resolver.free()

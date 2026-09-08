@@ -1,31 +1,25 @@
 extends Node3D
 
 const WorldSettingsScript := preload("res://world/runtime/config/world_settings.gd")
-const SurvivalSettingsScript := preload("res://gameplay/survival/prototype_survival_settings.gd")
-const WaterSettingsScript := preload("res://presentation/world/environment/prototype_water_settings.gd")
-const CavePresentationControllerScript := preload("res://presentation/world/caves/cave_presentation_controller.gd")
-const PrototypeCavePresentationCatalog := preload("res://content/presentation/caves/prototype_cave_presentation_catalog.tres")
-const SurfaceChunkStreamerScript := preload("res://world/runtime/streaming/surface_chunk_streamer.gd")
+const EnvironmentPresentationBuilderScript := preload("res://app/game/composition/environment_presentation_builder.gd")
 const WorldDeltaStoreScript := preload("res://worldgen/persistence/world_delta_store.gd")
 const WorldGenerationContextScript := preload("res://worldgen/pipeline/world_generation_context.gd")
 const IntegratedGameSaveContractScript := preload("res://gameplay/persistence/integrated_game_save_contract.gd")
 const GameplayStateCodecScript := preload("res://gameplay/persistence/gameplay_state_codec.gd")
 const GameplaySaveCatalogScript := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
 const WorldDomainSessionStateScript := preload("res://gameplay/world_session/world_domain_session_state.gd")
-const IntegratedSurvivalControllerScript := preload("res://gameplay/survival/integrated_survival_controller.gd")
 const ItemContainerStateScript := preload("res://gameplay/items/inventory/item_container_state.gd")
 const EquipmentHotbarStateScript := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
 const PendingLootStateScript := preload("res://gameplay/loot/runtime/pending_loot_state.gd")
 const PlayerScript := preload("res://gameplay/player/player.gd")
-const VoxelCharacterPresentationProviderScript := preload("res://presentation/characters/voxel/voxel_character_presentation_provider.gd")
-const PlayerDeathRecoveryControllerScript := preload("res://gameplay/player/lifecycle/player_death_recovery_controller.gd")
-const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
-const GameplayHudScript := preload("res://presentation/ui/hud/gameplay_hud.gd")
-const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
-const UnderworldRuntimeControllerScript := preload("res://worldgen/runtime/underworld_cave_runtime_controller.gd")
 const Map015FixtureScript := preload("res://worldgen/validation/map015_fixture.gd")
 const NaturalEntranceRouteSelectorScript := preload("res://worldgen/surface/natural_entrance_route_selector.gd")
+const WorldCompositionScript := preload("res://app/game/composition/world_composition.gd")
+const PlayerCompositionScript := preload("res://app/game/composition/player_composition.gd")
+const CombatCompositionScript := preload("res://app/game/composition/combat_composition.gd")
+const InterfaceCompositionScript := preload("res://app/game/composition/interface_composition.gd")
+const UnderworldCompositionScript := preload("res://app/game/composition/underworld_composition.gd")
 
 const STARTUP_NEW: StringName = &"new"
 const STARTUP_CONTINUE: StringName = &"continue"
@@ -287,34 +281,22 @@ func _collect_nearby_pending_loot() -> void:
 
 
 func _bind_gameplay_audio() -> void:
-	gameplay_audio_binding = get_node_or_null("GameplayAudio")
-	if gameplay_audio_binding == null or not gameplay_audio_binding.has_method("bind_game"):
-		return
-	var failures: Array[String] = gameplay_audio_binding.bind_game(self)
+	var composition: Dictionary = InterfaceCompositionScript.bind_gameplay_audio(self)
+	gameplay_audio_binding = composition.get("binding", null)
+	var failures: Array = composition.get("diagnostics", [])
 	if not failures.is_empty():
 		push_error("Gameplay audio binding failed: %s" % [failures])
 
 
 func _create_underworld_runtime() -> void:
-	underworld_runtime = UnderworldRuntimeControllerScript.new()
-	underworld_runtime.name = "UnderworldRuntime"
-	add_child(underworld_runtime)
-	if _session_world_context == null:
-		push_error("Underworld runtime requires retained exact session root context")
+	var composition: Dictionary = UnderworldCompositionScript.compose(self, _session_world_context, player)
+	underworld_runtime = composition.get("underworld_runtime", null)
+	cave_presentation = composition.get("cave_presentation", null)
+	for diagnostic in composition.get("diagnostics", []):
+		push_error(str(diagnostic))
+	if not bool(composition.get("success", false)):
 		return
-	underworld_runtime.configure(
-		str(_session_world_context.world_id),
-		str(_session_world_context.generator_manifest_id),
-		player
-	)
-
-	cave_presentation = CavePresentationControllerScript.new()
-	cave_presentation.name = "CavePresentation"
-	add_child(cave_presentation)
-	var presentation_failures: Array[String] = cave_presentation.configure(
-		underworld_runtime,
-		PrototypeCavePresentationCatalog
-	)
+	var presentation_failures: Array = composition.get("presentation_diagnostics", [])
 	if not presentation_failures.is_empty():
 		push_error("Cave presentation configuration failed: %s" % [presentation_failures])
 
@@ -362,59 +344,25 @@ func _create_underworld_runtime() -> void:
 
 
 func _setup_environment() -> void:
-	var world_environment: WorldEnvironment = WorldEnvironment.new()
-	world_environment.name = "WorldEnvironment"
-	var environment: Environment = Environment.new()
-	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.56, 0.72, 0.86)
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.72, 0.76, 0.82)
-	environment.ambient_light_energy = 0.8
-	world_environment.environment = environment
-	add_child(world_environment)
-	var sun: DirectionalLight3D = DirectionalLight3D.new()
-	sun.name = "Sun"
-	sun.rotation_degrees = Vector3(-55.0, -30.0, 0.0)
-	sun.light_energy = 1.1
-	sun.shadow_enabled = true
-	add_child(sun)
+	EnvironmentPresentationBuilderScript.build_environment(self)
 
 
 func _create_world() -> void:
-	world_settings = WorldSettingsScript.new()
-	if _session_world_context != null:
-		world_settings.world_seed = int(_session_world_context.world_seed)
-	elif enable_map015_fixture:
-		world_settings.world_seed = 1
-	survival_settings = SurvivalSettingsScript.new()
-	water_settings = WaterSettingsScript.new()
-
-	if _startup_mode == STARTUP_CONTINUE:
-		world_delta_store = _startup_candidate.get("delta_store", null)
-	else:
-		world_delta_store = WorldDeltaStoreScript.new()
-	if world_delta_store == null or not world_delta_store is WorldDeltaStoreScript:
-		push_error("Game startup is missing valid WorldDeltaStore authority")
-		world_delta_store = WorldDeltaStoreScript.new()
-
-	world = SurfaceChunkStreamerScript.new()
-	world.name = "SurfaceWorld"
-	if not world.bind_world_delta_store(world_delta_store):
-		push_error("Surface world rejected WorldDeltaStore authority")
-	world.configure(world_settings)
-	add_child(world)
-
-	survival = IntegratedSurvivalControllerScript.new()
-	survival.name = "PrototypeSurvival"
-	add_child(survival)
-	survival.configure_integrated(world, survival_settings, world_settings.world_seed)
-	if _startup_mode == STARTUP_CONTINUE:
-		var restore_failures: Array[String] = survival.activate_restored_state(
-			_startup_candidate.get("inventory_state", null),
-			_startup_candidate.get("equipment_state", null)
-		)
-		if not restore_failures.is_empty():
-			push_error("Detached Continue state failed during activation: %s" % [restore_failures])
+	var composition: Dictionary = WorldCompositionScript.compose(
+		self,
+		_session_world_context,
+		_startup_candidate,
+		_startup_mode == STARTUP_CONTINUE,
+		enable_map015_fixture
+	)
+	world_settings = composition.get("world_settings", null)
+	survival_settings = composition.get("survival_settings", null)
+	water_settings = composition.get("water_settings", null)
+	world_delta_store = composition.get("world_delta_store", null)
+	world = composition.get("world", null)
+	survival = composition.get("survival", null)
+	for diagnostic in composition.get("diagnostics", []):
+		push_error(str(diagnostic))
 
 	_resolve_natural_route()
 	if _startup_mode == STARTUP_CONTINUE:
@@ -481,101 +429,69 @@ func _record_route_failure(raw_diagnostics: Array) -> void:
 
 
 func _create_water_surface() -> void:
-	water_surface = MeshInstance3D.new()
-	water_surface.name = "PrototypeSea"
-	var plane: PlaneMesh = PlaneMesh.new()
-	plane.size = Vector2(water_settings.water_plane_size, water_settings.water_plane_size)
-	water_surface.mesh = plane
-	var water_material: StandardMaterial3D = StandardMaterial3D.new()
-	water_material.albedo_color = Color(0.08, 0.30, 0.48, 0.72)
-	water_material.roughness = 0.18
-	water_material.metallic = 0.05
-	water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	water_surface.material_override = water_material
-	water_surface.position = Vector3(spawn_xz.x, world_settings.sea_level + 0.03, spawn_xz.z)
-	add_child(water_surface)
+	var result: Dictionary = EnvironmentPresentationBuilderScript.build_water_surface(
+		self,
+		water_settings,
+		world_settings,
+		spawn_xz
+	)
+	water_surface = result.get("water_surface", null)
 
 
 func _create_player() -> bool:
+	var prepared_player: Node = null
 	if _gameplay_input_gate != null:
 		if _prepared_player == null or not is_instance_valid(_prepared_player):
 			push_error("Production Game has no pre-bound Player input authority")
 			return false
-		player = _prepared_player
+		prepared_player = _prepared_player
 		_prepared_player = null
-		if player.get("_gameplay_input_gate") != _gameplay_input_gate:
-			push_error("Prepared Player does not retain exact Game gameplay-input authority")
-			player.free()
-			player = null
-			return false
-	else:
-		player = PlayerScript.new()
-	player.name = "Player"
-	# Presentation is injected before add_child(), so Player._ready() never owns a hard-coded body implementation.
-	player.character_presentation_provider = VoxelCharacterPresentationProviderScript.new()
-	add_child(player)
-	var spawn_position: Vector3
-	if _startup_mode == STARTUP_CONTINUE:
-		spawn_position = _startup_candidate.get("resume_position", Vector3.ZERO)
-	else:
-		var spawn_height: float = world.get_height_at_world(spawn_xz.x, spawn_xz.z)
-		spawn_position = Vector3(spawn_xz.x, spawn_height + 3.0, spawn_xz.z)
-	player.global_position = spawn_position
-	player.set_harvest_range(survival_settings.harvest_range)
-	player.set_tool_use_cooldown(survival_settings.tool_use_cooldown)
-	player.harvest_requested.connect(survival.try_harvest)
-	player.hotbar_slot_requested.connect(survival.select_hotbar_slot)
-	player.craft_requested.connect(survival.request_craft)
-	survival.equipped_tool_changed.connect(player.set_equipped_tool)
-	world.set_player(player)
-	survival.set_player(player)
-	player.set_equipped_tool(survival.get_equipped_tool())
-	if _startup_mode == STARTUP_CONTINUE:
-		if not player.has_method("restore_current_vitals"):
-			push_error("Continue Player is missing current-vitals hydration seam")
-			return false
-		var vitals: Dictionary = _startup_candidate.get("player_vitals", {})
-		var hydration: Dictionary = player.call(
-			"restore_current_vitals",
-			vitals.get("current_health", null),
-			vitals.get("current_stamina", null)
-		)
-		if not bool(hydration.get("success", false)):
-			push_error("Continue Player vitals hydration rejected: %s" % [hydration.get("diagnostics", [])])
-			return false
+	var composition: Dictionary = PlayerCompositionScript.compose(
+		self,
+		prepared_player,
+		_gameplay_input_gate,
+		world,
+		survival,
+		survival_settings,
+		spawn_xz,
+		_startup_mode == STARTUP_CONTINUE,
+		_startup_candidate
+	)
+	player = composition.get("player", null)
+	if not bool(composition.get("success", false)):
+		for diagnostic in composition.get("diagnostics", []):
+			push_error(str(diagnostic))
+		return false
 	return true
 
 
 func _create_death_recovery() -> void:
-	death_recovery_controller = PlayerDeathRecoveryControllerScript.new()
-	death_recovery_controller.name = "DeathRecovery"
-	add_child(death_recovery_controller)
-	var failures: Array[String] = death_recovery_controller.configure(
+	var composition: Dictionary = CombatCompositionScript.compose_death_recovery(
+		self,
 		player,
 		world,
 		world_settings
 	)
+	death_recovery_controller = composition.get("controller", null)
+	var failures: Array = composition.get("diagnostics", [])
 	if not failures.is_empty():
 		push_error("Death recovery configuration failed: %s" % [failures])
-		return
-	player.defeat_requested.connect(death_recovery_controller.request_recovery)
 
 
 func _create_combat() -> void:
-	combat_resolver = CombatResolverScript.new()
-	combat_resolver.name = "CombatResolver"
-	add_child(combat_resolver)
-	combat_resolver.configure(player)
-	player.attack_requested.connect(combat_resolver.try_attack)
-	encounter_controller = BurrowerEncounterControllerScript.new()
-	encounter_controller.name = "BurrowerEncounters"
-	add_child(encounter_controller)
-	encounter_controller.configure(world, player, world_settings)
-	if _startup_mode == STARTUP_CONTINUE and not _restored_pending_loot_states.is_empty():
-		var import_result: Dictionary = encounter_controller.import_pending_loot_states(
-			_restored_pending_loot_states,
-			_startup_candidate.get("resume_position", Vector3.ZERO)
-		)
+	var composition: Dictionary = CombatCompositionScript.compose_combat(
+		self,
+		player,
+		world,
+		world_settings,
+		_startup_mode == STARTUP_CONTINUE,
+		_restored_pending_loot_states,
+		_startup_candidate.get("resume_position", Vector3.ZERO)
+	)
+	combat_resolver = composition.get("combat_resolver", null)
+	encounter_controller = composition.get("encounter_controller", null)
+	var import_result: Dictionary = composition.get("import_result", {})
+	if not import_result.is_empty():
 		if not bool(import_result.get("success", false)):
 			push_error("SAVE hard invariant: preflighted pending loot failed live import: %s" % [
 				import_result.get("diagnostics", []),
@@ -586,18 +502,17 @@ func _create_combat() -> void:
 
 
 func _create_gameplay_hud() -> void:
-	gameplay_hud = GameplayHudScript.new()
-	gameplay_hud.name = "GameplayHUD"
-	add_child(gameplay_hud)
-	var hud_failures: Array[String] = gameplay_hud.configure(
+	var composition: Dictionary = InterfaceCompositionScript.compose_gameplay_hud(
+		self,
 		player,
-		survival.get_inventory_state(),
-		survival.get_equipment_state()
+		survival,
+		Callable(self, "_on_player_parry_succeeded")
 	)
+	gameplay_hud = composition.get("gameplay_hud", null)
+	var hud_failures: Array = composition.get("diagnostics", [])
 	if not hud_failures.is_empty():
 		push_error("Gameplay HUD configuration failed: %s" % [hud_failures])
-	survival.harvest_result.connect(gameplay_hud.present_feedback)
-	player.parry_succeeded.connect(_on_player_parry_succeeded)
+
 
 func _on_player_parry_succeeded(_source_position: Vector3) -> void:
 	if gameplay_hud != null:
@@ -605,11 +520,9 @@ func _on_player_parry_succeeded(_source_position: Vector3) -> void:
 
 
 func _create_debug_hud() -> void:
-	if not enable_debug_hud:
-		return
-	debug_hud = DebugHudScript.new()
-	debug_hud.name = "DebugHUD"
-	debug_hud.configure(
+	var composition: Dictionary = InterfaceCompositionScript.compose_debug_hud(
+		self,
+		enable_debug_hud,
 		world,
 		player,
 		world_settings,
@@ -618,7 +531,7 @@ func _create_debug_hud() -> void:
 		encounter_controller,
 		underworld_runtime
 	)
-	add_child(debug_hud)
+	debug_hud = composition.get("debug_hud", null)
 
 
 func _capture_pending_loot_states() -> Dictionary:
