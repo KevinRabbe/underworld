@@ -91,11 +91,10 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	_test_environment_and_water(host, failures)
 	_test_audio_identity(host, failures)
 	_test_world_identity_and_failure_propagation(failures)
-	_test_prepared_player_identity(failures)
+	_test_prepared_player_identity(tree, failures)
 	_test_leaf_failure_propagation(failures)
 
-	host.queue_free()
-	await tree.process_frame
+	host.free()
 	return failures
 
 
@@ -133,7 +132,7 @@ static func _test_environment_and_water(host: Node3D, failures: Array[String]) -
 	else:
 		if sun.name != "Sun":
 			failures.append("environment builder changed Sun node name")
-		if sun.rotation_degrees != Vector3(-55.0, -30.0, 0.0):
+		if not sun.rotation_degrees.is_equal_approx(Vector3(-55.0, -30.0, 0.0)):
 			failures.append("environment builder changed Sun rotation")
 		if not is_equal_approx(sun.light_energy, 1.1):
 			failures.append("environment builder changed Sun energy")
@@ -160,7 +159,7 @@ static func _test_environment_and_water(host: Node3D, failures: Array[String]) -
 		if water_surface.name != "PrototypeSea":
 			failures.append("water builder changed PrototypeSea node name")
 		var expected_position := Vector3(spawn_xz.x, world_settings.sea_level + 0.03, spawn_xz.z)
-		if water_surface.position != expected_position:
+		if not water_surface.position.is_equal_approx(expected_position):
 			failures.append("water builder changed PrototypeSea placement")
 		if water_surface.mesh == null or not water_surface.mesh is PlaneMesh:
 			failures.append("water builder did not retain PlaneMesh presentation")
@@ -218,13 +217,16 @@ static func _test_world_identity_and_failure_propagation(failures: Array[String]
 	elif host.get_child_count() != 2 or host.get_child(0) != world or host.get_child(1) != survival:
 		failures.append("world composition changed Surface/Survival construction order")
 	var diagnostics: Array = result.get("diagnostics", [])
+	if bool(result.get("success", true)):
+		failures.append("world composition reported success despite Continue activation diagnostics")
 	if diagnostics.is_empty() or not str(diagnostics[0]).begins_with("Detached Continue state failed during activation:"):
 		failures.append("world composition did not return Continue activation failure to Game")
 	host.free()
 
 
-static func _test_prepared_player_identity(failures: Array[String]) -> void:
+static func _test_prepared_player_identity(tree: SceneTree, failures: Array[String]) -> void:
 	var host := Node3D.new()
+	tree.root.add_child(host)
 	var gate := Node.new()
 	var prepared := PreparedPlayerProbe.new()
 	prepared._gameplay_input_gate = gate
@@ -248,7 +250,7 @@ static func _test_prepared_player_identity(failures: Array[String]) -> void:
 		failures.append("Player composition replaced the exact prepared Player instance")
 	elif prepared.get_parent() != host or world.bound_player != prepared or survival.bound_player != prepared:
 		failures.append("Player composition changed exact Player dependency binding")
-	elif prepared.global_position != Vector3(2.0, 13.0, 3.0):
+	elif not prepared.global_position.is_equal_approx(Vector3(2.0, 13.0, 3.0)):
 		failures.append("Player composition changed post-add spawn placement")
 
 	var mismatched := PreparedPlayerProbe.new()
