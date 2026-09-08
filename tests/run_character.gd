@@ -11,6 +11,7 @@ const DeathRecoveryTests := preload("res://tests/character/test_death_recovery.g
 const CombatArchitectureTests := preload("res://tests/character/test_combat_architecture.gd")
 const WorldSurvivalArchitectureTests := preload("res://tests/character/test_world_survival_architecture.gd")
 const PlayerFeelTests := preload("res://tests/character/test_player_feel.gd")
+const PlayerLocomotionTests := preload("res://tests/character/test_player_locomotion_controller.gd")
 const VoxelCharacterTests := preload("res://tests/character/test_voxel_character.gd")
 const UnsupportedHeldItemPresentationTests := preload("res://tests/character/test_unsupported_held_item_presentation.gd")
 const BaselineFactory := preload("res://presentation/characters/voxel/baseline_survivor_factory.gd")
@@ -37,6 +38,7 @@ func _run_tests() -> void:
 	failures.append_array(CombatArchitectureTests.run())
 	failures.append_array(WorldSurvivalArchitectureTests.run())
 	failures.append_array(PlayerFeelTests.run(self))
+	failures.append_array(PlayerLocomotionTests.run())
 	failures.append_array(VoxelCharacterTests.run(self))
 	failures.append_array(UnsupportedHeldItemPresentationTests.run(self))
 
@@ -52,6 +54,7 @@ func _run_tests() -> void:
 		print("  combat resolution / encounter ownership split contracts passed")
 		print("  surface streaming / prototype survival ownership split contracts passed")
 		print("  responsive light/heavy action, buffering, stamina, and transition contracts passed")
+		print("  player locomotion value-level traces passed")
 		print("  faceted skinned survivor, legacy voxel fixture, runtime, and gameplay-boundary contracts passed")
 		print("  unsupported held-item presentation fails to explicit hidden fallback without gameplay mutation")
 		_print_faceted_metrics()
