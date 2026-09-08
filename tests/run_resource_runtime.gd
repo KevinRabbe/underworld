@@ -5,8 +5,17 @@ const RuntimeService := preload("res://gameplay/resources/runtime/underground_re
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
 const RuntimeTests := preload("res://tests/resources/test_underground_resource_runtime.gd")
 const REQUIRED_RESOURCE_RUNTIME_DEPENDENCY_PATHS: Array[String] = [
+	"worldgen/identity/stable_address.gd",
 	"worldgen/identity/stable_id.gd",
 	"content/placement/underground_placement_record.gd",
+	"core/content/registry/content_registry.gd",
+	"core/content/archetypes/archetype_realizer.gd",
+	"core/content/archetypes/packed_scene_archetype_adapter.gd",
+	"core/content/archetypes/archetype_family_validator.gd",
+	"core/content/schema/category_schema_registry.gd",
+	"core/content/schema/capability_schema_registry.gd",
+	"core/content/validation/content_validation_pipeline.gd",
+	"core/content/validation/content_validation_evidence.gd",
 	"gameplay/resources/definitions/resource_definition.gd",
 	"gameplay/resources/definitions/resource_yield_rule.gd",
 	"gameplay/resources/state/resource_depletion_state.gd",
@@ -27,6 +36,9 @@ const REQUIRED_RESOURCE_RUNTIME_DEPENDENCY_PATHS: Array[String] = [
 	"gameplay/items/inventory/inventory_state_codec.gd",
 	"gameplay/items/inventory/item_stack_state.gd",
 	"gameplay/items/inventory/item_instance_state.gd",
+	"tests/resources/test_underground_resource_runtime.gd",
+	"tests/run_resource_runtime.gd",
+	".github/workflows/resource-runtime-validation.yml",
 ]
 
 
@@ -122,6 +134,17 @@ func _test_pull_request_path_parser_false_positives(failures: Array[String]) -> 
 	if sibling_paths.has(STABLE_ID_PATH):
 		failures.append("pull_request.paths parser leaked an entry from a later sibling mapping")
 
+	# Negative GitHub path filters are ordered and can negate an earlier required
+	# positive dependency. This lane deliberately supports positive-only filters so
+	# the self-audit does not need to reimplement GitHub minimatch semantics.
+	var negated_yaml := "on:\n  pull_request:\n    paths:\n      - 'worldgen/persistence/world_delta_store.gd'\n      - '!worldgen/persistence/world_delta_store.gd'\n"
+	var negated_failures: Array[String] = []
+	var negated_paths: Array[String] = _pull_request_path_filters(negated_yaml, negated_failures)
+	if negated_failures.is_empty():
+		failures.append("pull_request.paths parser accepted a negative path filter that can negate required coverage")
+	if negated_paths.has("!worldgen/persistence/world_delta_store.gd"):
+		failures.append("pull_request.paths parser published a forbidden negative path filter")
+
 
 func _pull_request_path_filters(
 	workflow_text: String,
@@ -170,6 +193,11 @@ func _pull_request_path_filters(
 			var path_value: String = encoded_value.substr(1, encoded_value.length() - 2)
 			if path_value.is_empty() or path_value != path_value.strip_edges():
 				failures.append("Resource Runtime pull_request.paths contains an invalid path scalar")
+				continue
+			if path_value.begins_with("!"):
+				failures.append(
+					"Resource Runtime pull_request.paths negative filters are not allowed: %s" % path_value
+				)
 				continue
 			if result.has(path_value):
 				failures.append(
