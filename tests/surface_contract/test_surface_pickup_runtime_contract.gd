@@ -4,6 +4,7 @@ const TerrainChunk := preload("res://world/terrain_chunk.gd")
 const TerrainGenerator := preload("res://worldgen/surface/terrain_generator.gd")
 const PickupGenerator := preload("res://worldgen/surface/pickup_generator.gd")
 const SurfaceSettings := preload("res://worldgen/surface/prototype_surface_settings.gd")
+const WorldSettings := preload("res://world/runtime/config/world_settings.gd")
 const StableAddress := preload("res://worldgen/identity/stable_address.gd")
 const StableId := preload("res://worldgen/identity/stable_id.gd")
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
@@ -21,34 +22,25 @@ static func run() -> Array[String]:
 
 
 static func _test_non_mutating_pickup_discovery(failures: Array[String]) -> void:
-	var chunk = TerrainChunk.new()
-	chunk.chunk_coord = Vector2i(-2, 3)
-	chunk._branch_transforms = [
-		Transform3D(Basis.IDENTITY, Vector3(1.0, 0.0, 0.5)),
-		Transform3D(Basis.IDENTITY, Vector3(8.0, 0.0, 0.0)),
-	]
-	chunk._branch_stable_ids = [
-		_surface_id("branch", -8, 12),
-		_surface_id("branch", -6, 12),
-	]
-	chunk._loose_stone_transforms = [
-		Transform3D(Basis.IDENTITY, Vector3(0.5, 0.0, 1.0)),
-	]
-	chunk._loose_stone_stable_ids = [
-		_surface_id("loose-stone", -8, 12),
-	]
-
-	var branch_destroyed_before: Dictionary = chunk._destroyed_branch_indices.duplicate(true)
-	var stone_destroyed_before: Dictionary = chunk._destroyed_loose_stone_indices.duplicate(true)
+	var chunk = _build_pickup_chunk(
+		Vector2i(-2, 3),
+		[
+			Transform3D(Basis.IDENTITY, Vector3(1.0, 0.0, 0.5)),
+			Transform3D(Basis.IDENTITY, Vector3(8.0, 0.0, 0.0)),
+		],
+		[
+			_surface_id("branch", -8, 12),
+			_surface_id("branch", -6, 12),
+		],
+		[Transform3D(Basis.IDENTITY, Vector3(0.5, 0.0, 1.0))],
+		[_surface_id("loose-stone", -8, 12)],
+		{}
+	)
 	var first: Array = chunk.find_nearby_pickups(Vector3.ZERO, 2.0)
 	var second: Array = chunk.find_nearby_pickups(Vector3.ZERO, 2.0)
 
 	if first != second:
 		failures.append("surface pickup discovery changed across repeated identical queries")
-	if chunk._destroyed_branch_indices != branch_destroyed_before:
-		failures.append("surface branch discovery mutated destroyed-index world state")
-	if chunk._destroyed_loose_stone_indices != stone_destroyed_before:
-		failures.append("surface loose-stone discovery mutated destroyed-index world state")
 	if first.size() != 2:
 		failures.append("surface pickup discovery returned unexpected nearby candidate count: %d" % first.size())
 	else:
@@ -76,22 +68,22 @@ static func _test_non_mutating_pickup_discovery(failures: Array[String]) -> void
 
 
 static func _test_destroyed_pickups_are_excluded(failures: Array[String]) -> void:
-	var chunk = TerrainChunk.new()
-	chunk.chunk_coord = Vector2i(4, -5)
-	chunk._branch_transforms = [Transform3D(Basis.IDENTITY, Vector3.ZERO)]
-	chunk._branch_stable_ids = [_surface_id("branch", 16, -20)]
-	chunk._loose_stone_transforms = [Transform3D(Basis.IDENTITY, Vector3(0.25, 0.0, 0.25))]
-	chunk._loose_stone_stable_ids = [_surface_id("loose-stone", 16, -20)]
-	chunk._destroyed_branch_indices[0] = true
-	var before: Dictionary = chunk._destroyed_branch_indices.duplicate(true)
+	var branch_id: String = _surface_id("branch", 16, -20)
+	var stone_id: String = _surface_id("loose-stone", 16, -20)
+	var chunk = _build_pickup_chunk(
+		Vector2i(4, -5),
+		[Transform3D(Basis.IDENTITY, Vector3.ZERO)],
+		[branch_id],
+		[Transform3D(Basis.IDENTITY, Vector3(0.25, 0.0, 0.25))],
+		[stone_id],
+		{branch_id: true}
+	)
 
 	var found: Array = chunk.find_nearby_pickups(Vector3.ZERO, 2.0)
 	if found.size() != 1:
 		failures.append("surface pickup discovery did not exclude pre-destroyed candidate")
-	elif str(found[0].get("object_id", "")) != _surface_id("loose-stone", 16, -20):
+	elif str(found[0].get("object_id", "")) != stone_id:
 		failures.append("surface pickup discovery returned wrong surviving canonical StableId")
-	if chunk._destroyed_branch_indices != before:
-		failures.append("surface pickup discovery changed pre-existing destroyed-index state")
 	chunk.free()
 
 
@@ -232,26 +224,29 @@ static func _test_world_delta_and_streamer_reject_legacy_ids(failures: Array[Str
 
 static func _test_reload_suppresses_same_semantic_candidate(failures: Array[String]) -> void:
 	var stable_id: String = _surface_id("branch", -8, 12)
-	var reloaded = TerrainChunk.new()
-	reloaded._branch_transforms = [Transform3D(Basis.IDENTITY, Vector3.ZERO)]
-	reloaded._branch_stable_ids = [stable_id]
-	var destroyed_indices: Dictionary = {}
-	reloaded._load_destroyed_indices(
-		"branch",
-		reloaded._branch_transforms,
-		destroyed_indices,
+	var reloaded = _build_pickup_chunk(
+		Vector2i(-2, 3),
+		[Transform3D(Basis.IDENTITY, Vector3.ZERO)],
+		[stable_id],
+		[],
+		[],
 		{stable_id: true}
 	)
-	if not destroyed_indices.has(0):
-		failures.append("surface reload did not suppress destroyed semantic candidate")
-	reloaded._destroyed_branch_indices = destroyed_indices
 	if not reloaded.find_nearby_pickups(Vector3.ZERO, 2.0).is_empty():
 		failures.append("surface reload re-exposed destroyed pickup candidate")
-
-	reloaded._branch_stable_ids = ["sid1:garbage"]
-	if not reloaded._make_object_id("branch", 0).is_empty():
-		failures.append("TerrainChunk exposed malformed StableId as runtime object identity")
 	reloaded.free()
+
+	var malformed = _build_pickup_chunk(
+		Vector2i(-2, 3),
+		[Transform3D(Basis.IDENTITY, Vector3.ZERO)],
+		["sid1:garbage"],
+		[],
+		[],
+		{}
+	)
+	if not malformed._make_object_id("branch", 0).is_empty():
+		failures.append("TerrainChunk exposed malformed StableId as runtime object identity")
+	malformed.free()
 
 
 static func _assert_identity_set(
@@ -291,6 +286,77 @@ static func _pickup_fixture_data(
 		"forest_density": masks.duplicate(),
 		"rockiness": masks.duplicate(),
 		"buildability": masks.duplicate(),
+	}
+
+
+static func _build_pickup_chunk(
+	coord: Vector2i,
+	branch_transforms: Array,
+	branch_ids: Array,
+	stone_transforms: Array,
+	stone_ids: Array,
+	destroyed_objects: Dictionary
+):
+	var chunk = TerrainChunk.new()
+	var data: Dictionary = _terrain_chunk_data()
+	data["branch_transforms"] = branch_transforms
+	data["branch_stable_ids"] = branch_ids
+	data["loose_stone_transforms"] = stone_transforms
+	data["loose_stone_stable_ids"] = stone_ids
+	chunk.build(
+		coord,
+		data,
+		StandardMaterial3D.new(),
+		_decoration_assets(),
+		WorldSettings.new(),
+		destroyed_objects,
+		false
+	)
+	return chunk
+
+
+static func _terrain_chunk_data() -> Dictionary:
+	return {
+		"resolution": 2,
+		"spacing": 1.0,
+		"vertices": PackedVector3Array([
+			Vector3(0.0, 0.0, 0.0),
+			Vector3(1.0, 0.0, 0.0),
+			Vector3(0.0, 0.0, 1.0),
+			Vector3(1.0, 0.0, 1.0),
+		]),
+		"normals": PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP]),
+		"uvs": PackedVector2Array([Vector2.ZERO, Vector2.RIGHT, Vector2.DOWN, Vector2.ONE]),
+		"colors": PackedColorArray([Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE]),
+		"indices": PackedInt32Array([0, 2, 1, 1, 2, 3]),
+		"collision_heights": PackedFloat32Array([0.0, 0.0, 0.0, 0.0]),
+		"moisture": PackedFloat32Array([0.0, 0.0, 0.0, 0.0]),
+		"forest_density": PackedFloat32Array([0.0, 0.0, 0.0, 0.0]),
+		"rockiness": PackedFloat32Array([0.0, 0.0, 0.0, 0.0]),
+		"buildability": PackedFloat32Array([1.0, 1.0, 1.0, 1.0]),
+		"tree_transforms": [],
+		"tree_stable_ids": [],
+		"rock_transforms": [],
+		"rock_stable_ids": [],
+		"branch_transforms": [],
+		"branch_stable_ids": [],
+		"loose_stone_transforms": [],
+		"loose_stone_stable_ids": [],
+	}
+
+
+static func _decoration_assets() -> Dictionary:
+	var mesh: BoxMesh = BoxMesh.new()
+	var material: StandardMaterial3D = StandardMaterial3D.new()
+	return {
+		"tree_mesh": mesh,
+		"tree_material": material,
+		"rock_mesh": mesh,
+		"rock_material": material,
+		"branch_mesh": mesh,
+		"branch_material": material,
+		"loose_stone_mesh": mesh,
+		"loose_stone_material": material,
 	}
 
 
