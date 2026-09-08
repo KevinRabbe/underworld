@@ -1,5 +1,6 @@
 extends RefCounted
 
+const TypedJsonWire := preload("res://worldgen/persistence/typed_json_wire.gd")
 const IntegratedGameSaveContract := preload("res://gameplay/persistence/integrated_game_save_contract.gd")
 const LegacyV1GameSaveCodec := preload("res://gameplay/persistence/legacy_v1_game_save_codec.gd")
 
@@ -10,6 +11,7 @@ static func run() -> Array[String]:
 	_compare_validation_diagnostics(failures)
 	_compare_invalid_decode(failures)
 	_compare_invalid_clone(failures)
+	_verify_v2_legacy_classification(failures)
 	return failures
 
 
@@ -83,6 +85,43 @@ static func _compare_invalid_clone(failures: Array[String]) -> void:
 			LegacyV1GameSaveCodec.clone_candidate(candidate),
 			IntegratedGameSaveContract.clone_candidate(candidate)
 		)
+
+
+static func _verify_v2_legacy_classification(failures: Array[String]) -> void:
+	var envelope: Dictionary = {
+		"schema": LegacyV1GameSaveCodec.SCHEMA_NAME,
+		"save_schema_version": LegacyV1GameSaveCodec.SAVE_SCHEMA_VERSION,
+		"map_json": "{}",
+		"inventory_json": "{}",
+		"equipment_json": "{}",
+		"pending_loot_jsons": [],
+		"player_resume": {"x": 1.0, "y": 2.0, "z": 3.0},
+	}
+	var encoded: Dictionary = TypedJsonWire.encode(envelope, "legacy v1 classification fixture")
+	if not bool(encoded.get("success", false)):
+		failures.append("legacy v1 classification fixture did not encode")
+		return
+	var classified: Dictionary = IntegratedGameSaveContract.decode_v2_classified(
+		str(encoded.get("json", ""))
+	)
+	_expect_equal(
+		failures,
+		"valid legacy v1 remains classified incompatible",
+		classified.get("classification", ""),
+		IntegratedGameSaveContract.CLASS_INCOMPATIBLE
+	)
+	_expect_equal(
+		failures,
+		"valid legacy v1 classification remains unsuccessful",
+		bool(classified.get("success", true)),
+		false
+	)
+	_expect_equal(
+		failures,
+		"valid legacy v1 keeps domain-missing compatibility diagnostic",
+		classified.get("diagnostics", []),
+		[IntegratedGameSaveContract.LEGACY_DOMAIN_MISSING_DIAGNOSTIC]
+	)
 
 
 static func _expect_equal(
