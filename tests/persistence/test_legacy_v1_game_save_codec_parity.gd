@@ -3,6 +3,7 @@ extends RefCounted
 const TypedJsonWire := preload("res://worldgen/persistence/typed_json_wire.gd")
 const IntegratedGameSaveContract := preload("res://gameplay/persistence/integrated_game_save_contract.gd")
 const LegacyV1GameSaveCodec := preload("res://gameplay/persistence/legacy_v1_game_save_codec.gd")
+const LegacyV1FixtureSource := preload("res://tests/persistence/test_integrated_game_save_contract.gd")
 
 
 static func run() -> Array[String]:
@@ -11,6 +12,7 @@ static func run() -> Array[String]:
 	_compare_validation_diagnostics(failures)
 	_compare_invalid_decode(failures)
 	_compare_invalid_clone(failures)
+	_probe_valid_golden(failures)
 	_verify_v2_legacy_classification(failures)
 	return failures
 
@@ -85,6 +87,26 @@ static func _compare_invalid_clone(failures: Array[String]) -> void:
 			LegacyV1GameSaveCodec.clone_candidate(candidate),
 			IntegratedGameSaveContract.clone_candidate(candidate)
 		)
+
+
+static func _probe_valid_golden(failures: Array[String]) -> void:
+	var fixture_failures: Array[String] = []
+	var fixture: Dictionary = LegacyV1FixtureSource._fixture(fixture_failures)
+	if not fixture_failures.is_empty() or fixture.is_empty():
+		failures.append("legacy v1 golden fixture setup failed: %s" % [fixture_failures])
+		return
+	var encoded: Dictionary = LegacyV1GameSaveCodec.encode(
+		fixture["context"],
+		fixture["delta_store"],
+		fixture["inventory"],
+		fixture["equipment"],
+		[fixture["pending_b"], fixture["pending_a"]],
+		fixture["resume_position"]
+	)
+	if not bool(encoded.get("success", false)):
+		failures.append("legacy v1 golden fixture encode failed: %s" % [encoded.get("diagnostics", [])])
+		return
+	print("LEGACY_V1_GOLDEN_PROBE=" + str(encoded.get("json", "")))
 
 
 static func _verify_v2_legacy_classification(failures: Array[String]) -> void:
