@@ -6,6 +6,8 @@ const LegacyV1GameSaveCodec := preload("res://gameplay/persistence/legacy_v1_gam
 const LegacyV1FixtureSource := preload("res://tests/persistence/test_integrated_game_save_contract.gd")
 
 const GOLDEN_PATH := "res://tests/persistence/fixtures/legacy_v1_valid_golden.json"
+const GOLDEN_LENGTH: int = 5210
+const GOLDEN_SHA256 := "d04b8c1a15095268516abaf0f476658a29c3d86b47470a4be2e9c2bd90b64254"
 
 
 static func run() -> Array[String]:
@@ -96,6 +98,8 @@ static func _compare_valid_golden_and_clone(failures: Array[String]) -> void:
 	if expected_json.is_empty():
 		failures.append("legacy v1 golden fixture could not be read")
 		return
+	_expect_equal(failures, "accepted legacy v1 golden byte length", expected_json.length(), GOLDEN_LENGTH)
+	_expect_equal(failures, "accepted legacy v1 golden SHA-256", expected_json.sha256_text(), GOLDEN_SHA256)
 
 	var fixture_failures: Array[String] = []
 	var fixture: Dictionary = LegacyV1FixtureSource._fixture(fixture_failures)
