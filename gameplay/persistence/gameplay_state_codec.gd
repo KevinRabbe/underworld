@@ -4,10 +4,10 @@ const InventoryEquipmentCodec := preload("res://gameplay/persistence/codecs/inve
 const PlayerVitalsCodec := preload("res://gameplay/persistence/codecs/player_vitals_codec.gd")
 const PendingLootCodec := preload("res://gameplay/persistence/codecs/pending_loot_codec.gd")
 
-const INVENTORY_SCHEMA := "persistence.inventory.v1"
-const EQUIPMENT_SCHEMA := "persistence.equipment.v1"
-const PENDING_LOOT_SCHEMA := "persistence.pending_loot.v1"
-const PLAYER_VITALS_SCHEMA := "persistence.player_vitals.v1"
+const INVENTORY_SCHEMA := InventoryEquipmentCodec.INVENTORY_SCHEMA
+const EQUIPMENT_SCHEMA := InventoryEquipmentCodec.EQUIPMENT_SCHEMA
+const PENDING_LOOT_SCHEMA := PendingLootCodec.PENDING_LOOT_SCHEMA
+const PLAYER_VITALS_SCHEMA := PlayerVitalsCodec.PLAYER_VITALS_SCHEMA
 const ITEM_FAMILY := "item"
 const LOOT_PROFILE_FAMILY := "loot_profile"
 
