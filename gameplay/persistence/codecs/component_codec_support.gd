@@ -124,8 +124,8 @@ static func definition_contract(definition) -> String:
 
 static func encoded(snapshot: Dictionary, label: String) -> Dictionary:
 	var failures: Array[String] = []
-	for failure in InventoryStateCodec.validate_state(snapshot, label):
-		failures.append(failure)
+	for validation_failure in InventoryStateCodec.validate_state(snapshot, label):
+		failures.append(validation_failure)
 	validate_json_safe(snapshot, label, failures)
 	if not failures.is_empty():
 		return failure(failures)
