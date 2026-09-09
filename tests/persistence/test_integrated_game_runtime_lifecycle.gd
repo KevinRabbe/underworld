@@ -14,6 +14,7 @@ const EquipmentService := preload("res://gameplay/items/equipment/equipment_serv
 const PendingLootState := preload("res://gameplay/loot/runtime/pending_loot_state.gd")
 const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
 const GameSaveSlotService := preload("res://gameplay/persistence/game_save_slot_service.gd")
+const GameSaveSnapshotBuilder := preload("res://app/game/session/game_save_snapshot_builder.gd")
 
 const TEST_SEED: int = 2174242
 const WOOD_ID := "item.resource.wood"
@@ -79,6 +80,39 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		expected_resume,
 		failures
 	)
+
+	# The extracted owner must be exactly equivalent to the stable Game facade for
+	# both a valid live runtime and a fail-closed missing dependency.
+	var direct_request: Dictionary = GameSaveSnapshotBuilder.capture(
+		game.get("world_settings"),
+		game.get("_session_world_context"),
+		game.get("_world_session_state"),
+		game.get("world_delta_store"),
+		game.get("survival"),
+		game.get("player"),
+		game.get("encounter_controller")
+	)
+	var facade_request: Dictionary = game.call("build_save_request")
+	if direct_request != facade_request:
+		failures.append("Game SAVE facade changed extracted builder request semantics")
+
+	var original_world_settings = game.get("world_settings")
+	game.set("world_settings", null)
+	var direct_missing_world: Dictionary = GameSaveSnapshotBuilder.capture(
+		null,
+		game.get("_session_world_context"),
+		game.get("_world_session_state"),
+		game.get("world_delta_store"),
+		game.get("survival"),
+		game.get("player"),
+		game.get("encounter_controller")
+	)
+	var facade_missing_world: Dictionary = game.call("build_save_request")
+	game.set("world_settings", original_world_settings)
+	if direct_missing_world != facade_missing_world:
+		failures.append("Game SAVE facade changed extracted builder failure semantics")
+	if bool(facade_missing_world.get("success", false)):
+		failures.append("Game SAVE snapshot accepted missing WorldSettings after extraction")
 
 	# Production snapshot -> atomic slot -> teardown -> detached load -> Continue.
 	var request_variant: Variant = game.call("build_save_request")
