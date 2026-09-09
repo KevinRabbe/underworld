@@ -6,6 +6,7 @@ on:
       - 'presentation/ui/hud/**'
       - 'app/game/game.gd'
       - 'tests/presentation/test_gameplay_hud_contract.gd'
+      - 'tests/presentation/test_gameplay_objective_guidance.gd'
       - 'tests/run_hud.gd'
       - '.github/workflows/hud-validation.yml'
   push:
@@ -15,6 +16,7 @@ on:
       - 'presentation/ui/hud/**'
       - 'app/game/game.gd'
       - 'tests/presentation/test_gameplay_hud_contract.gd'
+      - 'tests/presentation/test_gameplay_objective_guidance.gd'
       - 'tests/run_hud.gd'
       - '.github/workflows/hud-validation.yml'
 
