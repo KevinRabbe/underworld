@@ -15,18 +15,23 @@ The Underworld is not required to be the literal continuous geometry beneath the
 
 See [`20_world/WORLD_DOMAINS_AND_TRANSITIONS.md`](20_world/WORLD_DOMAINS_AND_TRANSITIONS.md).
 
-## 2. Current playable scope — HARD GATE
+## 2. First playable biome scope — HARD GATE
 
-The current vertical slice needs exactly:
+The first player-facing content milestone is **one self-contained Overworld biome** that proves the core survival/building/combat/exploration loop before later biome/domain progression is required.
 
-- **one Overworld biome**;
-- **one biome in the first accessible Underworld layer**;
-- a working transition between them;
-- the core survival/building/combat/exploration loop functioning across both.
+Biome 1 must stand on its own as a learn/explore/survive/build experience. Its completion loop does **not** require:
+- a cave;
+- a portal/gateway;
+- Underworld entry;
+- a pickaxe;
+- mining/ore progression;
+- farming/planting.
 
-Do **not** design or implement additional Overworld biomes, deeper Underworld biomes/layers, or late-game systems merely because they are interesting future ideas.
+The accepted two-domain architecture remains locked. This is a **progression and milestone sequencing decision, not an architecture reversal**: the first Underworld biome and its gateway become later progression/content instead of being required to make the first biome playable.
 
-Future biome slots may be acknowledged at a roadmap level, but their theme, art, mechanics and content remain intentionally open until the current two-biome foundation is genuinely playable and validated.
+Do not expand into multiple Overworld biomes, deeper Underworld biomes/layers or late-game systems merely because they are interesting future ideas. Prove the first Overworld biome first, then add the next progression layer deliberately.
+
+The detailed first-biome content lock is in [`40_content/OVERWORLD_BIOME_1.md`](40_content/OVERWORLD_BIOME_1.md).
 
 ## 3. Both worlds exist independently of player choices — LOCKED
 
@@ -229,5 +234,6 @@ Prefer proving one strong version of a system before multiplying cosmetic/conten
 - one good weapon of a type before many variants;
 - one strong forest system before many tree skins;
 - one expressive construction grammar before hundreds of cosmetic building variants;
-- one playable Overworld biome and one playable first-layer Underworld biome before designing future biome families;
+- one strong playable first Overworld biome before relying on cave/gateway/Underworld progression to carry the early game;
+- one strong first-layer Underworld biome before designing deeper Underworld biome families;
 - no late-game Ancient Technology implementation before the current core loop is proven.
