@@ -11,6 +11,9 @@ const InventoryStateCodec := preload("res://gameplay/items/inventory/inventory_s
 const LootProfileDefinition := preload("res://gameplay/loot/definitions/loot_profile_definition.gd")
 const PendingLootState := preload("res://gameplay/loot/runtime/pending_loot_state.gd")
 const GameplayStateCodec := preload("res://gameplay/persistence/gameplay_state_codec.gd")
+const InventoryEquipmentCodec := preload("res://gameplay/persistence/codecs/inventory_equipment_codec.gd")
+const PlayerVitalsCodec := preload("res://gameplay/persistence/codecs/player_vitals_codec.gd")
+const PendingLootCodec := preload("res://gameplay/persistence/codecs/pending_loot_codec.gd")
 
 const EQUIPMENT_ROOT := "category.item.equipment"
 const EQUIPABLE := "capability.equipable"
@@ -32,6 +35,7 @@ static func run() -> Array[String]:
 	_test_malformed_pending_reward_never_reconstructs(failures)
 	_test_pending_loot_structural_keys_fail_closed(failures)
 	_test_canonical_evidence_is_order_independent(failures)
+	_test_component_codec_owner_parity(failures)
 	return failures
 
 
@@ -579,6 +583,58 @@ static func _test_canonical_evidence_is_order_independent(failures: Array[String
 		failures.append("equivalent registry/input ordering changed persistence canonical JSON")
 	if str(encoded_a.get("fingerprint", "")) != str(encoded_b.get("fingerprint", "")):
 		failures.append("equivalent registry/input ordering changed persistence fingerprint")
+
+
+static func _test_component_codec_owner_parity(failures: Array[String]) -> void:
+	var authored = _definitions()
+	var registry = _registry(authored.values())
+	var inventory = _inventory_with_gap(authored)
+	var facade_inventory: Dictionary = GameplayStateCodec.encode_inventory(inventory, registry)
+	var owner_inventory: Dictionary = InventoryEquipmentCodec.encode_inventory(inventory, registry)
+	if facade_inventory != owner_inventory:
+		failures.append("inventory component owner diverged from stable gameplay codec facade")
+	var bad_inventory: Dictionary = facade_inventory.get("snapshot", {}).duplicate(true)
+	bad_inventory["schema"] = "persistence.inventory.v999"
+	if GameplayStateCodec.decode_inventory(bad_inventory, registry) != InventoryEquipmentCodec.decode_inventory(bad_inventory, registry):
+		failures.append("inventory component owner malformed diagnostics diverged from facade")
+
+	var equipment_config: Dictionary = _equipment_config([EQUIPABLE])
+	var equipment = EquipmentHotbarState.new().configure(
+		equipment_config["rules"],
+		equipment_config["bindings"]
+	)
+	var facade_equipment: Dictionary = GameplayStateCodec.encode_equipment(equipment, registry)
+	var owner_equipment: Dictionary = InventoryEquipmentCodec.encode_equipment(equipment, registry)
+	if facade_equipment != owner_equipment:
+		failures.append("equipment component owner diverged from stable gameplay codec facade")
+
+	var facade_vitals: Dictionary = GameplayStateCodec.encode_player_vitals(37, 12.5)
+	var owner_vitals: Dictionary = PlayerVitalsCodec.encode(37, 12.5)
+	if facade_vitals != owner_vitals:
+		failures.append("player-vitals component owner diverged from stable gameplay codec facade")
+	var bad_vitals: Dictionary = facade_vitals.get("snapshot", {}).duplicate(true)
+	bad_vitals["current_health"] = 0
+	if GameplayStateCodec.decode_player_vitals(bad_vitals) != PlayerVitalsCodec.decode(bad_vitals):
+		failures.append("player-vitals component owner malformed diagnostics diverged from facade")
+
+	var contract: String = InventoryStateCodec.canonical_json(authored["ore"].canonical_descriptor())
+	var pending = PendingLootState.new().configure(
+		"occurrence.persistence.owner_parity",
+		"loot_profile.persistence_test",
+		[{
+			"item_id": "item.persistence_ore",
+			"quantity": 2,
+			"definition_contract": contract,
+		}]
+	)
+	var facade_pending: Dictionary = GameplayStateCodec.encode_pending_loot(pending, registry)
+	var owner_pending: Dictionary = PendingLootCodec.encode(pending, registry)
+	if facade_pending != owner_pending:
+		failures.append("pending-loot component owner diverged from stable gameplay codec facade")
+	var bad_pending: Dictionary = facade_pending.get("snapshot", {}).duplicate(true)
+	bad_pending["future_field"] = true
+	if GameplayStateCodec.decode_pending_loot(bad_pending, registry) != PendingLootCodec.decode(bad_pending, registry):
+		failures.append("pending-loot component owner malformed diagnostics diverged from facade")
 
 
 static func _inventory_with_gap(authored: Dictionary):
