@@ -3,32 +3,52 @@ extends SceneTree
 const ItemContainerState := preload("res://gameplay/items/inventory/item_container_state.gd")
 const RuntimeService := preload("res://gameplay/resources/runtime/underground_resource_runtime_service.gd")
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
+const ArchetypeRealizer := preload("res://core/content/archetypes/archetype_realizer.gd")
+const PackedSceneArchetypeAdapter := preload("res://core/content/archetypes/packed_scene_archetype_adapter.gd")
 const RuntimeTests := preload("res://tests/resources/test_underground_resource_runtime.gd")
 const REQUIRED_RESOURCE_RUNTIME_DEPENDENCY_PATHS: Array[String] = [
 	"worldgen/identity/stable_address.gd",
 	"worldgen/identity/stable_id.gd",
 	"content/placement/underground_placement_record.gd",
 	"core/content/registry/content_registry.gd",
+	"core/content/registry/content_definition.gd",
+	"core/content/references/content_reference.gd",
+	"core/content/identity/content_id.gd",
 	"core/content/archetypes/archetype_realizer.gd",
+	"core/content/archetypes/archetype_definition.gd",
+	"core/content/archetypes/archetype_composition.gd",
+	"core/content/archetypes/archetype_realization_adapter.gd",
 	"core/content/archetypes/packed_scene_archetype_adapter.gd",
 	"core/content/archetypes/archetype_family_validator.gd",
 	"core/content/schema/category_schema_registry.gd",
 	"core/content/schema/capability_schema_registry.gd",
+	"core/content/schema/category_schema.gd",
+	"core/content/schema/capability_schema.gd",
+	"core/content/schema/schema_id.gd",
 	"core/content/validation/content_validation_pipeline.gd",
 	"core/content/validation/content_validation_evidence.gd",
+	"core/content/validation/content_family_validator.gd",
+	"core/content/validation/content_reference_cycle_policy.gd",
+	"core/content/validation/finite_number.gd",
 	"gameplay/resources/definitions/resource_definition.gd",
 	"gameplay/resources/definitions/resource_yield_rule.gd",
+	"gameplay/resources/definitions/authored_harvestable_resource_definition.gd",
 	"gameplay/resources/state/resource_depletion_state.gd",
 	"worldgen/persistence/world_delta_store.gd",
+	"content/resources/**",
+	"content/items/resources/iron_chunk_definition.tres",
 	"content/items/resources/stone_definition.tres",
 	"content/items/tools/stone_pickaxe_definition.tres",
+	"presentation/world/resources/**",
 	"gameplay/items/definitions/item_definition.gd",
 	"gameplay/items/equipment/equipment_hotbar_state.gd",
 	"gameplay/items/equipment/equipped_item_resolver.gd",
 	"gameplay/items/equipment/equipment_slot_rule.gd",
 	"gameplay/items/equipment/equipment_service.gd",
 	"gameplay/items/weapons/definitions/weapon_definition.gd",
+	"gameplay/items/weapons/definitions/weapon_attack_set_definition.gd",
 	"gameplay/items/weapons/runtime/weapon_attack_resolver.gd",
+	"gameplay/combat/attacks/player_attack_definition.gd",
 	"gameplay/items/inventory/item_container_state.gd",
 	"gameplay/items/inventory/inventory_transaction_plan.gd",
 	"gameplay/items/inventory/inventory_transaction_service.gd",
@@ -39,6 +59,14 @@ const REQUIRED_RESOURCE_RUNTIME_DEPENDENCY_PATHS: Array[String] = [
 	"tests/resources/test_underground_resource_runtime.gd",
 	"tests/run_resource_runtime.gd",
 	".github/workflows/resource-runtime-validation.yml",
+]
+const FORBIDDEN_BROAD_RESOURCE_RUNTIME_TRIGGERS: Array[String] = [
+	"core/**",
+	"core/content/**",
+	"gameplay/**",
+	"gameplay/items/**",
+	"**",
+	"**/*",
 ]
 
 
@@ -57,11 +85,13 @@ class CommitFailingInventory extends ItemContainerState:
 func _init() -> void:
 	var failures: Array[String] = RuntimeTests.run()
 	_test_workflow_dependency_triggers(failures)
+	_test_workflow_trigger_precision_policy(failures)
 	_test_pull_request_path_parser_false_positives(failures)
+	_test_compatibility_only_realization_preserves_state(failures)
 	_test_commit_phase_failure_restores_world_delta(failures)
 	if failures.is_empty():
 		print("[RESOURCE RUNTIME VALIDATION] PASS")
-		print("  iron content / archetype realization / semantic pickaxe eligibility / atomic inventory yield / persistent depletion / idempotence / strict restore compatibility / commit-phase rollback / workflow dependency triggers passed")
+		print("  iron content / archetype realization / semantic pickaxe eligibility / atomic inventory yield / persistent depletion / idempotence / strict restore compatibility / commit-phase rollback / precise workflow dependency triggers passed")
 		quit(0)
 		return
 
@@ -80,18 +110,69 @@ func _test_workflow_dependency_triggers(failures: Array[String]) -> void:
 	if workflow_file == null:
 		failures.append("Resource Runtime workflow could not be opened for dependency-trigger validation")
 		return
+	var parser_failures: Array[String] = []
 	var pull_request_paths: Array[String] = _pull_request_path_filters(
 		workflow_file.get_as_text(),
-		failures
+		parser_failures
 	)
-	if pull_request_paths.has("gameplay/items/**"):
-		failures.append(
-			"Resource Runtime dependency trigger must remain precise; broad gameplay/items/** is not allowed"
-		)
-	for dependency_path in REQUIRED_RESOURCE_RUNTIME_DEPENDENCY_PATHS:
+	for parser_failure in parser_failures:
+		failures.append(parser_failure)
+	for policy_failure in _resource_runtime_trigger_policy_failures(
+		pull_request_paths,
+		REQUIRED_RESOURCE_RUNTIME_DEPENDENCY_PATHS
+	):
+		failures.append(policy_failure)
+
+
+func _resource_runtime_trigger_policy_failures(
+	pull_request_paths: Array[String],
+	required_paths: Array[String]
+) -> Array[String]:
+	var result: Array[String] = []
+	for forbidden_path in FORBIDDEN_BROAD_RESOURCE_RUNTIME_TRIGGERS:
+		if pull_request_paths.has(forbidden_path):
+			result.append(
+				"Resource Runtime dependency trigger must remain precise; forbidden broad trigger is not allowed: %s" % forbidden_path
+			)
+	for dependency_path in required_paths:
 		if not pull_request_paths.has(dependency_path):
-			failures.append(
+			result.append(
 				"Resource Runtime pull_request.paths is missing direct runtime/fixture dependency trigger: %s" % dependency_path
+			)
+	return result
+
+
+func _test_workflow_trigger_precision_policy(failures: Array[String]) -> void:
+	var representative_required: Array[String] = [
+		"core/content/validation/content_validation_pipeline.gd",
+		"core/content/archetypes/archetype_definition.gd",
+		"gameplay/resources/runtime/**",
+		"content/resources/**",
+		"presentation/world/resources/**",
+	]
+	var precise_yaml := "on:\n  pull_request:\n    paths:\n      - 'core/content/validation/content_validation_pipeline.gd'\n      - 'core/content/archetypes/archetype_definition.gd'\n      - 'gameplay/resources/runtime/**'\n      - 'content/resources/**'\n      - 'presentation/world/resources/**'\n"
+	var precise_parser_failures: Array[String] = []
+	var precise_paths: Array[String] = _pull_request_path_filters(precise_yaml, precise_parser_failures)
+	if not precise_parser_failures.is_empty():
+		failures.append("precise Resource Runtime trigger fixture failed parsing: %s" % [precise_parser_failures])
+	else:
+		var precise_policy_failures: Array[String] = _resource_runtime_trigger_policy_failures(
+			precise_paths,
+			representative_required
+		)
+		if not precise_policy_failures.is_empty():
+			failures.append("precise Resource Runtime trigger fixture was rejected: %s" % [precise_policy_failures])
+
+	for forbidden_path in FORBIDDEN_BROAD_RESOURCE_RUNTIME_TRIGGERS:
+		var broad_paths: Array[String] = precise_paths.duplicate()
+		broad_paths.append(forbidden_path)
+		var broad_failures: Array[String] = _resource_runtime_trigger_policy_failures(
+			broad_paths,
+			representative_required
+		)
+		if broad_failures.is_empty():
+			failures.append(
+				"Resource Runtime precision policy accepted forbidden broad trigger: %s" % forbidden_path
 			)
 
 
@@ -218,6 +299,52 @@ func _pull_request_path_filters(
 	elif not found_paths:
 		failures.append("Resource Runtime workflow is missing on.pull_request.paths")
 	return result
+
+
+func _test_compatibility_only_realization_preserves_state(failures: Array[String]) -> void:
+	var fixture: Dictionary = RuntimeTests._content_fixture(failures)
+	if fixture.is_empty():
+		return
+	var definition = fixture["resource"]
+	var archetype = fixture["archetype"]
+	var placement = RuntimeTests._placement()
+	var registry_before: Array = fixture["registry"].canonical_manifest()
+	var resource_before: Dictionary = definition.canonical_descriptor()
+	var placement_before: Dictionary = placement.canonical_data()
+
+	var realizer = ArchetypeRealizer.new()
+	var adapter_failures: Array[String] = realizer.register_adapter(PackedSceneArchetypeAdapter.new())
+	if not adapter_failures.is_empty():
+		failures.append("compatibility-only immutability fixture rejected packed.scene adapter: %s" % [adapter_failures])
+		return
+	var compatibility_only_validation: Dictionary = {
+		"success": true,
+		"diagnostics": [],
+		"validated_definition_ids": [archetype.content_id],
+	}
+	var rejected: Dictionary = RuntimeService.new().realize_placement(
+		placement,
+		fixture["registry"],
+		compatibility_only_validation,
+		realizer
+	)
+	if bool(rejected.get("success", true)):
+		failures.append("compatibility-only state immutability fixture was accepted")
+	if rejected.get("instance", null) != null:
+		failures.append("compatibility-only state immutability fixture realized an instance")
+	var found_evidence_diagnostic: bool = false
+	for diagnostic in rejected.get("diagnostics", []):
+		if str(diagnostic).contains("CONTENT-006 validation evidence: expected CONTENT-006 snapshot-bound validation evidence"):
+			found_evidence_diagnostic = true
+			break
+	if not found_evidence_diagnostic:
+		failures.append("compatibility-only state immutability fixture missed CONTENT-006 evidence diagnostic")
+	if fixture["registry"].canonical_manifest() != registry_before:
+		failures.append("compatibility-only rejection changed content registry state")
+	if definition.canonical_descriptor() != resource_before:
+		failures.append("compatibility-only rejection changed resource definition state")
+	if placement.canonical_data() != placement_before:
+		failures.append("compatibility-only rejection changed placement state")
 
 
 func _test_commit_phase_failure_restores_world_delta(failures: Array[String]) -> void:
