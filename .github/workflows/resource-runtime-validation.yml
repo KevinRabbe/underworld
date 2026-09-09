@@ -4,8 +4,29 @@ on:
   pull_request:
     paths:
       - 'gameplay/resources/runtime/**'
+      - 'worldgen/identity/stable_address.gd'
       - 'worldgen/identity/stable_id.gd'
       - 'content/placement/underground_placement_record.gd'
+      - 'core/content/registry/content_registry.gd'
+      - 'core/content/registry/content_definition.gd'
+      - 'core/content/references/content_reference.gd'
+      - 'core/content/identity/content_id.gd'
+      - 'core/content/archetypes/archetype_realizer.gd'
+      - 'core/content/archetypes/archetype_definition.gd'
+      - 'core/content/archetypes/archetype_composition.gd'
+      - 'core/content/archetypes/archetype_realization_adapter.gd'
+      - 'core/content/archetypes/packed_scene_archetype_adapter.gd'
+      - 'core/content/archetypes/archetype_family_validator.gd'
+      - 'core/content/schema/category_schema_registry.gd'
+      - 'core/content/schema/capability_schema_registry.gd'
+      - 'core/content/schema/category_schema.gd'
+      - 'core/content/schema/capability_schema.gd'
+      - 'core/content/schema/schema_id.gd'
+      - 'core/content/validation/content_validation_pipeline.gd'
+      - 'core/content/validation/content_validation_evidence.gd'
+      - 'core/content/validation/content_family_validator.gd'
+      - 'core/content/validation/content_reference_cycle_policy.gd'
+      - 'core/content/validation/finite_number.gd'
       - 'gameplay/resources/definitions/resource_definition.gd'
       - 'gameplay/resources/definitions/resource_yield_rule.gd'
       - 'gameplay/resources/definitions/authored_harvestable_resource_definition.gd'
@@ -22,7 +43,9 @@ on:
       - 'gameplay/items/equipment/equipment_slot_rule.gd'
       - 'gameplay/items/equipment/equipment_service.gd'
       - 'gameplay/items/weapons/definitions/weapon_definition.gd'
+      - 'gameplay/items/weapons/definitions/weapon_attack_set_definition.gd'
       - 'gameplay/items/weapons/runtime/weapon_attack_resolver.gd'
+      - 'gameplay/combat/attacks/player_attack_definition.gd'
       - 'gameplay/items/inventory/item_container_state.gd'
       - 'gameplay/items/inventory/inventory_transaction_plan.gd'
       - 'gameplay/items/inventory/inventory_transaction_service.gd'
@@ -32,6 +55,10 @@ on:
       - 'gameplay/items/inventory/item_instance_state.gd'
       - 'tests/resources/test_underground_resource_runtime.gd'
       - 'tests/run_resource_runtime.gd'
+      - 'tests/run_numeric_validation.gd'
+      - 'tests/run_persistence_state.gd'
+      - 'tests/run_content.gd'
+      - 'tests/run_inventory.gd'
       - '.github/workflows/resource-runtime-validation.yml'
   push:
     branches:
@@ -61,6 +88,9 @@ jobs:
       - name: Show Godot version
         run: godot --version
 
+      - name: Import project resources
+        run: godot --headless --editor --path . --quit
+
       - name: Run resource runtime contracts
         run: |
           set -o pipefail
@@ -89,7 +119,7 @@ jobs:
         run: |
           set -o pipefail
           validation_log="$(mktemp)"
-          godot --headless --path . --quit-after 1 \
+          godot --headless --path . \
             --script res://tests/run_persistence_state.gd 2>&1 \
             | tee "$validation_log"
           if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash' "$validation_log"; then

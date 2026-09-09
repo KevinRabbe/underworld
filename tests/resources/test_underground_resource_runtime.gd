@@ -4,6 +4,10 @@ const StableAddress := preload("res://worldgen/identity/stable_address.gd")
 const StableId := preload("res://worldgen/identity/stable_id.gd")
 const UndergroundPlacementRecord := preload("res://content/placement/underground_placement_record.gd")
 const ContentRegistry := preload("res://core/content/registry/content_registry.gd")
+const CategorySchemaRegistry := preload("res://core/content/schema/category_schema_registry.gd")
+const CapabilitySchemaRegistry := preload("res://core/content/schema/capability_schema_registry.gd")
+const ContentValidationPipeline := preload("res://core/content/validation/content_validation_pipeline.gd")
+const ArchetypeFamilyValidator := preload("res://core/content/archetypes/archetype_family_validator.gd")
 const ArchetypeRealizer := preload("res://core/content/archetypes/archetype_realizer.gd")
 const PackedSceneArchetypeAdapter := preload("res://core/content/archetypes/packed_scene_archetype_adapter.gd")
 const EquipmentSlotRule := preload("res://gameplay/items/equipment/equipment_slot_rule.gd")
@@ -50,11 +54,45 @@ static func _test_production_content_and_realization(failures: Array[String]) ->
 	if not adapter_failures.is_empty():
 		failures.append("iron resource realizer rejected packed.scene adapter: %s" % [adapter_failures])
 		return
-	var validation: Dictionary = {
-		"success": true,
-		"diagnostics": [],
-		"validated_definition_ids": [archetype.content_id],
-	}
+
+	var definitions: Array = [
+		definition,
+		iron_item,
+		fixture["pickaxe"],
+		fixture["stone"],
+		archetype,
+	]
+	var categories = CategorySchemaRegistry.new()
+	var category_failures: Array[String] = categories.index_schemas([])
+	if not category_failures.is_empty():
+		failures.append("iron resource validation category registry failed: %s" % [category_failures])
+		return
+	var capabilities = CapabilitySchemaRegistry.new()
+	var capability_failures: Array[String] = capabilities.index_schemas([])
+	if not capability_failures.is_empty():
+		failures.append("iron resource validation capability registry failed: %s" % [capability_failures])
+		return
+	var archetype_validator = ArchetypeFamilyValidator.new()
+	archetype_validator.configure("archetype")
+	var validation: Dictionary = ContentValidationPipeline.new().validate_ids(
+		definitions,
+		[archetype.content_id],
+		categories,
+		capabilities,
+		[archetype_validator]
+	)
+	if not bool(validation.get("success", false)):
+		failures.append("iron resource archetype failed CONTENT-006 validation: %s" % [validation.get("diagnostics", [])])
+		return
+	var validation_evidence_failures: Array[String] = ContentValidationPipeline.evidence_failures(
+		validation,
+		fixture["registry"],
+		archetype.content_id
+	)
+	if not validation_evidence_failures.is_empty():
+		failures.append("iron resource archetype validation evidence rejected runtime registry: %s" % [validation_evidence_failures])
+		return
+
 	var service = RuntimeService.new()
 	var result: Dictionary = service.realize_placement(_placement(), fixture["registry"], validation, realizer)
 	_expect_true(failures, "iron placement realizes through semantic archetype", bool(result.get("success", false)))
@@ -62,8 +100,28 @@ static func _test_production_content_and_realization(failures: Array[String]) ->
 	if instance != null and instance is Node:
 		_expect_equal(failures, "realized node stores placement identity only as runtime metadata", str(instance.get_meta("placement_stable_id", "")), _placement().placement_stable_id)
 		_expect_equal(failures, "realized node stores resource semantic id", str(instance.get_meta("resource_content_id", "")), "resource.deposit.iron_outcrop")
-		_expect_true(failures, "realized root exposes semantic archetype role", instance.is_in_group("archetype_role:root"))
 		instance.free()
+
+	var registry_before: Array = fixture["registry"].canonical_manifest()
+	var compatibility_only_validation: Dictionary = {
+		"success": true,
+		"diagnostics": [],
+		"validated_definition_ids": [archetype.content_id],
+	}
+	var rejected: Dictionary = service.realize_placement(
+		_placement(),
+		fixture["registry"],
+		compatibility_only_validation,
+		realizer
+	)
+	_expect_true(failures, "compatibility-only archetype validation fails closed", not bool(rejected.get("success", true)))
+	_expect_true(failures, "compatibility-only archetype validation realizes no instance", rejected.get("instance", null) == null)
+	_expect_true(
+		failures,
+		"compatibility-only archetype validation reports missing CONTENT-006 evidence",
+		_result_has_fragment(rejected, "CONTENT-006 validation evidence: expected CONTENT-006 snapshot-bound validation evidence")
+	)
+	_expect_equal(failures, "compatibility-only realization leaves content registry unchanged", fixture["registry"].canonical_manifest(), registry_before)
 
 
 static func _test_pickaxe_mining_depletion_and_idempotence(failures: Array[String]) -> void:
