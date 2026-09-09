@@ -55,6 +55,10 @@ on:
       - 'gameplay/items/inventory/item_instance_state.gd'
       - 'tests/resources/test_underground_resource_runtime.gd'
       - 'tests/run_resource_runtime.gd'
+      - 'tests/run_numeric_validation.gd'
+      - 'tests/run_persistence_state.gd'
+      - 'tests/run_content.gd'
+      - 'tests/run_inventory.gd'
       - '.github/workflows/resource-runtime-validation.yml'
   push:
     branches:
