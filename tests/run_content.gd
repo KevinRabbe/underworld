@@ -8,6 +8,7 @@ const ContentValidationEvidenceTests := preload("res://tests/content/test_conten
 const ContentValidationEvidenceConsumerTests := preload("res://tests/content/test_content_validation_evidence_consumers.gd")
 const ArchetypeContractTests := preload("res://tests/content/test_archetype_contract.gd")
 const ArchetypeRealizationTests := preload("res://tests/content/test_archetype_realization.gd")
+const ImportedWeaponVisualTests := preload("res://tests/content/test_imported_weapon_visual.gd")
 const ItemContractTests := preload("res://tests/content/test_item_contract.gd")
 const ResourceContractTests := preload("res://tests/content/test_resource_contract.gd")
 const CreatureContractTests := preload("res://tests/content/test_creature_contract.gd")
@@ -34,6 +35,7 @@ func _init() -> void:
 	failures.append_array(ContentValidationEvidenceConsumerTests.run())
 	failures.append_array(ArchetypeContractTests.run())
 	failures.append_array(ArchetypeRealizationTests.run())
+	failures.append_array(ImportedWeaponVisualTests.run())
 	failures.append_array(ItemContractTests.run())
 	failures.append_array(ResourceContractTests.run())
 	failures.append_array(CreatureContractTests.run())
@@ -50,7 +52,7 @@ func _init() -> void:
 	failures.append_array(CraftingContractTests.run())
 	if failures.is_empty():
 		print("[VALIDATION] PASS content")
-		print("  semantic content ids / deterministic registry / category-capability-role schemas / headless validation + snapshot evidence + stale-consumer guards / archetype realization / item / resource / creature / weapon / production weapon runtime + session composition + presentation-failure boundary + restored-selection reconstruction + failure atomicity / reserved-site assignment / underground placement / surface-harvest / loot / crafting rulebook contracts passed")
+		print("  semantic content ids / deterministic registry / category-capability-role schemas / headless validation + snapshot evidence + stale-consumer guards / archetype realization + imported GLB PackedScene smoke / item / resource / creature / weapon / production weapon runtime + session composition + presentation-failure boundary + restored-selection reconstruction + failure atomicity / reserved-site assignment / underground placement / surface-harvest / loot / crafting rulebook contracts passed")
 		quit(0)
 		return
 
