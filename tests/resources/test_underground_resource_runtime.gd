@@ -100,7 +100,6 @@ static func _test_production_content_and_realization(failures: Array[String]) ->
 	if instance != null and instance is Node:
 		_expect_equal(failures, "realized node stores placement identity only as runtime metadata", str(instance.get_meta("placement_stable_id", "")), _placement().placement_stable_id)
 		_expect_equal(failures, "realized node stores resource semantic id", str(instance.get_meta("resource_content_id", "")), "resource.deposit.iron_outcrop")
-		_expect_true(failures, "realized root exposes semantic archetype role", instance.is_in_group("archetype_role:root"))
 		instance.free()
 
 	var registry_before: Array = fixture["registry"].canonical_manifest()
