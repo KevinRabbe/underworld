@@ -258,6 +258,16 @@ func _test_pull_request_path_parser_false_positives(failures: Array[String]) -> 
 	if sibling_paths.has(STABLE_ID_PATH):
 		failures.append("pull_request.paths parser leaked an entry from a later sibling mapping")
 
+	# A trigger-looking mapping under a different top-level YAML key must not be
+	# mistaken for on.pull_request authority.
+	var non_on_yaml := "on:\n  workflow_dispatch:\n\njobs:\n  pull_request:\n    paths:\n      - 'worldgen/persistence/world_delta_store.gd'\n"
+	var non_on_failures: Array[String] = []
+	var non_on_paths: Array[String] = _pull_request_path_filters(non_on_yaml, non_on_failures)
+	if non_on_failures.is_empty():
+		failures.append("pull_request.paths parser accepted jobs.pull_request as on.pull_request authority")
+	if non_on_paths.has(WORLD_DELTA_PATH):
+		failures.append("pull_request.paths parser leaked path authority from non-on top-level mapping")
+
 	# Negative GitHub path filters are ordered and can negate an earlier required
 	# positive dependency. This lane deliberately supports positive-only filters so
 	# the self-audit does not need to reimplement GitHub minimatch semantics.
@@ -275,6 +285,8 @@ func _pull_request_path_filters(
 	failures: Array[String]
 ) -> Array[String]:
 	var result: Array[String] = []
+	var found_on: bool = false
+	var in_on: bool = false
 	var found_pull_request: bool = false
 	var found_paths: bool = false
 	var in_pull_request: bool = false
@@ -282,12 +294,23 @@ func _pull_request_path_filters(
 
 	for raw_line in workflow_text.split("\n"):
 		var line: String = str(raw_line).replace("\r", "")
-		if line == "  pull_request:":
-			found_pull_request = true
-			in_pull_request = true
-			in_paths = false
+		if line == "on:":
+			found_on = true
+			in_on = true
 			continue
+		if not in_on:
+			continue
+
+		# A non-comment, non-empty unindented line starts the next top-level mapping
+		# and ends the workflow trigger authority block.
+		if not line.is_empty() and not line.begins_with(" ") and not line.begins_with("#"):
+			break
+
 		if not in_pull_request:
+			if line == "  pull_request:":
+				found_pull_request = true
+				in_pull_request = true
+				in_paths = false
 			continue
 
 		# Any new two-space key ends the pull_request mapping.
@@ -337,7 +360,9 @@ func _pull_request_path_filters(
 				"Resource Runtime pull_request.paths contains unexpected non-list content: %s" % trimmed
 			)
 
-	if not found_pull_request:
+	if not found_on:
+		failures.append("Resource Runtime workflow is missing top-level on")
+	elif not found_pull_request:
 		failures.append("Resource Runtime workflow is missing on.pull_request")
 	elif not found_paths:
 		failures.append("Resource Runtime workflow is missing on.pull_request.paths")
@@ -370,9 +395,15 @@ func _test_push_main_trigger_policy(failures: Array[String]) -> void:
 	if _push_main_trigger_failures(sibling_alias_yaml).is_empty():
 		failures.append("Resource Runtime push trigger policy treated sibling pull_request.paths as main push evidence")
 
+	var non_on_push_yaml := "on:\n  workflow_dispatch:\n\njobs:\n  push:\n    branches:\n      - main\n"
+	if _push_main_trigger_failures(non_on_push_yaml).is_empty():
+		failures.append("Resource Runtime push trigger policy accepted jobs.push as on.push authority")
+
 
 func _push_main_trigger_failures(workflow_text: String) -> Array[String]:
 	var result: Array[String] = []
+	var found_on: bool = false
+	var in_on: bool = false
 	var found_push: bool = false
 	var found_branches: bool = false
 	var in_push: bool = false
@@ -381,12 +412,23 @@ func _push_main_trigger_failures(workflow_text: String) -> Array[String]:
 
 	for raw_line in workflow_text.split("\n"):
 		var line: String = str(raw_line).replace("\r", "")
-		if line == "  push:":
-			found_push = true
-			in_push = true
-			in_branches = false
+		if line == "on:":
+			found_on = true
+			in_on = true
 			continue
+		if not in_on:
+			continue
+
+		# A non-comment, non-empty unindented line starts the next top-level mapping
+		# and ends the workflow trigger authority block.
+		if not line.is_empty() and not line.begins_with(" ") and not line.begins_with("#"):
+			break
+
 		if not in_push:
+			if line == "  push:":
+				found_push = true
+				in_push = true
+				in_branches = false
 			continue
 
 		# Any new two-space key ends the push mapping.
@@ -430,7 +472,9 @@ func _push_main_trigger_failures(workflow_text: String) -> Array[String]:
 				continue
 			branches.append(branch_value)
 
-	if not found_push:
+	if not found_on:
+		result.append("Resource Runtime workflow is missing top-level on")
+	elif not found_push:
 		result.append("Resource Runtime workflow is missing on.push")
 	elif not found_branches:
 		result.append("Resource Runtime workflow is missing on.push.branches")
