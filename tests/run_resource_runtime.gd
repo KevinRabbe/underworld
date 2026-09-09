@@ -30,6 +30,7 @@ const REQUIRED_RESOURCE_RUNTIME_DEPENDENCY_PATHS: Array[String] = [
 	"core/content/validation/content_family_validator.gd",
 	"core/content/validation/content_reference_cycle_policy.gd",
 	"core/content/validation/finite_number.gd",
+	"gameplay/resources/runtime/**",
 	"gameplay/resources/definitions/resource_definition.gd",
 	"gameplay/resources/definitions/resource_yield_rule.gd",
 	"gameplay/resources/definitions/authored_harvestable_resource_definition.gd",
@@ -58,7 +59,17 @@ const REQUIRED_RESOURCE_RUNTIME_DEPENDENCY_PATHS: Array[String] = [
 	"gameplay/items/inventory/item_instance_state.gd",
 	"tests/resources/test_underground_resource_runtime.gd",
 	"tests/run_resource_runtime.gd",
+	"tests/run_numeric_validation.gd",
+	"tests/run_persistence_state.gd",
+	"tests/run_content.gd",
+	"tests/run_inventory.gd",
 	".github/workflows/resource-runtime-validation.yml",
+]
+const DIRECT_EMBEDDED_RUNNER_PATHS: Array[String] = [
+	"tests/run_numeric_validation.gd",
+	"tests/run_persistence_state.gd",
+	"tests/run_content.gd",
+	"tests/run_inventory.gd",
 ]
 const FORBIDDEN_BROAD_RESOURCE_RUNTIME_TRIGGERS: Array[String] = [
 	"core/**",
@@ -87,6 +98,7 @@ func _init() -> void:
 	_test_workflow_dependency_triggers(failures)
 	_test_workflow_trigger_precision_policy(failures)
 	_test_pull_request_path_parser_false_positives(failures)
+	_test_push_main_trigger_policy(failures)
 	_test_compatibility_only_realization_preserves_state(failures)
 	_test_commit_phase_failure_restores_world_delta(failures)
 	if failures.is_empty():
@@ -110,9 +122,10 @@ func _test_workflow_dependency_triggers(failures: Array[String]) -> void:
 	if workflow_file == null:
 		failures.append("Resource Runtime workflow could not be opened for dependency-trigger validation")
 		return
+	var workflow_text: String = workflow_file.get_as_text()
 	var parser_failures: Array[String] = []
 	var pull_request_paths: Array[String] = _pull_request_path_filters(
-		workflow_file.get_as_text(),
+		workflow_text,
 		parser_failures
 	)
 	for parser_failure in parser_failures:
@@ -122,6 +135,8 @@ func _test_workflow_dependency_triggers(failures: Array[String]) -> void:
 		REQUIRED_RESOURCE_RUNTIME_DEPENDENCY_PATHS
 	):
 		failures.append(policy_failure)
+	for push_failure in _push_main_trigger_failures(workflow_text):
+		failures.append(push_failure)
 
 
 func _resource_runtime_trigger_policy_failures(
@@ -149,8 +164,9 @@ func _test_workflow_trigger_precision_policy(failures: Array[String]) -> void:
 		"gameplay/resources/runtime/**",
 		"content/resources/**",
 		"presentation/world/resources/**",
+		"tests/run_resource_runtime.gd",
 	]
-	var precise_yaml := "on:\n  pull_request:\n    paths:\n      - 'core/content/validation/content_validation_pipeline.gd'\n      - 'core/content/archetypes/archetype_definition.gd'\n      - 'gameplay/resources/runtime/**'\n      - 'content/resources/**'\n      - 'presentation/world/resources/**'\n"
+	var precise_yaml := "on:\n  pull_request:\n    paths:\n      - 'core/content/validation/content_validation_pipeline.gd'\n      - 'core/content/archetypes/archetype_definition.gd'\n      - 'gameplay/resources/runtime/**'\n      - 'content/resources/**'\n      - 'presentation/world/resources/**'\n      - 'tests/run_resource_runtime.gd'\n"
 	var precise_parser_failures: Array[String] = []
 	var precise_paths: Array[String] = _pull_request_path_filters(precise_yaml, precise_parser_failures)
 	if not precise_parser_failures.is_empty():
@@ -162,6 +178,33 @@ func _test_workflow_trigger_precision_policy(failures: Array[String]) -> void:
 		)
 		if not precise_policy_failures.is_empty():
 			failures.append("precise Resource Runtime trigger fixture was rejected: %s" % [precise_policy_failures])
+
+	var missing_semantic_paths: Array[String] = precise_paths.duplicate()
+	missing_semantic_paths.erase("core/content/validation/content_validation_pipeline.gd")
+	if _resource_runtime_trigger_policy_failures(
+		missing_semantic_paths,
+		representative_required
+	).is_empty():
+		failures.append("Resource Runtime trigger policy did not detect removed semantic dependency")
+
+	var missing_control_paths: Array[String] = precise_paths.duplicate()
+	missing_control_paths.erase("tests/run_resource_runtime.gd")
+	if _resource_runtime_trigger_policy_failures(
+		missing_control_paths,
+		representative_required
+	).is_empty():
+		failures.append("Resource Runtime trigger policy did not detect removed control path")
+
+	for embedded_runner_path in DIRECT_EMBEDDED_RUNNER_PATHS:
+		var embedded_paths: Array[String] = DIRECT_EMBEDDED_RUNNER_PATHS.duplicate()
+		embedded_paths.erase(embedded_runner_path)
+		if _resource_runtime_trigger_policy_failures(
+			embedded_paths,
+			DIRECT_EMBEDDED_RUNNER_PATHS
+		).is_empty():
+			failures.append(
+				"Resource Runtime trigger policy did not detect removed embedded runner: %s" % embedded_runner_path
+			)
 
 	for forbidden_path in FORBIDDEN_BROAD_RESOURCE_RUNTIME_TRIGGERS:
 		var broad_paths: Array[String] = precise_paths.duplicate()
@@ -298,6 +341,101 @@ func _pull_request_path_filters(
 		failures.append("Resource Runtime workflow is missing on.pull_request")
 	elif not found_paths:
 		failures.append("Resource Runtime workflow is missing on.pull_request.paths")
+	return result
+
+
+func _test_push_main_trigger_policy(failures: Array[String]) -> void:
+	var valid_yaml := "on:\n  pull_request:\n    paths:\n      - 'main'\n  push:\n    branches:\n      - main\n      - 'gameplay/resource-runtime-*'\n"
+	var valid_failures: Array[String] = _push_main_trigger_failures(valid_yaml)
+	if not valid_failures.is_empty():
+		failures.append("valid Resource Runtime push trigger fixture was rejected: %s" % [valid_failures])
+
+	var missing_main_yaml := "on:\n  push:\n    branches:\n      - 'release/*'\n"
+	if _push_main_trigger_failures(missing_main_yaml).is_empty():
+		failures.append("Resource Runtime push trigger policy accepted branches without main")
+
+	var worker_only_yaml := "on:\n  push:\n    branches:\n      - 'gameplay/resource-runtime-*'\n"
+	if _push_main_trigger_failures(worker_only_yaml).is_empty():
+		failures.append("Resource Runtime push trigger policy accepted worker-only branches")
+
+	var filtered_main_yaml := "on:\n  push:\n    branches:\n      - main\n    paths:\n      - 'tests/**'\n"
+	if _push_main_trigger_failures(filtered_main_yaml).is_empty():
+		failures.append("Resource Runtime push trigger policy accepted path-filtered main dispatch")
+
+	var ignored_main_yaml := "on:\n  push:\n    branches:\n      - main\n    paths-ignore:\n      - 'docs/**'\n"
+	if _push_main_trigger_failures(ignored_main_yaml).is_empty():
+		failures.append("Resource Runtime push trigger policy accepted paths-ignore on main dispatch")
+
+	var sibling_alias_yaml := "on:\n  pull_request:\n    paths:\n      - 'main'\n  push:\n    branches:\n      - 'gameplay/resource-runtime-*'\n"
+	if _push_main_trigger_failures(sibling_alias_yaml).is_empty():
+		failures.append("Resource Runtime push trigger policy treated sibling pull_request.paths as main push evidence")
+
+
+func _push_main_trigger_failures(workflow_text: String) -> Array[String]:
+	var result: Array[String] = []
+	var found_push: bool = false
+	var found_branches: bool = false
+	var in_push: bool = false
+	var in_branches: bool = false
+	var branches: Array[String] = []
+
+	for raw_line in workflow_text.split("\n"):
+		var line: String = str(raw_line).replace("\r", "")
+		if line == "  push:":
+			found_push = true
+			in_push = true
+			in_branches = false
+			continue
+		if not in_push:
+			continue
+
+		# Any new two-space key ends the push mapping.
+		if line.begins_with("  ") and not line.begins_with("    "):
+			break
+
+		if line == "    paths:" or line == "    paths-ignore:":
+			result.append(
+				"Resource Runtime push:main quarantine proof must remain unconditional by path; %s is not allowed" % line.strip_edges().trim_suffix(":")
+			)
+			in_branches = false
+			continue
+
+		if line == "    branches:":
+			found_branches = true
+			in_branches = true
+			continue
+
+		# Any sibling mapping under push ends the branches sequence.
+		if line.begins_with("    ") and not line.begins_with("      "):
+			in_branches = false
+			continue
+
+		if in_branches and line.begins_with("      - "):
+			var encoded_value: String = line.substr(8).strip_edges()
+			if encoded_value.is_empty():
+				result.append("Resource Runtime push.branches contains an empty list entry")
+				continue
+			var branch_value: String = encoded_value
+			var quote: String = encoded_value.substr(0, 1)
+			if quote == "'" or quote == "\"":
+				if encoded_value.length() < 2 or not encoded_value.ends_with(quote):
+					result.append("Resource Runtime push.branches contains an invalid quoted scalar: %s" % encoded_value)
+					continue
+				branch_value = encoded_value.substr(1, encoded_value.length() - 2)
+			if branch_value.is_empty() or branch_value != branch_value.strip_edges():
+				result.append("Resource Runtime push.branches contains an invalid branch scalar")
+				continue
+			if branches.has(branch_value):
+				result.append("Resource Runtime push.branches contains duplicate entry: %s" % branch_value)
+				continue
+			branches.append(branch_value)
+
+	if not found_push:
+		result.append("Resource Runtime workflow is missing on.push")
+	elif not found_branches:
+		result.append("Resource Runtime workflow is missing on.push.branches")
+	elif not branches.has("main"):
+		result.append("Resource Runtime workflow push.branches must contain exact main")
 	return result
 
 
