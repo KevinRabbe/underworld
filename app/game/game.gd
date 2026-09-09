@@ -5,8 +5,7 @@ const EnvironmentPresentationBuilderScript := preload("res://app/game/compositio
 const WorldDeltaStoreScript := preload("res://worldgen/persistence/world_delta_store.gd")
 const WorldGenerationContextScript := preload("res://worldgen/pipeline/world_generation_context.gd")
 const IntegratedGameSaveContractScript := preload("res://gameplay/persistence/integrated_game_save_contract.gd")
-const GameplayStateCodecScript := preload("res://gameplay/persistence/gameplay_state_codec.gd")
-const GameplaySaveCatalogScript := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
+const GameplayItemCatalogScript := preload("res://gameplay/persistence/gameplay_item_catalog.gd")
 const WorldDomainSessionStateScript := preload("res://gameplay/world_session/world_domain_session_state.gd")
 const ItemContainerStateScript := preload("res://gameplay/items/inventory/item_container_state.gd")
 const EquipmentHotbarStateScript := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
@@ -537,7 +536,7 @@ func _create_debug_hud() -> void:
 func _capture_pending_loot_states() -> Dictionary:
 	if encounter_controller == null:
 		return {"success": true, "states": [], "diagnostics": []}
-	var catalog_result: Dictionary = GameplaySaveCatalogScript.build_registry()
+	var catalog_result: Dictionary = GameplayItemCatalogScript.build_registry()
 	if not bool(catalog_result.get("success", false)):
 		return _failure(catalog_result.get("diagnostics", []))
 	var registry = catalog_result.get("registry", null)
@@ -565,7 +564,7 @@ func _capture_pending_loot_states() -> Dictionary:
 		var state_failures: Array[String] = state.validate_state()
 		if not state_failures.is_empty():
 			return _prefixed_failure("SAVE runtime pending loot %s" % occurrence_id, state_failures)
-		var durable_validation: Dictionary = GameplayStateCodecScript.encode_pending_loot(state, registry)
+		var durable_validation: Dictionary = GameplayItemCatalogScript.validate_pending_loot(state, registry)
 		if not bool(durable_validation.get("success", false)):
 			return _prefixed_failure(
 				"SAVE runtime pending loot %s" % occurrence_id,
@@ -669,7 +668,7 @@ func _validate_continue_candidate(candidate: Dictionary) -> Array[String]:
 	if not vitals_variant is Dictionary:
 		failures.append("candidate player vitals must be Dictionary")
 	else:
-		var vitals_validation: Dictionary = GameplayStateCodecScript.encode_player_vitals(
+		var vitals_validation: Dictionary = GameplayItemCatalogScript.validate_player_vitals(
 			vitals_variant.get("current_health", null),
 			vitals_variant.get("current_stamina", null)
 		)
