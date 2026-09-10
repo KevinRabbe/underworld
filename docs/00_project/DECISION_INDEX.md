@@ -6,6 +6,7 @@ Status: **project-governance index**
 
 Current supersession authority:
 - [`ADR-001_TWO_WORLD_DOMAINS.md`](ADR-001_TWO_WORLD_DOMAINS.md) — **ACTIVE / LOCKED**, 2026-08-31.
+- [`ADR-002_WEAPON_MASTERY_AND_ACTIVE_SKILLS.md`](ADR-002_WEAPON_MASTERY_AND_ACTIVE_SKILLS.md) — **ACTIVE / LOCKED DIRECTION**, 2026-09-10.
 
 Current master roadmap:
 - [`MASTER_ROADMAP.md`](MASTER_ROADMAP.md)
@@ -40,8 +41,28 @@ Never infer supersession from newer code alone. A later decision/ADR must identi
 | Streaming ownership | [`STREAMING_OWNERSHIP`](../STREAMING_OWNERSHIP.md) | **Active — LOCKED** | Independent Overworld/Underworld residency; bounded relevance; explicit world-domain coordinator; stale-result rejection. |
 | Performance/scale discipline | [`PERFORMANCE_AND_SCALABILITY`](../10_architecture/PERFORMANCE_AND_SCALABILITY.md) | **Active — LOCKED DIRECTION** | Canonical state separate from runtime representation; static unchanged state approaches zero CPU work; scale by current relevance. |
 | Building architecture | [`BUILDING_SYSTEM`](../30_gameplay/BUILDING_SYSTEM.md) | **Active — LOCKED direction** | Modular declarative pieces, arbitrary transforms, grid + sockets, snap escape, overlap, terrain embedding, event-driven structural graph. |
+| Weapon mastery ownership | [`ADR-002`](ADR-002_WEAPON_MASTERY_AND_ACTIVE_SKILLS.md), [`WEAPON_MASTERY`](../30_gameplay/WEAPON_MASTERY.md) | **Active — LOCKED DIRECTION** | Mastery belongs to the weapon family, persists across material/tier variants, uses two specialization branches and allows at most three selected active skills per used family. |
+| Weapon special model | [`ADR-002`](ADR-002_WEAPON_MASTERY_AND_ACTIVE_SKILLS.md), [`WEAPON_MASTERY`](../30_gameplay/WEAPON_MASTERY.md) | **Active — LOCKED DIRECTION** | The old exactly-one-signature-special-per-weapon model is superseded by the mastery/active-skill model. |
+| Shield mastery direction | [`ADR-002`](ADR-002_WEAPON_MASTERY_AND_ACTIVE_SKILLS.md), [`WEAPON_MASTERY`](../30_gameplay/WEAPON_MASTERY.md) | **Active — LOCKED DIRECTION** | Shield is not currently a standalone mastery family; Shield gameplay is skill/technique-driven, while equipment/off-hand/hand/pairing semantics remain open. |
 | Visual production strategy | [`VISUAL_DIRECTION`](VISUAL_DIRECTION.md) | **Active — LOCKED visual family** | Silhouette/readability first; economical geometry + materials/shaders/lighting/atmosphere; modular reusable asset families. |
 | Long-horizon execution | [`MASTER_ROADMAP`](MASTER_ROADMAP.md) | **Active strategic plan pending PR acceptance** | Topic lanes allow parallel work; phases are integration gates, not one serial worker queue. |
+
+---
+
+# Explicit 2026-09-10 weapon-system supersessions
+
+[`ADR-002_WEAPON_MASTERY_AND_ACTIVE_SKILLS.md`](ADR-002_WEAPON_MASTERY_AND_ACTIVE_SKILLS.md) changes the **target product design**, not the current prototype implementation by itself.
+
+| Historical/planning source/topic | Previous direction | Current status | Replacement |
+| --- | --- | --- | --- |
+| Issue #470 input grammar: `MMB exactly one signature special per weapon` | locked planning direction | **Superseded** | Family mastery with multiple active-skill options and max three selected active skills. |
+| Issue #485 global `weapon_special -> exactly one authored signature special` | planned family-mechanics model | **Superseded** | Mastery-selected active skills under ADR-002 / `WEAPON_MASTERY.md`. |
+| Issue #485 per-family requirement for exactly one signature Special | planned family-mechanics model | **Superseded** | Exact skill lists are TBD; families may offer multiple active skills, max three selected. |
+| Old roster interpretation treating Shield as a mandatory standalone mastery family | implicit from seven-item roster wording | **Superseded / narrowed** | Shield is skill/technique-driven for mastery purposes; equipment semantics remain open. |
+
+The rest of #470/#485 is not automatically superseded. Spear/War Pike/Bow/Axe family identities and the natural-matchup philosophy remain current where they do not depend on the old one-special rule.
+
+Issue #473 remains planning context for unresolved equipment/loadout questions. ADR-002 deliberately does **not** invent its open Shield slot/pairing/hand-occupancy answers.
 
 ---
 
@@ -140,7 +161,7 @@ These headings remain useful historical anchors even where ADR-001 supersedes sp
 
 # Current open/tunable topics
 
-Architecture intentionally does not lock arbitrary numeric values that require profiling or gameplay testing, including:
+Architecture/product direction intentionally does not lock arbitrary values or unresolved composition decisions that require profiling, implementation work or gameplay testing, including:
 - exact Underworld depth curves;
 - exact cell/chunk dimensions;
 - render/collision/simulation radii;
@@ -150,9 +171,14 @@ Architecture intentionally does not lock arbitrary numeric values that require p
 - final art/texture/poly budgets;
 - exact persistence physical format/sharding;
 - long-term legacy support window;
-- final multiplayer replication budgets.
+- final multiplayer replication budgets;
+- exact weapon mastery level cap/XP curve/point cadence/respec rules;
+- exact mastery active-skill and passive-node lists;
+- final physical weapon-skill key/button bindings;
+- exact Shield equipment slot, pairing compatibility and hand-occupancy rules;
+- exact future weapon-family release order.
 
-Open tuning must not be mistaken for permission to violate the current ownership/identity boundaries.
+Open tuning must not be mistaken for permission to violate current ownership/identity boundaries or restore an explicitly superseded product rule.
 
 ---
 
