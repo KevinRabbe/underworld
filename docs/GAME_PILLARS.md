@@ -133,15 +133,29 @@ Do not spend the layer's difficulty budget on routine HP sponges. A larger enemy
 
 This **does not** mean every future Underworld biome is Hell. The Hell-Entrance identity belongs to this biome only.
 
-## 11. Combat direction — DIRECTIONAL
+## 11. Combat direction — LOCKED DIRECTION
 
-Combat should be more active and readable than baseline survival-game combat, but it should not drift into an MMO ability-bar system.
+Combat should be active, readable and skill-expressive without drifting into an MMO ability-bar system.
 
-Universal actions and weapon properties should carry most of the depth. Enemy behavior, telegraphs, spacing, timing and player execution matter more than simply increasing stats.
+Weapon depth comes from a combination of:
+- a readable action-combat core;
+- distinct weapon-family mechanics;
+- **weapon-family mastery** that gives long-term build variety;
+- a bounded loadout of **at most three selected active skills for the currently used weapon family**;
+- meaningful passive/specialization choices;
+- enemy behavior, telegraphs, spacing, timing and player execution.
 
-Weapons may express skill differently. In particular, projectile/bow play should preserve meaningful player-owned aiming, release timing, lead/drop judgment and other execution rather than replacing skill with mastery-driven automation.
+Mastery belongs to the **weapon family**, not to each material tier. A player who advances Sword mastery keeps that mastery when replacing one material/tier Sword with another Sword. Equipment/material progression supplies vertical power progression; mastery supplies horizontal playstyle progression.
 
-Exact future defensive mechanics, weapons and moves remain open until needed.
+Each significant weapon mastery family uses two specialization branches. Current branch names are provisional rather than sacred product terminology.
+
+The old plan of exactly one signature special per weapon is superseded by the active-skill mastery model. Exact physical key/button bindings, mastery XP curves, skill lists, unlock thresholds and balance values remain open until explicitly authored.
+
+Weapons may express skill differently. In particular, projectile/Bow play should preserve meaningful player-owned aiming, release timing, lead/drop judgment and other execution rather than replacing skill with mastery-driven automation.
+
+Current first-biome mastery families are Sword, Knife, Axe, Spear, War Pike and Bow. Shield is not currently a standalone mastery family; current direction is to express Shield gameplay through defensive skill/technique choices while exact equipment/off-hand/hand/pairing rules remain open.
+
+See [`30_gameplay/WEAPON_MASTERY.md`](30_gameplay/WEAPON_MASTERY.md) and [`00_project/ADR-002_WEAPON_MASTERY_AND_ACTIVE_SKILLS.md`](00_project/ADR-002_WEAPON_MASTERY_AND_ACTIVE_SKILLS.md).
 
 ## 12. Mining should be intrinsically satisfying — LOCKED
 
@@ -226,8 +240,11 @@ New features require a reason tied to the pillars above or to a current developm
 A feature being interesting is not enough reason to add it immediately.
 
 Prefer proving one strong version of a system before multiplying cosmetic/content variants. In particular:
-- one good weapon of a type before many variants;
+- one good weapon family before many material/cosmetic variants whose only distinction is numbers/appearance;
+- mastery depth should reuse a family's mechanics rather than require a new weapon item for every build idea;
 - one strong forest system before many tree skins;
 - one expressive construction grammar before hundreds of cosmetic building variants;
 - one playable Overworld biome and one playable first-layer Underworld biome before designing future biome families;
 - no late-game Ancient Technology implementation before the current core loop is proven.
+
+The mastery design is a product direction, not authorization to implement every tree/skill immediately. Scheduling remains governed by the roadmap and explicit work authorization.
