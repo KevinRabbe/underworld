@@ -331,7 +331,65 @@ Bow remains fully three-dimensional: manual aim, projectile travel, gravity/drop
 
 Exact vertical-correction angles, slope limits, foot IK, hit-volume tolerance, jump/falling attacks and combat behavior while swimming or climbing remain later implementation/playtest decisions.
 
-## 14. Explicitly not required for Phase 7
+## 14. Weapon reach and close-range behavior
+
+Weapon reach should emerge primarily from authored geometry and movement rather than from a universal hidden optimal-range multiplier.
+
+The intended spacing identities are:
+
+```text
+Knife / Gauntlets & Greaves
+-> strongest at very close range
+-> little reach
+-> remain functional chest-to-chest
+
+Sword / Axe
+-> comfortable middle distance
+-> still usable close
+-> moderate control around the actor
+
+Greatsword
+-> wants room for broad committed attacks
+-> tighter spaces and crowded contact can interfere more naturally
+
+Spear
+-> wants clean tip distance
+-> reach / precision are strongest when spacing is maintained
+-> enemies inside the ideal tip distance reduce clean tip contact
+
+War Pike
+-> wants the most distance
+-> dominates a long lane when spacing is preserved
+-> becomes increasingly awkward when an enemy gets inside the shaft
+```
+
+Long weapons should not use an arbitrary rule where crossing a minimum-range threshold makes an otherwise valid contact deal zero damage. Instead, the contacted part of the authored weapon and the attack geometry determine the physical result.
+
+Conceptually:
+
+```text
+Spear tip reaches target at intended distance
+-> full authored piercing contact
+
+enemy crowds inside tip distance
+-> shaft / inner weapon section may contact instead
+-> weaker or different authored result where that distinction is useful
+
+NOT
+
+enemy crossed invisible minimum-range line
+-> attack magically fails regardless of contact
+```
+
+This creates physical counterplay: Spear and War Pike users protect distance and lanes, while Knife and Gauntlets & Greaves users benefit from collapsing that space and remaining close.
+
+World geometry participates in the same language. Greatsword and War Pike attacks in narrow caves, doorways or dense obstacles may have less room than in an open field, but collision handling should be tolerant enough that tiny incidental contacts do not constantly invalidate otherwise readable attacks.
+
+The project does **not** require every attack to model blade/tip/shaft zones differently. Clean-contact distinctions should be authored only where they materially reinforce weapon identity.
+
+Exact contact-zone dimensions, close-range penalties, wall-collision tolerances, and whether individual Spear/War Pike attacks provide explicit close-range alternatives remain weapon implementation/playtest work.
+
+## 15. Explicitly not required for Phase 7
 
 Phase 7 does not require:
 
@@ -354,6 +412,9 @@ Phase 7 does not require:
 - exact vertical startup-correction angles or slope limits;
 - final foot-IK or uneven-ground presentation implementation;
 - exact gameplay hit-volume tolerance around visual attack geometry;
+- exact weapon contact-zone dimensions or universal minimum-range penalties;
+- exact weapon/world-collision tolerance in tight spaces;
+- mandatory close-range alternate attacks for long weapons;
 - jump attacks, falling attacks or combat behavior while swimming/climbing;
 - final magic damage categories.
 
