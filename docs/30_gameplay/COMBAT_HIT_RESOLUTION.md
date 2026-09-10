@@ -203,7 +203,56 @@ Armor resistance does **not** introduce an armor-weight dodge system. The univer
 
 Future magic may extend damage typing with additional non-physical categories without changing the three Phase-7 physical categories.
 
-## 10. Explicitly not required for Phase 7
+## 10. Interception and contact priority
+
+Defense must physically intercept an attack rather than being applied as an unrelated after-the-fact percentage check.
+
+For a single contact path, the first meaningful authored contact determines the immediate resolution:
+
+```text
+attack travels through space
+     |
+     +-> solid world obstruction
+     |      -> obstruct / stop / alter attack where appropriate
+     |
+     +-> valid defending weapon / Shield surface
+     |      -> resolve block or parry
+     |      -> do not also apply a second full body hit from the same contact
+     |
+     +-> body / weak point / protected region
+            -> resolve direct hit
+```
+
+A successful parry deflects the incoming strike and prevents that same strike from simply continuing through the defender as a normal body hit. A successful normal block resolves the established chip-damage, stamina and posture/guard-pressure outcome rather than also applying a second unblocked hit to the body.
+
+Missing the guard remains meaningful: if the authored attack geometry reaches an exposed body region without a valid defensive interception, normal direct-hit resolution applies.
+
+Broad sweeps and very forceful attacks may later have authored behavior that continues toward other targets after one contact. The project does **not** yet define a universal rule that every block stops the entire swing or that every heavy attack cleaves through every guard. Exact continuation/deflection behavior remains attack-specific implementation and playtest work.
+
+## 11. Precision and critical-hit philosophy
+
+Phase-7 physical combat should reward **readable execution** before relying on universal random critical-hit rolls.
+
+The baseline sources of precision reward are physical and understandable:
+
+```text
+authored weak-point contact
+clean weapon-specific contact
+exposed enemy state
+posture break / meaningful opening
+well-aimed projectile
+other explicitly authored vulnerability
+```
+
+A successful precision event may increase health damage, posture effect or another authored outcome, but the player should be able to connect the reward to something that happened in the combat world.
+
+Phase 7 does **not require a universal random critical-hit chance** on ordinary physical attacks. This keeps the base combat result tied primarily to aim, spacing, contact, timing and enemy state rather than hidden dice rolls.
+
+Later equipment, mastery or magic may introduce crit-related build mechanics if they add useful variety. Those systems should layer onto the physical contact model rather than replacing weak points and execution with automatic random spikes.
+
+Exact weak-point multipliers, exposed-state bonuses, any future critical-chance rules and how later mastery interacts with them remain open.
+
+## 12. Explicitly not required for Phase 7
 
 Phase 7 does not require:
 
@@ -219,6 +268,8 @@ Phase 7 does not require:
 - exact Cutting/Piercing/Blunt resistance values;
 - exact armor mitigation formulas;
 - exact weapon-family damage-type percentages;
+- a universal random critical-hit chance for base physical combat;
+- exact block/deflection continuation rules for broad or forceful attacks;
 - final magic damage categories.
 
 Those may be evaluated later if they add value without weakening readability or maintainability.
