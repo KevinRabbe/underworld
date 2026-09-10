@@ -205,15 +205,40 @@ Enemy size/mass affects displacement and knockdown response. Bosses are not exem
 
 Boss difficulty should come from timing, sequences, positioning, force and consequences rather than silently ignoring the combat rules.
 
-## 11. Readability
+## 11. Enemy attack readability
 
-The preferred default is physical readability rather than MMO-style universal color coding.
+The preferred default is **physical readability**, not MMO-style universal color coding or a giant warning marker for every dangerous attack.
 
-Attack danger should primarily be communicated through animation, body commitment, weapon size, movement, sound and impact preparation.
+Attack danger should primarily be communicated through:
 
-Broad internal attack classes may later be useful for authoring/validation, such as Quick, Committed, Crushing, Charge and Control/Grab, but exact enum/schema names are not locked by this document.
+```text
+animation / body preparation
+weapon or limb size
+movement commitment
+audio cue
+attack geometry
+recovery after the attack
+```
 
-Large missed attacks should have meaningful recovery so successful reads create real punish opportunities.
+For design and authoring, enemy attacks may use a small set of broad behavior classes. These are gameplay-language categories, not final implementation enum names:
+
+| Attack class | High-level meaning | Expected defensive reading |
+| --- | --- | --- |
+| **Quick** | fast, relatively low-commitment attack | block, parry or dodge depending on weapon/geometry |
+| **Committed** | visible wind-up and meaningful commitment | block, parry or dodge can all be valid with different risk/cost |
+| **Crushing** | very heavy force intended to punish passive defense | normal block is costly; dodge/reposition is often safest; parry only where physically authored |
+| **Charge** | attacker movement is part of the attack | evade the line, intercept with an appropriate mechanic such as Brace, or otherwise answer the movement physically |
+| **Control / Grab** | attack tries to seize, pin, displace or otherwise control the target | positioning/dodge is normally the main answer; weapon parry only if the authored motion physically supports it |
+
+These categories should not override the actual geometry. A thrust is a line, a sweep covers a lateral arc, an overhead strike is narrow and forceful, a body charge is moving collision pressure, and a ground attack can create an area that cannot be sword-parried merely because the player timed a button press.
+
+Large committed misses should have meaningful recovery. Reading an attack correctly must create a real opportunity to reposition, counterattack or recover stamina rather than the enemy instantly snapping into another unrelated attack.
+
+Enemy sequences should be learnable. Difficulty can come from chained patterns, altered timing, spacing, mixed attack classes and consequences, but attacks should still look and sound connected to what the enemy is actually doing.
+
+Audio matters especially when an attack begins near the edge of the camera. Off-screen pressure should remain fair through readable sound/movement cues rather than requiring enemies to wait passively for camera focus.
+
+Exact telegraph duration, animation, audio mix, attack-class schema and accessibility indicators remain future implementation/playtest work.
 
 ## 12. Phase-7 boundary
 
@@ -239,6 +264,8 @@ This document intentionally leaves the following for implementation/playtesting:
 - exact stunlock-protection stabilization duration and override threshold;
 - exact action-phase commitment resistance values;
 - exact enemy/boss reaction tuning;
+- exact attack telegraph timings, animation/audio details and accessibility indicators;
+- exact implementation schema/names for attack readability classes;
 - exact Shield equipment/skill interaction with block/parry.
 
 Those are tuning or later explicit product decisions. Do not infer arbitrary values from genre convention.
