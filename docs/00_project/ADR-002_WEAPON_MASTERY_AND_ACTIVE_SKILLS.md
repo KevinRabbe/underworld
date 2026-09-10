@@ -11,6 +11,8 @@ The durable product rules are:
 
 - mastery belongs to a **weapon family**, not to each material/tier weapon item;
 - changing to another material/tier item in the same family preserves that family's mastery;
+- baseline weapons must already be complete and functional without mastery;
+- mastery is a later overlay that adds **scaling, build variety and skills** to an already-working weapon family;
 - each significant mastery family has two specialization branches;
 - the player may select/equip **at most three active skills for the currently used weapon family**;
 - meaningful passive choices may also live in the family mastery;
@@ -105,13 +107,13 @@ Issue **#473** remains useful for its unresolved loadout/equipment questions. Th
 
 ## Rationale
 
-Family mastery creates build variety without requiring a large number of mechanically shallow weapon items. Keeping mastery at family level lets material progression improve equipment vertically while the player develops playstyle horizontally.
+Family mastery creates scaling and build variety without requiring a large number of mechanically shallow weapon items. Keeping mastery at family level lets material progression improve equipment vertically while the player develops playstyle horizontally.
 
 A three-active-skill cap preserves action-game readability and prevents the combat model from drifting into a large MMO hotbar. Two branches give each family room for distinct playstyles while retaining a recognizable core weapon identity.
 
 Separating Shield mastery from Shield equipment semantics prevents an unresolved loadout decision from blocking the mastery architecture.
 
-Deferring mastery until the later progression phase keeps Phase 7 focused on making the underlying weapons and combat feel good first. Mastery should deepen combat that already works; it should not be used to compensate for weak baseline weapon mechanics.
+Deferring mastery until the later progression phase keeps Phase 7 focused on making the underlying weapons and combat feel good first. Mastery adds scaling, variety and skills to combat that already works; it is not the layer that makes an incomplete baseline weapon functional.
 
 ## Affected contracts
 
