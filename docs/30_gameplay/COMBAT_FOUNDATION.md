@@ -240,13 +240,47 @@ Audio matters especially when an attack begins near the edge of the camera. Off-
 
 Exact telegraph duration, animation, audio mix, attack-class schema and accessibility indicators remain future implementation/playtest work.
 
-## 12. Phase-7 boundary
+## 12. Attack commitment and steering
+
+Attacks should preserve player/enemy intent and physical commitment without becoming either magnetically target-snapped or unnecessarily rigid.
+
+The baseline direction is:
+
+```text
+before attack
+-> actor chooses facing / attack direction
+
+attack begins
+-> action commits to that intent
+
+light / low-commitment action
+-> limited steering may remain
+
+heavy / highly committed action
+-> much less steering after commitment
+
+moving attack
+-> real collision-aware actor movement
+-> never teleport or snap to the target
+```
+
+A committed Greatsword overhead or comparable heavy attack should be capable of missing when the target moves out of the attack geometry. The game must not rotate the attacker through an implausibly large angle during the swing merely to guarantee a connection.
+
+The same rule applies to enemies. Once a large enemy has visibly committed to a crushing overhead, charge or similar attack, it should not unrealistically rotate midway through the committed portion solely to catch a correctly timed dodge.
+
+Limited steering is still useful for lighter attacks so ordinary combat does not feel mechanically stiff. The amount of steering belongs to the authored action/commitment profile and must be tuned in playtesting rather than derived from one universal turn-rate constant.
+
+This is compatible with the existing attack lifecycle: facing/intent is committed through gameplay authority, while any allowed steering or movement remains explicit action behavior rather than presentation-only correction.
+
+Exact turn rates, steering windows, facing lock timing and per-attack movement values remain implementation/playtest work.
+
+## 13. Phase-7 boundary
 
 Phase 7 should establish this shared combat foundation and make each base weapon mechanically complete without mastery.
 
 Mastery remains a later Phase-13 overlay for **scaling, variety and skills**. Phase-7 combat must therefore stand on its own and expose clean semantic hooks for later mastery without implementing mastery XP, trees, passive-node progression or mastery persistence early.
 
-## 13. Explicitly open
+## 14. Explicitly open
 
 This document intentionally leaves the following for implementation/playtesting:
 
@@ -266,6 +300,7 @@ This document intentionally leaves the following for implementation/playtesting:
 - exact enemy/boss reaction tuning;
 - exact attack telegraph timings, animation/audio details and accessibility indicators;
 - exact implementation schema/names for attack readability classes;
+- exact attack steering/turn rates, steering windows, facing-lock timing and movement values;
 - exact Shield equipment/skill interaction with block/parry.
 
 Those are tuning or later explicit product decisions. Do not infer arbitrary values from genre convention.
