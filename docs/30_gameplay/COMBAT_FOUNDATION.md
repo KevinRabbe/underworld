@@ -338,13 +338,54 @@ A hard target-lock system is **not required for Phase 7**. If later playtesting 
 
 Exact camera sensitivity, startup correction angle, camera distance, collision behavior and accessibility assists remain implementation/playtest work.
 
-## 15. Phase-7 boundary
+## 15. Hit feedback and impact feel
+
+Combat feedback should communicate **physical impact**, not merely the amount of health damage dealt.
+
+The baseline melee-hit presentation direction is:
+
+```text
+weapon / body attack visibly connects
+-> impact sound appropriate to contacted materials
+-> target reaction follows authored impact / interruption force
+-> short hit-stop or impact pause where appropriate
+-> directional particles / blood / debris where appropriate
+-> attacker continues through the authored action and recovery
+```
+
+A miss should not receive fake hit-stop or hit-confirm feedback. The attack simply continues into its authored recovery.
+
+Blocks and parries need distinct feedback from direct health hits. A normal block should visibly and audibly communicate force absorption through weapon-on-weapon, weapon-on-shield or equivalent contact plus defender guard recoil. A successful parry should have a particularly clear sharp deflection cue so the player immediately understands that the timing succeeded and a counter opportunity may exist.
+
+Feedback intensity should scale primarily with **impact and physical event**, not one-to-one with damage. A Knife precision hit may deal high health damage without shaking the entire camera, while a Greatsword, Axe or War Pike heavy can justify stronger impact pause, reaction and camera impulse because the underlying attack carries greater force.
+
+Camera shake should remain restrained and readable. Small directional impulses may reinforce major impacts; constant strong shaking should not obscure combat readability or become the primary way the game communicates force.
+
+Conceptually:
+
+```text
+fast / low-impact strike
+-> minimal hit pause and restrained camera response
+
+ordinary Sword / Spear connection
+-> modest connection feedback
+
+heavy Axe / Greatsword / War Pike impact
+-> stronger pause / reaction / camera impulse where appropriate
+
+boss-scale collision or exceptional force
+-> potentially stronger physical response without abandoning readability
+```
+
+Exact hit-stop duration, camera impulse, animation response, VFX density, blood/debris treatment, audio mix and accessibility options remain implementation/playtest work.
+
+## 16. Phase-7 boundary
 
 Phase 7 should establish this shared combat foundation and make each base weapon mechanically complete without mastery.
 
 Mastery remains a later Phase-13 overlay for **scaling, variety and skills**. Phase-7 combat must therefore stand on its own and expose clean semantic hooks for later mastery without implementing mastery XP, trees, passive-node progression or mastery persistence early.
 
-## 16. Explicitly open
+## 17. Explicitly open
 
 This document intentionally leaves the following for implementation/playtesting:
 
@@ -368,6 +409,7 @@ This document intentionally leaves the following for implementation/playtesting:
 - exact attack steering/turn rates, steering windows, facing-lock timing and movement values;
 - exact camera sensitivity, startup facing-correction angle, camera distance and collision behavior;
 - whether a later optional lock-on mode is needed after playtesting;
+- exact hit-stop durations, camera impulse, VFX density, hit reaction presentation and combat audio mix;
 - exact Shield equipment/skill interaction with block/parry.
 
 Those are tuning or later explicit product decisions. Do not infer arbitrary values from genre convention.
