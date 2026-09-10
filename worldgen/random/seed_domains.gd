@@ -34,6 +34,10 @@ const UG_SECONDARY_SHAPE: int = 0x020402
 const UG_SPECIAL_EXISTS: int = 0x020501
 const UG_GEOMETRY_SHAPE: int = 0x020601
 
+const GATEWAY_OVERWORLD_SOURCE_SITE: int = 0x030001
+const GATEWAY_UNDERWORLD_DESTINATION_SITE: int = 0x030101
+const GATEWAY_LINK_PAIRING: int = 0x030201
+
 
 static func get_domain(domain_id: int):
 	for domain in all_domains():
@@ -82,6 +86,17 @@ static func all_domains() -> Array:
 		SeedDomainScript.new(UG_SECONDARY_SHAPE, "ug.secondary.shape", 1),
 		SeedDomainScript.new(UG_SPECIAL_EXISTS, "ug.special.exists", 1),
 		SeedDomainScript.new(UG_GEOMETRY_SHAPE, "ug.geometry.shape", 1),
+		SeedDomainScript.new(
+			GATEWAY_OVERWORLD_SOURCE_SITE,
+			"gateway.overworld.source_site",
+			1
+		),
+		SeedDomainScript.new(
+			GATEWAY_UNDERWORLD_DESTINATION_SITE,
+			"gateway.underworld.destination_site",
+			1
+		),
+		SeedDomainScript.new(GATEWAY_LINK_PAIRING, "gateway.link.pairing", 1),
 	]
 
 
