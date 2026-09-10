@@ -6,7 +6,7 @@
 
 This document defines the data-driven player attack lifecycle that current and future weapon actions must compose with. Exact phase timings, damage values, hit-volume dimensions, final physical bindings and mastery-skill execution details remain tuning/implementation work.
 
-Product authority for weapon mastery and active skills is [`30_gameplay/WEAPON_MASTERY.md`](30_gameplay/WEAPON_MASTERY.md) and [`00_project/ADR-002_WEAPON_MASTERY_AND_ACTIVE_SKILLS.md`](00_project/ADR-002_WEAPON_MASTERY_AND_ACTIVE_SKILLS.md).
+Product authority for weapon mastery and active skills is [`30_gameplay/WEAPON_MASTERY.md`](30_gameplay/WEAPON_MASTERY.md) and [`00_project/ADR-002_WEAPON_MASTERY_AND_ACTIVE_SKILLS.md`](00_project/ADR-002_WEAPON_MASTERY_AND_ACTIVE_SKILLS.md). Product authority for target Phase-7 physical contact behavior is [`30_gameplay/COMBAT_HIT_RESOLUTION.md`](30_gameplay/COMBAT_HIT_RESOLUTION.md).
 
 The architectural ownership rules below are the important part.
 
@@ -128,7 +128,7 @@ Future active skills may require additional bounded gameplay contracts for movem
 Current tuning only:
 
 | Attack | Startup | Active | Recovery | Damage |
-| --- | ---: | ---: | ---: | ---: |
+| --- | ---: | ---: | ---: |
 | Hands light | 0.10 s | 0.10 s | 0.18 s | 7 |
 | Stone axe light | 0.12 s | 0.10 s | 0.20 s | 16 |
 | Stone pickaxe light | 0.14 s | 0.10 s | 0.20 s | 13 |
@@ -216,7 +216,11 @@ minimum forward dot
 
 `CombatManager` also retains the existing clear-path ray so terrain/world objects can block the melee connection.
 
-The manager chooses the nearest valid enemy in the supplied attack volume.
+**Current executable prototype only:** the manager chooses the nearest valid enemy in the supplied attack volume. This remains a temporary single-sample simplification and is not the target Phase-7 product behavior.
+
+**Target Phase-7 behavior:** authored weapon/body attack geometry moves through space and contacts the valid targets it physically crosses, as defined by [`30_gameplay/COMBAT_HIT_RESOLUTION.md`](30_gameplay/COMBAT_HIT_RESOLUTION.md). Broad melee attacks may therefore naturally contact multiple enemies, and one attack activation must not repeatedly damage the same target merely because overlap persists across several simulation frames.
+
+The implementation may evolve from the current sphere-volume proof toward swept or otherwise authored attack geometry without changing the ownership principle: the committed gameplay action supplies the authoritative attack data, and combat resolution evaluates that action against world physics.
 
 Future moving attacks such as War Pike techniques must move the real authoritative Player through accepted movement/collision ownership. A presentation-only dash or teleport-to-target must not substitute for gameplay movement.
 
@@ -276,6 +280,8 @@ heavy attacks
 production attack stamina costs
 lock-on
 root motion
+swept / geometry-based multi-target melee resolution
+authored weak-point / contacted-region resolution
 weapon mastery progression
 mastery XP / points / passives
 three equipped active skills
@@ -283,7 +289,7 @@ Shield skill/equipment integration
 future Life Staff healing/status actions
 ```
 
-Those are separate implementation tasks. Their absence from the prototype is not permission to revert to the superseded one-signature-special product model.
+Those are separate implementation tasks. Their absence from the prototype is not permission to revert to the superseded one-signature-special product model or the temporary nearest-target hit-resolution behavior.
 
 ## Automated validation
 
@@ -301,6 +307,6 @@ Current headless character validation proves that:
 - changing equipment after commitment cannot mutate the pending execution;
 - mannequin attack duration follows supplied definition timing.
 
-Future mastery/skill tests must be added when that runtime exists. Documentation must not pretend those tests already pass.
+Future mastery/skill tests and Phase-7 geometry/multi-target contact tests must be added when those runtimes exist. Documentation must not pretend those tests already pass.
 
 The existing deterministic-worldgen gate must remain green on the same PR head for future implementation changes.
