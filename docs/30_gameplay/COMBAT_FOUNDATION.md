@@ -112,9 +112,21 @@ Not every attack must be parryable. Physical readability and attack type should 
 
 Dodge is a universal physical avoidance/repositioning tool.
 
-The project does **not** use an armor-weight/equip-load dodge-class system. Armor does not select Light/Medium/Heavy roll categories or impose a weight-based movement class.
+The baseline dodge is a **smooth forward dodge roll**. It is a real movement action, costs stamina and includes a brief invulnerability window during the clean evasive portion of the roll. The dodge must not become a free cancel out of an already committed attack/action.
 
-Exact dodge distance, invulnerability behavior, stamina cost and recovery remain playtest/tuning decisions.
+```text
+dodge request
+     |
+     +-> pay stamina
+     +-> commit to smooth forward roll
+     +-> physically reposition
+     +-> brief evasive invulnerability window
+     +-> recover back into normal movement/combat
+```
+
+The project does **not** use an armor-weight/equip-load dodge-class system. Armor does not select Light/Medium/Heavy roll categories or impose a weight-based movement class; the same baseline dodge-roll family applies regardless of armor.
+
+Exact roll distance, duration, stamina cost, invulnerability timing and recovery remain playtest/tuning decisions.
 
 ## 6. Attack properties are separate
 
@@ -195,7 +207,7 @@ This document intentionally leaves the following for implementation/playtesting:
 - exact guard-break threshold and recovery;
 - exact posture capacity, recovery and break duration;
 - exact parry window, stamina cost, residual chip and counter-window duration;
-- exact dodge invulnerability/distance/recovery behavior;
+- exact dodge-roll distance, duration, stamina cost, invulnerability timing and recovery;
 - exact impact/interruption thresholds;
 - exact action-phase commitment resistance values;
 - exact enemy/boss reaction tuning;
