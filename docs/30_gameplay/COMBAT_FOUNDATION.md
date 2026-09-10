@@ -313,13 +313,38 @@ This creates the intended physical loop: attacking aggressively can reduce defen
 
 Exact minimum-action thresholds, guard-break conversion, recovery delay and regeneration rates remain playtest/tuning work.
 
-## 14. Phase-7 boundary
+## 14. Camera and melee targeting
+
+Melee combat is **primarily free-camera with no hard target lock**.
+
+The baseline direction is:
+
+```text
+normal melee
+-> free camera
+-> player/camera intent establishes attack direction
+-> small authored facing correction may occur at attack startup where needed
+-> once committed, no magnetic target tracking
+-> heavier attacks receive less correction than lighter attacks
+
+bow / precision ranged
+-> fully manual player aim
+-> no hard lock-on or mastery-driven auto-aim identity
+```
+
+Free-camera combat must preserve the physical commitment rules above: attacks can miss, positioning and spacing matter, and an enemy moving out of the authored attack geometry is a valid result. Small startup correction is allowed only to keep ordinary melee from feeling unnecessarily awkward; it must not turn into snap targeting or large mid-swing rotation.
+
+A hard target-lock system is **not required for Phase 7**. If later playtesting demonstrates a clear usability need, an optional lock-on mode may be evaluated separately, but it must not redefine the baseline weapon identities or override physical attack commitment.
+
+Exact camera sensitivity, startup correction angle, camera distance, collision behavior and accessibility assists remain implementation/playtest work.
+
+## 15. Phase-7 boundary
 
 Phase 7 should establish this shared combat foundation and make each base weapon mechanically complete without mastery.
 
 Mastery remains a later Phase-13 overlay for **scaling, variety and skills**. Phase-7 combat must therefore stand on its own and expose clean semantic hooks for later mastery without implementing mastery XP, trees, passive-node progression or mastery persistence early.
 
-## 15. Explicitly open
+## 16. Explicitly open
 
 This document intentionally leaves the following for implementation/playtesting:
 
@@ -341,6 +366,8 @@ This document intentionally leaves the following for implementation/playtesting:
 - exact attack telegraph timings, animation/audio details and accessibility indicators;
 - exact implementation schema/names for attack readability classes;
 - exact attack steering/turn rates, steering windows, facing-lock timing and movement values;
+- exact camera sensitivity, startup facing-correction angle, camera distance and collision behavior;
+- whether a later optional lock-on mode is needed after playtesting;
 - exact Shield equipment/skill interaction with block/parry.
 
 Those are tuning or later explicit product decisions. Do not infer arbitrary values from genre convention.
