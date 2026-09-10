@@ -379,13 +379,53 @@ boss-scale collision or exceptional force
 
 Exact hit-stop duration, camera impulse, animation response, VFX density, blood/debris treatment, audio mix and accessibility options remain implementation/playtest work.
 
-## 16. Phase-7 boundary
+## 16. Combo and input buffering
+
+Phase-7 combat should accept slightly early player intent without allowing button mashing to schedule a long autonomous sequence.
+
+For ordinary authored light-attack chains, the baseline direction is:
+
+```text
+attack 1
+-> player presses attack near the legal transition window
+-> remember one pending next attack
+-> current committed action reaches the authored transition/recovery point
+-> if still legal and enough stamina exists
+-> begin attack 2
+```
+
+The same principle applies through the rest of an authored chain. If the player stops providing input, the chain returns to neutral rather than continuing by itself.
+
+The combat buffer should normally hold **one meaningful pending action**, not an arbitrary queue of repeated inputs. Pressing attack many times during one committed swing must not cause the character to execute several future attacks after the player has stopped pressing.
+
+Defensive intent may also be buffered during the final legal portion of recovery. A slightly early dodge or block/parry request can execute as soon as the current action becomes legally free, but buffering must not turn those actions into cancels during startup/active commitment.
+
+Conceptually:
+
+```text
+committed attack
+     |
+     +-> early next-attack input: remember one legal follow-up
+     +-> early defense input near legal recovery: remember one defense request
+     |
+     v
+action reaches legal transition
+     |
+     +-> validate stamina/state/context
+     +-> execute pending action if still legal
+```
+
+Later mastery skills may participate in the same semantic buffering/transition system when authored, but mastery must not replace the core action-commitment authority.
+
+Exact buffer duration, per-action transition windows, priority between competing pending inputs, combo reset time and skill-specific cancel rules remain implementation/playtest work.
+
+## 17. Phase-7 boundary
 
 Phase 7 should establish this shared combat foundation and make each base weapon mechanically complete without mastery.
 
 Mastery remains a later Phase-13 overlay for **scaling, variety and skills**. Phase-7 combat must therefore stand on its own and expose clean semantic hooks for later mastery without implementing mastery XP, trees, passive-node progression or mastery persistence early.
 
-## 17. Explicitly open
+## 18. Explicitly open
 
 This document intentionally leaves the following for implementation/playtesting:
 
@@ -410,6 +450,8 @@ This document intentionally leaves the following for implementation/playtesting:
 - exact camera sensitivity, startup facing-correction angle, camera distance and collision behavior;
 - whether a later optional lock-on mode is needed after playtesting;
 - exact hit-stop durations, camera impulse, VFX density, hit reaction presentation and combat audio mix;
+- exact input-buffer duration, combo transition windows, pending-input priority and combo-reset timing;
+- exact mastery-skill cancel/transition rules;
 - exact Shield equipment/skill interaction with block/parry.
 
 Those are tuning or later explicit product decisions. Do not infer arbitrary values from genre convention.
