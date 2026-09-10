@@ -71,6 +71,16 @@ This does **not** decide:
 
 Those remain product-open and must be asked/decided explicitly rather than inferred from genre convention.
 
+## Roadmap sequencing
+
+Weapon mastery is intentionally a **later-phase system**.
+
+- **Phase 7 — Combat depth and skill-expression** establishes the core combat foundation: strong weapon archetypes, attacks, defense/aim behavior, enemy interactions, bosses, animation/feedback and the underlying action lifecycle. Phase 7 does **not** require mastery XP, mastery levels, mastery trees, passive-node progression, mastery persistence or the three-selected-skill progression UI to be implemented.
+- **Phase 13 — Meta progression and long-term social depth** owns implementation/integration of weapon mastery and its long-term progression layer.
+- Earlier combat code and content should remain compatible with later mastery by using semantic combat/action boundaries, but workers must not build mastery early merely because the target product direction is already documented.
+
+The three-active-skill mastery model therefore remains authoritative **target design**, not a Phase-7 acceptance requirement.
+
 ## Future/proposed families
 
 Greatsword, Gauntlets & Greaves and Life Staff are future/proposed families, not current first-biome mastery families. Their provisional branch labels are:
@@ -101,6 +111,8 @@ A three-active-skill cap preserves action-game readability and prevents the comb
 
 Separating Shield mastery from Shield equipment semantics prevents an unresolved loadout decision from blocking the mastery architecture.
 
+Deferring mastery until the later progression phase keeps Phase 7 focused on making the underlying weapons and combat feel good first. Mastery should deepen combat that already works; it should not be used to compensate for weak baseline weapon mechanics.
+
 ## Affected contracts
 
 Current authority should be read through:
@@ -109,17 +121,20 @@ Current authority should be read through:
 - [`../40_content/WEAPON_RULEBOOK.md`](../40_content/WEAPON_RULEBOOK.md) — weapon family/content boundary;
 - [`../PLAYER_ATTACK_CONTRACT.md`](../PLAYER_ATTACK_CONTRACT.md) — action/attack execution lifecycle;
 - [`../40_content/ITEM_RULEBOOK.md`](../40_content/ITEM_RULEBOOK.md) — item/material identity separation;
+- [`MASTER_ROADMAP.md`](MASTER_ROADMAP.md) — implementation sequencing;
 - [`DECISION_INDEX.md`](DECISION_INDEX.md) — current governance index.
 
 ## Migration consequence
 
 This ADR is a **documentation/product-direction change only**. It does not claim the current runtime already implements mastery or three active skills.
 
-When combat implementation migrates:
+When Phase-13 mastery implementation is authorized:
 
 - old one-special input/content assumptions must not become the target schema;
 - final semantic input actions must support three selected active skills without hard-coding physical keys into weapon definitions;
 - mastery persistence must be family-based;
-- existing prototype attack timing/commitment authority should be reused rather than bypassed by skill UI/input code.
+- existing combat timing/commitment/action authority should be reused rather than bypassed by skill UI/input code.
+
+Before that phase, combat implementation should expose clean semantic hooks for later skills without implementing mastery XP, trees, unlock UI or persistence prematurely.
 
 Exact implementation classes, ContentIds, skill schemas, XP curves, balance values and save migrations remain future implementation decisions.
