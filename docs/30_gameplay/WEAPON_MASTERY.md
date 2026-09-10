@@ -30,6 +30,8 @@ vertical progression   = equipment material/tier/base item power
 
 Material/tier progression may change stats, crafting requirements, durability, appearance or other item-owned properties. It must not silently fork the family into a new mastery tree.
 
+The baseline weapon family must already be mechanically complete without mastery. Mastery is a later progression overlay whose purpose is to add **scaling, build variety and skills** to that established weapon. Exact numerical scaling remains TBD until the mastery phase is authored and playtested.
+
 ## 2. Active-skill model
 
 The previous design of **exactly one signature special per weapon** is superseded.
@@ -200,7 +202,7 @@ Weapon mastery is **not required for Phase 7 combat**.
 
 Phase 7 should make the baseline combat system and weapon families strong without depending on mastery progression: attacks, defense/aim behavior, movement commitment, hit resolution, stamina/cost semantics, enemy reactions, weapon identity, bosses, animation and feedback should stand on their own.
 
-The mastery progression layer is intentionally deferred to **Phase 13 — Meta progression and long-term social depth**. That phase may introduce mastery XP, levels, unlock trees, passive choices, the three-selected-active-skill progression/loadout layer, mastery persistence and associated UI.
+The mastery progression layer is intentionally deferred to **Phase 13 — Meta progression and long-term social depth**. Its job is to add scaling, variety and active/passive skill choices on top of established weapon combat. That phase may introduce mastery XP, levels, unlock trees, passive choices, the three-selected-active-skill progression/loadout layer, mastery persistence and associated UI.
 
 Earlier systems should preserve clean semantic hooks so later active skills can use the same combat/action authority. They must not implement mastery trees, XP, unlock UI or persistence early merely because the target design is already known.
 
@@ -234,6 +236,7 @@ weapon family -> one signature special
 
 REPLACED BY
 weapon family -> mastery progression
+              -> scaling and build variety
               -> two specialization branches
               -> multiple active-skill options
               -> max three equipped active skills
