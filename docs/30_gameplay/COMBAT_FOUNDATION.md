@@ -274,7 +274,57 @@ This is compatible with the existing attack lifecycle: facing/intent is committe
 
 Exact turn rates, steering windows, facing lock timing and per-attack movement values remain implementation/playtest work.
 
-## 13. Zero stamina and action gating
+## 13. Movement during attacks
+
+Attack movement should be authored per action. It must not come from magnetic target snapping, unrestricted normal locomotion during the swing, or presentation-only animation displacement that secretly moves the gameplay body.
+
+The baseline authority is:
+
+```text
+attack starts
+-> normal locomotion becomes constrained according to the action
+-> authored attack movement takes authority where movement is part of the action
+-> limited steering may remain where the action allows it
+-> collision remains active
+-> attack reaches recovery / completion
+-> normal locomotion authority returns
+```
+
+This avoids both undesirable extremes: ordinary attacks should not all root the actor completely, but the player also should not retain unrestricted movement and ice-skate around while a committed strike is active.
+
+Weapon identity should be reflected through this authored movement language. At a high level, Knife and Gauntlets & Greaves may use short responsive engagement movement; Sword can use modest grounded steps; Axe and Greatsword can commit more deliberately; Spear should preserve controlled spacing rather than constantly dragging the player into the target; and War Pike can use stronger real forward drive as part of its family identity. Bow aiming/drawing follows ranged movement rules rather than melee lunge behavior.
+
+Moving attacks use the gameplay movement authority and remain collision-aware. A War Pike drive, charge, leap or other movement-heavy action may be obstructed by terrain, walls or sufficiently solid actors rather than teleporting through them because an animation expects a destination.
+
+```text
+moving attack + clear path
+-> perform authored physical displacement
+
+moving attack + obstruction
+-> collision authority constrains / stops the displacement
+-> attack resolves from the position actually reached
+```
+
+Gameplay displacement should be defined by action/gameplay data and performed through the character movement authority. Animation should visually match that displacement, but animation root motion alone must not become an untracked source of gameplay teleportation. Replaceable animation assets must therefore be able to change without silently changing combat reach.
+
+Attack movement, steering and major movement techniques are distinct concepts:
+
+```text
+attack movement
+-> displacement belonging to the ordinary authored action
+
+steering
+-> limited directional correction while that action is underway
+
+lunge / charge / leap
+-> deliberately movement-heavy authored action or technique
+```
+
+Enemies use the same principle. A wolf leap, boar charge or advancing enemy combo uses authored collision-aware movement; enemy attacks must not gain invisible target suction between hits.
+
+Exact displacement distances, acceleration curves, root-motion integration, collision response, movement interruption and per-weapon values remain implementation/playtest work.
+
+## 14. Zero stamina and action gating
 
 Reaching zero stamina should be dangerous because options disappear, not because the game automatically applies an unrelated exhaustion stun.
 
@@ -313,7 +363,7 @@ This creates the intended physical loop: attacking aggressively can reduce defen
 
 Exact minimum-action thresholds, guard-break conversion, recovery delay and regeneration rates remain playtest/tuning work.
 
-## 14. Camera and melee targeting
+## 15. Camera and melee targeting
 
 Melee combat is **primarily free-camera with no hard target lock**.
 
@@ -338,7 +388,7 @@ A hard target-lock system is **not required for Phase 7**. If later playtesting 
 
 Exact camera sensitivity, startup correction angle, camera distance, collision behavior and accessibility assists remain implementation/playtest work.
 
-## 15. Hit feedback and impact feel
+## 16. Hit feedback and impact feel
 
 Combat feedback should communicate **physical impact**, not merely the amount of health damage dealt.
 
@@ -379,7 +429,7 @@ boss-scale collision or exceptional force
 
 Exact hit-stop duration, camera impulse, animation response, VFX density, blood/debris treatment, audio mix and accessibility options remain implementation/playtest work.
 
-## 16. Combo and input buffering
+## 17. Combo and input buffering
 
 Phase-7 combat should accept slightly early player intent without allowing button mashing to schedule a long autonomous sequence.
 
@@ -419,13 +469,13 @@ Later mastery skills may participate in the same semantic buffering/transition s
 
 Exact buffer duration, per-action transition windows, priority between competing pending inputs, combo reset time and skill-specific cancel rules remain implementation/playtest work.
 
-## 17. Phase-7 boundary
+## 18. Phase-7 boundary
 
 Phase 7 should establish this shared combat foundation and make each base weapon mechanically complete without mastery.
 
 Mastery remains a later Phase-13 overlay for **scaling, variety and skills**. Phase-7 combat must therefore stand on its own and expose clean semantic hooks for later mastery without implementing mastery XP, trees, passive-node progression or mastery persistence early.
 
-## 18. Explicitly open
+## 19. Explicitly open
 
 This document intentionally leaves the following for implementation/playtesting:
 
@@ -447,6 +497,7 @@ This document intentionally leaves the following for implementation/playtesting:
 - exact attack telegraph timings, animation/audio details and accessibility indicators;
 - exact implementation schema/names for attack readability classes;
 - exact attack steering/turn rates, steering windows, facing-lock timing and movement values;
+- exact attack displacement distances, acceleration curves, root-motion integration and collision-response values;
 - exact camera sensitivity, startup facing-correction angle, camera distance and collision behavior;
 - whether a later optional lock-on mode is needed after playtesting;
 - exact hit-stop durations, camera impulse, VFX density, hit reaction presentation and combat audio mix;
