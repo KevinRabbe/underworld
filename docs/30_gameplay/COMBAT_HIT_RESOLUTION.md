@@ -252,7 +252,38 @@ Later equipment, mastery or magic may introduce crit-related build mechanics if 
 
 Exact weak-point multipliers, exposed-state bonuses, any future critical-chance rules and how later mastery interacts with them remain open.
 
-## 12. Explicitly not required for Phase 7
+## 12. Actor body collision and dodge interaction
+
+Combatants should have physical body presence without turning encounters into rigid physics traffic jams.
+
+Baseline movement collision is:
+
+```text
+player <-> enemy
+-> bodies cannot freely occupy the same space
+-> collision should slide / separate smoothly
+-> ordinary movement should not ghost through another actor
+-> avoid unstable hard-body shoving and jitter
+```
+
+Target size and mass should affect how strongly an actor controls space. Small creatures can be easier to displace, human-sized combatants have meaningful body presence, and large enemies or bosses should strongly occupy their physical volume rather than allowing the player to walk through their torso.
+
+The dodge roll's brief invulnerability window is **damage avoidance, not universal physical intangibility**:
+
+```text
+dodge roll
+-> attack overlap during valid i-frames: damage authority may ignore the hit
+-> wall / solid terrain in path: remains physically solid
+-> enemy body in path: movement/collision authority resolves the body contact
+```
+
+Dodge movement should still remain smooth. Small overlap imperfections should favor stable sliding/separation rather than abruptly cancelling a roll, while clearly solid world geometry and large actor bodies remain meaningful obstacles.
+
+Crowd collision should create positioning pressure without creating a perfectly rigid ring that traps the player only because several collision capsules touched at once. The intended direction is physical presence plus spacing/sliding/limited displacement, not universal actor ghosting and not unconstrained rigid-body pushing.
+
+Exact collision shapes, separation force, displacement rules, crowd handling and whether specific tiny enemies can be rolled over or through remain implementation/playtest work.
+
+## 13. Explicitly not required for Phase 7
 
 Phase 7 does not require:
 
@@ -270,6 +301,8 @@ Phase 7 does not require:
 - exact weapon-family damage-type percentages;
 - a universal random critical-hit chance for base physical combat;
 - exact block/deflection continuation rules for broad or forceful attacks;
+- exact actor collision shapes, crowd-separation force or displacement thresholds;
+- exact dodge/body-collision exception rules;
 - final magic damage categories.
 
 Those may be evaluated later if they add value without weakening readability or maintainability.
