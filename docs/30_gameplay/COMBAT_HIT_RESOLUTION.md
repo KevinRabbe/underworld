@@ -145,7 +145,65 @@ Greatsword
 
 Exact family modifiers are not defined here.
 
-## 8. Explicitly not required for Phase 7
+## 8. Physical health-damage types
+
+Phase-7 physical combat uses three high-level health-damage types:
+
+```text
+CUTTING
+-> edged cutting attacks such as many Sword, Greatsword, Axe and Knife strikes
+
+PIERCING
+-> thrusting/projectile attacks such as Spear, War Pike, Bow and stabbing techniques
+
+BLUNT
+-> fists, kicks, body strikes and other physically blunt techniques
+```
+
+The **attack owns the damage type**. A weapon family is not forced to use one type for every authored action. A Sword thrust may therefore be Piercing while a Sword cut is Cutting if the authored attack requires that distinction.
+
+Health-damage type remains separate from the shared physical-response properties:
+
+```text
+health damage type
+-> Cutting / Piercing / Blunt
+
+impact
+-> immediate interruption / stagger force
+
+posture pressure
+-> accumulated destabilization
+```
+
+A high-damage precision hit does not automatically imply high impact, and a heavy blunt impact does not need extreme health damage merely to feel forceful.
+
+## 9. Armor and resistance interaction
+
+Armor/body-region resistance may modify **health damage** by physical damage type without redefining dodge, movement class, impact or posture as the same system.
+
+Conceptually:
+
+```text
+successful contact
+-> base health damage
+-> attack physical damage type
+-> contacted region / armor resistance
+-> final health damage
+
+separately
+-> resolve impact
+-> resolve posture pressure
+```
+
+The default balance direction is **favorable/unfavorable matchups, not hard weapon invalidation**. A physical resistance can make one attack type noticeably less effective, but ordinary enemies should not routinely reduce a valid physical weapon to near-zero usefulness solely because the player chose the wrong family.
+
+Exceptional creatures may use stronger authored resistance where their physical design makes that behavior clear, such as a stone-like body being unusually resistant to cutting. Those are content-specific exceptions, not the global baseline.
+
+Armor resistance does **not** introduce an armor-weight dodge system. The universal dodge-roll direction from `COMBAT_FOUNDATION.md` remains unchanged.
+
+Future magic may extend damage typing with additional non-physical categories without changing the three Phase-7 physical categories.
+
+## 10. Explicitly not required for Phase 7
 
 Phase 7 does not require:
 
@@ -157,6 +215,10 @@ Phase 7 does not require:
 - fixed cleave-damage reduction rules;
 - a final thrust-piercing/multi-target rule;
 - exact collision-sampling implementation;
-- exact weak-point multipliers or posture bonuses.
+- exact weak-point multipliers or posture bonuses;
+- exact Cutting/Piercing/Blunt resistance values;
+- exact armor mitigation formulas;
+- exact weapon-family damage-type percentages;
+- final magic damage categories.
 
 Those may be evaluated later if they add value without weakening readability or maintainability.
