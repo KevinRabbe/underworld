@@ -283,7 +283,55 @@ Crowd collision should create positioning pressure without creating a perfectly 
 
 Exact collision shapes, separation force, displacement rules, crowd handling and whether specific tiny enemies can be rolled over or through remain implementation/playtest work.
 
-## 13. Explicitly not required for Phase 7
+## 13. Vertical combat and uneven terrain
+
+Combat takes place in full 3D space. Authored attack geometry, actor height and terrain elevation remain meaningful rather than collapsing melee into a flat two-dimensional radius check.
+
+The baseline direction is:
+
+```text
+attack resolution
+-> authored attack geometry exists in 3D space
+-> vertical position matters
+-> terrain elevation can change whether the attack actually reaches the target
+```
+
+Small height differences should not make ordinary melee unnecessarily brittle. Modest vertical alignment at action startup is allowed where needed so a target standing slightly uphill, downhill or on a stair can still be attacked naturally without visible snapping.
+
+```text
+small height difference
+-> modest startup vertical alignment may occur
+-> attack remains visually and physically plausible
+
+large height difference
+-> authored geometry must genuinely reach the target
+-> no magical vertical homing or bending after commitment
+```
+
+This follows the same commitment rule used for horizontal steering. A Spear thrust may reasonably follow player intent toward a target slightly uphill, while a Sword or Greatsword swing does not rotate through an implausible vertical angle after the action is already committed merely to guarantee contact.
+
+Terrain grounding should preserve readable character posture. Feet/locomotion may conform to slopes and steps where presentation supports it, but the entire combatant should not mechanically tilt to every terrain normal in a way that distorts attack intent or hit geometry.
+
+Gameplay hit shapes should closely follow the authored visual attack while allowing a small implementation tolerance for animation, simulation and uneven-ground imperfections. That tolerance must not become a large invisible hit bubble that defeats physical readability.
+
+Ledges and intervening geometry remain authoritative:
+
+```text
+target below a ledge
+-> attack hits only if its real geometry reaches below the edge
+
+target well above attacker
+-> attack must genuinely reach upward
+
+wall / ledge / terrain between actors
+-> may obstruct the attack
+```
+
+Bow remains fully three-dimensional: manual aim, projectile travel, gravity/drop where authored, terrain collision and actual impact point determine the result.
+
+Exact vertical-correction angles, slope limits, foot IK, hit-volume tolerance, jump/falling attacks and combat behavior while swimming or climbing remain later implementation/playtest decisions.
+
+## 14. Explicitly not required for Phase 7
 
 Phase 7 does not require:
 
@@ -303,6 +351,10 @@ Phase 7 does not require:
 - exact block/deflection continuation rules for broad or forceful attacks;
 - exact actor collision shapes, crowd-separation force or displacement thresholds;
 - exact dodge/body-collision exception rules;
+- exact vertical startup-correction angles or slope limits;
+- final foot-IK or uneven-ground presentation implementation;
+- exact gameplay hit-volume tolerance around visual attack geometry;
+- jump attacks, falling attacks or combat behavior while swimming/climbing;
 - final magic damage categories.
 
 Those may be evaluated later if they add value without weakening readability or maintainability.
