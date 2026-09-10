@@ -93,7 +93,18 @@ This block model is intended to prevent permanent low-risk turtling while still 
 
 Parry is the higher-skill timing response and should be more efficient/rewarding than simply holding block.
 
-A successful parry may reduce defensive cost, redirect immediate impact and create a counter opportunity, but exact stamina cost, health-chip treatment, counter-window length and family-specific behavior remain TBD.
+The baseline successful-parry direction is:
+
+```text
+successful parry / deflection
+     |
+     +-> no or almost no health damage
+     +-> substantially lower stamina cost than absorbing the same hit with a normal block
+     +-> incoming attack is deflected rather than fully absorbed
+     +-> attacker is briefly opened for a counter opportunity where physically appropriate
+```
+
+Exact parry window, stamina cost, any residual chip damage, counter-window duration and family-specific response remain playtest/tuning work.
 
 Not every attack must be parryable. Physical readability and attack type should determine whether a parry makes sense. A sword swing, for example, can participate in this language; a ground shockwave does not become parryable merely because the player pressed the parry input at the right time.
 
@@ -183,7 +194,7 @@ This document intentionally leaves the following for implementation/playtesting:
 - exact guard recoil/stumble strength and animation;
 - exact guard-break threshold and recovery;
 - exact posture capacity, recovery and break duration;
-- exact parry window, cost and chip-damage treatment;
+- exact parry window, stamina cost, residual chip and counter-window duration;
 - exact dodge invulnerability/distance/recovery behavior;
 - exact impact/interruption thresholds;
 - exact action-phase commitment resistance values;
