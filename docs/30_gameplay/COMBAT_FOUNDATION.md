@@ -274,19 +274,59 @@ This is compatible with the existing attack lifecycle: facing/intent is committe
 
 Exact turn rates, steering windows, facing lock timing and per-attack movement values remain implementation/playtest work.
 
-## 13. Phase-7 boundary
+## 13. Zero stamina and action gating
+
+Reaching zero stamina should be dangerous because options disappear, not because the game automatically applies an unrelated exhaustion stun.
+
+The baseline rule is:
+
+```text
+enough stamina
+-> stamina-costing action may begin
+
+not enough stamina
+-> that stamina-costing action cannot begin
+
+stamina reaches zero through ordinary spending
+-> no automatic stun
+-> demanding stamina-costing actions remain unavailable
+-> recovery resumes when normal regeneration conditions allow
+```
+
+Stamina should not normally be treated as a deeply negative resource. If an incoming blocked attack requires more defensive stamina than the defender has remaining, the available stamina is consumed and the **unabsorbed force** converts into guard failure rather than silently driving stamina far below zero.
+
+Conceptually:
+
+```text
+block incoming force
+     |
+     +-> enough stamina: absorb according to normal block rules
+     |
+     +-> insufficient stamina:
+             remaining stamina consumed
+             + unabsorbed force
+             -> guard break / stronger stumble or stagger
+             -> brief exposed state
+```
+
+This creates the intended physical loop: attacking aggressively can reduce defensive options; repeated blocking can collapse guard; good parries preserve more stamina; dodging spends stamina to avoid the hit; disengaging creates room for stamina and posture recovery.
+
+Exact minimum-action thresholds, guard-break conversion, recovery delay and regeneration rates remain playtest/tuning work.
+
+## 14. Phase-7 boundary
 
 Phase 7 should establish this shared combat foundation and make each base weapon mechanically complete without mastery.
 
 Mastery remains a later Phase-13 overlay for **scaling, variety and skills**. Phase-7 combat must therefore stand on its own and expose clean semantic hooks for later mastery without implementing mastery XP, trees, passive-node progression or mastery persistence early.
 
-## 14. Explicitly open
+## 15. Explicitly open
 
 This document intentionally leaves the following for implementation/playtesting:
 
 - exact stamina pool and regeneration values;
-- exact attack/heavy/dodge stamina costs;
+- exact attack/heavy/dodge stamina costs and minimum-action thresholds;
 - exact stamina-regeneration behavior while guarding;
+- exact zero-stamina recovery delay and guard-break force conversion;
 - exact block chip-damage percentage/formula;
 - exact block stamina drain and guard-pressure formulas;
 - exact guard recoil/stumble strength and animation;
