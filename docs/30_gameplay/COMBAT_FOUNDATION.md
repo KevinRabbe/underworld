@@ -158,9 +158,36 @@ small hit reaction
 
 These are severity concepts, not a requirement that every hit progress through every stage.
 
+**Stagger and posture break are different mechanisms.** Stagger is an immediate response to enough impact/interruption force from a hit. Posture break is the result of accumulated posture pressure reaching its break threshold. A heavy strike may cause an immediate stagger without filling posture, while repeated pressure may eventually create a posture break without every contributing hit being a large stagger.
+
 Knockdown should be comparatively rare and must respect target size/mass and attack force. Fast/light weapons should not permanently interrupt large targets merely through attack speed.
 
-## 8. Commitment resistance
+## 8. Stunlock protection
+
+Combat should not allow a player or enemy to be held indefinitely in repeated hit reactions by fast low-impact attacks.
+
+After a meaningful stagger or similar strong reaction, the recovering actor should receive a short **stabilization** period against repeated low-impact stagger/interrupt effects. This is not general invulnerability: health damage and posture pressure can still apply normally, and sufficiently strong impact can still overcome the stabilization when physically appropriate.
+
+Conceptually:
+
+```text
+meaningful stagger
+     |
+     v
+short recovery / stabilization
+     |
+     +-> low-impact repeat hit: damage/posture may apply, but no immediate re-stagger
+     +-> sufficiently strong impact: may still stagger
+     |
+     v
+normal reaction susceptibility returns
+```
+
+The same principle applies to player and enemy combat where appropriate. Bosses and very large enemies may have stronger resistance through their authored mass/stability and encounter tuning, but they should still use the same readable reaction language rather than arbitrary immunity to the whole system.
+
+Exact stabilization duration, impact threshold and which reaction classes trigger it remain playtest/tuning work.
+
+## 9. Commitment resistance
 
 The project does not rely on a universal armor-derived poise system.
 
@@ -170,7 +197,7 @@ This resistance belongs to the action/phase, not permanently to an armor-weight 
 
 Exact resistance values and eligible phases remain weapon-authoring/tuning work.
 
-## 9. Enemy and boss participation
+## 10. Enemy and boss participation
 
 Enemies use the same underlying combat language as the player where appropriate. Enemy attacks can carry health damage, impact, posture pressure, guard pressure and parryability/readability information.
 
@@ -178,7 +205,7 @@ Enemy size/mass affects displacement and knockdown response. Bosses are not exem
 
 Boss difficulty should come from timing, sequences, positioning, force and consequences rather than silently ignoring the combat rules.
 
-## 10. Readability
+## 11. Readability
 
 The preferred default is physical readability rather than MMO-style universal color coding.
 
@@ -188,13 +215,13 @@ Broad internal attack classes may later be useful for authoring/validation, such
 
 Large missed attacks should have meaningful recovery so successful reads create real punish opportunities.
 
-## 11. Phase-7 boundary
+## 12. Phase-7 boundary
 
 Phase 7 should establish this shared combat foundation and make each base weapon mechanically complete without mastery.
 
 Mastery remains a later Phase-13 overlay for **scaling, variety and skills**. Phase-7 combat must therefore stand on its own and expose clean semantic hooks for later mastery without implementing mastery XP, trees, passive-node progression or mastery persistence early.
 
-## 12. Explicitly open
+## 13. Explicitly open
 
 This document intentionally leaves the following for implementation/playtesting:
 
@@ -209,6 +236,7 @@ This document intentionally leaves the following for implementation/playtesting:
 - exact parry window, stamina cost, residual chip and counter-window duration;
 - exact dodge-roll distance, duration, stamina cost, invulnerability timing and recovery;
 - exact impact/interruption thresholds;
+- exact stunlock-protection stabilization duration and override threshold;
 - exact action-phase commitment resistance values;
 - exact enemy/boss reaction tuning;
 - exact Shield equipment/skill interaction with block/parry.
