@@ -194,7 +194,17 @@ Do not persist mastery against a mesh, scene path, hotbar slot or a concrete mat
 
 Exact save schema/versioning remains TBD and must follow the project's persistence/migration contracts.
 
-## 11. Explicitly open
+## 11. Roadmap timing
+
+Weapon mastery is **not required for Phase 7 combat**.
+
+Phase 7 should make the baseline combat system and weapon families strong without depending on mastery progression: attacks, defense/aim behavior, movement commitment, hit resolution, stamina/cost semantics, enemy reactions, weapon identity, bosses, animation and feedback should stand on their own.
+
+The mastery progression layer is intentionally deferred to **Phase 13 — Meta progression and long-term social depth**. That phase may introduce mastery XP, levels, unlock trees, passive choices, the three-selected-active-skill progression/loadout layer, mastery persistence and associated UI.
+
+Earlier systems should preserve clean semantic hooks so later active skills can use the same combat/action authority. They must not implement mastery trees, XP, unlock UI or persistence early merely because the target design is already known.
+
+## 12. Explicitly open
 
 This document intentionally does **not** decide:
 
@@ -214,7 +224,7 @@ This document intentionally does **not** decide:
 
 These require explicit product or implementation decisions. Do not fill them in by convention.
 
-## 12. Supersession summary
+## 13. Supersession summary
 
 Current target:
 
