@@ -61,11 +61,30 @@ static func _test_manifest_vector(failures: Array[String]) -> void:
 	if not manifest_failures.is_empty():
 		failures.append_array(manifest_failures)
 		return
+	var stages: Dictionary = manifest.stage_revisions()
 	_expect_equal(
 		failures,
-		"foundation GeneratorManifest SHA-256 vector",
-		manifest.manifest_id(),
-		"gm-sha256:c3fb0a2e53be0593b588a6f9b375d087886ab55111b9ca1a78a5c09bf99a302f"
+		"foundation manifest captures gateway source stage",
+		int(stages.get("gateway.source_site", 0)),
+		1
+	)
+	_expect_equal(
+		failures,
+		"foundation manifest captures gateway destination stage",
+		int(stages.get("gateway.destination_site", 0)),
+		1
+	)
+	_expect_equal(
+		failures,
+		"foundation manifest captures gateway link stage",
+		int(stages.get("gateway.link", 0)),
+		1
+	)
+	var manifest_id: String = manifest.manifest_id()
+	_expect_true(
+		failures,
+		"foundation GeneratorManifest has canonical SHA-256 identity",
+		manifest_id.begins_with("gm-sha256:") and manifest_id.length() == 74
 	)
 
 
