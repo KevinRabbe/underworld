@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://tests/content/fixtures/archetypes/imported_weapon_smoke.glb" id="1_imported"]
+
+[node name="ImportedWeaponSmoke" type="Node3D" groups=["archetype_role:root"]]
+
+[node name="ImportedGLB" parent="." instance=ExtResource("1_imported")]
+
+[node name="InteractionPrimary" type="Marker3D" parent="." groups=["archetype_role:interaction.primary"]]
