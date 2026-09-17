@@ -1,0 +1,97 @@
+{
+  "schema_revision": 1,
+  "accepted_main": "1c258ab681023d296425a574f769a4f73841ebf9",
+  "last_synced_at": "2026-09-17",
+  "project_mode": "CORE_PLAYABLE_INTEGRATION",
+  "playable_state": "NOT_YET",
+  "current_gate": {
+    "issue": 539,
+    "state": "REVIEW_WIP_1",
+    "summary": "Protected independent review of frozen gateway-definition source remains the current hard gate."
+  },
+  "next_transition": "Consumable #539 verdict -> accepted #433 disposition -> re-derive and lock downstream geometry work before topology-critical implementation advances.",
+  "world_model": {
+    "domains": [
+      "OVERWORLD",
+      "UNDERWORLD"
+    ],
+    "underworld_topology": "CONTINUOUS_BIOME_WORLD",
+    "exploration_scale_direction": {
+      "overworld_percent": 40,
+      "underworld_percent": 60,
+      "metric": "DIRECTIONAL_EXPLORATION_ALLOCATION_NOT_RADIUS"
+    }
+  },
+  "authorities": {
+    "board": 33,
+    "review_governance": 281,
+    "integration": 299,
+    "core_playable": 752,
+    "core_gap_audit": 754,
+    "first_playable": 586,
+    "topology": 871,
+    "repo_status": 879
+  },
+  "milestones": [
+    {
+      "id": "PHASE_0_ARCHITECTURE_EXIT",
+      "state": "IN_PROGRESS",
+      "authority_issue": 752,
+      "summary": "Architecture exit is not yet accepted; protected world/gateway review and downstream worldgen/runtime work remain."
+    },
+    {
+      "id": "CORE_PLAYABLE",
+      "state": "NOT_ACHIEVED",
+      "authority_issue": 752,
+      "summary": "Smallest complete production loop is not yet accepted."
+    },
+    {
+      "id": "FIRST_PLAYABLE",
+      "state": "NOT_ACHIEVED",
+      "authority_issue": 586,
+      "summary": "Broader biome breadth, scale, traversal and product-content acceptance remain after Core."
+    }
+  ],
+  "topology_gates": [
+    {
+      "issue": 872,
+      "name": "continuous biome semantics",
+      "state": "PLANNED"
+    },
+    {
+      "issue": 873,
+      "name": "layer-identity migration",
+      "state": "PLANNED"
+    },
+    {
+      "issue": 875,
+      "name": "one-root gateway mapping",
+      "state": "PLANNED"
+    },
+    {
+      "issue": 876,
+      "name": "root/manifest/SAVE compatibility",
+      "state": "PLANNED"
+    },
+    {
+      "issue": 877,
+      "name": "minimum biome-aware content route",
+      "state": "PLANNED"
+    },
+    {
+      "issue": 878,
+      "name": "production continuity proof",
+      "state": "PLANNED"
+    }
+  ],
+  "scale_program": {
+    "issue": 874,
+    "state": "PLANNED",
+    "core_requirement": "BOUNDED_REPRESENTATIVE_PROFILE",
+    "first_playable_requirement": "FINAL_40_60_SCALE_AND_STRESS_EVIDENCE"
+  },
+  "status_policy": {
+    "numeric_progress": "ONLY_FROM_EXPLICIT_FINITE_GATE_SET",
+    "live_authority": "GitHub issues #33/#281/#299 and linked milestone authorities override this last-synchronized snapshot when newer."
+  }
+}
