@@ -1,11 +1,14 @@
 extends CanvasLayer
 
 const GameplayHudReadModel := preload("res://presentation/ui/hud/gameplay_hud_read_model.gd")
+const GameplayObjectiveReadModel := preload("res://presentation/ui/hud/gameplay_objective_read_model.gd")
 const UnderworldTheme := preload("res://presentation/ui/theme/underworld_theme.tres")
 
 const REFRESH_INTERVAL := 0.05
 
 var _read_model := GameplayHudReadModel.new()
+var _objective_model := GameplayObjectiveReadModel.new()
+var _game = null
 var _player = null
 var _inventory_state = null
 var _equipment_state = null
@@ -13,6 +16,7 @@ var _material_ids: Array[String] = GameplayHudReadModel.DEFAULT_MATERIAL_IDS.dup
 var _refresh_timer: float = 0.0
 var _feedback_text: String = ""
 var _latest_model: Dictionary = {}
+var _latest_objective: Dictionary = {}
 
 var _root: Control
 var _health_bar: ProgressBar
@@ -21,6 +25,7 @@ var _stamina_bar: ProgressBar
 var _stamina_label: Label
 var _materials_label: Label
 var _action_label: Label
+var _objective_label: Label
 var _feedback_label: Label
 var _hint_label: Label
 var _hotbar_labels: Array[Label] = []
@@ -32,11 +37,13 @@ func configure(
 	equipment_state,
 	material_ids: Array[String] = GameplayHudReadModel.DEFAULT_MATERIAL_IDS
 ) -> Array[String]:
+	_game = get_parent()
 	_player = player
 	_inventory_state = inventory_state
 	_equipment_state = equipment_state
 	_material_ids = material_ids.duplicate()
 	_ensure_ui()
+	_bind_semantic_feedback_sources()
 	var model: Dictionary = refresh_now()
 	if bool(model.get("success", false)):
 		return []
@@ -63,6 +70,7 @@ func refresh_now() -> Dictionary:
 		_material_ids
 	)
 	_render(_latest_model)
+	_refresh_objective()
 	return _latest_model.duplicate(true)
 
 
@@ -90,16 +98,66 @@ func render_snapshot() -> Dictionary:
 		"stamina": _stamina_label.text,
 		"materials": _materials_label.text,
 		"action": _action_label.text,
+		"objective": _objective_label.text,
 		"feedback": _feedback_label.text,
 		"hint": _hint_label.text,
 		"hotbar": hotbar_text,
 		"model": _latest_model.duplicate(true),
+		"objective_model": _latest_objective.duplicate(true),
 	}
 
 
 func controls_are_mouse_passthrough() -> bool:
 	_ensure_ui()
 	return _controls_are_mouse_passthrough(_root)
+
+
+func _refresh_objective() -> void:
+	_latest_objective = {}
+	if _game == null or not is_instance_valid(_game):
+		_objective_label.text = ""
+		return
+	_latest_objective = _objective_model.sample(
+		_game,
+		_player,
+		_inventory_state,
+		_equipment_state
+	)
+	if not bool(_latest_objective.get("success", false)):
+		_objective_label.text = "Objective unavailable"
+		return
+	var text: String = str(_latest_objective.get("text", "")).strip_edges()
+	_objective_label.text = "Objective: %s" % text if not text.is_empty() else ""
+
+
+func _bind_semantic_feedback_sources() -> void:
+	if _game == null or not is_instance_valid(_game):
+		return
+	var survival = _game.get("survival")
+	if survival != null and is_instance_valid(survival):
+		_connect_once(survival, &"craft_completed", Callable(self, "_on_craft_completed"))
+		_connect_once(survival, &"equipped_tool_changed", Callable(self, "_on_equipped_tool_changed"))
+
+
+func _connect_once(source, signal_name: StringName, callback: Callable) -> void:
+	if source == null or not is_instance_valid(source) or not source.has_signal(signal_name):
+		return
+	if source.is_connected(signal_name, callback):
+		return
+	source.connect(signal_name, callback)
+
+
+func _on_craft_completed(_recipe_id: String, item_id: String) -> void:
+	present_feedback({"type": "craft.completed", "item_id": item_id})
+
+
+func _on_equipped_tool_changed(tool_id: String) -> void:
+	var semantic_id: String = tool_id.strip_edges()
+	if semantic_id.is_empty() or semantic_id == "hands":
+		return
+	if not semantic_id.begins_with("item."):
+		semantic_id = "item.tool." + semantic_id
+	present_feedback({"type": "equipment.hotbar_selected", "slot_key": semantic_id})
 
 
 func _ensure_ui() -> void:
@@ -177,11 +235,17 @@ func _ensure_ui() -> void:
 	var bottom := VBoxContainer.new()
 	bottom.name = "BottomHUD"
 	bottom.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	bottom.position = Vector2(-330.0, -148.0)
-	bottom.size = Vector2(660.0, 130.0)
+	bottom.position = Vector2(-330.0, -178.0)
+	bottom.size = Vector2(660.0, 160.0)
 	bottom.alignment = BoxContainer.ALIGNMENT_CENTER
 	bottom.add_theme_constant_override("separation", 5)
 	_root.add_child(bottom)
+
+	_objective_label = Label.new()
+	_objective_label.name = "ObjectiveLabel"
+	_objective_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_objective_label.text = ""
+	bottom.add_child(_objective_label)
 
 	_feedback_label = Label.new()
 	_feedback_label.name = "FeedbackLabel"

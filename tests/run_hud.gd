@@ -1,6 +1,7 @@
 extends SceneTree
 
 const HudTests := preload("res://tests/presentation/test_gameplay_hud_contract.gd")
+const ObjectiveGuidanceTests := preload("res://tests/presentation/test_gameplay_objective_guidance.gd")
 
 
 func _init() -> void:
@@ -8,10 +9,12 @@ func _init() -> void:
 
 
 func _run() -> void:
-	var failures: Array[String] = HudTests.run()
+	var failures: Array[String] = []
+	failures.append_array(HudTests.run())
+	failures.append_array(ObjectiveGuidanceTests.run())
 	if failures.is_empty():
 		print("[HUD VALIDATION] PASS")
-		print("  authoritative vitals / four-slot hotbar / material counts / fail-visible equipment / semantic feedback / DebugHUD independence passed")
+		print("  authoritative vitals / four-slot hotbar / materials / semantic feedback / state-derived M3 objective guidance / DebugHUD independence passed")
 		quit(0)
 		return
 	printerr("[HUD VALIDATION] FAIL — %d failure(s)" % failures.size())
