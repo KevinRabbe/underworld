@@ -88,6 +88,77 @@ Whenever a worker finishes or becomes blocked:
 
 This means a diagram such as `A -> B -> C` is mandatory only when the issue contract says the edges are semantic. A preferred turnover order is not automatically a dependency graph.
 
+## Blocked / preflight execution loop
+
+A long run must not collapse into:
+
+```text
+read #33
+-> see CLOSED
+-> report blocker
+-> exit
+```
+
+When the ready implementation set is empty because of governance, review ownership, or evidence selection, enter this loop:
+
+```text
+refresh blocker once
+-> freeze exact blocker state
+-> build blocked-mode backlog
+-> execute read-only preflight items
+-> record newly learned facts
+-> continue until backlog is materially exhausted
+```
+
+Good blocked-mode outputs include:
+
+- exact accepted-main-relative path packets for the next source turn;
+- obsolete path removals discovered from current source;
+- shared-file/function mutex maps;
+- runner/workflow trigger and PASS-marker audits;
+- baseline test results using unchanged source;
+- integration-wrapper composition plans;
+- branch/PR collision maps;
+- PASS / REPAIR / SYNC decision matrices for pending reviews;
+- current-source contradiction reports;
+- downstream READY-set calculations;
+- ordinary-player acceptance witness plans tied to real production routes.
+
+Bad blocked-mode activity includes:
+
+- repeatedly checking an unchanged issue every few seconds;
+- inventing new architecture to appear busy;
+- editing production source without authorization;
+- creating duplicate branches/reviews for protected work;
+- selecting evidence-governed values without evidence;
+- producing a second prose summary of facts already frozen on the board.
+
+### Blocked-mode work stealing
+
+Treat read-only preflight as a work-stealing pool. If the immediate blocker has already been audited, move downstream without claiming source:
+
+1. next Phase/milestone source packet;
+2. next shared-path integration seam;
+3. next validation/CI seam;
+4. next player-visible acceptance join;
+5. later packet only when it can reveal a real current-source blocker or shrink future latency.
+
+Do not preflight arbitrary distant breadth merely to consume time.
+
+### Blocked-run exit criterion
+
+Do not finish a long run merely because the first preferred implementation task is illegal.
+
+Finish only when:
+
+```text
+READY implementation set = empty
+and every high-value current blocked-mode preflight item has been completed
+and remaining progress requires an external reviewer / PM acceptance / evidence event
+```
+
+The final report must say what was preflighted and what exact event resumes execution.
+
 ## Accepted-head rebasing
 
 Many late project packets are intentionally accepted-head-relative.
