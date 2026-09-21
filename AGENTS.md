@@ -173,6 +173,38 @@ Do not reserve a worker for a future task.
 
 Parallelize only genuinely disjoint work.
 
+## Blocked-run mode
+
+A closed project gate, unavailable reviewer, evidence wait, or blocked preferred packet is **not by itself permission to end a long autonomous run**.
+
+If governance forbids source mutation, switch the whole run to **BLOCKED / PREFLIGHT mode** instead of stopping after a status check.
+
+In BLOCKED / PREFLIGHT mode, do not claim or mutate production source. Continue useful read-only work in priority order:
+
+1. refresh live board / PR / accepted-main state once;
+2. identify the exact blocking transition and owner;
+3. audit the next blocked source packet against current accepted source;
+4. derive the smallest current path set and likely shared-path mutexes;
+5. verify focused runners/workflows and PASS markers still exist and cover the packet;
+6. inspect active PRs/branches for collision or stale-base risk;
+7. precompute both PASS and REPAIR/SYNC continuation plans where the blocker is a review verdict;
+8. preflight the next one or two downstream packets that would become READY if the blocker clears;
+9. preflight the nearest player-visible post-gate queue and identify any stale issue assumptions;
+10. run existing read-only tests/validation where useful to establish baseline health;
+11. produce a structured checkpoint with exact facts, not a generic "blocked" message.
+
+Do **not** repeatedly poll the same unchanged gate in a tight loop and call that progress. Once the current blocker is proven unchanged, spend the remaining run on new preflight information that shortens future implementation/review latency.
+
+A blocked run may end only when both are true:
+
+```text
+no lawful source mutation is authorized
+AND
+no material unperformed preflight/audit/test work remains in the current blocked-mode backlog
+```
+
+When ending for that reason, enumerate the preflight work completed and the single external transition that will make source execution legal.
+
 ## STOP conditions
 
 Stop the affected packet and report instead of improvising when any of these occurs:
