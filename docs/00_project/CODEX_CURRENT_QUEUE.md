@@ -25,6 +25,59 @@ Therefore do **not** treat the queue below as authorization to mutate production
 
 Preflight/read-only analysis may establish readiness, but do not claim source paths while the controlling board says no claim.
 
+## Current blocked-mode backlog
+
+While Gate 0 remains closed, a long Codex run should **not stop after confirming #539 is still protected**. It should perform read-only work from this backlog without taking source/review ownership.
+
+Current highest-value order:
+
+```text
+P0-B1  #539/#433 disposition freshness
+       verify exact protected head, current main relation,
+       active findings, exact PASS/REPAIR/SYNC/RUNNER branches
+
+P0-B2  paired #807/#601 accepted-head preflight
+       re-read current frozen contracts and current main
+       derive branch-sensitive 19/20-path shape
+       identify exact shared paths, tests, workflow triggers,
+       and what changes if #433 is repaired vs lands unchanged
+
+P0-B3  #663 preflight
+       derive smallest accepted-#807/#601-relative Surface
+       seed-domain / contract-revision packet and test ownership
+
+P0-B4  #718 preflight
+       confirm the structural-only TerrainGenerator extraction
+       still has the expected source boundary after #663
+
+P0-B5  Phase-0 closeout join audit
+       enumerate every remaining required join after #718;
+       distinguish already-satisfied evidence from true source debt
+
+P0-B6  post-EXIT reviewed integration freshness
+       re-audit #423 + #446-A reviewed blobs against then-current main;
+       confirm the smallest #299 wrapper and triggered validation
+
+P0-B7  R1 launch freshness
+       verify #446-B / #410-P / #448-A / #400 source packets,
+       collisions, runners, and first refill #401-C1
+```
+
+Rules for this backlog:
+
+- each item should produce **new exact source/test/scheduling facts**, not duplicate prose;
+- skip an item that has already been fully frozen against the same accepted main and no relevant source moved;
+- if an audit discovers a real contradiction, record it and continue with independent backlog items;
+- do not open production branches, implementation WIP, review takeover, wrappers, or PM acceptance while Gate 0 says no claim;
+- existing tests may be run read-only to establish baseline health;
+- after finishing P0-B1..B7, stop only if no newer board movement creates another high-value preflight item.
+
+The exact external transition currently expected to resume source execution is:
+
+```text
+#539 final #281 classification or explicit REVIEW WIP release
+```
+
 ## First post-EXIT integration car
 
 The controlling R1 execution handoff currently starts with:
