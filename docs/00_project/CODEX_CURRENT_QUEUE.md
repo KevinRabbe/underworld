@@ -192,6 +192,62 @@ explicit REVIEW WIP=0 release
 
 Until that state changes, a new long run should perform **delta-only** audits rather than replay this completed pass.
 
+## Review-pool state changed — #539 is now claimable
+
+Project staffing is now the active PM context plus the active Codex worker context.
+
+The historical #539 reviewer context is unavailable and was administratively released under #281 continuity rule `5769754751`.
+
+Current authoritative state:
+
+```text
+#539
+  REVIEW WIP=0
+  ORPHANED-RELEASED
+  READY for exactly one new independent reviewer
+
+review target:
+  PR #530
+  825f538d9da0c67f7691f7ffb0a6830286286ee5
+  9 paths
+```
+
+Therefore the active Codex context should **not** remain in blocked preflight merely because #539 used to be protected.
+
+If the active Codex context did not implement any part of frozen #433 source, the next lawful action is:
+
+```text
+claim #539 under #281
+-> REVIEW WIP=1
+-> independently review exact frozen #433 source
+-> consume accumulated findings as evidence, not verdict
+-> return one final #281 classification
+-> REVIEW WIP=0
+```
+
+The reviewer must not edit/rebase/merge PR #530.
+
+After the classification:
+
+```text
+PM-LANDING-READY / TRAIN-READY
+  -> PM/#299 latest-main wrapper and acceptance flow
+
+REPAIR-REQUIRED
+  -> same #433 branch / PR #530 resumes for bounded repair
+  -> new freeze
+  -> same #539 rereview
+
+SYNC-ONLY
+  -> same #433 branch absorbs only identified semantic overlap
+  -> new freeze / same #539 rereview
+
+RUNNER-PENDING
+  -> keep source immutable; complete exact-head evidence
+```
+
+This replaces the prior blocked-mode stop condition that required an external #539 reviewer event.
+
 ## First post-EXIT integration car
 
 The controlling R1 execution handoff currently starts with:
