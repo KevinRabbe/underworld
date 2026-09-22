@@ -255,6 +255,68 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		elif bool(restored_death_cache.get("cache", {}).get("collected", true)):
 			failures.append("save/load round-trip prematurely resolved death cache")
 
+	# Exercise the real Continue activation boundary, not only detached codec state.
+	var resumed: Node = packed.instantiate()
+	resumed.set("enable_debug_hud", false)
+	if not bool(resumed.call("prepare_continue", candidate_variant)):
+		failures.append("fresh Game rejected unresolved death-cache Continue candidate")
+		resumed.free()
+		_cleanup_slot()
+		return failures
+	tree.root.add_child(resumed)
+	var resumed_inventory = resumed.get("survival").get_inventory_state()
+	var resumed_equipment = resumed.get("survival").get_equipment_state()
+	var resumed_cache = resumed.get("death_cache_service")
+	if resumed_inventory.occupied_slot_count() != 0:
+		failures.append("Continue resurrected cargo before death-cache recovery")
+	if resumed_equipment.canonical_snapshot() != equipment_before:
+		failures.append("Continue changed retained equipment")
+	if resumed.get("world_delta_store").snapshot() != world_delta_before:
+		failures.append("Continue changed WorldDelta")
+	if resumed.get("encounter_controller").get_pending_loot_snapshot(OCCURRENCE_ID) != pending_before:
+		failures.append("Continue changed pending loot")
+	if resumed_cache == null or not resumed_cache.has_cache():
+		failures.append("Continue lost unresolved death cache")
+
+	var resumed_collected: Dictionary = resumed_cache.collect_cache() if resumed_cache != null else {"success": false}
+	if not bool(resumed_collected.get("success", false)):
+		failures.append("Continue death-cache interaction could not restore cargo")
+	elif resumed_inventory.canonical_snapshot() != cargo_before:
+		failures.append("Continue death-cache interaction did not restore exact cargo")
+	var resumed_duplicate: Dictionary = resumed_cache.collect_cache() if resumed_cache != null else {"success": false}
+	if bool(resumed_duplicate.get("success", false)):
+		failures.append("Continue death-cache interaction restored cargo twice")
+
+	var resumed_request_result: Variant = resumed.call("build_save_request")
+	if not resumed_request_result is Dictionary or not bool(resumed_request_result.get("success", false)):
+		failures.append("post-Continue recovery SAVE request failed")
+	else:
+		var resumed_request: Variant = resumed_request_result.get("request", null)
+		if not resumed_request is Dictionary:
+			failures.append("post-Continue recovery SAVE request omitted payload")
+		else:
+			var resumed_save: Dictionary = service.save_slot(resumed_request, TEST_SLOT)
+			var resumed_loaded: Dictionary = service.load_slot(TEST_SLOT)
+			var resumed_candidate: Variant = resumed_loaded.get("candidate", null)
+			if not bool(resumed_save.get("success", false)) or not bool(resumed_loaded.get("success", false)) or not resumed_candidate is Dictionary:
+				failures.append("post-Continue recovery SAVE/LOAD failed")
+			else:
+				var resumed_again: Node = packed.instantiate()
+				resumed_again.set("enable_debug_hud", false)
+				if not bool(resumed_again.call("prepare_continue", resumed_candidate)):
+					failures.append("second Continue rejected resolved death-cache candidate")
+					resumed_again.free()
+				else:
+					tree.root.add_child(resumed_again)
+					var again_cache = resumed_again.get("death_cache_service")
+					var again_inventory = resumed_again.get("survival").get_inventory_state()
+					if again_inventory.canonical_snapshot() != cargo_before:
+						failures.append("second Continue lost or duplicated recovered cargo")
+					if again_cache != null and again_cache.has_cache():
+						failures.append("second Continue resurrected resolved death cache")
+					_free_attached(resumed_again)
+	_free_attached(resumed)
+
 	var collected: Dictionary = death_cache.collect_cache()
 	if not _require_success(collected, "normal death-cache recovery", failures):
 		_free_attached(game)
