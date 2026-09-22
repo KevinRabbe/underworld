@@ -20,7 +20,6 @@ static func run() -> Array[String]:
 
 	# B selects the authored chest piece, and placement stays in the runtime seam.
 	runtime.toggle_build_tool()
-	runtime.toggle_build_tool()
 	var chest_result: Dictionary = runtime.place_shelter_at(Vector3(2.0, 0.0, 0.0))
 	_expect(failures, "chest placement succeeds through selected build piece", bool(chest_result.get("success", false)))
 	var chest_id := str(chest_result.get("stable_id", ""))
