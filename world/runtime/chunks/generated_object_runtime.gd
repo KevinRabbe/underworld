@@ -352,6 +352,14 @@ func _rebuild_visual_set(object_type: String) -> void:
 	for index in range(transforms.size()):
 		if not destroyed.has(index):
 			visible_transforms.append(transforms[index])
+	# Older focused fixtures intentionally provide only the legacy decoration
+	# assets. Keep semantic pickup data/query behavior available without making
+	# optional newer visuals a hard load-time dependency; production streaming
+	# supplies both plant-fiber assets.
+	var mesh_variant: Variant = _decoration_assets.get(mesh_key, null)
+	var material_variant: Variant = _decoration_assets.get(material_key, null)
+	if not mesh_variant is Mesh or not material_variant is Material:
+		return
 
 	var replacement: MultiMeshInstance3D
 	match object_type:
@@ -359,8 +367,8 @@ func _rebuild_visual_set(object_type: String) -> void:
 			replacement = _replace_multimesh_instance(
 				_tree_multimesh_instance,
 				node_name,
-				_decoration_assets[mesh_key],
-				_decoration_assets[material_key],
+				mesh_variant,
+				material_variant,
 				visible_transforms
 			)
 			_tree_multimesh_instance = replacement
@@ -369,8 +377,8 @@ func _rebuild_visual_set(object_type: String) -> void:
 			replacement = _replace_multimesh_instance(
 				_rock_multimesh_instance,
 				node_name,
-				_decoration_assets[mesh_key],
-				_decoration_assets[material_key],
+				mesh_variant,
+				material_variant,
 				visible_transforms
 			)
 			_rock_multimesh_instance = replacement
@@ -379,8 +387,8 @@ func _rebuild_visual_set(object_type: String) -> void:
 			replacement = _replace_multimesh_instance(
 				_branch_multimesh_instance,
 				node_name,
-				_decoration_assets[mesh_key],
-				_decoration_assets[material_key],
+				mesh_variant,
+				material_variant,
 				visible_transforms
 			)
 			_branch_multimesh_instance = replacement
@@ -389,8 +397,8 @@ func _rebuild_visual_set(object_type: String) -> void:
 			replacement = _replace_multimesh_instance(
 				_plant_fiber_multimesh_instance,
 				node_name,
-				_decoration_assets[mesh_key],
-				_decoration_assets[material_key],
+				mesh_variant,
+				material_variant,
 				visible_transforms
 			)
 			_plant_fiber_multimesh_instance = replacement
@@ -399,8 +407,8 @@ func _rebuild_visual_set(object_type: String) -> void:
 			replacement = _replace_multimesh_instance(
 				_loose_stone_multimesh_instance,
 				node_name,
-				_decoration_assets[mesh_key],
-				_decoration_assets[material_key],
+				mesh_variant,
+				material_variant,
 				visible_transforms
 			)
 			_loose_stone_multimesh_instance = replacement
