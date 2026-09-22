@@ -137,6 +137,38 @@ A runner process exiting zero is not sufficient when the workflow also checks fo
 
 Before review, run all feasible required checks triggered by the changed paths. Do not alter workflow path filters or required checks merely to reduce cost.
 
+## Goal completion must exist on accepted main
+
+For any future-state `/ziel ...` mission, a locally working branch is **not COMPLETE** unless the goal explicitly says "local prototype only".
+
+Default completion theorem:
+
+```text
+implemented
++ validated
++ pushed
++ independently reviewed when required
++ accepted through normal integration governance
++ present on accepted main
++ goal flow reverified from accepted main
+= COMPLETE
+```
+
+Therefore do not report a goal as complete from:
+- a local worktree;
+- an unpublished branch;
+- an open/unmerged PR;
+- a review PASS that has not been integrated;
+- a harness that only passes on a non-accepted head.
+
+If the player-visible target works locally but is not yet accepted, report:
+
+```text
+STATUS: PRODUCT FLOW PROVEN / INTEGRATION PENDING
+```
+
+and continue automatically through publication, review, integration, accepted-main validation, and final production witness.
+
 ## Standing mission
 
 The standing autonomous mission is:
