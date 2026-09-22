@@ -89,6 +89,12 @@ func _create_prototype_decoration_assets() -> void:
 	branch_material.albedo_color = Color(0.30, 0.17, 0.07)
 	branch_material.roughness = 1.0
 
+	var plant_fiber_mesh: BoxMesh = BoxMesh.new()
+	plant_fiber_mesh.size = Vector3.ONE
+	var plant_fiber_material: StandardMaterial3D = StandardMaterial3D.new()
+	plant_fiber_material.albedo_color = Color(0.55, 0.70, 0.20)
+	plant_fiber_material.roughness = 1.0
+
 	var loose_stone_mesh: BoxMesh = BoxMesh.new()
 	loose_stone_mesh.size = Vector3.ONE
 	var loose_stone_material: StandardMaterial3D = StandardMaterial3D.new()
@@ -102,6 +108,8 @@ func _create_prototype_decoration_assets() -> void:
 		"rock_material": rock_material,
 		"branch_mesh": branch_mesh,
 		"branch_material": branch_material,
+		"plant_fiber_mesh": plant_fiber_mesh,
+		"plant_fiber_material": plant_fiber_material,
 		"loose_stone_mesh": loose_stone_mesh,
 		"loose_stone_material": loose_stone_material,
 	}
@@ -557,13 +565,15 @@ func _is_valid_surface_object_id(object_id: String, object_type: String = "") ->
 	var expected_domain: String = _surface_domain_for_object_type(object_type)
 	if not object_type.is_empty():
 		return not expected_domain.is_empty() and domain == expected_domain
-	return domain in ["tree", "rock", "branch", "loose-stone"]
+	return domain in ["tree", "rock", "branch", "plant-fiber", "loose-stone"]
 
 
 func _surface_domain_for_object_type(object_type: String) -> String:
 	match object_type:
 		"tree", "rock", "branch":
 			return object_type
+		"plant_fiber":
+			return "plant-fiber"
 		"loose_stone":
 			return "loose-stone"
 		_:

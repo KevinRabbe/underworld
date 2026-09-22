@@ -5,6 +5,7 @@ const StableIdScript := preload("res://worldgen/identity/stable_id.gd")
 var tree_instance_count: int = 0
 var rock_instance_count: int = 0
 var branch_instance_count: int = 0
+var plant_fiber_instance_count: int = 0
 var loose_stone_instance_count: int = 0
 
 var _host_ref: WeakRef
@@ -18,17 +19,21 @@ var _rock_transforms: Array = []
 var _rock_stable_ids: Array = []
 var _branch_transforms: Array = []
 var _branch_stable_ids: Array = []
+var _plant_fiber_transforms: Array = []
+var _plant_fiber_stable_ids: Array = []
 var _loose_stone_transforms: Array = []
 var _loose_stone_stable_ids: Array = []
 
 var _destroyed_tree_indices: Dictionary = {}
 var _destroyed_rock_indices: Dictionary = {}
 var _destroyed_branch_indices: Dictionary = {}
+var _destroyed_plant_fiber_indices: Dictionary = {}
 var _destroyed_loose_stone_indices: Dictionary = {}
 
 var _tree_multimesh_instance: MultiMeshInstance3D
 var _rock_multimesh_instance: MultiMeshInstance3D
 var _branch_multimesh_instance: MultiMeshInstance3D
+var _plant_fiber_multimesh_instance: MultiMeshInstance3D
 var _loose_stone_multimesh_instance: MultiMeshInstance3D
 
 var _world_object_root: Node3D
@@ -59,17 +64,21 @@ func build(
 	_rock_stable_ids = data.get("rock_stable_ids", [])
 	_branch_transforms = data.get("branch_transforms", [])
 	_branch_stable_ids = data.get("branch_stable_ids", [])
+	_plant_fiber_transforms = data.get("plant_fiber_transforms", [])
+	_plant_fiber_stable_ids = data.get("plant_fiber_stable_ids", [])
 	_loose_stone_transforms = data.get("loose_stone_transforms", [])
 	_loose_stone_stable_ids = data.get("loose_stone_stable_ids", [])
 
 	_destroyed_tree_indices.clear()
 	_destroyed_rock_indices.clear()
 	_destroyed_branch_indices.clear()
+	_destroyed_plant_fiber_indices.clear()
 	_destroyed_loose_stone_indices.clear()
 
 	_load_destroyed_indices("tree", _tree_transforms, _destroyed_tree_indices, destroyed_objects)
 	_load_destroyed_indices("rock", _rock_transforms, _destroyed_rock_indices, destroyed_objects)
 	_load_destroyed_indices("branch", _branch_transforms, _destroyed_branch_indices, destroyed_objects)
+	_load_destroyed_indices("plant_fiber", _plant_fiber_transforms, _destroyed_plant_fiber_indices, destroyed_objects)
 	_load_destroyed_indices(
 		"loose_stone",
 		_loose_stone_transforms,
@@ -80,6 +89,7 @@ func build(
 	_rebuild_visual_set("tree")
 	_rebuild_visual_set("rock")
 	_rebuild_visual_set("branch")
+	_rebuild_visual_set("plant_fiber")
 	_rebuild_visual_set("loose_stone")
 
 
@@ -125,6 +135,14 @@ func find_nearby_pickups(player_local_position: Vector3, radius: float) -> Array
 		found
 	)
 	_find_pickup_set(
+		_plant_fiber_transforms,
+		_destroyed_plant_fiber_indices,
+		"plant_fiber",
+		player_local_position,
+		radius_sq,
+		found
+	)
+	_find_pickup_set(
 		_loose_stone_transforms,
 		_destroyed_loose_stone_indices,
 		"loose_stone",
@@ -147,6 +165,14 @@ func collect_nearby_pickups(player_local_position: Vector3, radius: float) -> Ar
 		radius_sq,
 		collected
 	)
+	var plant_fiber_changed: bool = _collect_pickup_set(
+		_plant_fiber_transforms,
+		_destroyed_plant_fiber_indices,
+		"plant_fiber",
+		player_local_position,
+		radius_sq,
+		collected
+	)
 	var stones_changed: bool = _collect_pickup_set(
 		_loose_stone_transforms,
 		_destroyed_loose_stone_indices,
@@ -158,6 +184,8 @@ func collect_nearby_pickups(player_local_position: Vector3, radius: float) -> Ar
 
 	if branches_changed:
 		_rebuild_visual_set("branch")
+	if plant_fiber_changed:
+		_rebuild_visual_set("plant_fiber")
 	if stones_changed:
 		_rebuild_visual_set("loose_stone")
 	return collected
@@ -188,6 +216,9 @@ func destroy_world_object(object_type: String, index: int) -> bool:
 		"branch":
 			transforms = _branch_transforms
 			destroyed = _destroyed_branch_indices
+		"plant_fiber":
+			transforms = _plant_fiber_transforms
+			destroyed = _destroyed_plant_fiber_indices
 		"loose_stone":
 			transforms = _loose_stone_transforms
 			destroyed = _destroyed_loose_stone_indices
@@ -216,6 +247,8 @@ func make_object_id(object_type: String, index: int) -> String:
 			stable_ids = _rock_stable_ids
 		"branch":
 			stable_ids = _branch_stable_ids
+		"plant_fiber":
+			stable_ids = _plant_fiber_stable_ids
 		"loose_stone":
 			stable_ids = _loose_stone_stable_ids
 		_:
@@ -267,6 +300,12 @@ func _rebuild_visual_set(object_type: String) -> void:
 			node_name = "LooseBranches"
 			mesh_key = "branch_mesh"
 			material_key = "branch_material"
+		"plant_fiber":
+			transforms = _plant_fiber_transforms
+			destroyed = _destroyed_plant_fiber_indices
+			node_name = "PlantFiber"
+			mesh_key = "plant_fiber_mesh"
+			material_key = "plant_fiber_material"
 		"loose_stone":
 			transforms = _loose_stone_transforms
 			destroyed = _destroyed_loose_stone_indices
@@ -313,6 +352,16 @@ func _rebuild_visual_set(object_type: String) -> void:
 			)
 			_branch_multimesh_instance = replacement
 			branch_instance_count = visible_transforms.size()
+		"plant_fiber":
+			replacement = _replace_multimesh_instance(
+				_plant_fiber_multimesh_instance,
+				node_name,
+				_decoration_assets[mesh_key],
+				_decoration_assets[material_key],
+				visible_transforms
+			)
+			_plant_fiber_multimesh_instance = replacement
+			plant_fiber_instance_count = visible_transforms.size()
 		"loose_stone":
 			replacement = _replace_multimesh_instance(
 				_loose_stone_multimesh_instance,

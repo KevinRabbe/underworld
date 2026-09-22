@@ -10,6 +10,7 @@ const EquippedItemResolver := preload("res://gameplay/items/equipment/equipped_i
 const INVENTORY_KEY := "surface_inventory"
 const WOOD_ID := "item.resource.wood"
 const STONE_ID := "item.resource.stone"
+const PLANT_FIBER_ID := "item.resource.plant_fiber"
 const AXE_ID := "item.tool.stone_axe"
 const PICKAXE_ID := "item.tool.stone_pickaxe"
 const AXE_CATEGORY_ROOT := "category.item.equipment.tool.axe"
@@ -40,7 +41,7 @@ func validate_runtime() -> Array[String]:
 		failures.append("surface harvest requires ItemContainerState")
 	if _equipment == null or not _equipment is EquipmentHotbarState:
 		failures.append("surface harvest requires EquipmentHotbarState")
-	for required_id in [WOOD_ID, STONE_ID, AXE_ID, PICKAXE_ID]:
+	for required_id in [WOOD_ID, STONE_ID, PLANT_FIBER_ID, AXE_ID, PICKAXE_ID]:
 		var definition = _definitions.get(required_id, null)
 		if definition == null or not definition is ItemDefinition:
 			failures.append("surface harvest is missing ItemDefinition: %s" % required_id)
@@ -60,6 +61,8 @@ func item_id_for_world_object(object_type: String) -> String:
 		return WOOD_ID
 	if object_type == "loose_stone" or object_type == "rock":
 		return STONE_ID
+	if object_type == "plant_fiber":
+		return PLANT_FIBER_ID
 	return ""
 
 
@@ -140,6 +143,12 @@ func resource_counts() -> Vector2i:
 		_inventory.quantity_of(WOOD_ID),
 		_inventory.quantity_of(STONE_ID)
 	)
+
+
+func material_quantity(item_id: String) -> int:
+	if _inventory == null or not _inventory is ItemContainerState:
+		return 0
+	return _inventory.quantity_of(item_id)
 
 
 func selected_descriptor() -> Dictionary:

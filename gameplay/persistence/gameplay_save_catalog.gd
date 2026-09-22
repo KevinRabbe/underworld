@@ -11,6 +11,7 @@ const SLOT_UTILITY := "equipment_slot.hotbar.utility"
 const DURABLE_CONTENT_PATHS: Array[String] = [
 	"res://content/items/resources/burrower_chitin_definition.tres",
 	"res://content/items/resources/iron_chunk_definition.tres",
+	"res://content/items/resources/plant_fiber_definition.tres",
 	"res://content/items/resources/stone_definition.tres",
 	"res://content/items/resources/wood_definition.tres",
 	"res://content/items/tools/stone_axe_definition.tres",

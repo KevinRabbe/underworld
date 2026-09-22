@@ -23,6 +23,9 @@ var rock_instance_count: int:
 var branch_instance_count: int:
 	get:
 		return _generated_objects.branch_instance_count
+var plant_fiber_instance_count: int:
+	get:
+		return _generated_objects.plant_fiber_instance_count
 var loose_stone_instance_count: int:
 	get:
 		return _generated_objects.loose_stone_instance_count

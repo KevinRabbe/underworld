@@ -20,6 +20,8 @@ func add_pickups_to_chunk_data(chunk_coord: Vector2i, data: Dictionary) -> void:
 
 	var branch_transforms: Array[Transform3D] = []
 	var branch_stable_ids: Array[String] = []
+	var plant_fiber_transforms: Array[Transform3D] = []
+	var plant_fiber_stable_ids: Array[String] = []
 	var loose_stone_transforms: Array[Transform3D] = []
 	var loose_stone_stable_ids: Array[String] = []
 	var step: int = maxi(settings.pickup_vertex_step, 2)
@@ -108,6 +110,8 @@ func add_pickups_to_chunk_data(chunk_coord: Vector2i, data: Dictionary) -> void:
 
 	data["branch_transforms"] = branch_transforms
 	data["branch_stable_ids"] = branch_stable_ids
+	data["plant_fiber_transforms"] = plant_fiber_transforms
+	data["plant_fiber_stable_ids"] = plant_fiber_stable_ids
 	data["loose_stone_transforms"] = loose_stone_transforms
 	data["loose_stone_stable_ids"] = loose_stone_stable_ids
 

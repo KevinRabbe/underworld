@@ -15,6 +15,7 @@ const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_c
 
 const WOOD_ID := "item.resource.wood"
 const STONE_ID := "item.resource.stone"
+const PLANT_FIBER_ID := "item.resource.plant_fiber"
 const AXE_ID := "item.tool.stone_axe"
 const PICKAXE_ID := "item.tool.stone_pickaxe"
 const SLOT_HANDS := "equipment_slot.hotbar.hands"
@@ -226,6 +227,7 @@ func collect_nearby_pickups_at(player_world_position: Vector3) -> Dictionary:
 	)
 	var branch_count: int = 0
 	var stone_count: int = 0
+	var plant_fiber_count: int = 0
 	var events: Array = []
 	var diagnostics: Array[String] = []
 	for pickup_variant in candidates:
@@ -260,6 +262,8 @@ func collect_nearby_pickups_at(player_world_position: Vector3) -> Dictionary:
 
 		if object_type == "branch":
 			branch_count += 1
+		elif object_type == "plant_fiber":
+			plant_fiber_count += 1
 		elif object_type == "loose_stone":
 			stone_count += 1
 		var event: Dictionary = {
@@ -272,18 +276,27 @@ func collect_nearby_pickups_at(player_world_position: Vector3) -> Dictionary:
 		events.append(event)
 		harvest_result.emit(event)
 
-	if branch_count == 0 and stone_count == 0:
+	if branch_count == 0 and plant_fiber_count == 0 and stone_count == 0:
 		return {
 			"success": diagnostics.is_empty(),
 			"diagnostics": diagnostics,
 			"events": events,
 			"wood": 0,
-			"stone": 0,
+		"stone": 0,
+		"plant_fiber": 0,
 		}
 
 	_sync_legacy_mirrors()
-	if branch_count > 0 and stone_count > 0:
+	if branch_count > 0 and plant_fiber_count > 0 and stone_count > 0:
+		last_action_message = "Picked up %d wood + %d fiber + %d stone" % [branch_count, plant_fiber_count, stone_count]
+	elif branch_count > 0 and plant_fiber_count > 0:
+		last_action_message = "Picked up %d wood + %d fiber" % [branch_count, plant_fiber_count]
+	elif plant_fiber_count > 0 and stone_count > 0:
+		last_action_message = "Picked up %d fiber + %d stone" % [plant_fiber_count, stone_count]
+	elif branch_count > 0 and stone_count > 0:
 		last_action_message = "Picked up %d wood + %d stone" % [branch_count, stone_count]
+	elif plant_fiber_count > 0:
+		last_action_message = "Picked up %d plant fiber" % plant_fiber_count
 	elif branch_count > 0:
 		last_action_message = "Picked up %d wood" % branch_count
 	else:
@@ -293,6 +306,7 @@ func collect_nearby_pickups_at(player_world_position: Vector3) -> Dictionary:
 		"diagnostics": diagnostics,
 		"events": events,
 		"wood": branch_count,
+		"plant_fiber": plant_fiber_count,
 		"stone": stone_count,
 	}
 

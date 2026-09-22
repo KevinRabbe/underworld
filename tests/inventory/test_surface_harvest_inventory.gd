@@ -6,6 +6,7 @@ const EquipmentService := preload("res://gameplay/items/equipment/equipment_serv
 
 const WOOD_ID := "item.resource.wood"
 const STONE_ID := "item.resource.stone"
+const PLANT_FIBER_ID := "item.resource.plant_fiber"
 const AXE_ID := "item.tool.stone_axe"
 const PICKAXE_ID := "item.tool.stone_pickaxe"
 const SLOT_AXE := "equipment_slot.hotbar.axe"
@@ -91,23 +92,25 @@ static func _test_loose_pickups_commit_inventory_before_world_consumption(failur
 	var world = FakeWorld.new()
 	world.pickup_candidates = [
 		{"object_id": "0:0:branch:1", "object_type": "branch", "index": 1, "object_chunk": Vector2i.ZERO},
+		{"object_id": "0:0:plant-fiber:3", "object_type": "plant_fiber", "index": 3, "object_chunk": Vector2i.ZERO},
 		{"object_id": "0:0:loose_stone:2", "object_type": "loose_stone", "index": 2, "object_chunk": Vector2i.ZERO},
 	]
 	var survival = _new_survival(world, seed)
 	var result: Dictionary = survival.collect_nearby_pickups_at(Vector3.ZERO)
 	_expect_true(failures, "loose pickup transaction succeeded", bool(result.get("success", false)))
 	_expect_equal(failures, "branch entered semantic inventory", survival.get_resource_counts().x, 1)
+	_expect_equal(failures, "plant fiber entered semantic inventory", survival.get_inventory_state().quantity_of(PLANT_FIBER_ID), 1)
 	_expect_equal(failures, "loose stone entered semantic inventory", survival.get_resource_counts().y, 1)
-	_expect_equal(failures, "pickup StableIds consumed after transfer", world.destroy_calls, 2)
+	_expect_equal(failures, "pickup StableIds consumed after transfer", world.destroy_calls, 3)
 	var event_text: String = str(result.get("events", []))
-	_expect_true(failures, "pickup events expose semantic item ids", event_text.contains(WOOD_ID) and event_text.contains(STONE_ID))
+	_expect_true(failures, "pickup events expose semantic item ids", event_text.contains(WOOD_ID) and event_text.contains(PLANT_FIBER_ID) and event_text.contains(STONE_ID))
 	_expect_true(failures, "pickup events do not leak resource paths", not event_text.contains("res://") and not event_text.contains("ui_slot"))
 
 	var inventory_after: String = survival.get_inventory_state().canonical_json()
 	var repeat: Dictionary = survival.collect_nearby_pickups_at(Vector3.ZERO)
 	_expect_equal(failures, "repeated pickup scan consumes nothing", repeat.get("events", []).size(), 0)
 	_expect_equal(failures, "repeated pickup scan preserves inventory", survival.get_inventory_state().canonical_json(), inventory_after)
-	_expect_equal(failures, "repeated pickup scan preserves StableId count", world.destroy_calls, 2)
+	_expect_equal(failures, "repeated pickup scan preserves StableId count", world.destroy_calls, 3)
 	_cleanup(survival, seed)
 
 
