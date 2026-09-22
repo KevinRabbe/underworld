@@ -71,6 +71,22 @@ func add_pickups_to_chunk_data(chunk_coord: Vector2i, data: Dictionary) -> void:
 					"branch", chunk_coord, resolution, base_x, base_z
 				))
 
+			var fiber_chance: float = settings.plant_fiber_pickup_density * (
+				0.65 + forest_density * 0.70 + shore_factor * 0.20 + buildability * 0.10
+			)
+			if rng.randf() < fiber_chance:
+				var fiber_scale: float = rng.randf_range(0.45, 0.80)
+				var fiber_yaw: float = rng.randf_range(0.0, TAU)
+				var fiber_basis: Basis = Basis(Vector3.UP, fiber_yaw).scaled(
+					Vector3(fiber_scale, rng.randf_range(0.12, 0.20), fiber_scale * 0.45)
+				)
+				plant_fiber_transforms.append(Transform3D(
+					fiber_basis,
+					Vector3(local_x, terrain_height + 0.10, local_z)
+				))
+				plant_fiber_stable_ids.append(_candidate_stable_id(
+					"plant-fiber", chunk_coord, resolution, base_x, base_z
+				))
 			# Loose stones favor shorelines and rocky ground, but retain a baseline
 			# chance in clearings so the starting loop cannot dead-end on one seed.
 			var stone_chance: float = settings.loose_stone_pickup_density * (
