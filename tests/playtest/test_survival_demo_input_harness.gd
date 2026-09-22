@@ -324,7 +324,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 static func _cleanup_save_slot(slot_path: String) -> void:
 	for path in [slot_path, slot_path + SAVE_CANDIDATE_SUFFIX, slot_path + SAVE_BACKUP_SUFFIX]:
 		if FileAccess.file_exists(path):
-			DirAccess.remove_absolute(path)
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
 static func _wait_frames(tree: SceneTree, count: int) -> void:
