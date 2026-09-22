@@ -283,7 +283,7 @@ static func _test_v2_building_continue_contract(failures: Array[String]) -> void
 	# This contract intentionally uses a detached BuildingRuntime fixture. Godot
 	# cannot resolve global_position until a node enters a SceneTree; the local
 	# position is the authoritative transform for this detached restore path.
-	if shelter_node == null or shelter_node.position != placed_record["position"]:
+	if shelter_node == null or shelter_node.transform.origin != placed_record["position"]:
 		failures.append("building Continue activation did not realize shelter at saved position")
 	runtime.free()
 	player.free()
