@@ -46,19 +46,13 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	_expect(failures, "W movement input reaches production Player", player.global_position.distance_to(before) > 0.001)
 
 	# I is handled by the production InventorySurface and owns input capture.
-	_send_key(tree, KEY_I, true)
-	_send_key(tree, KEY_I, false)
-	await tree.process_frame
+	await _tap_key(tree, KEY_I)
 	var inventory_surface = game.get("inventory_surface")
 	_expect(failures, "I opens production inventory surface", inventory_surface != null and bool(inventory_surface.call("is_open")))
 	if inventory_surface != null:
-		_send_key(tree, KEY_I, true)
-		_send_key(tree, KEY_I, false)
-		await tree.process_frame
+		await _tap_key(tree, KEY_I)
 		_expect(failures, "I closes production inventory surface", not bool(inventory_surface.call("is_open")))
-		_send_key(tree, KEY_I, true)
-		_send_key(tree, KEY_I, false)
-		await tree.process_frame
+		await _tap_key(tree, KEY_I)
 		_expect(failures, "I reopens production inventory surface", bool(inventory_surface.call("is_open")))
 
 	# Seed canonical items, then exercise real slot selection/equip via UI focus.
@@ -72,28 +66,20 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			var grid = inventory_surface.get_node_or_null("InventorySurface/InventoryPanel/MarginContainer/VBoxContainer/GridContainer")
 			if grid != null and grid.get_child_count() > 0:
 				(grid.get_child(0) as Control).grab_focus()
-				_send_key(tree, KEY_ENTER, true)
-				_send_key(tree, KEY_ENTER, false)
-				await tree.process_frame
+				await _tap_key(tree, KEY_ENTER)
 				_expect(failures, "inventory slot selection routes to production equip", survival.call("get_equipment_state") != null)
 		# Release the inventory capture before exercising the next modal surface.
-		_send_key(tree, KEY_I, true)
-		_send_key(tree, KEY_I, false)
-		await tree.process_frame
+		await _tap_key(tree, KEY_I)
 
 	# C opens the real crafting screen; its first recipe is activated by Enter.
 	var crafting_ui = game.get("crafting_ui")
-	_send_key(tree, KEY_C, true)
-	_send_key(tree, KEY_C, false)
-	await tree.process_frame
+	await _tap_key(tree, KEY_C)
 	_expect(failures, "C opens production crafting surface", crafting_ui != null and bool(crafting_ui.call("is_open")))
 	if crafting_ui != null and bool(crafting_ui.call("is_open")):
 		var recipe_list = crafting_ui.get_node_or_null("CraftingRoot/CraftingPanel/MarginContainer/VBoxContainer/RecipeList")
 		if recipe_list != null and recipe_list.get_child_count() > 0:
 			(recipe_list.get_child(0) as Control).grab_focus()
-			_send_key(tree, KEY_ENTER, true)
-			_send_key(tree, KEY_ENTER, false)
-			await tree.process_frame
+			await _tap_key(tree, KEY_ENTER)
 		_expect(failures, "crafting UI remains live after craft/equip input", crafting_ui.has_method("render_snapshot"))
 
 	# A normal left-click harvest request is routed through Player -> Survival.
@@ -105,19 +91,21 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	Input.parse_input_event(harvest_click)
 	# The first click in a normal session captures the mouse; the next click is
 	# the actual gameplay interaction and must traverse Player._unhandled_input.
-	Input.parse_input_event(harvest_click)
+	var harvest_interaction := InputEventMouseButton.new()
+	harvest_interaction.button_index = MOUSE_BUTTON_LEFT
+	harvest_interaction.pressed = true
+	await tree.process_frame
+	Input.parse_input_event(harvest_interaction)
 	await tree.process_frame
 	_expect(failures, "left-click resource interaction reaches production harvest path", harvest_requests[0] > 0)
 
 	# B/G/LMB traverse the production build/workbench/placement input path.
-	_send_key(tree, KEY_ESCAPE, true)
-	_send_key(tree, KEY_ESCAPE, false)
-	_send_key(tree, KEY_B, true)
-	_send_key(tree, KEY_B, false)
-	await tree.process_frame
+	# CraftingScreen owns C close; Escape is intentionally not its shortcut.
+	if crafting_ui != null and bool(crafting_ui.call("is_open")):
+		await _tap_key(tree, KEY_C)
+	await _tap_key(tree, KEY_B)
 	_expect(failures, "B activates production build tool", player.get("build_tool_active") == true)
-	_send_key(tree, KEY_G, true)
-	_send_key(tree, KEY_G, false)
+	await _tap_key(tree, KEY_G)
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true
@@ -146,6 +134,12 @@ static func _send_key(tree: SceneTree, physical_key: Key, pressed: bool) -> void
 	event.unicode = physical_key
 	event.pressed = pressed
 	Input.parse_input_event(event)
+
+static func _tap_key(tree: SceneTree, physical_key: Key) -> void:
+	_send_key(tree, physical_key, true)
+	await tree.process_frame
+	_send_key(tree, physical_key, false)
+	await tree.process_frame
 
 static func _expect(failures: Array[String], label: String, condition: bool) -> void:
 	if not condition:
