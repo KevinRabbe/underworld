@@ -137,6 +137,46 @@ A runner process exiting zero is not sufficient when the workflow also checks fo
 
 Before review, run all feasible required checks triggered by the changed paths. Do not alter workflow path filters or required checks merely to reduce cost.
 
+## Standing mission
+
+The standing autonomous mission is:
+
+```text
+CURRENT STATE
+-> complete the mandatory Phase-0 tail
+-> explicit PHASE-0 EXIT
+-> complete Overworld Biome 1
+-> earn final #499 Biome-1 acceptance
+```
+
+Do not stop merely because one task, review, PR, milestone rung, or implementation packet completes.
+
+After every completion/review/landing/blocker change:
+
+1. refresh accepted `main` and the controlling board comments;
+2. identify the nearest incomplete player truth or required Phase-0 predecessor;
+3. build the lawful ready set;
+4. claim/execute the highest-priority lawful packet within governance;
+5. refill immediately when the packet ends;
+6. if source work is temporarily blocked, enter BLOCKED / PREFLIGHT delta-only mode;
+7. continue until the mission-level stop condition below is reached.
+
+Mission-level stop conditions are only:
+
+```text
+A. #499 explicitly accepts complete Overworld Biome 1
+OR
+B. remaining progress requires a genuine owner/PM/evidence decision
+   that cannot be derived from existing authority,
+   and no material lawful implementation/review/preflight work remains
+OR
+C. project owner explicitly changes or pauses the mission
+```
+
+A completed intermediate milestone such as Phase-0 EXIT, R1, R1b, R2, V3a, V3b, V3c, V4a, V4b, or V5 is **not** a stop condition. It is a refill event.
+
+The project owner should not need to send repeated "continue" messages between lawful turns.
+
 ## Player-visible priority
 
 When two equally lawful tasks contend for finite capacity or the same path, prefer the task that shortens the nearest incomplete ordinary-player truth.
