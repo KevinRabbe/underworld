@@ -214,7 +214,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		var camera_node = player.get("camera")
 		if camera_pitch_pivot != null and camera_node != null:
 			var horizontal_distance: float = Vector2(target_direction.x, target_direction.z).length()
-			camera_pitch_pivot.rotation.x = atan2(camera_node.global_position.y - tree_target_position.y, maxf(horizontal_distance, 0.001))
+			camera_pitch_pivot.rotation.x = atan2(tree_target_position.y - camera_node.global_position.y, maxf(horizontal_distance, 0.001))
 		print("[PLAYTEST DIAG] tree_target=%s player=%s camera=%s forward=%s" % [str(tree_target_position), str(player.global_position), str(camera_node.global_position) if camera_node != null else "<missing>", str(-camera_node.global_transform.basis.z) if camera_node != null else "<missing>"])
 	else:
 		failures.append("BLOCKED: no active production tree collider was available for real chopping")
