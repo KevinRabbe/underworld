@@ -14,8 +14,11 @@ const DURABLE_CONTENT_PATHS: Array[String] = [
 	"res://content/items/resources/plant_fiber_definition.tres",
 	"res://content/items/resources/stone_definition.tres",
 	"res://content/items/resources/wood_definition.tres",
+	"res://content/items/resources/raw_meat_definition.tres",
+	"res://content/items/resources/boar_hide_definition.tres",
 	"res://content/items/tools/stone_axe_definition.tres",
 	"res://content/items/tools/stone_pickaxe_definition.tres",
+	"res://content/items/tools/skinning_knife_definition.tres",
 	"res://content/items/weapons/iron_sword_definition.tres",
 	"res://content/loot/profiles/prototype_burrower_reward_profile.tres",
 ]

@@ -7,6 +7,7 @@ const InventoryTransactionPreflightTests := preload("res://tests/inventory/test_
 const EquipmentHotbarTests := preload("res://tests/inventory/test_equipment_hotbar_state.gd")
 const SurfaceHarvestTests := preload("res://tests/inventory/test_surface_harvest_inventory.gd")
 const LootCollectionTests := preload("res://tests/inventory/test_loot_collection.gd")
+const SkinningTests := preload("res://tests/hunting/test_skinning_service.gd")
 
 
 func _init() -> void:
@@ -18,9 +19,10 @@ func _init() -> void:
 	failures.append_array(EquipmentHotbarTests.run())
 	failures.append_array(SurfaceHarvestTests.run())
 	failures.append_array(LootCollectionTests.run())
+	failures.append_array(SkinningTests.run())
 	if failures.is_empty():
 		print("[INVENTORY VALIDATION] PASS")
-		print("  container / authored-definition-identity / transaction / transaction-preflight / equipment-hotbar / surface-harvest / loot-collection contracts passed")
+		print("  container / authored-definition-identity / transaction / transaction-preflight / equipment-hotbar / surface-harvest / loot-collection / skinning contracts passed")
 		quit(0)
 		return
 

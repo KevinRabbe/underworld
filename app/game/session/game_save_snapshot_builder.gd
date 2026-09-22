@@ -18,7 +18,8 @@ static func capture(
 	world_delta_store,
 	survival,
 	player,
-	encounter_controller
+	encounter_controller,
+	hunting_controller = null
 ) -> Dictionary:
 	var failures: Array[String] = []
 	if world_settings == null:
@@ -64,6 +65,7 @@ static func capture(
 		"workbench_used": false,
 		"placed_shelters": [],
 	}
+	var hunting_state: Dictionary = hunting_controller.durable_snapshot() if hunting_controller != null and hunting_controller.has_method("durable_snapshot") else {"schema": "hunting.skinning.v1", "boar_alive": true, "progression": {"skinning": 0, "last_carcass_id": ""}, "carcasses": []}
 	if survival.has_method("building_durable_snapshot"):
 		building_state = survival.building_durable_snapshot()
 	return IntegratedGameSaveContract.capture_v2_request({
@@ -77,6 +79,7 @@ static func capture(
 		"current_health": int(player.call("get_health")),
 		"current_stamina": float(player.call("get_stamina")),
 		"building_state": building_state,
+		"hunting_state": hunting_state,
 	})
 
 
