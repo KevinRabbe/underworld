@@ -74,6 +74,27 @@ Do not confuse "definition complete" with source readiness.
 
 Do not confuse "source ready" with milestone acceptance.
 
+## Future-state goal completion rule
+
+A product-state goal is not complete merely because one branch demonstrates it.
+
+Unless the goal explicitly defines a local-only proof, the required lifecycle is:
+
+```text
+player flow works on implementation head
+-> publish immutable candidate
+-> independent review where required
+-> repair/rereview as needed
+-> governed integration
+-> accepted main advances
+-> rerun the relevant production/player witness from accepted main
+-> only then mark the goal COMPLETE
+```
+
+Use `PRODUCT FLOW PROVEN / INTEGRATION PENDING` for a validated but unaccepted branch.
+
+This keeps future-state goals from terminating at the exact point where repository governance still has to make the feature real for the project.
+
 ## Autonomous mission horizon
 
 The current long-run horizon is **complete Overworld Biome 1**, with final acceptance owned by #499.
