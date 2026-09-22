@@ -49,7 +49,7 @@ static func run() -> Array[String]:
 	var replay: Dictionary = service.capture_death(Vector3(99.0, 2.0, 99.0))
 	if not bool(replay.get("already_captured", false)):
 		failures.append("replayed death created a second cache")
-	var collected := service.collect_cache()
+	var collected: Dictionary = service.collect_cache()
 	if not bool(collected.get("success", false)) or inventory.quantity_of("item.resource.wood") != 3:
 		failures.append("cache collection did not restore cargo exactly once")
 	if bool(service.collect_cache().get("success", false)):

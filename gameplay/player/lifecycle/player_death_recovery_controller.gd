@@ -52,7 +52,8 @@ func request_recovery(reason: StringName) -> bool:
 	if _death_cache != null and _death_cache.has_method("capture_death"):
 		var cache_result: Dictionary = _death_cache.capture_death(_player.get("global_position"))
 		if not bool(cache_result.get("success", false)):
-			return _record_failure(cache_result.get("diagnostics", []))
+			_record_failure(cache_result.get("diagnostics", []))
+			return false
 	call_deferred("try_commit_recovery")
 	return true
 
