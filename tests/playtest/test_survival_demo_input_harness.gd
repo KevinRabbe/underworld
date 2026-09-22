@@ -167,7 +167,14 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var tree_body: StaticBody3D = null
 	var tree_object_id := ""
 	var tree_distance := INF
+	if world != null and world.has_method("find_nearest_active_world_object_body"):
+		tree_body = world.call("find_nearest_active_world_object_body", player.global_position, "tree") as StaticBody3D
+		if tree_body != null:
+			tree_object_id = str(tree_body.get_meta("world_object_id"))
+			tree_distance = tree_body.global_position.distance_to(player.global_position)
 	for candidate in game.find_children("*", "Node", true, false):
+		if tree_body != null:
+			break
 		if not candidate.has_meta("world_object_type") or str(candidate.get_meta("world_object_type")) != "tree":
 			continue
 		var distance: float = player.global_position.distance_to(candidate.global_position)

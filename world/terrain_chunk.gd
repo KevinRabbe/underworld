@@ -98,6 +98,9 @@ func collect_nearby_pickups(player_world_position: Vector3, radius: float) -> Ar
 func get_active_world_object_count() -> int:
 	return _generated_objects.get_active_world_object_count()
 
+func find_nearest_active_world_object_body(object_type: String, world_position: Vector3):
+	return _generated_objects.nearest_active_body(object_type, to_local(world_position))
+
 
 func get_pickup_counts() -> Vector2i:
 	return _generated_objects.get_pickup_counts()

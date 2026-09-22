@@ -341,6 +341,21 @@ func get_active_world_object_count() -> int:
 		total += chunk.get_active_world_object_count()
 	return total
 
+func find_nearest_active_world_object_body(world_position: Vector3, object_type: String):
+	var nearest: Node3D = null
+	var nearest_distance := INF
+	for chunk in chunks.values():
+		if not chunk.has_method("find_nearest_active_world_object_body"):
+			continue
+		var candidate = chunk.find_nearest_active_world_object_body(object_type, world_position)
+		if candidate == null or not is_instance_valid(candidate):
+			continue
+		var distance := candidate.global_position.distance_to(world_position)
+		if distance < nearest_distance:
+			nearest = candidate
+			nearest_distance = distance
+	return nearest
+
 
 func get_last_generation_ms() -> float:
 	return last_generation_ms
