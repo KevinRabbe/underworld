@@ -197,6 +197,37 @@ V5    Skinning Knife -> real Boar -> Skinning -> Continue
 
 Later breadth work does not jump ahead merely because its architecture is already defined.
 
+## Write-first worker policy
+
+Codex worker capacity is for **state-changing implementation work by default**.
+
+Do not allocate a standalone Codex worker merely to:
+- reread issues;
+- summarize board state;
+- enumerate paths already frozen;
+- perform broad preflight;
+- wait on CI;
+- poll a blocker;
+- write another planning report.
+
+Read-only work is justified only in two cases:
+
+1. **independent review** required by #281 or equivalent governance;
+2. **short targeted diagnosis** needed to identify the exact write/repair that the same execution lane can perform immediately afterward.
+
+For ordinary blocked implementation:
+
+```text
+preferred write blocked
+-> take another lawful write-capable packet
+-> if none exists, do only the minimum diagnosis needed to prove the blocker
+-> return the worker slot rather than burning a full Codex run on read-only inventory
+```
+
+Do not create dedicated read-only "preflight workers" as latency-hiding work. Prefer implementing a disjoint accepted prerequisite, repair, test-owned source packet, integration adapter, or another player-truth feeder.
+
+Independent reviewers remain read-only by design and must not convert themselves into implementation workers for the candidate they reviewed.
+
 ## Autonomous scheduling
 
 Do not idle because the preferred task is blocked.
@@ -217,9 +248,9 @@ Parallelize only genuinely disjoint work.
 
 A closed project gate, unavailable reviewer, evidence wait, or blocked preferred packet is **not by itself permission to end a long autonomous run**.
 
-If governance forbids source mutation, switch the whole run to **BLOCKED / PREFLIGHT mode** instead of stopping after a status check.
+If governance forbids the preferred source mutation, first search for another lawful **write-capable** packet. Use BLOCKED/PREFLIGHT only as a minimal fallback when no lawful write-capable work exists.
 
-In BLOCKED / PREFLIGHT mode, do not claim or mutate production source. Continue useful read-only work in priority order:
+In BLOCKED / PREFLIGHT fallback, do not claim or mutate production source. Perform only the minimum read-only work needed to unlock or classify the next write-capable turn:
 
 1. refresh live board / PR / accepted-main state once;
 2. identify the exact blocking transition and owner;
