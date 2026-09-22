@@ -98,9 +98,15 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 					axe_slot = index
 					break
 		if axe_slot >= 0 and grid != null and axe_slot < grid.get_child_count():
-			(grid.get_child(axe_slot) as Control).grab_focus()
+			var axe_button := grid.get_child(axe_slot) as Button
+			var pressed_count: Array[int] = [0]
+			axe_button.pressed.connect(func() -> void: pressed_count[0] += 1)
+			axe_button.grab_focus()
+			print("[PLAYTEST DIAG] axe button focused=%s disabled=%s equipment_before=%s" % [str(axe_button.has_focus()), str(axe_button.disabled), equipment_before])
 			await _tap_key(tree, KEY_ENTER)
 			var equipment_after: String = equipment.canonical_json() if equipment != null else ""
+			var selected = equipment.selected_definition() if equipment != null else null
+			print("[PLAYTEST DIAG] axe button pressed=%d equipment_after=%s selected=%s" % [pressed_count[0], equipment_after, str(selected.content_id) if selected != null else "<none>"])
 			_expect(failures, "inventory Enter selects/equips authored tool", axe_slot >= 0 and equipment_after != equipment_before and equipment.selected_definition() != null)
 		else:
 			failures.append("inventory Enter could not locate seeded authored tool slot")
