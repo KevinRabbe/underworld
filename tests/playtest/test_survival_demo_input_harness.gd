@@ -152,8 +152,18 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	await _wait_physics(tree, 4)
 
 	# A normal left-click harvest request is routed through Player -> Survival.
-	await _wait_physics(tree, 30)
+	# Surface chunk generation and world-object proxy activation are deferred;
+	# allow the production streamer enough real frames before searching colliders.
+	await _wait_physics(tree, 240)
 	var world = game.get("world")
+	print("[PLAYTEST DIAG] surface chunks=%s pending=%s generated=%s decorations=%s active_objects=%s pickups=%s" % [
+		str(world.call("get_loaded_chunk_count")) if world != null and world.has_method("get_loaded_chunk_count") else "<missing>",
+		str(world.call("get_pending_chunk_count")) if world != null and world.has_method("get_pending_chunk_count") else "<missing>",
+		str(world.call("get_total_chunks_generated")) if world != null and world.has_method("get_total_chunks_generated") else "<missing>",
+		str(world.call("get_current_decoration_counts")) if world != null and world.has_method("get_current_decoration_counts") else "<missing>",
+		str(world.call("get_active_world_object_count")) if world != null and world.has_method("get_active_world_object_count") else "<missing>",
+		str(world.call("get_current_pickup_counts")) if world != null and world.has_method("get_current_pickup_counts") else "<missing>",
+	])
 	var tree_body: StaticBody3D = null
 	var tree_object_id := ""
 	var tree_distance := INF
