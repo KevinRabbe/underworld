@@ -12,6 +12,7 @@ const EquipmentHotbarState := preload("res://gameplay/items/equipment/equipment_
 const EquipmentService := preload("res://gameplay/items/equipment/equipment_service.gd")
 const SurfaceHarvestInventoryService := preload("res://gameplay/survival/surface_harvest_inventory_service.gd")
 const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
+const BuildingRuntime := preload("res://gameplay/building/building_runtime.gd")
 
 const WOOD_ID := "item.resource.wood"
 const STONE_ID := "item.resource.stone"
@@ -50,6 +51,7 @@ var _equipment_service = EquipmentService.new()
 var _transactions = InventoryTransactionService.new()
 var _harvest_inventory = null
 var _definitions: Dictionary = {}
+var _building_runtime: Node = null
 
 
 func configure(
@@ -76,8 +78,49 @@ func legacy_persistence_enabled() -> bool:
 
 func set_player(player_node: Node3D) -> void:
 	player = player_node
+	if _building_runtime != null:
+		_building_runtime.set_player(player)
 	_sync_legacy_mirrors()
 	equipped_tool_changed.emit(equipped_tool)
+
+func request_build_tool() -> void:
+	if _building_runtime == null:
+		return
+	var result: Dictionary = _building_runtime.toggle_build_tool()
+	if bool(result.get("active", false)):
+		last_action_message = "Build Tool: shelter selected"
+	else:
+		last_action_message = "Build Tool holstered"
+	if player != null and player.has_method("set_build_tool_active"):
+		player.set_build_tool_active(bool(result.get("active", false)))
+
+func request_workbench_interact() -> void:
+	if _building_runtime == null:
+		return
+	var result: Dictionary = _building_runtime.interact_with_workbench()
+	if bool(result.get("success", false)):
+		last_action_message = "Workbench: shelter ready"
+		if player != null and player.has_method("set_build_tool_active"):
+			player.set_build_tool_active(true)
+	else:
+		last_action_message = str(result.get("diagnostics", ["Workbench unavailable"])[0])
+
+func request_build_place(origin: Vector3, direction: Vector3, max_distance: float) -> void:
+	if _building_runtime == null:
+		return
+	var result: Dictionary = _building_runtime.place_shelter_from_ray(origin, direction, max_distance)
+	if bool(result.get("success", false)):
+		last_action_message = "Built shelter"
+		harvest_result.emit({
+			"type": "building.shelter_placed",
+			"building_id": result.get("building_id", ""),
+			"stable_id": result.get("stable_id", ""),
+		})
+	else:
+		last_action_message = str(result.get("diagnostics", ["Cannot build"])[0])
+
+func get_building_runtime():
+	return _building_runtime
 
 
 func _process(delta: float) -> void:
@@ -521,6 +564,9 @@ func _configure_semantic_runtime() -> void:
 		_equipment,
 		_definitions.values()
 	)
+	_building_runtime = BuildingRuntime.new().configure(world, _inventory, _definitions)
+	_building_runtime.name = "BuildingRuntime"
+	add_child(_building_runtime)
 
 
 func _find_inventory_instance_slot(item_id: String) -> int:

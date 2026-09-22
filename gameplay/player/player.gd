@@ -4,6 +4,9 @@ signal harvest_requested(origin: Vector3, direction: Vector3, max_distance: floa
 signal attack_requested(execution: Dictionary)
 signal hotbar_slot_requested(slot: int)
 signal craft_requested(recipe_id: String)
+signal build_tool_requested
+signal workbench_interact_requested
+signal build_place_requested(origin: Vector3, direction: Vector3, max_distance: float)
 signal parry_succeeded(source_position: Vector3)
 signal damage_committed(amount: int, remaining_health: int, source_position: Vector3)
 signal defeat_requested(reason: StringName)
@@ -53,6 +56,7 @@ var camera_distance: float = DEFAULT_CAMERA_DISTANCE
 var harvest_range: float = 4.5
 var tool_use_cooldown_duration: float = 0.38
 var tool_use_cooldown_timer: float = 0.0
+var build_tool_active: bool = false
 var tool_swing_timer: float = 0.0
 var damage_invulnerability_timer: float = 0.0
 var health: int = MAX_HEALTH
@@ -141,6 +145,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("hotbar_slot_4"):
 		hotbar_slot_requested.emit(4)
 		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		match event.physical_keycode:
+			KEY_B:
+				build_tool_requested.emit()
+				return
+			KEY_G:
+				workbench_interact_requested.emit()
+				return
 
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
@@ -378,7 +390,13 @@ func _request_harvest() -> void:
 	if defeated or not _begin_tool_action():
 		return
 	var ray: Dictionary = _get_camera_action_ray(harvest_range)
+	if build_tool_active:
+		build_place_requested.emit(ray["origin"], ray["direction"], ray["distance"])
+		return
 	harvest_requested.emit(ray["origin"], ray["direction"], ray["distance"])
+
+func set_build_tool_active(active: bool) -> void:
+	build_tool_active = active
 
 
 func _request_attack(heavy: bool = false) -> void:
