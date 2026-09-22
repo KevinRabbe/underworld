@@ -210,6 +210,9 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		var camera_yaw = player.get("camera_yaw")
 		if camera_yaw != null and not target_direction.is_zero_approx():
 			camera_yaw.rotation.y = atan2(-target_direction.x, -target_direction.z)
+		var camera_pitch_pivot = player.get("camera_pitch_pivot")
+		if camera_pitch_pivot != null:
+			camera_pitch_pivot.rotation.x = 0.0
 	else:
 		failures.append("BLOCKED: no active production tree collider was available for real chopping")
 	var wood_before_harvest: int = inventory.quantity_of("item.resource.wood")
