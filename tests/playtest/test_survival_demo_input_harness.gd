@@ -153,25 +153,44 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 
 	# A normal left-click harvest request is routed through Player -> Survival.
 	await _wait_physics(tree, 30)
+	var world = game.get("world")
+	var tree_body: StaticBody3D = null
+	var tree_distance := INF
+	for candidate in game.find_children("*", "StaticBody3D", true, false):
+		if not candidate.has_meta("world_object_type") or str(candidate.get_meta("world_object_type")) != "tree":
+			continue
+		var distance := player.global_position.distance_to(candidate.global_position)
+		if distance < tree_distance:
+			tree_body = candidate as StaticBody3D
+			tree_distance = distance
+	if tree_body != null:
+		var target_direction := tree_body.global_position - player.global_position
+		target_direction.y = 0.0
+		var camera_yaw = player.get("camera_yaw")
+		if camera_yaw != null and not target_direction.is_zero_approx():
+			camera_yaw.rotation.y = atan2(-target_direction.x, -target_direction.z)
+	else:
+		failures.append("BLOCKED: no active production tree collider was available for real chopping")
+	var wood_before_harvest: int = inventory.quantity_of("item.resource.wood")
+	var fiber_before: int = inventory.quantity_of("item.resource.plant_fiber")
 	var harvest_requests: Array[int] = [0]
 	player.harvest_requested.connect(func(_origin: Vector3, _direction: Vector3, _distance: float) -> void: harvest_requests[0] += 1)
-	var harvest_click := InputEventMouseButton.new()
-	harvest_click.button_index = MOUSE_BUTTON_LEFT
-	harvest_click.pressed = true
-	Input.parse_input_event(harvest_click)
-	# The first click in a normal session captures the mouse; the next click is
-	# the actual gameplay interaction and must traverse Player._unhandled_input.
-	var harvest_interaction := InputEventMouseButton.new()
-	harvest_interaction.button_index = MOUSE_BUTTON_LEFT
-	harvest_interaction.pressed = true
-	await tree.process_frame
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	Input.parse_input_event(harvest_interaction)
-	await _wait_physics(tree, 2)
+	for _hit in range(3):
+		var harvest_interaction := InputEventMouseButton.new()
+		harvest_interaction.button_index = MOUSE_BUTTON_LEFT
+		harvest_interaction.pressed = true
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		Input.parse_input_event(harvest_interaction)
+		await _wait_physics(tree, 30)
 	var gate = app.get_gameplay_input_gate() if app.has_method("get_gameplay_input_gate") else null
 	var gameplay_enabled := bool(player.call("gameplay_input_enabled")) if player.has_method("gameplay_input_enabled") else false
 	print("[PLAYTEST DIAG] harvest requests=%d mouse_mode=%d gameplay_input_enabled=%s gate_allowed=%s" % [harvest_requests[0], Input.mouse_mode, str(gameplay_enabled), str(gate.call("allows_player_input")) if gate != null else "<missing>"])
 	_expect(failures, "left-click resource interaction reaches production harvest path", harvest_requests[0] > 0)
+	_expect(failures, "three real tree clicks produce canonical wood", tree_body != null and inventory.quantity_of("item.resource.wood") >= wood_before_harvest + 4)
+	if tree_body != null and world != null and world.has_method("is_world_object_destroyed"):
+		_expect(failures, "three real tree clicks destroy the world tree", bool(world.call("is_world_object_destroyed", str(tree_body.get_meta("world_object_id")))))
+	await _wait_physics(tree, 120)
+	_expect(failures, "real nearby plant-fiber pickup reaches canonical inventory", inventory.quantity_of("item.resource.plant_fiber") > fiber_before)
 
 	# B/G/LMB traverse the production build/workbench/placement input path.
 	await _tap_key(tree, KEY_B)
