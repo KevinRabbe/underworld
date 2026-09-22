@@ -60,7 +60,8 @@ func collect_cache() -> Dictionary:
 	var current_records_result := _validated_cargo_records(current_snapshot)
 	if not bool(current_records_result.get("success", false)):
 		return _failure(current_records_result.get("diagnostics", []))
-	var probe := ItemContainerState.new().configure(int(current_snapshot.get("slot_capacity", 0)), float(current_snapshot.get("max_weight", -1.0)))
+	var probe := ItemContainerState.new()
+	probe.configure(int(current_snapshot.get("slot_capacity", 0)), float(current_snapshot.get("max_weight", -1.0)))
 	for record in current_records_result.get("records", []):
 		var current_result: Dictionary = _apply_record(probe, record)
 		if not bool(current_result.get("success", false)):
@@ -162,7 +163,7 @@ func _validated_cargo_records(cargo: Dictionary) -> Dictionary:
 		return {"success": false, "diagnostics": failures}
 	return {"success": true, "records": records, "diagnostics": []}
 
-func _apply_record(container: ItemContainerState, record: Dictionary) -> Dictionary:
+func _apply_record(container, record: Dictionary) -> Dictionary:
 	var state: Dictionary = record.get("state", {})
 	var definition = _definitions.get(str(state.get("item_id", "")), null)
 	if str(record.get("kind", "")) == "stack":
