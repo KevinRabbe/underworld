@@ -12,6 +12,32 @@ This file is deliberately a **mutable scheduling snapshot**. The live issue boar
 
 Before every long run and after every merge, reread the newest controlling comments on `#33`, `#886`, and the issues for candidate packets.
 
+## Standing autonomous goal
+
+Current mission:
+
+> **Reach explicit #499 acceptance for complete Overworld Biome 1 without requiring repeated owner "continue" prompts.**
+
+Current sequence authority is #886:
+
+```text
+finish mandatory Phase-0 correctness tail
+-> COMPLETE OVERWORLD BIOME 1
+-> only after that proceed to Biome 2
+```
+
+Within Biome 1, use the current serial delivery spine:
+
+```text
+R1 -> R1b -> R2 -> V3a -> V3b -> V3c -> V4a -> V4b -> V5
+```
+
+while latency-hiding disjoint V6/resource/actor/Building/evidence prerequisites whenever the nearest serial rung leaves lawful spare capacity.
+
+After V5, continue convergence work until #499's complete Biome-1 acceptance tree is satisfied. Do not treat source-complete or architecture-complete as product-complete.
+
+The active worker should stop for owner input only on a genuine unresolved decision/evidence authority, not at ordinary task boundaries.
+
 ## Current gate
 
 At snapshot time:
