@@ -78,6 +78,15 @@ jobs:
           use-dotnet: false
           include-templates: false
 
+      - name: Import source assets
+        run: |
+          set -o pipefail
+          import_log="$(mktemp)"
+          godot --headless --editor --path . --quit 2>&1 | tee "$import_log"
+          if grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|handle_crash|ERROR: Error importing' "$import_log"; then
+            exit 1
+          fi
+
       - name: Run content registry contracts
         run: |
           set -o pipefail
