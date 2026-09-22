@@ -42,6 +42,8 @@ static func compose(
 	player.harvest_requested.connect(survival.try_harvest)
 	player.hotbar_slot_requested.connect(survival.select_hotbar_slot)
 	player.craft_requested.connect(survival.request_craft)
+	if player.has_signal(&"food_requested") and survival.has_method("consume_food"):
+		player.food_requested.connect(survival.consume_food)
 	if player.has_signal(&"build_tool_requested") and survival.has_method("request_build_tool"):
 		player.build_tool_requested.connect(survival.request_build_tool)
 	if player.has_signal(&"workbench_interact_requested") and survival.has_method("request_workbench_interact"):
@@ -66,7 +68,8 @@ static func compose(
 		var hydration: Dictionary = player.call(
 			"restore_current_vitals",
 			vitals.get("current_health", null),
-			vitals.get("current_stamina", null)
+			vitals.get("current_stamina", null),
+			vitals.get("current_food", 100.0)
 		)
 		if not bool(hydration.get("success", false)):
 			return _failure(

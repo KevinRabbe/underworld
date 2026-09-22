@@ -14,6 +14,7 @@ const SurfaceHarvestInventoryService := preload("res://gameplay/survival/surface
 const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
 const BuildingRuntime := preload("res://gameplay/building/building_runtime.gd")
 const SkinningService := preload("res://gameplay/hunting/skinning/skinning_service.gd")
+const FoodItemDefinition := preload("res://gameplay/items/definitions/food_item_definition.gd")
 
 const WOOD_ID := "item.resource.wood"
 const STONE_ID := "item.resource.stone"
@@ -21,6 +22,7 @@ const PLANT_FIBER_ID := "item.resource.plant_fiber"
 const AXE_ID := "item.tool.stone_axe"
 const PICKAXE_ID := "item.tool.stone_pickaxe"
 const KNIFE_ID := "item.tool.skinning_knife"
+const BERRIES_ID := "item.food.berries"
 const SLOT_HANDS := "equipment_slot.hotbar.hands"
 const SLOT_AXE := "equipment_slot.hotbar.axe"
 const SLOT_PICKAXE := "equipment_slot.hotbar.pickaxe"
@@ -102,9 +104,6 @@ func get_skinning_service():
 	return _skinning_service
 
 
-func get_item_definitions() -> Array:
-	return _definitions.values()
-
 func request_build_tool() -> void:
 	if _building_runtime == null:
 		return
@@ -121,7 +120,14 @@ func request_workbench_interact() -> void:
 		return
 	var result: Dictionary = _building_runtime.interact_with_workbench()
 	if bool(result.get("success", false)):
-		last_action_message = "Workbench: shelter ready"
+		if result.has("chest_opened"):
+			last_action_message = "Chest opened"
+			harvest_result.emit({"type": "building.chest_opened", "stable_id": result.get("chest_opened", ""), "contents": result.get("contents", {})})
+		elif result.has("bed_claimed"):
+			last_action_message = "Bed claimed"
+			harvest_result.emit({"type": "building.bed_claimed", "stable_id": result.get("bed_claimed", "")})
+		else:
+			last_action_message = "Workbench: shelter ready"
 		if player != null and player.has_method("set_build_tool_active"):
 			player.set_build_tool_active(true)
 	else:
@@ -418,6 +424,30 @@ func select_hotbar_slot(slot: int) -> void:
 		last_action_message = "Equipment selected"
 	equipped_tool_changed.emit(equipped_tool)
 
+
+func consume_food() -> Dictionary:
+	if _inventory == null or player == null or not player.has_method("restore_food"):
+		return {"success": false, "diagnostics": ["food runtime is unavailable"]}
+	var food_definition = _definitions.get(BERRIES_ID, null)
+	if food_definition == null or not food_definition is FoodItemDefinition:
+		return {"success": false, "diagnostics": ["food definition is unavailable"]}
+	if float(player.call("get_food")) >= float(player.call("get_max_food")):
+		last_action_message = "Food is full"
+		return {"success": false, "diagnostics": ["food is already full"]}
+	var removed: Dictionary = _inventory.remove_stack(BERRIES_ID, 1)
+	if not bool(removed.get("success", false)):
+		last_action_message = "No food to eat"
+		return removed
+	var restored: Dictionary = player.call("restore_food", food_definition.food_value)
+	if not bool(restored.get("success", false)):
+		_inventory.add_stack(food_definition, 1)
+		return restored
+	_sync_legacy_mirrors()
+	last_action_message = "Ate berries (+%d food)" % int(food_definition.food_value)
+	var event := {"type": "food.consumed", "item_id": BERRIES_ID, "food": restored.get("food", 0.0)}
+	harvest_result.emit(event)
+	return {"success": true, "diagnostics": [], "event": event}
+
 func equip_inventory_slot(source_slot: int, target_slot_key: String) -> Dictionary:
 	if _inventory == null or _equipment == null:
 		return {"success": false, "diagnostics": ["survival equipment state is unavailable"]}
@@ -588,6 +618,17 @@ func get_inventory_state():
 
 func get_equipment_state():
 	return _equipment
+
+
+func get_item_definitions() -> Array:
+	return _definitions.values()
+
+
+func get_bed_respawn_position() -> Vector3:
+	if _building_runtime == null or not _building_runtime.has_method("get_claimed_bed_respawn_position"):
+		return Vector3(NAN, NAN, NAN)
+	var position: Variant = _building_runtime.get_claimed_bed_respawn_position()
+	return position if position is Vector3 else Vector3(NAN, NAN, NAN)
 
 
 func get_item_definition(item_id: String):

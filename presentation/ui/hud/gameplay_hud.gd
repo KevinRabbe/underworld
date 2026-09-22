@@ -19,6 +19,8 @@ var _health_bar: ProgressBar
 var _health_label: Label
 var _stamina_bar: ProgressBar
 var _stamina_label: Label
+var _food_bar: ProgressBar
+var _food_label: Label
 var _materials_label: Label
 var _action_label: Label
 var _feedback_label: Label
@@ -150,6 +152,15 @@ func _ensure_ui() -> void:
 	_stamina_bar.max_value = 1.0
 	_stamina_bar.custom_minimum_size = Vector2(280.0, 16.0)
 	vitals.add_child(_stamina_bar)
+	_food_label = Label.new()
+	_food_label.name = "FoodLabel"
+	vitals.add_child(_food_label)
+	_food_bar = ProgressBar.new()
+	_food_bar.name = "FoodBar"
+	_food_bar.show_percentage = false
+	_food_bar.max_value = 1.0
+	_food_bar.custom_minimum_size = Vector2(280.0, 16.0)
+	vitals.add_child(_food_bar)
 
 	_action_label = Label.new()
 	_action_label.name = "ActionStateLabel"
@@ -206,7 +217,7 @@ func _ensure_ui() -> void:
 	_hint_label = Label.new()
 	_hint_label.name = "HintLabel"
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hint_label.text = ""
+	_hint_label.text = "WASD move  •  Z eat food  •  1–4 hotbar"
 	bottom.add_child(_hint_label)
 	_set_mouse_passthrough(_root)
 
@@ -217,6 +228,8 @@ func _render(model: Dictionary) -> void:
 		_health_bar.value = 0.0
 		_stamina_label.text = "Stamina --"
 		_stamina_bar.value = 0.0
+		_food_label.text = "Food --"
+		_food_bar.value = 0.0
 		_action_label.text = "State unavailable"
 		_materials_label.text = "Materials unavailable"
 		_render_invalid_hotbar()
@@ -232,6 +245,8 @@ func _render(model: Dictionary) -> void:
 		float(model.get("max_stamina", 0.0)),
 	]
 	_stamina_bar.value = float(model.get("stamina_ratio", 0.0))
+	_food_label.text = "Food %.0f / %.0f" % [float(model.get("food", 0.0)), float(model.get("max_food", 0.0))]
+	_food_bar.value = float(model.get("food_ratio", 0.0))
 	_action_label.text = "Action: %s" % _display_state(str(model.get("action_state", "")))
 
 	var material_lines: Array[String] = []

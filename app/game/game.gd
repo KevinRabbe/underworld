@@ -33,6 +33,7 @@ var world_delta_store
 var survival
 var player
 var death_recovery_controller
+var death_cache_service
 var combat_resolver
 var encounter_controller
 var gameplay_hud
@@ -182,7 +183,8 @@ func build_save_request() -> Dictionary:
 		survival,
 		player,
 		encounter_controller,
-		get_node_or_null("BoarEncounters")
+		get_node_or_null("BoarEncounters"),
+		death_cache_service
 	)
 
 
@@ -435,9 +437,15 @@ func _create_death_recovery() -> void:
 		self,
 		player,
 		world,
-		world_settings
+		world_settings,
+		survival
 	)
 	death_recovery_controller = composition.get("controller", null)
+	death_cache_service = composition.get("death_cache_service", null)
+	if death_cache_service != null and _startup_mode == STARTUP_CONTINUE and _startup_candidate.has("death_cache_state"):
+		var restored_cache: Dictionary = death_cache_service.restore_durable_snapshot(_startup_candidate.get("death_cache_state", {}))
+		if not bool(restored_cache.get("success", false)):
+			push_error("SAVE death cache hydration rejected: %s" % [restored_cache.get("diagnostics", [])])
 	var failures: Array = composition.get("diagnostics", [])
 	if not failures.is_empty():
 		push_error("Death recovery configuration failed: %s" % [failures])
@@ -637,7 +645,8 @@ func _validate_continue_candidate(candidate: Dictionary) -> Array[String]:
 	else:
 		var vitals_validation: Dictionary = GameplayStateCodecScript.encode_player_vitals(
 			vitals_variant.get("current_health", null),
-			vitals_variant.get("current_stamina", null)
+			vitals_variant.get("current_stamina", null),
+			vitals_variant.get("current_food", 100.0)
 		)
 		if not bool(vitals_validation.get("success", false)):
 			for diagnostic in vitals_validation.get("diagnostics", []):

@@ -21,6 +21,9 @@ func configure_integrated(
 		inventory_slot_capacity,
 		inventory_max_weight
 	)
+	var starter_food = _definitions.get("item.food.berries", null)
+	if starter_food != null:
+		_inventory.add_stack(starter_food, 3)
 
 
 func activate_restored_state(

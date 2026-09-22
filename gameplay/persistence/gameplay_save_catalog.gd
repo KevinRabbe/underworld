@@ -9,6 +9,7 @@ const SLOT_PICKAXE := "equipment_slot.hotbar.pickaxe"
 const SLOT_UTILITY := "equipment_slot.hotbar.utility"
 
 const DURABLE_CONTENT_PATHS: Array[String] = [
+	"res://content/items/resources/berries_definition.tres",
 	"res://content/items/resources/burrower_chitin_definition.tres",
 	"res://content/items/resources/iron_chunk_definition.tres",
 	"res://content/items/resources/plant_fiber_definition.tres",

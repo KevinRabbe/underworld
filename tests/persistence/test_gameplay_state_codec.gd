@@ -381,12 +381,14 @@ static func _test_player_vitals_round_trip_and_zero_stamina(failures: Array[Stri
 	if not _require_success(encoded, "player vitals encode", failures):
 		return
 	var snapshot: Dictionary = encoded.get("snapshot", {})
-	if _sorted_keys(snapshot) != ["current_health", "current_stamina", "schema"]:
+	if _sorted_keys(snapshot) != ["current_food", "current_health", "current_stamina", "schema"]:
 		failures.append("player-vitals snapshot keys are not exact and bounded")
 	if int(snapshot.get("current_health", -1)) != 37:
 		failures.append("player-vitals snapshot changed current Health")
 	if not is_equal_approx(float(snapshot.get("current_stamina", -1.0)), 42.5):
 		failures.append("player-vitals snapshot changed current Stamina")
+	if not is_equal_approx(float(snapshot.get("current_food", -1.0)), 100.0):
+		failures.append("player-vitals snapshot did not include full default Food")
 	var decoded: Dictionary = GameplayStateCodec.decode_player_vitals(snapshot)
 	if not _require_success(decoded, "player vitals decode", failures):
 		return
@@ -395,6 +397,8 @@ static func _test_player_vitals_round_trip_and_zero_stamina(failures: Array[Stri
 		failures.append("player-vitals round-trip changed current Health")
 	if not is_equal_approx(float(state.get("current_stamina", -1.0)), 42.5):
 		failures.append("player-vitals round-trip changed current Stamina")
+	if not is_equal_approx(float(state.get("current_food", -1.0)), 100.0):
+		failures.append("player-vitals round-trip changed current Food")
 
 	var zero_encoded: Dictionary = GameplayStateCodec.encode_player_vitals(37, 0.0)
 	if not _require_success(zero_encoded, "zero-Stamina vitals encode", failures):

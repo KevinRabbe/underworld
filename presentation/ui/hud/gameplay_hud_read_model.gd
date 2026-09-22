@@ -39,6 +39,8 @@ func sample(
 	var max_health: int = int(player.call("get_max_health"))
 	var stamina: float = float(player.call("get_stamina"))
 	var max_stamina: float = float(player.call("get_max_stamina"))
+	var food: float = float(player.call("get_food")) if player.has_method("get_food") else 100.0
+	var max_food: float = float(player.call("get_max_food")) if player.has_method("get_max_food") else 100.0
 	if max_health <= 0:
 		failures.append("HUD player max health must be > 0")
 	if is_nan(stamina) or is_inf(stamina) or is_nan(max_stamina) or is_inf(max_stamina):
@@ -80,6 +82,9 @@ func sample(
 		"stamina": stamina,
 		"max_stamina": max_stamina,
 		"stamina_ratio": clampf(stamina / max_stamina, 0.0, 1.0),
+		"food": food,
+		"max_food": max_food,
+		"food_ratio": clampf(food / max_food, 0.0, 1.0) if max_food > 0.0 else 0.0,
 		"action_state": str(player.call("get_action_state_name")),
 		"equipment_valid": equipment_valid,
 		"hotbar": hotbar,

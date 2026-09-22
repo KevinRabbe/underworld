@@ -19,7 +19,8 @@ static func capture(
 	survival,
 	player,
 	encounter_controller,
-	hunting_controller = null
+	hunting_controller = null,
+	death_cache_service = null
 ) -> Dictionary:
 	var failures: Array[String] = []
 	if world_settings == null:
@@ -64,6 +65,9 @@ static func capture(
 		"build_tool_active": false,
 		"workbench_used": false,
 		"placed_shelters": [],
+		"placed_chests": [],
+		"claimed_bed_stable_id": "",
+		"selected_building_id": BuildingRuntime.BUILDING_SHELTER_ID,
 	}
 	var hunting_state: Dictionary = hunting_controller.durable_snapshot() if hunting_controller != null and hunting_controller.has_method("durable_snapshot") else {"schema": "hunting.skinning.v1", "boar_alive": true, "progression": {"skinning": 0, "last_carcass_id": ""}, "carcasses": []}
 	if survival.has_method("building_durable_snapshot"):
@@ -78,8 +82,10 @@ static func capture(
 		"resume_position": resume_position,
 		"current_health": int(player.call("get_health")),
 		"current_stamina": float(player.call("get_stamina")),
+		"current_food": float(player.call("get_food")) if player.has_method("get_food") else 100.0,
 		"building_state": building_state,
 		"hunting_state": hunting_state,
+		"death_cache_state": death_cache_service.durable_snapshot() if death_cache_service != null and death_cache_service.has_method("durable_snapshot") else {"schema": "player.death_cache.v1", "cache": {}},
 	})
 
 

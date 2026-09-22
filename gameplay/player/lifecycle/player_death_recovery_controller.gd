@@ -12,12 +12,14 @@ const WATER_CLEARANCE: float = 1.5
 var _player
 var _world
 var _world_settings
+var _death_cache = null
+var _respawn_anchor_provider = null
 var _pending: bool = false
 var _pending_reason: StringName = &""
 var _last_diagnostics: Array[String] = []
 
 
-func configure(player_node, surface_world, world_settings) -> Array[String]:
+func configure(player_node, surface_world, world_settings, death_cache_service = null, respawn_anchor_provider = null) -> Array[String]:
 	var failures: Array[String] = []
 	if player_node == null or not player_node.has_method("is_defeated") or not player_node.has_method("commit_respawn"):
 		failures.append("death recovery requires Player defeat/respawn authority")
@@ -34,6 +36,8 @@ func configure(player_node, surface_world, world_settings) -> Array[String]:
 	_player = player_node
 	_world = surface_world
 	_world_settings = world_settings
+	_death_cache = death_cache_service
+	_respawn_anchor_provider = respawn_anchor_provider
 	return []
 
 
@@ -45,6 +49,13 @@ func request_recovery(reason: StringName) -> bool:
 	_pending = true
 	_pending_reason = reason
 	_last_diagnostics.clear()
+	if _death_cache != null and _death_cache.has_method("capture_death"):
+		var cache_result: Dictionary = _death_cache.capture_death(_player.get("global_position"))
+		if not bool(cache_result.get("success", false)):
+			_record_failure(cache_result.get("diagnostics", []))
+			_pending = false
+			_pending_reason = &""
+			return false
 	call_deferred("try_commit_recovery")
 	return true
 
@@ -94,10 +105,15 @@ func resolve_safe_target(current_position: Vector3) -> Dictionary:
 		0.0,
 		float(_world_settings.get("chunk_size")) * 0.5
 	)
-	var attempts: Array[Dictionary] = [
+	var attempts: Array[Dictionary] = []
+	if _respawn_anchor_provider != null and _respawn_anchor_provider.has_method("get_bed_respawn_position"):
+		var bed_position: Variant = _respawn_anchor_provider.call("get_bed_respawn_position")
+		if bed_position is Vector3 and _is_finite_vector3(bed_position):
+			attempts.append({"label": "bed-anchor", "preferred": Vector3(bed_position.x, 0.0, bed_position.z), "fallback": false})
+	attempts.append_array([
 		{"label": "current-xz", "preferred": primary_preferred, "fallback": false},
 		{"label": "initial-spawn", "preferred": fallback_preferred, "fallback": true},
-	]
+	])
 	var failures: Array[String] = []
 	for attempt in attempts:
 		var candidate_variant: Variant = _world.call("find_spawn_xz", attempt["preferred"])

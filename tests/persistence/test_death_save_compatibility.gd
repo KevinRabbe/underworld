@@ -6,6 +6,8 @@ const PendingLootState := preload("res://gameplay/loot/runtime/pending_loot_stat
 const InventoryStateCodec := preload("res://gameplay/items/inventory/inventory_state_codec.gd")
 const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
 const GameSaveSlotService := preload("res://gameplay/persistence/game_save_slot_service.gd")
+const EquipmentService := preload("res://gameplay/items/equipment/equipment_service.gd")
+const AxeDefinition := preload("res://content/items/tools/stone_axe_definition.tres")
 
 const CHITIN_ID := "item.resource.burrower_chitin"
 const PROFILE_ID := "loot_profile.creature.burrower.m3"
@@ -33,7 +35,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var encounter = game.get("encounter_controller")
 	var recovery = game.get("death_recovery_controller")
 	var store = game.get("world_delta_store")
-	if player == null or survival == null or encounter == null or recovery == null or store == null:
+	var death_cache = game.get("death_cache_service")
+	if player == null or survival == null or encounter == null or recovery == null or store == null or death_cache == null:
 		failures.append("DEATH Game composition is missing Player/Survival/encounter/recovery/WorldDelta authority")
 		_free_attached(game)
 		_cleanup_slot()
@@ -70,7 +73,34 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 
 	var inventory = survival.get_inventory_state()
 	var equipment = survival.get_equipment_state()
-	var inventory_before: String = inventory.canonical_json()
+	var cargo_added: Dictionary = inventory.add_stack(chitin, 3, {"death_fixture": true})
+	if not _require_success(cargo_added, "DEATH SAVE cargo fixture", failures):
+		_free_attached(game)
+		_cleanup_slot()
+		return failures
+	var retained_added: Dictionary = inventory.add_instance(AxeDefinition, {"durability": 77})
+	if not _require_success(retained_added, "DEATH SAVE retained-equipment fixture", failures):
+		_free_attached(game)
+		_cleanup_slot()
+		return failures
+	var retained_slot: int = int(retained_added.get("slot", -1))
+	if retained_slot < 0:
+		failures.append("DEATH SAVE retained-equipment fixture omitted source slot")
+		_free_attached(game)
+		_cleanup_slot()
+		return failures
+	var retained_equipped: Dictionary = EquipmentService.new().equip_from_inventory(
+		equipment,
+		inventory,
+		retained_slot,
+		AxeDefinition,
+		GameplaySaveCatalog.SLOT_AXE
+	)
+	if not _require_success(retained_equipped, "DEATH SAVE retained-equipment equip", failures):
+		_free_attached(game)
+		_cleanup_slot()
+		return failures
+	var cargo_before: Dictionary = inventory.canonical_snapshot()
 	var equipment_before: Dictionary = equipment.canonical_snapshot()
 	var world_delta_before: Dictionary = store.snapshot()
 	var pending_before: Dictionary = encounter.get_pending_loot_snapshot(OCCURRENCE_ID)
@@ -87,20 +117,24 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		failures.append("real Game defeat did not arm recovery lifecycle")
 	if player.global_position != old_position:
 		failures.append("real Game defeat teleported Player before recovery commit")
+	var duplicate_capture: Dictionary = death_cache.capture_death(old_position)
+	if not bool(duplicate_capture.get("success", false)) or not bool(duplicate_capture.get("already_captured", false)):
+		failures.append("real Game defeat created more than one death cache")
 
 	# Even if collection is explicitly polled while defeated, Game must suppress it
 	# so death itself cannot consume/duplicate unresolved rewards.
 	game.call("_collect_nearby_pending_loot")
-	_assert_durable_unchanged(
+	_assert_post_death_ownership(
 		inventory,
 		equipment,
+		death_cache,
 		store,
 		encounter,
-		inventory_before,
 		equipment_before,
 		world_delta_before,
 		pending_before,
 		pending_count_before,
+		cargo_before,
 		"while defeated",
 		failures
 	)
@@ -118,16 +152,17 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		var defeated_diagnostics: Array = defeated_request_variant.get("diagnostics", [])
 		if not defeated_diagnostics.has("SAVE runtime snapshot rejects defeated Player"):
 			failures.append("defeated Game SAVE rejection omitted deterministic diagnostic")
-	_assert_durable_unchanged(
+	_assert_post_death_ownership(
 		inventory,
 		equipment,
+		death_cache,
 		store,
 		encounter,
-		inventory_before,
 		equipment_before,
 		world_delta_before,
 		pending_before,
 		pending_count_before,
+		cargo_before,
 		"after rejected defeated SAVE request",
 		failures
 	)
@@ -141,17 +176,18 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		failures.append("real Game recovery left Player defeated")
 	if not _is_finite_vector3(player.global_position):
 		failures.append("real Game recovery committed non-finite Player position")
-	_assert_durable_unchanged(
+	_assert_post_death_ownership(
 		inventory,
 		equipment,
+		death_cache,
 		store,
 		encounter,
-		inventory_before,
 		equipment_before,
 		world_delta_before,
 		pending_before,
 		pending_count_before,
-		"after recovery",
+		cargo_before,
+		"after respawn before cache collection",
 		failures
 	)
 
@@ -209,8 +245,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		var restored_equipment = candidate.get("equipment_state", null)
 		var restored_store = candidate.get("delta_store", null)
 		var restored_pending: Variant = candidate.get("pending_loot_states", null)
-		if restored_inventory == null or restored_inventory.canonical_json() != inventory_before:
-			failures.append("save/load round-trip changed inventory across death")
+		if restored_inventory == null or restored_inventory.occupied_slot_count() != 0:
+			failures.append("save/load round-trip restored cargo to defeated Player before recovery")
 		if restored_equipment == null or restored_equipment.canonical_snapshot() != equipment_before:
 			failures.append("save/load round-trip changed equipment across death")
 		if restored_store == null or restored_store.snapshot() != world_delta_before:
@@ -219,27 +255,147 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			failures.append("save/load round-trip lost unresolved pending loot across death")
 		elif restored_pending[0].canonical_snapshot() != pending_before:
 			failures.append("save/load round-trip changed pending loot across death")
+		var restored_death_cache: Variant = candidate.get("death_cache_state", null)
+		if not restored_death_cache is Dictionary:
+			failures.append("save/load round-trip omitted unresolved death cache")
+		elif bool(restored_death_cache.get("cache", {}).get("collected", true)):
+			failures.append("save/load round-trip prematurely resolved death cache")
+
+	# Exercise the real Continue activation boundary, not only detached codec state.
+	var resumed: Node = packed.instantiate()
+	resumed.set("enable_debug_hud", false)
+	if not bool(resumed.call("prepare_continue", candidate_variant)):
+		failures.append("fresh Game rejected unresolved death-cache Continue candidate")
+		resumed.free()
+		_cleanup_slot()
+		return failures
+	tree.root.add_child(resumed)
+	var resumed_inventory = resumed.get("survival").get_inventory_state()
+	var resumed_equipment = resumed.get("survival").get_equipment_state()
+	var resumed_cache = resumed.get("death_cache_service")
+	if resumed_inventory.occupied_slot_count() != 0:
+		failures.append("Continue resurrected cargo before death-cache recovery")
+	if resumed_equipment.canonical_snapshot() != equipment_before:
+		failures.append("Continue changed retained equipment")
+	if resumed.get("world_delta_store").snapshot() != world_delta_before:
+		failures.append("Continue changed WorldDelta")
+	if resumed.get("encounter_controller").get_pending_loot_snapshot(OCCURRENCE_ID) != pending_before:
+		failures.append("Continue changed pending loot")
+	if resumed_cache == null or not resumed_cache.has_cache():
+		failures.append("Continue lost unresolved death cache")
+
+	var resumed_collected: Dictionary = resumed_cache.collect_cache() if resumed_cache != null else {"success": false}
+	if not bool(resumed_collected.get("success", false)):
+		failures.append("Continue death-cache interaction could not restore cargo")
+	elif resumed_inventory.canonical_snapshot() != cargo_before:
+		failures.append("Continue death-cache interaction did not restore exact cargo")
+	var resumed_duplicate: Dictionary = resumed_cache.collect_cache() if resumed_cache != null else {"success": false}
+	if bool(resumed_duplicate.get("success", false)):
+		failures.append("Continue death-cache interaction restored cargo twice")
+
+	var resumed_request_result: Variant = resumed.call("build_save_request")
+	if not resumed_request_result is Dictionary or not bool(resumed_request_result.get("success", false)):
+		failures.append("post-Continue recovery SAVE request failed")
+	else:
+		var resumed_request: Variant = resumed_request_result.get("request", null)
+		if not resumed_request is Dictionary:
+			failures.append("post-Continue recovery SAVE request omitted payload")
+		else:
+			var resumed_save: Dictionary = service.save_slot(resumed_request_result, TEST_SLOT)
+			var resumed_loaded: Dictionary = service.load_slot(TEST_SLOT)
+			var resumed_candidate: Variant = resumed_loaded.get("candidate", null)
+			if not bool(resumed_save.get("success", false)) or not bool(resumed_loaded.get("success", false)) or not resumed_candidate is Dictionary:
+				failures.append("post-Continue recovery SAVE/LOAD failed")
+			else:
+				var resumed_again: Node = packed.instantiate()
+				resumed_again.set("enable_debug_hud", false)
+				if not bool(resumed_again.call("prepare_continue", resumed_candidate)):
+					failures.append("second Continue rejected resolved death-cache candidate")
+					resumed_again.free()
+				else:
+					tree.root.add_child(resumed_again)
+					var again_cache = resumed_again.get("death_cache_service")
+					var again_inventory = resumed_again.get("survival").get_inventory_state()
+					if again_inventory.canonical_snapshot() != cargo_before:
+						failures.append("second Continue lost or duplicated recovered cargo")
+					if again_cache != null and again_cache.has_cache():
+						failures.append("second Continue resurrected resolved death cache")
+					_free_attached(resumed_again)
+	_free_attached(resumed)
+
+	var collected: Dictionary = death_cache.collect_cache()
+	if not _require_success(collected, "normal death-cache recovery", failures):
+		_free_attached(game)
+		_cleanup_slot()
+		return failures
+	if inventory.canonical_snapshot() != cargo_before:
+		failures.append("normal death-cache recovery did not restore exact cargo")
+	if death_cache.has_cache():
+		failures.append("resolved death cache remained collectible")
+	var recovered_inventory_before_duplicate: Dictionary = inventory.canonical_snapshot()
+	var duplicate_collection: Dictionary = death_cache.collect_cache()
+	if bool(duplicate_collection.get("success", false)):
+		failures.append("resolved death cache restored cargo more than once")
+	if inventory.canonical_snapshot() != recovered_inventory_before_duplicate:
+		failures.append("rejected duplicate death-cache collection mutated Player cargo")
+
+	var recovered_request_variant: Variant = game.call("build_save_request")
+	if not recovered_request_variant is Dictionary or not bool(recovered_request_variant.get("success", false)):
+		failures.append("post-recovery Game could not build accepted SAVE request")
+	else:
+		var recovered_request: Variant = recovered_request_variant.get("request", null)
+		if not recovered_request is Dictionary:
+			failures.append("post-recovery SAVE request omitted detached request payload")
+			_free_attached(game)
+			_cleanup_slot()
+			return failures
+		var recovered_save: Dictionary = service.save_slot(recovered_request_variant, TEST_SLOT)
+		if not _require_success(recovered_save, "post-recovery atomic SAVE", failures):
+			_free_attached(game)
+			_cleanup_slot()
+			return failures
+		var recovered_loaded: Dictionary = service.load_slot(TEST_SLOT)
+		if not _require_success(recovered_loaded, "post-recovery atomic load", failures):
+			_free_attached(game)
+			_cleanup_slot()
+			return failures
+		var recovered_candidate: Variant = recovered_loaded.get("candidate", null)
+		if not recovered_candidate is Dictionary:
+			failures.append("post-recovery slot load did not return detached candidate")
+		else:
+			var recovered_inventory = recovered_candidate.get("inventory_state", null)
+			var recovered_cache: Variant = recovered_candidate.get("death_cache_state", null)
+			if recovered_inventory == null or recovered_inventory.canonical_snapshot() != cargo_before:
+				failures.append("save/continue after recovery lost or duplicated cargo")
+			if not recovered_cache is Dictionary or not bool(recovered_cache.get("cache", {}).get("collected", false)):
+				failures.append("save/continue after recovery resurrected death cache")
 
 	_free_attached(game)
 	_cleanup_slot()
 	return failures
 
 
-static func _assert_durable_unchanged(
+static func _assert_post_death_ownership(
 	inventory,
 	equipment,
+	death_cache,
 	store,
 	encounter,
-	inventory_before: String,
 	equipment_before: Dictionary,
 	world_delta_before: Dictionary,
 	pending_before: Dictionary,
 	pending_count_before: int,
+	cargo_before: Dictionary,
 	label: String,
 	failures: Array[String]
 ) -> void:
-	if inventory.canonical_json() != inventory_before:
-		failures.append("DEATH mutated inventory %s" % label)
+	if inventory.occupied_slot_count() != 0:
+		failures.append("DEATH left cargo in Player inventory %s" % label)
+	var cache_snapshot: Dictionary = death_cache.cache_snapshot()
+	if not death_cache.has_cache():
+		failures.append("DEATH cache is missing unresolved cargo %s" % label)
+	elif cache_snapshot.get("cargo", {}) != cargo_before:
+		failures.append("DEATH cache does not own exact cargo %s" % label)
 	if equipment.canonical_snapshot() != equipment_before:
 		failures.append("DEATH mutated equipment %s" % label)
 	if store.snapshot() != world_delta_before:
