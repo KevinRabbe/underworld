@@ -74,6 +74,93 @@ Do not confuse "definition complete" with source readiness.
 
 Do not confuse "source ready" with milestone acceptance.
 
+## Autonomous mission horizon
+
+The current long-run horizon is **complete Overworld Biome 1**, with final acceptance owned by #499.
+
+The run should traverse this delivery hierarchy continuously:
+
+```text
+PHASE-0 TAIL
+  #539/#433 disposition
+  -> #807/#601
+  -> #663
+  -> #718
+  -> remaining Phase-0 joins
+  -> explicit PHASE-0 EXIT
+
+SERIAL PLAYER SPINE
+  R1   real Inventory visible
+  R1b  real Equip / Unequip / Select
+  R2   real Crafting screen
+  V3a  real Fiber
+  V3b  real Primitive Axe craft/equip/select
+  V3c  real Tree -> durable Wood
+  V4a  Build Tool -> Workbench -> station craft
+  V4b  real shelter -> Continue
+  V5   Skinning Knife -> Boar -> Skinning -> Continue
+
+BIOME-1 CONVERGENCE
+  ordinary resource/world truths
+  home/storage/survival/death truths
+  combat/equipment/progression truths
+  Building breadth/access/maintenance
+  real promoted actors + RP_prod
+  governed Building-pressure values
+  governed worldspace values
+  Skeleton Boss climax/reward
+  ordinary B1 -> B2 traversal
+  mixed Save/Continue
+  presentation/performance evidence
+
+FINAL
+  #499 MEASURE + LOOK + HUMAN fan-in
+  -> explicit Biome-1 acceptance
+```
+
+### Automatic continuation rule
+
+Every terminal task state triggers another scheduling turn:
+
+```text
+packet PASS / merged / accepted
+-> refresh
+-> refill
+
+review PASS
+-> hand PM-only landing step to PM authority
+-> preflight next lawful packet while integration occurs
+-> resume source as soon as accepted dependency exists
+
+REPAIR-REQUIRED
+-> same implementation lane repair/refreeze
+-> same review card rereview
+-> continue
+
+blocked preferred packet
+-> next lawful disjoint packet
+-> or delta-only preflight
+-> continue
+
+player milestone completed
+-> next player milestone
+-> continue
+```
+
+Do not ask the project owner whether to continue when the controlling board already determines the next lawful action.
+
+### What still requires PM/project-owner intervention
+
+Escalate only when existing authority cannot decide the next action, for example:
+
+- a true architecture ownership contradiction;
+- a product choice with multiple still-lawful options and no controlling selection;
+- a governed evidence-selected value whose evidence is complete but selection authority is explicitly human/PM;
+- an irreversible/destructive repository operation not already authorized;
+- a mission/scope change.
+
+Routine review classification, bounded repair, source refill, focused validation, and movement to the next already-defined player truth are not reasons to ask "continue?".
+
 ## Refill algorithm
 
 Whenever a worker finishes or becomes blocked:
