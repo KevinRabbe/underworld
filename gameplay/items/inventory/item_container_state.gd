@@ -311,6 +311,17 @@ func state_at(slot_index: int) -> Dictionary:
 	return _slot_snapshot(slot_index)
 
 
+## Returns the resolved authored definition for presentation/runtime consumers.
+## Serialized state_at/canonical_snapshot intentionally omit resource objects.
+func definition_at(slot_index: int):
+	if slot_index < 0 or slot_index >= _slots.size():
+		return null
+	var slot = _slots[slot_index]
+	if slot == null or not slot is Dictionary:
+		return null
+	return slot.get("definition", null)
+
+
 func resize_capacity(new_slot_capacity: int, new_max_weight: float) -> Dictionary:
 	var failures: Array[String] = validate_container()
 	if new_slot_capacity < 1:

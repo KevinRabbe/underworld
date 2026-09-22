@@ -147,8 +147,9 @@ func _refresh() -> void:
 		button.custom_minimum_size = Vector2(145.0, 58.0)
 		button.focus_mode = Control.FOCUS_ALL
 		var record: Dictionary = _inventory.state_at(index)
-		button.text = _slot_text(index, record)
-		button.disabled = record.is_empty()
+		var definition = _inventory.definition_at(index) if _inventory.has_method("definition_at") else null
+		button.text = _slot_text(index, record, definition)
+		button.disabled = definition == null
 		button.pressed.connect(_on_slot_pressed.bind(index))
 		_grid.add_child(button)
 		_slot_buttons.append(button)
@@ -163,7 +164,7 @@ func _refresh() -> void:
 
 func _on_slot_pressed(source_slot: int) -> void:
 	var record: Dictionary = _inventory.state_at(source_slot)
-	var definition = record.get("definition", null)
+	var definition = _inventory.definition_at(source_slot) if _inventory.has_method("definition_at") else null
 	if definition == null:
 		return
 	for target_slot_key in _equipment.slot_keys():
@@ -177,10 +178,9 @@ func _on_slot_pressed(source_slot: int) -> void:
 	_status_label.text = "Cannot equip %s" % str(definition.content_id)
 
 
-static func _slot_text(index: int, record: Dictionary) -> String:
+static func _slot_text(index: int, record: Dictionary, definition = null) -> String:
 	if record.is_empty():
 		return "%d\nEmpty" % (index + 1)
-	var definition = record.get("definition", null)
 	var state: Dictionary = record.get("state", {})
 	var item_name := str(definition.content_id) if definition != null else "Invalid"
 	var quantity := int(state.get("quantity", 1))

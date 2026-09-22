@@ -92,7 +92,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		if grid != null:
 			for index in range(inventory.slot_capacity()):
 				var record: Dictionary = inventory.state_at(index)
-				var slot_definition = record.get("definition", null)
+				var slot_definition = inventory.definition_at(index) if inventory.has_method("definition_at") else null
 				print("[PLAYTEST DIAG] inventory slot=%d item=%s grid_children=%d capacity=%d" % [index, str(slot_definition.content_id) if slot_definition != null else "<empty>", grid.get_child_count(), inventory.slot_capacity()])
 				if slot_definition != null and str(slot_definition.content_id) == "item.tool.stone_axe":
 					axe_slot = index
