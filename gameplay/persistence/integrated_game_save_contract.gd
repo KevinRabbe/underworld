@@ -34,7 +34,6 @@ const V2_CAPTURE_SOURCE_KEYS: Array[String] = [
 	"resume_position",
 	"world_context",
 	"world_session_state",
-	"death_cache_state",
 ]
 const V2_REQUEST_KEYS: Array[String] = [
 	"equipment_json",
@@ -46,7 +45,6 @@ const V2_REQUEST_KEYS: Array[String] = [
 	"root_identity",
 	"world_seed",
 	"world_session",
-	"death_cache_json",
 ]
 const V2_ROOT_KEYS: Array[String] = [
 	"equipment_json",
@@ -60,7 +58,6 @@ const V2_ROOT_KEYS: Array[String] = [
 	"schema",
 	"world_seed",
 	"world_session",
-	"death_cache_json",
 ]
 const V2_RESUME_KEYS: Array[String] = ["domain", "x", "y", "z"]
 
