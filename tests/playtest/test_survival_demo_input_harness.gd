@@ -6,9 +6,9 @@ extends RefCounted
 ## events through the SceneTree.  Inventory resources are seeded only as a
 ## fixture so the normal inventory/crafting UI can be exercised deterministically.
 ## Some CI hosts cannot instantiate the production 3D scene (notably hosts
-## without the imported SVG/rendering resources).  In that case we report the
-## exact startup blocker and pass the bounded harness rather than replacing it
-## with service-level shortcuts.
+## without the imported SVG/rendering resources). In that case we report the
+## exact startup blocker as BLOCKED; the bounded harness never converts it to
+## PASS and never replaces production input with service-level shortcuts.
 
 const AppRootScene: PackedScene = preload("res://app/app_root.tscn")
 
@@ -16,12 +16,12 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var failures: Array[String] = []
 	var app := AppRootScene.instantiate()
 	if app == null:
-		print("[PLAYTEST INPUT HARNESS] SKIP — production AppRoot could not instantiate (scene/resource limitation)")
+		failures.append("BLOCKED: production AppRoot could not instantiate (scene/resource limitation)")
 		return failures
 	tree.root.add_child(app)
 	await tree.process_frame
 	if not app.has_method("start_new_game") or not bool(app.call("start_new_game")):
-		print("[PLAYTEST INPUT HARNESS] SKIP — production Game startup blocked in this environment (SceneTree/rendering/import limitation)")
+		failures.append("BLOCKED: production Game startup failed (SceneTree/rendering/import limitation)")
 		app.queue_free()
 		await tree.process_frame
 		return failures
@@ -45,6 +45,16 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	_send_key(tree, KEY_W, false)
 	_expect(failures, "W movement input reaches production Player", player.global_position.distance_to(before) > 0.001)
 
+	# Seed an equippable authored item before opening the UI. The Enter assertion
+	# below must prove canonical equipment changed, not merely that a surface lived.
+	var inventory = survival.call("get_inventory_state") if survival != null else null
+	if survival != null and survival.has_method("get_item_definition") and inventory != null:
+		for item_id in ["item.resource.wood", "item.resource.stone", "item.resource.plant_fiber", "item.tool.stone_axe"]:
+			var definition = survival.call("get_item_definition", item_id)
+			if definition != null:
+				var seeded: Dictionary = inventory.call("add_stack", definition, 99) if item_id != "item.tool.stone_axe" else inventory.call("add_instance", definition)
+				_expect(failures, "seed %s for production input" % item_id, bool(seeded.get("success", false)))
+
 	# I is handled by the production InventorySurface and owns input capture.
 	await _tap_key(tree, KEY_I)
 	var inventory_surface = game.get("inventory_surface")
@@ -55,25 +65,34 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		await _tap_key(tree, KEY_I)
 		_expect(failures, "I reopens production inventory surface", bool(inventory_surface.call("is_open")))
 
-	# Seed canonical items, then exercise real slot selection/equip via UI focus.
-	if survival != null and survival.has_method("get_item_definition"):
-		var inventory = survival.call("get_inventory_state")
-		for item_id in ["item.resource.wood", "item.resource.stone", "item.resource.plant_fiber"]:
-			var definition = survival.call("get_item_definition", item_id)
-			if definition != null and inventory != null:
-				inventory.call("add_stack", definition, 99)
-		if inventory_surface != null:
-			var grid = inventory_surface.get_node_or_null("InventorySurface/InventoryPanel/MarginContainer/VBoxContainer/GridContainer")
-			if grid != null and grid.get_child_count() > 0:
-				(grid.get_child(0) as Control).grab_focus()
-				await _tap_key(tree, KEY_ENTER)
-				_expect(failures, "inventory slot selection routes to production equip", survival.call("get_equipment_state") != null)
+	# Exercise real slot selection/equip via UI focus and prove canonical state changed.
+	if survival != null and inventory_surface != null:
+		var equipment = survival.call("get_equipment_state")
+		var equipment_before: String = equipment.canonical_json() if equipment != null else ""
+		var grid = inventory_surface.get_node_or_null("InventorySurface/InventoryPanel/MarginContainer/VBoxContainer/GridContainer")
+		var axe_slot := -1
+		if grid != null:
+			for index in range(inventory.slot_capacity()):
+				var record: Dictionary = inventory.state_at(index)
+				var slot_definition = record.get("definition", null)
+				if slot_definition != null and str(slot_definition.content_id) == "item.tool.stone_axe":
+					axe_slot = index
+					break
+		if axe_slot >= 0 and grid != null and axe_slot < grid.get_child_count():
+			(grid.get_child(axe_slot) as Control).grab_focus()
+			await _tap_key(tree, KEY_ENTER)
+			var equipment_after: String = equipment.canonical_json() if equipment != null else ""
+			_expect(failures, "inventory Enter selects/equips authored tool", axe_slot >= 0 and equipment_after != equipment_before and equipment.selected_definition() != null)
+		else:
+			failures.append("inventory Enter could not locate seeded authored tool slot")
 		# Release the inventory capture before exercising the next modal surface.
 		await _tap_key(tree, KEY_I)
 		await tree.physics_frame
 		await tree.physics_frame
 
 	# C opens the real crafting screen; its first recipe is activated by Enter.
+	var crafting_inventory_before: String = inventory.canonical_json() if inventory != null else ""
+	var crafting_equipment_before: String = survival.call("get_equipment_state").canonical_json() if survival != null else ""
 	var crafting_ui = game.get("crafting_ui")
 	await _tap_key(tree, KEY_C)
 	_expect(failures, "C opens production crafting surface", crafting_ui != null and bool(crafting_ui.call("is_open")))
@@ -82,6 +101,15 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		if recipe_list != null and recipe_list.get_child_count() > 0:
 			(recipe_list.get_child(0) as Control).grab_focus()
 			await _tap_key(tree, KEY_ENTER)
+			await tree.process_frame
+			var weapon_session = game.get_node_or_null("WeaponRuntimeSession")
+			var craft_result: Dictionary = weapon_session.call("last_result") if weapon_session != null else {}
+			var crafting_inventory_after: String = inventory.canonical_json() if inventory != null else ""
+			var crafting_equipment_after: String = survival.call("get_equipment_state").canonical_json() if survival != null else ""
+			_expect(failures, "crafting Enter reports successful recipe transaction", bool(craft_result.get("success", false)) and bool(craft_result.get("craft_succeeded", false)))
+			_expect(failures, "crafting Enter changes material/equipment state", crafting_inventory_after != crafting_inventory_before or crafting_equipment_after != crafting_equipment_before)
+		else:
+			failures.append("crafting surface exposed no recipe button for Enter")
 		_expect(failures, "crafting UI remains live after craft/equip input", crafting_ui.has_method("render_snapshot"))
 	# CraftingScreen owns C close; Escape is intentionally not its shortcut.
 	if crafting_ui != null and bool(crafting_ui.call("is_open")):
@@ -109,6 +137,10 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	# B/G/LMB traverse the production build/workbench/placement input path.
 	await _tap_key(tree, KEY_B)
 	_expect(failures, "B activates production build tool", player.get("build_tool_active") == true)
+	var building_runtime = survival.call("get_building_runtime") if survival != null else null
+	var building_before: Dictionary = building_runtime.durable_snapshot() if building_runtime != null else {}
+	var wood_before: int = inventory.quantity_of("item.resource.wood") if inventory != null else -1
+	var stone_before: int = inventory.quantity_of("item.resource.stone") if inventory != null else -1
 	await _tap_key(tree, KEY_G)
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
@@ -117,18 +149,26 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	await tree.process_frame
 	await tree.physics_frame
 	await tree.physics_frame
-	_expect(failures, "G/LMB building path reaches composed Survival", survival != null and survival.has_method("get_building_runtime"))
+	var building_after: Dictionary = building_runtime.durable_snapshot() if building_runtime != null else {}
+	var placed: Array = building_after.get("placed_shelters", [])
+	_expect(failures, "G uses the live workbench", bool(building_after.get("workbench_used", false)) and not bool(building_before.get("workbench_used", false)))
+	_expect(failures, "G/LMB places authored shelter and consumes materials", placed.size() > int(building_before.get("placed_shelters", []).size()) and inventory.quantity_of("item.resource.wood") == wood_before - 4 and inventory.quantity_of("item.resource.stone") == stone_before - 2)
 
 	# Durable save/continue uses the application boundary and the production snapshot.
 	if app.has_method("save_current_game"):
 		var save_result: Dictionary = app.call("save_current_game")
 		if not bool(save_result.get("success", false)):
-			print("[PLAYTEST INPUT HARNESS] save diagnostics: %s" % [save_result.get("diagnostics", [])])
+			failures.append("SAVE BLOCKED: save_current_game diagnostics=%s" % [save_result.get("diagnostics", [])])
 		_expect(failures, "production save returns success", bool(save_result.get("success", false)))
-		if bool(save_result.get("success", false)) and app.has_method("show_title"):
-			app.call("show_title")
-			await tree.process_frame
-			_expect(failures, "production continue route restores after save", bool(app.call("continue_game")))
+		if bool(save_result.get("success", false)):
+			if not app.has_method("show_title") or not app.has_method("continue_game"):
+				failures.append("SAVE BLOCKED: successful save has no mandatory title/continue route")
+			else:
+				_expect(failures, "production title route is reachable after save", bool(app.call("show_title")))
+				await tree.process_frame
+				_expect(failures, "production continue route restores after save", bool(app.call("continue_game")))
+	else:
+		failures.append("SAVE BLOCKED: AppRoot does not expose mandatory save_current_game")
 
 	app.queue_free()
 	await tree.process_frame

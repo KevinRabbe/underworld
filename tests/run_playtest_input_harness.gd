@@ -11,7 +11,11 @@ func _run() -> void:
 		print("[PLAYTEST INPUT HARNESS] PASS — production movement / inventory / equip / craft / build input and save boundary exercised")
 		quit(0)
 		return
-	printerr("[PLAYTEST INPUT HARNESS] FAIL — %d failure(s)" % failures.size())
+	var blocked := false
+	for failure in failures:
+		if failure.begins_with("BLOCKED:") or failure.begins_with("SAVE BLOCKED:"):
+			blocked = true
+	printerr("[PLAYTEST INPUT HARNESS] %s — %d issue(s)" % ["BLOCKED" if blocked else "FAIL", failures.size()])
 	for failure in failures:
 		printerr("  - " + failure)
-	quit(1)
+	quit(2 if blocked else 1)
