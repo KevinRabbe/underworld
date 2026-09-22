@@ -129,6 +129,12 @@ func _ensure_ui() -> void:
 
 
 func _refresh() -> void:
+	# Survival may finish deferred runtime composition after this surface was
+	# configured. Rebind presentation references before reading slot state so the
+	# UI always reflects the canonical containers owned by Survival.
+	if _survival != null and is_instance_valid(_survival):
+		_inventory = _survival.call("get_inventory_state") if _survival.has_method("get_inventory_state") else _inventory
+		_equipment = _survival.call("get_equipment_state") if _survival.has_method("get_equipment_state") else _equipment
 	if _grid == null or _inventory == null or _equipment == null:
 		return
 	for button in _slot_buttons:
