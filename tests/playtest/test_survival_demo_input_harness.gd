@@ -63,9 +63,15 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	if survival != null and survival.has_method("get_item_definition") and inventory != null:
 		for item_id in ["item.resource.wood", "item.resource.stone", "item.resource.plant_fiber", "item.tool.stone_axe"]:
 			var definition = survival.call("get_item_definition", item_id)
+			if definition == null:
+				failures.append("seed definition unavailable: %s" % item_id)
+				print("[PLAYTEST DIAG] missing survival item definition=%s" % item_id)
+				continue
 			if definition != null:
 				var seeded: Dictionary = inventory.call("add_stack", definition, 99) if item_id != "item.tool.stone_axe" else inventory.call("add_instance", definition)
+				print("[PLAYTEST DIAG] seed item=%s result=%s" % [item_id, str(seeded)])
 				_expect(failures, "seed %s for production input" % item_id, bool(seeded.get("success", false)))
+		print("[PLAYTEST DIAG] seeded canonical inventory=%s" % inventory.canonical_json())
 
 	# I is handled by the production InventorySurface and owns input capture.
 	await _tap_key(tree, KEY_I)
