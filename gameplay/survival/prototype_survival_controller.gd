@@ -391,6 +391,8 @@ func equip_inventory_slot(source_slot: int, target_slot_key: String) -> Dictiona
 		return {"success": false, "diagnostics": ["survival equipment state is unavailable"]}
 	var source_record: Dictionary = _inventory.state_at(source_slot)
 	var definition = source_record.get("definition", null)
+	if definition == null and _inventory.has_method("definition_at"):
+		definition = _inventory.definition_at(source_slot)
 	if definition == null:
 		return {"success": false, "diagnostics": ["inventory slot is empty"]}
 	var result: Dictionary = _equipment_service.equip_from_inventory(
