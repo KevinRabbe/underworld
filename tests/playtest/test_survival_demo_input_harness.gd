@@ -68,7 +68,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 				print("[PLAYTEST DIAG] missing survival item definition=%s" % item_id)
 				continue
 			if definition != null:
-				var seeded: Dictionary = inventory.call("add_stack", definition, 99) if item_id != "item.tool.stone_axe" else inventory.call("add_instance", definition)
+				var seed_quantity: int = 1 if item_id == "item.resource.plant_fiber" else 99
+				var seeded: Dictionary = inventory.call("add_stack", definition, seed_quantity) if item_id != "item.tool.stone_axe" else inventory.call("add_instance", definition)
 				print("[PLAYTEST DIAG] seed item=%s result=%s" % [item_id, str(seeded)])
 				_expect(failures, "seed %s for production input" % item_id, bool(seeded.get("success", false)))
 		print("[PLAYTEST DIAG] seeded canonical inventory=%s" % inventory.canonical_json())
