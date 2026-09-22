@@ -284,7 +284,12 @@ static func _test_v2_building_continue_contract(failures: Array[String]) -> void
 		failures.append("building Continue activation did not restore active tool and shelter")
 	var shelter_node: Node = runtime.get_node_or_null("building.shelter.basic.001")
 	if shelter_node == null or shelter_node.global_position != placed_record["position"]:
-		failures.append("building Continue activation did not realize shelter at saved position")
+		failures.append(
+			"building Continue activation did not realize shelter at saved position actual=%s expected=%s" % [
+				"<missing>" if shelter_node == null else str(shelter_node.global_position),
+				str(placed_record["position"]),
+			]
+		)
 	runtime.free()
 	player.free()
 
