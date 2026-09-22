@@ -54,6 +54,14 @@ static func run() -> Array[String]:
 		failures.append("cache collection did not restore cargo exactly once")
 	if bool(service.collect_cache().get("success", false)):
 		failures.append("collected cache was collectible twice")
+	var malformed_inventory := ItemContainerState.new().configure(8)
+	malformed_inventory.add_stack(WoodDefinition, 2)
+	var malformed_service = DeathCacheService.new().configure(malformed_inventory, FakeEquipment.new(), [WoodDefinition])
+	malformed_service.capture_death(Vector3(1.0, 2.0, 3.0))
+	var malformed_snapshot: Dictionary = malformed_service.durable_snapshot()
+	malformed_snapshot["cache"]["cargo"]["slots"].append({"slot": 99, "kind": "stack", "state": {"item_id": "missing", "quantity": 1, "stack_state": {}}})
+	var malformed_restore := DeathCacheService.new().configure(malformed_inventory, FakeEquipment.new(), [WoodDefinition])
+	_expect_failure(failures, "malformed death cache hydration fails closed", malformed_restore.restore_durable_snapshot(malformed_snapshot))
 	var restored = DeathCacheService.new().configure(inventory, FakeEquipment.new(), [WoodDefinition])
 	if not bool(restored.restore_durable_snapshot(service.durable_snapshot()).get("success", false)):
 		failures.append("death cache durable state did not restore")
@@ -68,3 +76,7 @@ static func run() -> Array[String]:
 			failures.append("bed respawn anchor was not preferred by death recovery")
 	controller.free()
 	return failures
+
+static func _expect_failure(failures: Array[String], label: String, result: Dictionary) -> void:
+	if bool(result.get("success", false)):
+		failures.append(label)

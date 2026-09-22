@@ -628,12 +628,9 @@ func get_item_definitions() -> Array:
 
 
 func get_bed_respawn_position() -> Vector3:
-	if _building_runtime == null or not _building_runtime.has_method("placed_shelters"):
+	if _building_runtime == null or not _building_runtime.has_method("get_claimed_bed_respawn_position"):
 		return Vector3(NAN, NAN, NAN)
-	var shelters: Array = _building_runtime.placed_shelters()
-	if shelters.is_empty():
-		return Vector3(NAN, NAN, NAN)
-	var position: Variant = shelters[0].get("position", Vector3(NAN, NAN, NAN))
+	var position: Variant = _building_runtime.get_claimed_bed_respawn_position()
 	return position if position is Vector3 else Vector3(NAN, NAN, NAN)
 
 

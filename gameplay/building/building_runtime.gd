@@ -55,12 +55,22 @@ func placed_chests() -> Array[Dictionary]:
 func store_in_chest(stable_id: String, item_id: String, quantity: int) -> Dictionary:
 	if quantity <= 0 or item_id.is_empty():
 		return _failure("chest storage requires positive quantity and item id")
+	if _inventory == null or not _inventory.has_method("quantity_of") or not _inventory.has_method("remove_stack"):
+		return _failure("chest storage requires canonical player inventory")
 	for chest in _placed_chests:
 		if str(chest.get("stable_id", "")) == stable_id:
-			var contents: Dictionary = chest.get("contents", {})
-			contents[item_id] = int(contents.get(item_id, 0)) + quantity
-			chest["contents"] = contents
-			return {"success": true, "stable_id": stable_id, "contents": contents.duplicate(true), "diagnostics": []}
+		var definition = _definitions.get(item_id, null)
+		if definition == null or not definition is ItemDefinition:
+			return _failure("chest storage item definition is not owned/canonical: %s" % item_id)
+		if _inventory.quantity_of(item_id) < quantity:
+			return _failure("player does not own requested chest quantity: %s" % item_id)
+		var removed: Dictionary = _inventory.remove_stack(item_id, quantity)
+		if not bool(removed.get("success", false)):
+			return _failure("chest storage inventory removal failed: %s" % [removed.get("diagnostics", [])])
+		var contents: Dictionary = chest.get("contents", {})
+		contents[item_id] = int(contents.get(item_id, 0)) + quantity
+		chest["contents"] = contents
+		return {"success": true, "stable_id": stable_id, "contents": contents.duplicate(true), "diagnostics": []}
 	return _failure("unknown chest stable id: %s" % stable_id)
 
 func chest_contents(stable_id: String) -> Dictionary:
@@ -131,8 +141,21 @@ static func validate_durable_snapshot(snapshot: Dictionary) -> Array[String]:
 				continue
 			var shelter: Dictionary = record
 			if str(shelter.get("building_id", "")) == BUILDING_BED_ID:
-				if not shelter.has("stable_id") or not shelter.get("position", null) is Vector3 or not _is_finite_vector3(shelter.position):
-					failures.append("building snapshot bed %d has invalid identity/position" % index)
+				var bed_keys: Array[String] = []
+				for key in shelter.keys(): bed_keys.append(str(key))
+				bed_keys.sort()
+				if bed_keys != ["building_id", "position", "stable_id", "stone", "wood"]:
+					failures.append("building snapshot bed %d keys are invalid" % index)
+				var bed_id_variant: Variant = shelter.get("stable_id", null)
+				var bed_id := str(bed_id_variant)
+				var bed_suffix := bed_id.trim_prefix("building.bed.basic.")
+				if typeof(bed_id_variant) != TYPE_STRING or not bed_id.begins_with("building.bed.basic.") or not bed_suffix.is_valid_int() or int(bed_suffix) <= 0 or bed_id != "building.bed.basic.%03d" % int(bed_suffix) or seen.has(bed_id):
+					failures.append("building snapshot bed %d has duplicate/invalid stable_id" % index)
+				seen[bed_id] = true
+				if not shelter.get("position", null) is Vector3 or not _is_finite_vector3(shelter.position):
+					failures.append("building snapshot bed %d position must be finite Vector3" % index)
+				if typeof(shelter.get("wood", null)) != TYPE_INT or int(shelter.get("wood")) != 0 or typeof(shelter.get("stone", null)) != TYPE_INT or int(shelter.get("stone")) != 0:
+					failures.append("building snapshot bed %d materials must be canonical zero integers" % index)
 				continue
 			var record_keys: Array[String] = []
 			for key in shelter.keys():
@@ -186,10 +209,32 @@ static func validate_durable_snapshot(snapshot: Dictionary) -> Array[String]:
 				failures.append("building snapshot chest %d keys are invalid" % index)
 			if str(chest.get("building_id", "")) != BUILDING_CHEST_ID:
 				failures.append("building snapshot chest %d building_id is not canonical" % index)
+			var chest_id_variant: Variant = chest.get("stable_id", null)
+			var chest_id := str(chest_id_variant)
+			var chest_suffix := chest_id.trim_prefix("building.chest.basic.")
+			if typeof(chest_id_variant) != TYPE_STRING or not chest_id.begins_with("building.chest.basic.") or not chest_suffix.is_valid_int() or int(chest_suffix) <= 0 or chest_id != "building.chest.basic.%03d" % int(chest_suffix):
+				failures.append("building snapshot chest %d stable_id is not canonical" % index)
+			var contents: Variant = chest.get("contents", null)
+			if not contents is Dictionary:
+				failures.append("building snapshot chest %d contents must be Dictionary" % index)
+			else:
+				for item_id in contents.keys():
+					if typeof(item_id) != TYPE_STRING or typeof(contents[item_id]) != TYPE_INT or int(contents[item_id]) <= 0:
+						failures.append("building snapshot chest %d contents are malformed" % index)
 			if not chest.get("position", null) is Vector3 or not _is_finite_vector3(chest.position):
 				failures.append("building snapshot chest %d position must be finite Vector3" % index)
 	if typeof(snapshot.get("claimed_bed_stable_id", null)) != TYPE_STRING:
 		failures.append("building snapshot claimed_bed_stable_id must be String")
+	else:
+		var claimed := str(snapshot.get("claimed_bed_stable_id", ""))
+		if not claimed.is_empty():
+			var claim_found := false
+			if shelters is Array:
+				for raw_bed in shelters:
+					if raw_bed is Dictionary and str(raw_bed.get("building_id", "")) == BUILDING_BED_ID and str(raw_bed.get("stable_id", "")) == claimed:
+						claim_found = true
+			if not claim_found:
+				failures.append("building snapshot claimed_bed_stable_id must reference a placed bed")
 	if str(snapshot.get("selected_building_id", "")) not in [BUILDING_SHELTER_ID, BUILDING_CHEST_ID, BUILDING_BED_ID]:
 		failures.append("building snapshot selected_building_id is not canonical")
 	return failures
@@ -301,16 +346,39 @@ func place_shelter_at(position: Vector3) -> Dictionary:
 	}
 
 func _place_chest_at(position: Vector3) -> Dictionary:
+	var admission := _validate_placement_admission(position)
+	if not admission.is_empty():
+		return _failure(admission)
 	var record := {"building_id": BUILDING_CHEST_ID, "stable_id": "building.chest.basic.%03d" % (_placed_chests.size() + 1), "position": position, "contents": {}}
 	_placed_chests.append(record)
 	_realize_chest(record)
 	return {"success": true, "building_id": BUILDING_CHEST_ID, "stable_id": record.stable_id, "position": position, "diagnostics": []}
 
 func _place_bed_at(position: Vector3) -> Dictionary:
+	var admission := _validate_placement_admission(position)
+	if not admission.is_empty():
+		return _failure(admission)
 	var record := {"building_id": BUILDING_BED_ID, "stable_id": "building.bed.basic.%03d" % (_placed_shelters.size() + 1), "position": position, "wood": 0, "stone": 0}
 	_placed_shelters.append(record)
 	_realize_shelter(record)
 	return {"success": true, "building_id": BUILDING_BED_ID, "stable_id": record.stable_id, "position": position, "diagnostics": []}
+
+func get_claimed_bed_respawn_position() -> Variant:
+	if _claimed_bed_stable_id.is_empty():
+		return null
+	for bed in _placed_shelters:
+		if str(bed.get("building_id", "")) == BUILDING_BED_ID and str(bed.get("stable_id", "")) == _claimed_bed_stable_id:
+			var position: Variant = bed.get("position", null)
+			return position if position is Vector3 and _is_finite_vector3(position) else null
+	return null
+
+func _validate_placement_admission(position: Vector3) -> Array[String]:
+	var failures: Array[String] = []
+	if not _build_tool_active or not _workbench_used:
+		failures.append("use the workbench before selecting a building piece")
+	if not _is_finite_vector3(position):
+		failures.append("building placement position is not finite")
+	return failures
 
 func _ensure_workbench() -> void:
 	if _workbench != null or _player == null:
