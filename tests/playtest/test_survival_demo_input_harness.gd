@@ -279,6 +279,13 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	_expect(failures, "G/LMB places authored shelter and consumes materials", placed.size() > int(building_before.get("placed_shelters", []).size()) and inventory.quantity_of("item.resource.wood") == wood_before - 4 and inventory.quantity_of("item.resource.stone") == stone_before - 2)
 
 	# Durable save/continue uses the application boundary and the production snapshot.
+	var inventory_before_save: String = inventory.canonical_json()
+	var equipment_before_save: String = survival.call("get_equipment_state").canonical_json()
+	var building_before_save: Dictionary = building_after.duplicate(true)
+	var world_delta_before_save: Dictionary = {}
+	var world_delta = game.get("world_delta_store")
+	if world_delta != null and world_delta.has_method("snapshot"):
+		world_delta_before_save = world_delta.call("snapshot")
 	if app.has_method("save_current_game"):
 		var save_result: Dictionary = app.call("save_current_game")
 		if not bool(save_result.get("success", false)):
@@ -290,7 +297,21 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			else:
 				_expect(failures, "production title route is reachable after save", bool(app.call("show_title")))
 				await tree.process_frame
-				_expect(failures, "production continue route restores after save", bool(app.call("continue_game")))
+				var continued := bool(app.call("continue_game"))
+				_expect(failures, "production continue route restores after save", continued)
+				if continued:
+					await _wait_frames(tree, 4)
+					var restored_game = app.get("current_scene")
+					var restored_survival = restored_game.get("survival") if restored_game != null else null
+					var restored_inventory = restored_survival.call("get_inventory_state") if restored_survival != null else null
+					var restored_equipment = restored_survival.call("get_equipment_state") if restored_survival != null else null
+					var restored_building = restored_survival.call("get_building_runtime") if restored_survival != null else null
+					_expect(failures, "Continue restores canonical inventory", restored_inventory != null and restored_inventory.canonical_json() == inventory_before_save)
+					_expect(failures, "Continue restores selected equipment", restored_equipment != null and restored_equipment.canonical_json() == equipment_before_save)
+					_expect(failures, "Continue restores workbench and shelter state", restored_building != null and restored_building.durable_snapshot() == building_before_save)
+					var restored_delta = restored_game.get("world_delta_store") if restored_game != null else null
+					if not world_delta_before_save.is_empty() and restored_delta != null and restored_delta.has_method("snapshot"):
+						_expect(failures, "Continue restores world deltas", restored_delta.call("snapshot") == world_delta_before_save)
 	else:
 		failures.append("SAVE BLOCKED: AppRoot does not expose mandatory save_current_game")
 
