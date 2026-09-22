@@ -160,13 +160,13 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	for candidate in game.find_children("*", "StaticBody3D", true, false):
 		if not candidate.has_meta("world_object_type") or str(candidate.get_meta("world_object_type")) != "tree":
 			continue
-		var distance := player.global_position.distance_to(candidate.global_position)
+		var distance: float = player.global_position.distance_to(candidate.global_position)
 		if distance < tree_distance:
 			tree_body = candidate as StaticBody3D
 			tree_distance = distance
 			tree_object_id = str(candidate.get_meta("world_object_id"))
 	if tree_body != null:
-		var target_direction := tree_body.global_position - player.global_position
+		var target_direction: Vector3 = tree_body.global_position - player.global_position
 		target_direction.y = 0.0
 		var camera_yaw = player.get("camera_yaw")
 		if camera_yaw != null and not target_direction.is_zero_approx():
