@@ -3,6 +3,7 @@ extends RefCounted
 const MapSerializationContract := preload("res://worldgen/persistence/map_data_serialization_contract.gd")
 const TypedJsonWire := preload("res://worldgen/persistence/typed_json_wire.gd")
 const WorldGenerationContext := preload("res://worldgen/pipeline/world_generation_context.gd")
+const GeneratorManifest := preload("res://worldgen/versioning/generator_manifest.gd")
 const GameplayStateCodec := preload("res://gameplay/persistence/gameplay_state_codec.gd")
 const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
 
@@ -18,6 +19,33 @@ const ROOT_KEYS: Array[String] = [
 	"schema",
 ]
 const RESUME_KEYS: Array[String] = ["x", "y", "z"]
+const GATEWAY_AWARE_MANIFEST_ID: String = "gm-sha256:cb5674049cfdb0c0f6291c35fbc85382cddf4707bfbd2531d669f78b6e35471e"
+const GATEWAY_AWARE_MANIFEST_CANONICAL: String = "gm1|15:manifest-schema|1:1|11:seed-schema|1:1|21:stable-address-schema|1:1|16:surface-contract|1:2|19:underworld-contract|1:1|19:provenance-contract|1:1|11:stage-count|2:10|5:stage|18:entrance_selection|1:1|5:stage|24:gateway.destination_site|1:1|5:stage|12:gateway.link|1:1|5:stage|19:gateway.source_site|1:1|5:stage|20:geometry_description|1:1|5:stage|12:macro_region|1:1|5:stage|16:primary_topology|1:1|5:stage|19:region_finalization|1:1|5:stage|22:secondary_connectivity|1:1|5:stage|22:special_location_hooks|1:1|13:profile-count|1:1|7:profile|13:depth_grammar|1:1|12:domain-count|2:29|6:domain|8:00010001|1:1|19:surface.tree.exists|6:domain|8:00010002|1:1|19:surface.tree.offset|6:domain|8:00010003|1:1|18:surface.tree.shape|6:domain|8:00010101|1:1|19:surface.rock.exists|6:domain|8:00010102|1:1|19:surface.rock.offset|6:domain|8:00010103|1:1|18:surface.rock.shape|6:domain|8:00010201|1:1|28:surface.pickup.branch.exists|6:domain|8:00010202|1:1|27:surface.pickup.branch.shape|6:domain|8:00010211|1:1|33:surface.pickup.loose_stone.exists|6:domain|8:00010212|1:1|32:surface.pickup.loose_stone.shape|6:domain|8:00020001|1:1|16:ug.region.layout|6:domain|8:00020101|1:1|17:ug.network.exists|6:domain|8:00020102|1:1|19:ug.network.topology|6:domain|8:00020200|1:1|14:ug.node.exists|6:domain|8:00020201|1:1|16:ug.node.position|6:domain|8:00020202|1:1|13:ug.node.shape|6:domain|8:00020203|1:1|15:ug.node.profile|6:domain|8:00020211|1:1|24:ug.primary_edge.topology|6:domain|8:00020301|1:1|21:ug.entrance.selection|6:domain|8:00020302|1:1|19:ug.entrance.profile|6:domain|8:00020303|1:1|19:ug.entrance.surface|6:domain|8:00020304|1:1|20:ug.entrance.geometry|6:domain|8:00020401|1:1|19:ug.secondary.exists|6:domain|8:00020402|1:1|18:ug.secondary.shape|6:domain|8:00020501|1:1|17:ug.special.exists|6:domain|8:00020601|1:1|17:ug.geometry.shape|6:domain|8:00030001|1:1|29:gateway.overworld.source_site|6:domain|8:00030101|1:1|35:gateway.underworld.destination_site|6:domain|8:00030201|1:1|20:gateway.link.pairing"
+const PRE_GATEWAY_MANIFEST_ID: String = "gm-sha256:c3fb0a2e53be0593b588a6f9b375d087886ab55111b9ca1a78a5c09bf99a302f"
+const PRE_GATEWAY_MANIFEST_CANONICAL: String = "gm1|15:manifest-schema|1:1|11:seed-schema|1:1|21:stable-address-schema|1:1|16:surface-contract|1:2|19:underworld-contract|1:1|19:provenance-contract|1:1|11:stage-count|1:7|5:stage|18:entrance_selection|1:1|5:stage|20:geometry_description|1:1|5:stage|12:macro_region|1:1|5:stage|16:primary_topology|1:1|5:stage|19:region_finalization|1:1|5:stage|22:secondary_connectivity|1:1|5:stage|22:special_location_hooks|1:1|13:profile-count|1:1|7:profile|13:depth_grammar|1:1|12:domain-count|2:26|6:domain|8:00010001|1:1|19:surface.tree.exists|6:domain|8:00010002|1:1|19:surface.tree.offset|6:domain|8:00010003|1:1|18:surface.tree.shape|6:domain|8:00010101|1:1|19:surface.rock.exists|6:domain|8:00010102|1:1|19:surface.rock.offset|6:domain|8:00010103|1:1|18:surface.rock.shape|6:domain|8:00010201|1:1|28:surface.pickup.branch.exists|6:domain|8:00010202|1:1|27:surface.pickup.branch.shape|6:domain|8:00010211|1:1|33:surface.pickup.loose_stone.exists|6:domain|8:00010212|1:1|32:surface.pickup.loose_stone.shape|6:domain|8:00020001|1:1|16:ug.region.layout|6:domain|8:00020101|1:1|17:ug.network.exists|6:domain|8:00020102|1:1|19:ug.network.topology|6:domain|8:00020200|1:1|14:ug.node.exists|6:domain|8:00020201|1:1|16:ug.node.position|6:domain|8:00020202|1:1|13:ug.node.shape|6:domain|8:00020203|1:1|15:ug.node.profile|6:domain|8:00020211|1:1|24:ug.primary_edge.topology|6:domain|8:00020301|1:1|21:ug.entrance.selection|6:domain|8:00020302|1:1|19:ug.entrance.profile|6:domain|8:00020303|1:1|19:ug.entrance.surface|6:domain|8:00020304|1:1|20:ug.entrance.geometry|6:domain|8:00020401|1:1|19:ug.secondary.exists|6:domain|8:00020402|1:1|18:ug.secondary.shape|6:domain|8:00020501|1:1|17:ug.special.exists|6:domain|8:00020601|1:1|17:ug.geometry.shape"
+
+const GATEWAY_STAGE_REVISIONS: Dictionary = {
+	"gateway.source_site": 1,
+	"gateway.destination_site": 1,
+	"gateway.link": 1,
+}
+const GATEWAY_SEED_DOMAINS: Array[Dictionary] = [
+	{
+		"domain_id": 0x030001,
+		"revision": 1,
+		"readable_name": "gateway.overworld.source_site",
+	},
+	{
+		"domain_id": 0x030101,
+		"revision": 1,
+		"readable_name": "gateway.underworld.destination_site",
+	},
+	{
+		"domain_id": 0x030201,
+		"revision": 1,
+		"readable_name": "gateway.link.pairing",
+	},
+]
 
 
 static func encode(
@@ -205,12 +233,14 @@ static func decode(json_text: String) -> Dictionary:
 	if not bool(resume_result.get("success", false)):
 		return resume_result
 	var world_seed: int = int(str(world_header.get("world_seed", "0")))
-	var current_context = WorldGenerationContext.new(world_seed)
+	var compatible_context = _world_context_for_supported_header(world_header)
+	if compatible_context == null:
+		return _failure(["integrated save world header lost compatibility after validation"])
 	return {
 		"success": true,
 		"envelope": envelope.duplicate(true),
 		"candidate": {
-			"world_context": current_context,
+			"world_context": compatible_context,
 			"world_seed": world_seed,
 			"world_id": str(world_header.get("world_id", "")),
 			"delta_store": loaded_map.get("delta_store", null),
@@ -291,12 +321,98 @@ static func _validate_current_world_compatibility(world_header: Dictionary) -> A
 	var current_header: Dictionary = context.canonical_header()
 	if str(world_header.get("world_id", "")) != str(current_header.get("world_id", "")):
 		failures.append("integrated save WorldId is incompatible with current world context")
-	if str(world_header.get("generator_manifest_id", "")) != str(current_header.get("generator_manifest_id", "")):
+	if _world_context_for_supported_header(world_header, false) == null:
 		failures.append("integrated save generator manifest id is incompatible with current runtime")
-	if str(world_header.get("generator_manifest_canonical", "")) != str(current_header.get("generator_manifest_canonical", "")):
 		failures.append("integrated save generator manifest contract is incompatible with current runtime")
 	failures.sort()
 	return failures
+
+
+static func _world_context_for_supported_header(
+	world_header: Dictionary,
+	require_world_id_match: bool = true
+):
+	var seed_text: String = str(world_header.get("world_seed", ""))
+	if seed_text.is_empty() or not seed_text.is_valid_int():
+		return null
+	var world_seed: int = int(seed_text)
+	var current_context = WorldGenerationContext.new(world_seed)
+	if not current_context.validate().is_empty():
+		return null
+	if (
+		require_world_id_match
+		and str(world_header.get("world_id", "")) != current_context.world_id
+	):
+		return null
+
+	var manifest_id: String = str(world_header.get("generator_manifest_id", ""))
+	var manifest_canonical: String = str(
+		world_header.get("generator_manifest_canonical", "")
+	)
+	var include_gateway: bool
+	if (
+		manifest_id == GATEWAY_AWARE_MANIFEST_ID
+		and manifest_canonical == GATEWAY_AWARE_MANIFEST_CANONICAL
+	):
+		include_gateway = true
+	elif (
+		manifest_id == PRE_GATEWAY_MANIFEST_ID
+		and manifest_canonical == PRE_GATEWAY_MANIFEST_CANONICAL
+	):
+		include_gateway = false
+	else:
+		return null
+
+	# This is an explicit two-vector compatibility path, not general manifest
+	# rehydration. Normalize only the three Gateway additions, then require the
+	# complete canonical payload and digest to match the selected frozen vector.
+	var snapshot: Dictionary = current_context.manifest_snapshot()
+	var retained_stages: Array = []
+	for entry_variant in snapshot.get("stage_entries", []):
+		if not entry_variant is Dictionary:
+			continue
+		var entry: Dictionary = entry_variant
+		if GATEWAY_STAGE_REVISIONS.has(str(entry.get("id", ""))):
+			continue
+		retained_stages.append(entry.duplicate(true))
+	if include_gateway:
+		for stage_id in GATEWAY_STAGE_REVISIONS:
+			retained_stages.append({
+				"id": stage_id,
+				"revision": int(GATEWAY_STAGE_REVISIONS[stage_id]),
+			})
+	snapshot["stage_entries"] = retained_stages
+
+	var gateway_domain_ids: Dictionary = {}
+	for descriptor in GATEWAY_SEED_DOMAINS:
+		gateway_domain_ids[int(descriptor["domain_id"])] = true
+	var retained_domains: Array = []
+	for descriptor_variant in snapshot.get("seed_domain_descriptors", []):
+		if not descriptor_variant is Dictionary:
+			continue
+		var descriptor: Dictionary = descriptor_variant
+		if gateway_domain_ids.has(int(descriptor.get("domain_id", 0))):
+			continue
+		retained_domains.append(descriptor.duplicate(true))
+	if include_gateway:
+		for descriptor in GATEWAY_SEED_DOMAINS:
+			retained_domains.append(descriptor.duplicate(true))
+	snapshot["seed_domain_descriptors"] = retained_domains
+
+	var manifest = GeneratorManifest.from_snapshot(snapshot)
+	if manifest.manifest_id() != manifest_id:
+		return null
+	if manifest.canonical_text() != manifest_canonical:
+		return null
+	var compatible_context = WorldGenerationContext.from_exact_identity(
+		world_seed,
+		current_context.world_id,
+		current_context.world_id_contract(),
+		manifest
+	)
+	if not compatible_context.validate_structure().is_empty():
+		return null
+	return compatible_context
 
 
 static func _decode_component_snapshot(json_text: String, label: String, failures: Array[String]) -> Dictionary:

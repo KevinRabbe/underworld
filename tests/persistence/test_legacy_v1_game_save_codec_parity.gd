@@ -1,6 +1,7 @@
 extends RefCounted
 
 const TypedJsonWire := preload("res://worldgen/persistence/typed_json_wire.gd")
+const WorldGenerationContext := preload("res://worldgen/pipeline/world_generation_context.gd")
 const IntegratedGameSaveContract := preload("res://gameplay/persistence/integrated_game_save_contract.gd")
 const LegacyV1GameSaveCodec := preload("res://gameplay/persistence/legacy_v1_game_save_codec.gd")
 const LegacyV1FixtureSource := preload("res://tests/persistence/test_integrated_game_save_contract.gd")
@@ -17,6 +18,7 @@ static func run() -> Array[String]:
 	_compare_invalid_decode(failures)
 	_compare_invalid_clone(failures)
 	_compare_valid_golden_and_clone(failures)
+	_verify_supported_manifest_headers(failures)
 	_verify_v2_legacy_classification(failures)
 	return failures
 
@@ -215,6 +217,78 @@ static func _expect_pending_order(failures: Array[String], pending_variant: Vari
 		str(pending_states[1].occurrence_id),
 		"burrower_43"
 	)
+
+
+static func _verify_supported_manifest_headers(failures: Array[String]) -> void:
+	var world_seed: int = 9007199254740997
+	var world_id: String = WorldGenerationContext.new(world_seed).world_id
+	var gateway_header: Dictionary = {
+		"world_seed": str(world_seed),
+		"world_id": world_id,
+		"generator_manifest_id": LegacyV1GameSaveCodec.GATEWAY_AWARE_MANIFEST_ID,
+		"generator_manifest_canonical": (
+			LegacyV1GameSaveCodec.GATEWAY_AWARE_MANIFEST_CANONICAL
+		),
+	}
+	_expect_equal(
+		failures,
+		"exact Gateway-aware legacy v1 header remains accepted",
+		LegacyV1GameSaveCodec._validate_current_world_compatibility(gateway_header),
+		[]
+	)
+
+	var historical_header: Dictionary = gateway_header.duplicate(true)
+	historical_header["generator_manifest_id"] = LegacyV1GameSaveCodec.PRE_GATEWAY_MANIFEST_ID
+	historical_header["generator_manifest_canonical"] = (
+		LegacyV1GameSaveCodec.PRE_GATEWAY_MANIFEST_CANONICAL
+	)
+	_expect_equal(
+		failures,
+		"exact pre-Gateway legacy v1 header remains accepted",
+		LegacyV1GameSaveCodec._validate_current_world_compatibility(historical_header),
+		[]
+	)
+
+	var stale_id: Dictionary = gateway_header.duplicate(true)
+	stale_id["generator_manifest_id"] = "gm-sha256:" + "0".repeat(64)
+	_expect_rejected_manifest_header(
+		failures,
+		"arbitrary manifest ID remains rejected",
+		stale_id
+	)
+
+	var stale_canonical: Dictionary = gateway_header.duplicate(true)
+	stale_canonical["generator_manifest_canonical"] = (
+		LegacyV1GameSaveCodec.GATEWAY_AWARE_MANIFEST_CANONICAL + "|stale"
+	)
+	stale_canonical["generator_manifest_id"] = (
+		"gm-sha256:" + str(stale_canonical["generator_manifest_canonical"]).sha256_text()
+	)
+	_expect_rejected_manifest_header(
+		failures,
+		"self-consistent but unsupported canonical manifest remains rejected",
+		stale_canonical
+	)
+
+	var mixed_vectors: Dictionary = gateway_header.duplicate(true)
+	mixed_vectors["generator_manifest_id"] = LegacyV1GameSaveCodec.PRE_GATEWAY_MANIFEST_ID
+	_expect_rejected_manifest_header(
+		failures,
+		"supported manifest ID paired with the wrong canonical payload remains rejected",
+		mixed_vectors
+	)
+
+
+static func _expect_rejected_manifest_header(
+	failures: Array[String],
+	label: String,
+	header: Dictionary
+) -> void:
+	var diagnostics: Array[String] = (
+		LegacyV1GameSaveCodec._validate_current_world_compatibility(header)
+	)
+	if diagnostics.is_empty():
+		failures.append(label)
 
 
 static func _expect_candidate_reencodes_to_golden(
