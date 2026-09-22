@@ -36,8 +36,10 @@ var death_recovery_controller
 var combat_resolver
 var encounter_controller
 var gameplay_hud
+var inventory_surface
 var debug_hud
 var gameplay_audio_binding
+var crafting_ui
 var water_surface: MeshInstance3D
 var underworld_runtime
 var cave_presentation
@@ -202,6 +204,8 @@ func _ready() -> void:
 	_create_combat()
 	_bind_gameplay_audio()
 	_create_gameplay_hud()
+	_create_crafting_ui()
+	_create_inventory_surface()
 	_create_debug_hud()
 
 
@@ -472,6 +476,40 @@ func _create_gameplay_hud() -> void:
 	var hud_failures: Array = composition.get("diagnostics", [])
 	if not hud_failures.is_empty():
 		push_error("Gameplay HUD configuration failed: %s" % [hud_failures])
+
+func _create_crafting_ui() -> void:
+	var app_root: Node = get_parent().get_parent() if get_parent() != null else null
+	if app_root == null or not is_instance_valid(app_root):
+		push_error("Crafting UI composition requires the application root")
+		return
+	var input_gate: Node = app_root.get_node_or_null("GameplayInputGate")
+	var focus_stack: Node = app_root.get_node_or_null("UiFocusStack")
+	var runtime_session: Node = get_node_or_null("WeaponRuntimeSession")
+	var composition: Dictionary = InterfaceCompositionScript.compose_crafting_ui(
+		self,
+		runtime_session,
+		input_gate,
+		focus_stack
+	)
+	crafting_ui = composition.get("crafting_ui", null)
+	var failures: Array = composition.get("diagnostics", [])
+	if not failures.is_empty():
+		push_error("Crafting UI configuration failed: %s" % [failures])
+
+func _create_inventory_surface() -> void:
+	var application_root: Node = get_parent().get_parent() if get_parent() != null else null
+	var input_gate: Node = application_root.get_gameplay_input_gate() if application_root != null and application_root.has_method("get_gameplay_input_gate") else _gameplay_input_gate
+	var focus_stack: Node = application_root.get_ui_focus_stack() if application_root != null and application_root.has_method("get_ui_focus_stack") else null
+	var composition: Dictionary = InterfaceCompositionScript.compose_inventory_surface(
+		self,
+		survival,
+		input_gate,
+		focus_stack
+	)
+	inventory_surface = composition.get("inventory_surface", null)
+	var failures: Array = composition.get("diagnostics", [])
+	if not failures.is_empty():
+		push_error("Inventory surface configuration failed: %s" % [failures])
 
 
 func _on_player_parry_succeeded(_source_position: Vector3) -> void:

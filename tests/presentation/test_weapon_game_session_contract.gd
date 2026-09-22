@@ -46,7 +46,10 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		failures.append("ordinary Game WeaponRuntimeSession did not bind canonical Player/inventory/equipment state")
 	else:
 		var capabilities: Array = weapon_session.call("craft_capabilities")
-		if capabilities.size() != 1 or str(capabilities[0].get("recipe_id", "")) != "recipe.hand.iron_sword":
+		var capability_ids: Array[String] = []
+		for capability in capabilities:
+			capability_ids.append(str(capability.get("recipe_id", "")))
+		if not capability_ids.has("recipe.hand.iron_sword"):
 			failures.append("ordinary Game does not expose semantic iron-sword craft capability")
 
 	game.queue_free()

@@ -23,6 +23,9 @@ var rock_instance_count: int:
 var branch_instance_count: int:
 	get:
 		return _generated_objects.branch_instance_count
+var plant_fiber_instance_count: int:
+	get:
+		return _generated_objects.plant_fiber_instance_count
 var loose_stone_instance_count: int:
 	get:
 		return _generated_objects.loose_stone_instance_count
@@ -94,6 +97,13 @@ func collect_nearby_pickups(player_world_position: Vector3, radius: float) -> Ar
 
 func get_active_world_object_count() -> int:
 	return _generated_objects.get_active_world_object_count()
+
+func find_nearest_active_world_object_body(object_type: String, world_position: Vector3):
+	return _generated_objects.nearest_active_body(object_type, to_local(world_position))
+
+func find_nearest_pickup_position(object_type: String, world_position: Vector3) -> Vector3:
+	var local_position: Vector3 = _generated_objects.nearest_pickup_position(object_type, to_local(world_position))
+	return global_transform * local_position if local_position != Vector3.INF else Vector3.INF
 
 
 func get_pickup_counts() -> Vector2i:

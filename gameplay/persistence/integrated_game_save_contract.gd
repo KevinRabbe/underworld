@@ -7,6 +7,7 @@ const WorldDomainSessionState := preload("res://gameplay/world_session/world_dom
 const GameplayStateCodec := preload("res://gameplay/persistence/gameplay_state_codec.gd")
 const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
 const LegacyV1GameSaveCodec := preload("res://gameplay/persistence/legacy_v1_game_save_codec.gd")
+const BuildingRuntime := preload("res://gameplay/building/building_runtime.gd")
 
 # Legacy v1 remains temporarily callable while #431 migrates the production slot
 # ingress. Normal v2 compatibility classification treats a valid v1 as
@@ -96,7 +97,7 @@ static func validate_envelope(envelope: Dictionary) -> Array[String]:
 # only value-owned snapshots/canonical component JSON leave this function.
 static func capture_v2_request(source: Dictionary) -> Dictionary:
 	var failures: Array[String] = []
-	_validate_exact_keys(source, V2_CAPTURE_SOURCE_KEYS, "v2 SAVE capture source", failures)
+	_validate_exact_keys(source, V2_CAPTURE_SOURCE_KEYS, "v2 SAVE capture source", failures, ["building_state"])
 	if not failures.is_empty():
 		return _failure(failures)
 
@@ -190,6 +191,18 @@ static func capture_v2_request(source: Dictionary) -> Dictionary:
 	)
 	if not bool(equipment_wire.get("success", false)):
 		return _prefixed_failure("v2 SAVE equipment wire", equipment_wire.get("diagnostics", []))
+	var building_state: Dictionary = source.get("building_state", {
+		"schema": BuildingRuntime.SNAPSHOT_SCHEMA,
+		"build_tool_active": false,
+		"workbench_used": false,
+		"placed_shelters": [],
+	})
+	var building_failures := BuildingRuntime.validate_durable_snapshot(building_state)
+	if not building_failures.is_empty():
+		return _prefixed_failure("v2 SAVE building", building_failures)
+	var building_wire: Dictionary = TypedJsonWire.encode(building_state, "v2 SAVE building")
+	if not bool(building_wire.get("success", false)):
+		return _prefixed_failure("v2 SAVE building wire", building_wire.get("diagnostics", []))
 
 	var pending_capture: Dictionary = _capture_pending_loot_jsons(pending_variant, registry)
 	if not bool(pending_capture.get("success", false)):
@@ -210,6 +223,7 @@ static func capture_v2_request(source: Dictionary) -> Dictionary:
 		"map_json": str(map_result.get("json", "")),
 		"inventory_json": str(inventory_wire.get("json", "")),
 		"equipment_json": str(equipment_wire.get("json", "")),
+		"building_json": str(building_wire.get("json", "")),
 		"pending_loot_jsons": pending_capture.get("jsons", []).duplicate(),
 		"player_resume": {
 			"domain": active_domain,
@@ -361,6 +375,16 @@ static func decode_v2_classified(json_text: String) -> Dictionary:
 		"equipment",
 		failures
 	)
+	var building_snapshot: Dictionary = _decode_component_snapshot(
+		str(envelope.get("building_json", "")),
+		"building",
+		failures
+	) if envelope.has("building_json") else {
+		"schema": BuildingRuntime.SNAPSHOT_SCHEMA,
+		"build_tool_active": false,
+		"workbench_used": false,
+		"placed_shelters": [],
+	}
 	if not failures.is_empty():
 		return _classified_failure(CLASS_INVALID, failures)
 	var inventory_result: Dictionary = GameplayStateCodec.decode_inventory(inventory_snapshot, registry)
@@ -380,6 +404,9 @@ static func decode_v2_classified(json_text: String) -> Dictionary:
 			CLASS_INVALID,
 			_prefixed_messages("equipment", equipment_result.get("diagnostics", []))
 		)
+	var building_failures := BuildingRuntime.validate_durable_snapshot(building_snapshot)
+	if not building_failures.is_empty():
+		return _classified_failure(CLASS_INVALID, _prefixed_messages("building", building_failures))
 
 	var pending_result: Dictionary = _decode_pending_loot_jsons(
 		envelope.get("pending_loot_jsons", []),
@@ -415,6 +442,7 @@ static func decode_v2_classified(json_text: String) -> Dictionary:
 			"delta_store": loaded_map.get("delta_store", null),
 			"inventory_state": inventory_result.get("state", null),
 			"equipment_state": equipment_result.get("state", null),
+			"building_state": building_snapshot.duplicate(true),
 			"pending_loot_states": pending_result.get("states", []).duplicate(),
 			"resume_position": resume_result.get("position", Vector3.ZERO),
 			"player_vitals": vitals_result.get("state", {}).duplicate(true),
@@ -441,6 +469,12 @@ static func clone_v2_candidate(candidate: Dictionary) -> Dictionary:
 		"delta_store": candidate.get("delta_store", null),
 		"inventory_state": candidate.get("inventory_state", null),
 		"equipment_state": candidate.get("equipment_state", null),
+		"building_state": candidate.get("building_state", {
+			"schema": BuildingRuntime.SNAPSHOT_SCHEMA,
+			"build_tool_active": false,
+			"workbench_used": false,
+			"placed_shelters": [],
+		}),
 		"pending_loot_states": pending_variant,
 		"world_session_state": session,
 		"resume_position": resume_variant,
@@ -464,7 +498,7 @@ static func clone_v2_candidate(candidate: Dictionary) -> Dictionary:
 
 static func validate_v2_request(request: Dictionary) -> Array[String]:
 	var failures: Array[String] = []
-	_validate_exact_keys(request, V2_REQUEST_KEYS, "integrated save v2 request", failures)
+	_validate_exact_keys(request, V2_REQUEST_KEYS, "integrated save v2 request", failures, ["building_json"])
 	if typeof(request.get("world_seed", null)) != TYPE_INT:
 		failures.append("integrated save v2 world_seed must be int")
 	for field in ["root_identity", "world_session", "player_resume", "player_vitals"]:
@@ -474,6 +508,11 @@ static func validate_v2_request(request: Dictionary) -> Array[String]:
 		var value: Variant = request.get(field, null)
 		if typeof(value) != TYPE_STRING or str(value).is_empty():
 			failures.append("integrated save v2 %s must be non-empty String" % field)
+	if request.has("building_json") and (
+		typeof(request.get("building_json")) != TYPE_STRING
+		or str(request.get("building_json", "")).is_empty()
+	):
+		failures.append("integrated save v2 building_json must be non-empty String")
 	var raw_pending: Variant = request.get("pending_loot_jsons", null)
 	if not raw_pending is Array:
 		failures.append("integrated save v2 pending_loot_jsons must be Array")
@@ -529,7 +568,7 @@ static func validate_v2_request(request: Dictionary) -> Array[String]:
 
 static func validate_v2_envelope(envelope: Dictionary) -> Array[String]:
 	var failures: Array[String] = []
-	_validate_exact_keys(envelope, V2_ROOT_KEYS, "integrated save v2", failures)
+	_validate_exact_keys(envelope, V2_ROOT_KEYS, "integrated save v2", failures, ["building_json"])
 	if str(envelope.get("schema", "")) != V2_SCHEMA_NAME:
 		failures.append("unsupported integrated save v2 schema: %s" % str(envelope.get("schema", "")))
 	if typeof(envelope.get("save_schema_version", null)) != TYPE_INT:
@@ -682,13 +721,17 @@ static func _validate_exact_keys(
 	source: Dictionary,
 	expected_keys: Array[String],
 	label: String,
-	failures: Array[String]
+	failures: Array[String],
+	optional_keys: Array[String] = []
 ) -> void:
 	var actual: Array[String] = []
 	for raw_key in source.keys():
 		actual.append(str(raw_key))
 	actual.sort()
 	var expected: Array[String] = expected_keys.duplicate()
+	for optional_key in optional_keys:
+		if source.has(optional_key):
+			expected.append(optional_key)
 	expected.sort()
 	if actual != expected:
 		failures.append("%s keys must be exact expected=%s actual=%s" % [label, expected, actual])

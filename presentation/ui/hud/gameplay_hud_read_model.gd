@@ -7,6 +7,7 @@ const ItemDefinition := preload("res://gameplay/items/definitions/item_definitio
 
 const DEFAULT_MATERIAL_IDS: Array[String] = [
 	"item.resource.wood",
+	"item.resource.plant_fiber",
 	"item.resource.stone",
 	"item.resource.burrower_chitin",
 ]

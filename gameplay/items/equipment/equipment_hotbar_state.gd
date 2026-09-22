@@ -122,6 +122,14 @@ func slot_rule(slot_key: String):
 	return _rules.get(slot_key, null)
 
 
+func slot_keys() -> Array[String]:
+	var result: Array[String] = []
+	for raw_key in _rules.keys():
+		result.append(str(raw_key))
+	result.sort()
+	return result
+
+
 func slot_container(slot_key: String):
 	return _containers.get(slot_key, null)
 

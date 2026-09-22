@@ -22,6 +22,7 @@ const UndergroundPlacementTests := preload("res://tests/content/test_underground
 const SurfaceHarvestContentTests := preload("res://tests/content/test_surface_harvest_content.gd")
 const LootContractTests := preload("res://tests/content/test_loot_contract.gd")
 const CraftingContractTests := preload("res://tests/crafting/test_crafting_contract.gd")
+const BuildingRuntimeTests := preload("res://tests/building/test_building_runtime.gd")
 
 
 func _init() -> void:
@@ -48,6 +49,7 @@ func _init() -> void:
 	failures.append_array(SurfaceHarvestContentTests.run())
 	failures.append_array(LootContractTests.run())
 	failures.append_array(CraftingContractTests.run())
+	failures.append_array(BuildingRuntimeTests.run())
 	if failures.is_empty():
 		print("[VALIDATION] PASS content")
 		print("  semantic content ids / deterministic registry / category-capability-role schemas / headless validation + snapshot evidence + stale-consumer guards / archetype realization / item / resource / creature / weapon / production weapon runtime + session composition + presentation-failure boundary + restored-selection reconstruction + failure atomicity / reserved-site assignment / underground placement / surface-harvest / loot / crafting rulebook contracts passed")

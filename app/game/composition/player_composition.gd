@@ -42,9 +42,21 @@ static func compose(
 	player.harvest_requested.connect(survival.try_harvest)
 	player.hotbar_slot_requested.connect(survival.select_hotbar_slot)
 	player.craft_requested.connect(survival.request_craft)
+	if player.has_signal(&"build_tool_requested") and survival.has_method("request_build_tool"):
+		player.build_tool_requested.connect(survival.request_build_tool)
+	if player.has_signal(&"workbench_interact_requested") and survival.has_method("request_workbench_interact"):
+		player.workbench_interact_requested.connect(survival.request_workbench_interact)
+	if player.has_signal(&"build_place_requested") and survival.has_method("request_build_place"):
+		player.build_place_requested.connect(survival.request_build_place)
 	survival.equipped_tool_changed.connect(player.set_equipped_tool)
 	world.set_player(player)
 	survival.set_player(player)
+	if is_continue and startup_candidate.has("building_state") and survival.has_method("restore_building_durable"):
+		var building_restore: Dictionary = survival.restore_building_durable(startup_candidate.get("building_state", {}))
+		if not bool(building_restore.get("success", false)):
+			return _failure(player, "Continue building hydration rejected: %s" % [building_restore.get("diagnostics", [])])
+		if player.has_method("set_build_tool_active"):
+			player.set_build_tool_active(bool(startup_candidate.get("building_state", {}).get("build_tool_active", false)))
 	player.set_equipped_tool(survival.get_equipped_tool())
 
 	if is_continue:

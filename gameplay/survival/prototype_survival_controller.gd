@@ -12,9 +12,11 @@ const EquipmentHotbarState := preload("res://gameplay/items/equipment/equipment_
 const EquipmentService := preload("res://gameplay/items/equipment/equipment_service.gd")
 const SurfaceHarvestInventoryService := preload("res://gameplay/survival/surface_harvest_inventory_service.gd")
 const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
+const BuildingRuntime := preload("res://gameplay/building/building_runtime.gd")
 
 const WOOD_ID := "item.resource.wood"
 const STONE_ID := "item.resource.stone"
+const PLANT_FIBER_ID := "item.resource.plant_fiber"
 const AXE_ID := "item.tool.stone_axe"
 const PICKAXE_ID := "item.tool.stone_pickaxe"
 const SLOT_HANDS := "equipment_slot.hotbar.hands"
@@ -49,6 +51,7 @@ var _equipment_service = EquipmentService.new()
 var _transactions = InventoryTransactionService.new()
 var _harvest_inventory = null
 var _definitions: Dictionary = {}
+var _building_runtime: Node = null
 
 
 func configure(
@@ -75,8 +78,64 @@ func legacy_persistence_enabled() -> bool:
 
 func set_player(player_node: Node3D) -> void:
 	player = player_node
+	if _building_runtime != null:
+		_building_runtime.set_player(player)
 	_sync_legacy_mirrors()
 	equipped_tool_changed.emit(equipped_tool)
+
+func request_build_tool() -> void:
+	if _building_runtime == null:
+		return
+	var result: Dictionary = _building_runtime.toggle_build_tool()
+	if bool(result.get("active", false)):
+		last_action_message = "Build Tool: shelter selected"
+	else:
+		last_action_message = "Build Tool holstered"
+	if player != null and player.has_method("set_build_tool_active"):
+		player.set_build_tool_active(bool(result.get("active", false)))
+
+func request_workbench_interact() -> void:
+	if _building_runtime == null:
+		return
+	var result: Dictionary = _building_runtime.interact_with_workbench()
+	if bool(result.get("success", false)):
+		last_action_message = "Workbench: shelter ready"
+		if player != null and player.has_method("set_build_tool_active"):
+			player.set_build_tool_active(true)
+	else:
+		last_action_message = str(result.get("diagnostics", ["Workbench unavailable"])[0])
+
+func request_build_place(origin: Vector3, direction: Vector3, max_distance: float) -> void:
+	if _building_runtime == null:
+		return
+	var result: Dictionary = _building_runtime.place_shelter_from_ray(origin, direction, max_distance)
+	if bool(result.get("success", false)):
+		last_action_message = "Built shelter"
+		harvest_result.emit({
+			"type": "building.shelter_placed",
+			"building_id": result.get("building_id", ""),
+			"stable_id": result.get("stable_id", ""),
+		})
+	else:
+		last_action_message = str(result.get("diagnostics", ["Cannot build"])[0])
+
+func get_building_runtime():
+	return _building_runtime
+
+func building_durable_snapshot() -> Dictionary:
+	if _building_runtime == null or not _building_runtime.has_method("durable_snapshot"):
+		return {
+			"schema": BuildingRuntime.SNAPSHOT_SCHEMA,
+			"build_tool_active": false,
+			"workbench_used": false,
+			"placed_shelters": [],
+		}
+	return _building_runtime.durable_snapshot()
+
+func restore_building_durable(snapshot: Dictionary) -> Dictionary:
+	if _building_runtime == null or not _building_runtime.has_method("restore_from_durable"):
+		return {"success": false, "diagnostics": ["building runtime is unavailable"]}
+	return _building_runtime.restore_from_durable(snapshot)
 
 
 func _process(delta: float) -> void:
@@ -226,6 +285,7 @@ func collect_nearby_pickups_at(player_world_position: Vector3) -> Dictionary:
 	)
 	var branch_count: int = 0
 	var stone_count: int = 0
+	var plant_fiber_count: int = 0
 	var events: Array = []
 	var diagnostics: Array[String] = []
 	for pickup_variant in candidates:
@@ -260,6 +320,8 @@ func collect_nearby_pickups_at(player_world_position: Vector3) -> Dictionary:
 
 		if object_type == "branch":
 			branch_count += 1
+		elif object_type == "plant_fiber":
+			plant_fiber_count += 1
 		elif object_type == "loose_stone":
 			stone_count += 1
 		var event: Dictionary = {
@@ -272,18 +334,27 @@ func collect_nearby_pickups_at(player_world_position: Vector3) -> Dictionary:
 		events.append(event)
 		harvest_result.emit(event)
 
-	if branch_count == 0 and stone_count == 0:
+	if branch_count == 0 and plant_fiber_count == 0 and stone_count == 0:
 		return {
 			"success": diagnostics.is_empty(),
 			"diagnostics": diagnostics,
 			"events": events,
 			"wood": 0,
-			"stone": 0,
+		"stone": 0,
+		"plant_fiber": 0,
 		}
 
 	_sync_legacy_mirrors()
-	if branch_count > 0 and stone_count > 0:
+	if branch_count > 0 and plant_fiber_count > 0 and stone_count > 0:
+		last_action_message = "Picked up %d wood + %d fiber + %d stone" % [branch_count, plant_fiber_count, stone_count]
+	elif branch_count > 0 and plant_fiber_count > 0:
+		last_action_message = "Picked up %d wood + %d fiber" % [branch_count, plant_fiber_count]
+	elif plant_fiber_count > 0 and stone_count > 0:
+		last_action_message = "Picked up %d fiber + %d stone" % [plant_fiber_count, stone_count]
+	elif branch_count > 0 and stone_count > 0:
 		last_action_message = "Picked up %d wood + %d stone" % [branch_count, stone_count]
+	elif plant_fiber_count > 0:
+		last_action_message = "Picked up %d plant fiber" % plant_fiber_count
 	elif branch_count > 0:
 		last_action_message = "Picked up %d wood" % branch_count
 	else:
@@ -293,6 +364,7 @@ func collect_nearby_pickups_at(player_world_position: Vector3) -> Dictionary:
 		"diagnostics": diagnostics,
 		"events": events,
 		"wood": branch_count,
+		"plant_fiber": plant_fiber_count,
 		"stone": stone_count,
 	}
 
@@ -314,6 +386,33 @@ func select_hotbar_slot(slot: int) -> void:
 		last_action_message = "Equipment selected"
 	equipped_tool_changed.emit(equipped_tool)
 
+func equip_inventory_slot(source_slot: int, target_slot_key: String) -> Dictionary:
+	if _inventory == null or _equipment == null:
+		return {"success": false, "diagnostics": ["survival equipment state is unavailable"]}
+	var source_record: Dictionary = _inventory.state_at(source_slot)
+	var definition = source_record.get("definition", null)
+	if definition == null and _inventory.has_method("definition_at"):
+		definition = _inventory.definition_at(source_slot)
+	if definition == null:
+		return {"success": false, "diagnostics": ["inventory slot is empty"]}
+	var result: Dictionary = _equipment_service.equip_from_inventory(
+		_equipment,
+		_inventory,
+		source_slot,
+		definition,
+		target_slot_key
+	)
+	if not bool(result.get("success", false)):
+		return result
+	var slot_key: String = target_slot_key
+	var hotbar_bindings: Array = _equipment.canonical_snapshot().get("hotbar_bindings", [])
+	for binding in hotbar_bindings:
+		if binding is Dictionary and str(binding.get("slot_key", "")) == slot_key:
+			_equipment.select_hotbar(int(binding.get("hotbar", 0)))
+			break
+	_sync_legacy_mirrors()
+	equipped_tool_changed.emit(equipped_tool)
+	return result
 
 func request_craft(recipe_id: String) -> void:
 	# Temporary compatibility bridge for the existing C/V prototype controls.
@@ -482,6 +581,9 @@ func _configure_semantic_runtime() -> void:
 		_equipment,
 		_definitions.values()
 	)
+	_building_runtime = BuildingRuntime.new().configure(world, _inventory, _definitions)
+	_building_runtime.name = "BuildingRuntime"
+	add_child(_building_runtime)
 
 
 func _find_inventory_instance_slot(item_id: String) -> int:

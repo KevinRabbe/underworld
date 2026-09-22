@@ -2,6 +2,8 @@ extends RefCounted
 
 const GameplayHudScript := preload("res://presentation/ui/hud/gameplay_hud.gd")
 const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
+const CraftingScreenScript := preload("res://presentation/ui/screens/crafting/crafting_screen.gd")
+const InventorySurfaceScript := preload("res://presentation/ui/inventory/inventory_surface.gd")
 
 
 static func bind_gameplay_audio(root: Node) -> Dictionary:
@@ -36,6 +38,23 @@ static func compose_gameplay_hud(
 		"success": failures.is_empty(),
 		"gameplay_hud": gameplay_hud,
 		"diagnostics": failures,
+}
+
+
+static func compose_inventory_surface(
+	root: Node,
+	survival,
+	input_gate: Node,
+	focus_stack: Node
+) -> Dictionary:
+	var surface = InventorySurfaceScript.new()
+	surface.name = "InventorySurface"
+	root.add_child(surface)
+	var failures: Array[String] = surface.configure(survival, input_gate, focus_stack)
+	return {
+		"success": failures.is_empty(),
+		"inventory_surface": surface,
+		"diagnostics": failures,
 	}
 
 
@@ -65,3 +84,15 @@ static func compose_debug_hud(
 	)
 	root.add_child(debug_hud)
 	return {"success": true, "debug_hud": debug_hud, "diagnostics": []}
+
+
+static func compose_crafting_ui(root: Node, runtime_session, input_gate: Node, focus_stack: Node) -> Dictionary:
+	var crafting_ui = CraftingScreenScript.new()
+	crafting_ui.name = "CraftingUI"
+	root.add_child(crafting_ui)
+	var failures: Array[String] = crafting_ui.configure(runtime_session, input_gate, focus_stack)
+	return {
+		"success": failures.is_empty(),
+		"crafting_ui": crafting_ui,
+		"diagnostics": failures,
+	}

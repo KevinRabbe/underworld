@@ -67,7 +67,12 @@ static func run() -> Array[String]:
 		return failures
 
 	var capabilities: Array = session.craft_capabilities()
-	if capabilities.size() != 1 or str(capabilities[0].get("recipe_id", "")) != RECIPE_ID:
+	var has_sword_capability := false
+	for capability_variant in capabilities:
+		if capability_variant is Dictionary and str((capability_variant as Dictionary).get("recipe_id", "")) == RECIPE_ID:
+			has_sword_capability = true
+			break
+	if not has_sword_capability:
 		failures.append("weapon runtime did not expose authored sword craft capability")
 	var progressed: Dictionary = session.craft_and_equip(RECIPE_ID)
 	if not bool(progressed.get("success", false)):

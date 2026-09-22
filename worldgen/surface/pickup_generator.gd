@@ -20,6 +20,8 @@ func add_pickups_to_chunk_data(chunk_coord: Vector2i, data: Dictionary) -> void:
 
 	var branch_transforms: Array[Transform3D] = []
 	var branch_stable_ids: Array[String] = []
+	var plant_fiber_transforms: Array[Transform3D] = []
+	var plant_fiber_stable_ids: Array[String] = []
 	var loose_stone_transforms: Array[Transform3D] = []
 	var loose_stone_stable_ids: Array[String] = []
 	var step: int = maxi(settings.pickup_vertex_step, 2)
@@ -29,6 +31,11 @@ func add_pickups_to_chunk_data(chunk_coord: Vector2i, data: Dictionary) -> void:
 	mixed_seed ^= chunk_coord.x * 83492791
 	mixed_seed ^= chunk_coord.y * 297121507
 	rng.seed = mixed_seed
+	# Keep the frozen legacy-v2 branch/stone stream byte-for-byte stable. New
+	# authored pickup families must use an independent stream rather than
+	# consuming draws from the accepted migration RNG sequence.
+	var fiber_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	fiber_rng.seed = mixed_seed ^ 0x6D2B79F5
 
 	for base_z in range(0, resolution - 1, step):
 		for base_x in range(0, resolution - 1, step):
@@ -71,6 +78,22 @@ func add_pickups_to_chunk_data(chunk_coord: Vector2i, data: Dictionary) -> void:
 					"branch", chunk_coord, resolution, base_x, base_z
 				))
 
+			var fiber_chance: float = settings.plant_fiber_pickup_density * (
+				0.65 + forest_density * 0.70 + shore_factor * 0.20 + buildability * 0.10
+			)
+			if fiber_rng.randf() < fiber_chance:
+				var fiber_scale: float = fiber_rng.randf_range(0.45, 0.80)
+				var fiber_yaw: float = fiber_rng.randf_range(0.0, TAU)
+				var fiber_basis: Basis = Basis(Vector3.UP, fiber_yaw).scaled(
+					Vector3(fiber_scale, fiber_rng.randf_range(0.12, 0.20), fiber_scale * 0.45)
+				)
+				plant_fiber_transforms.append(Transform3D(
+					fiber_basis,
+					Vector3(local_x, terrain_height + 0.10, local_z)
+				))
+				plant_fiber_stable_ids.append(_candidate_stable_id(
+					"plant-fiber", chunk_coord, resolution, base_x, base_z
+				))
 			# Loose stones favor shorelines and rocky ground, but retain a baseline
 			# chance in clearings so the starting loop cannot dead-end on one seed.
 			var stone_chance: float = settings.loose_stone_pickup_density * (
@@ -92,6 +115,8 @@ func add_pickups_to_chunk_data(chunk_coord: Vector2i, data: Dictionary) -> void:
 
 	data["branch_transforms"] = branch_transforms
 	data["branch_stable_ids"] = branch_stable_ids
+	data["plant_fiber_transforms"] = plant_fiber_transforms
+	data["plant_fiber_stable_ids"] = plant_fiber_stable_ids
 	data["loose_stone_transforms"] = loose_stone_transforms
 	data["loose_stone_stable_ids"] = loose_stone_stable_ids
 
