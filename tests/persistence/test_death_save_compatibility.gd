@@ -301,7 +301,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		if not resumed_request is Dictionary:
 			failures.append("post-Continue recovery SAVE request omitted payload")
 		else:
-			var resumed_save: Dictionary = service.save_slot(resumed_request, TEST_SLOT)
+			var resumed_save: Dictionary = service.save_slot(resumed_request_result, TEST_SLOT)
 			var resumed_loaded: Dictionary = service.load_slot(TEST_SLOT)
 			var resumed_candidate: Variant = resumed_loaded.get("candidate", null)
 			if not bool(resumed_save.get("success", false)) or not bool(resumed_loaded.get("success", false)) or not resumed_candidate is Dictionary:
@@ -349,7 +349,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			_free_attached(game)
 			_cleanup_slot()
 			return failures
-		var recovered_save: Dictionary = service.save_slot(recovered_request, TEST_SLOT)
+		var recovered_save: Dictionary = service.save_slot(recovered_request_variant, TEST_SLOT)
 		if not _require_success(recovered_save, "post-recovery atomic SAVE", failures):
 			_free_attached(game)
 			_cleanup_slot()
