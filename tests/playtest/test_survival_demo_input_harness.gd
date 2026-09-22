@@ -243,6 +243,8 @@ static func _send_key(tree: SceneTree, physical_key: Key, pressed: bool) -> void
 static func _tap_key(tree: SceneTree, physical_key: Key) -> void:
 	_send_key(tree, physical_key, true)
 	await tree.process_frame
+	_send_key(tree, physical_key, false)
+	await tree.process_frame
 
 
 static func _tap_action(tree: SceneTree, action: StringName) -> void:
@@ -255,8 +257,6 @@ static func _tap_action(tree: SceneTree, action: StringName) -> void:
 	release.action = action
 	release.pressed = false
 	Input.parse_input_event(release)
-	await tree.process_frame
-	_send_key(tree, physical_key, false)
 	await tree.process_frame
 
 static func _expect(failures: Array[String], label: String, condition: bool) -> void:
