@@ -43,12 +43,12 @@ var _active_rock_bodies: Dictionary = {}
 func nearest_active_body(object_type: String, local_position: Vector3):
 	var bodies: Dictionary = _active_tree_bodies if object_type == "tree" else _active_rock_bodies if object_type == "rock" else {}
 	var nearest: Node3D = null
-	var nearest_distance := INF
+	var nearest_distance: float = INF
 	for body_variant in bodies.values():
-		var body := body_variant as Node3D
+		var body: Node3D = body_variant as Node3D
 		if body == null or not is_instance_valid(body):
 			continue
-		var distance := body.position.distance_to(local_position)
+		var distance: float = body.position.distance_to(local_position)
 		if distance < nearest_distance:
 			nearest = body
 			nearest_distance = distance
