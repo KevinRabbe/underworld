@@ -46,6 +46,9 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var survival = game.get("survival")
 	_expect(failures, "production Player is inside SceneTree", player.is_inside_tree())
 	_expect(failures, "production Survival is composed", survival != null)
+	# Game startup composition can finish one deferred pass after Player exposure;
+	# seed only after that canonical Survival state is settled.
+	await _wait_frames(tree, 4)
 
 	# Frame-polled movement uses a physical W key routed through InputMap.
 	var before: Vector3 = player.global_position
@@ -112,8 +115,13 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		var recipe_list = crafting_ui.find_child("RecipeList", true, false)
 		var weapon_session = game.get_node_or_null("WeaponRuntimeSession")
 		print("[PLAYTEST DIAG] crafting capabilities=%d recipe_buttons=%d session_configured=%s" % [weapon_session.call("craft_capabilities").size() if weapon_session != null else -1, recipe_list.get_child_count() if recipe_list != null else -1, str(weapon_session.call("is_configured")) if weapon_session != null else "<missing>"])
-		if recipe_list != null and recipe_list.get_child_count() > 0:
-			(recipe_list.get_child(0) as Control).grab_focus()
+		var axe_recipe_button: Control = null
+		if recipe_list != null:
+			for child in recipe_list.get_children():
+				if child is Control and str((child as Control).tooltip_text) == "recipe.hand.stone_axe":
+					axe_recipe_button = child as Control
+		if axe_recipe_button != null:
+			axe_recipe_button.grab_focus()
 			await _tap_key(tree, KEY_ENTER)
 			await tree.process_frame
 			var weapon_session_after = game.get_node_or_null("WeaponRuntimeSession")
@@ -124,7 +132,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			_expect(failures, "crafting Enter reports successful recipe transaction", bool(craft_result.get("success", false)) and bool(craft_result.get("craft_succeeded", false)))
 			_expect(failures, "crafting Enter changes material/equipment state", crafting_inventory_after != crafting_inventory_before or crafting_equipment_after != crafting_equipment_before)
 		else:
-			failures.append("crafting surface exposed no recipe button for Enter")
+			failures.append("crafting surface exposed no stone axe recipe button for Enter")
 		_expect(failures, "crafting UI remains live after craft/equip input", crafting_ui.has_method("render_snapshot"))
 	# CraftingScreen owns C close; Escape is intentionally not its shortcut.
 	if crafting_ui != null and bool(crafting_ui.call("is_open")):

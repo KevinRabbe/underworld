@@ -18,11 +18,17 @@ const SWORD_PATH := "res://content/items/weapons/iron_sword_definition.tres"
 const ATTACK_SET_PATH := "res://content/items/weapons/iron_sword_attack_set.tres"
 const ARCHETYPE_PATH := "res://content/items/weapons/iron_sword_archetype.tres"
 const RECIPE_PATH := "res://content/recipes/iron_sword.tres"
+const AXE_PATH := "res://content/items/tools/stone_axe_definition.tres"
+const AXE_RECIPE_PATH := "res://content/recipes/stone_axe.tres"
 
 const RECIPE_ID := "recipe.hand.iron_sword"
 const SWORD_ID := "item.weapon.iron_sword"
+const AXE_RECIPE_ID := "recipe.hand.stone_axe"
+const AXE_ID := "item.tool.stone_axe"
 const SLOT_UTILITY := "equipment_slot.hotbar.utility"
+const SLOT_AXE := "equipment_slot.hotbar.axe"
 const PREFERRED_HOTBAR := 4
+const AXE_PREFERRED_HOTBAR := 2
 
 const ITEM_ROOT := "category.item"
 const ITEM_RESOURCE := "category.item.resource"
@@ -30,8 +36,11 @@ const ITEM_EQUIPMENT := "category.item.equipment"
 const ITEM_WEAPON := "category.item.equipment.weapon"
 const ITEM_WEAPON_MELEE := "category.item.equipment.weapon.melee"
 const ITEM_SWORD := "category.item.equipment.weapon.melee.sword"
+const ITEM_TOOL := "category.item.equipment.tool"
+const ITEM_AXE := "category.item.equipment.tool.axe"
 const EQUIPABLE := "capability.equipable"
 const DAMAGE_DEALER := "capability.damage_dealer"
+const HARVEST_TOOL := "capability.harvest_tool"
 
 const PRODUCTION_PATHS: Array[String] = [
 	WOOD_PATH,
@@ -40,6 +49,8 @@ const PRODUCTION_PATHS: Array[String] = [
 	ATTACK_SET_PATH,
 	ARCHETYPE_PATH,
 	RECIPE_PATH,
+	AXE_PATH,
+	AXE_RECIPE_PATH,
 ]
 
 
@@ -61,6 +72,8 @@ static func build() -> Dictionary:
 		CategorySchema.new().configure(ITEM_WEAPON, [ITEM_EQUIPMENT]),
 		CategorySchema.new().configure(ITEM_WEAPON_MELEE, [ITEM_WEAPON]),
 		CategorySchema.new().configure(ITEM_SWORD, [ITEM_WEAPON_MELEE]),
+		CategorySchema.new().configure(ITEM_TOOL, [ITEM_EQUIPMENT]),
+		CategorySchema.new().configure(ITEM_AXE, [ITEM_TOOL]),
 	]):
 		failures.append("weapon runtime category schema: %s" % failure)
 
@@ -68,6 +81,7 @@ static func build() -> Dictionary:
 	for failure in capabilities.index_schemas([
 		CapabilitySchema.new().configure(EQUIPABLE),
 		CapabilitySchema.new().configure(DAMAGE_DEALER),
+		CapabilitySchema.new().configure(HARVEST_TOOL),
 	]):
 		failures.append("weapon runtime capability schema: %s" % failure)
 
@@ -116,6 +130,13 @@ static func craft_capabilities() -> Array:
 		"output_item_id": SWORD_ID,
 		"target_slot_key": SLOT_UTILITY,
 		"preferred_hotbar": PREFERRED_HOTBAR,
+		"supports_craft": true,
+		"supports_craft_and_equip": true,
+	}, {
+		"recipe_id": AXE_RECIPE_ID,
+		"output_item_id": AXE_ID,
+		"target_slot_key": SLOT_AXE,
+		"preferred_hotbar": AXE_PREFERRED_HOTBAR,
 		"supports_craft": true,
 		"supports_craft_and_equip": true,
 	}]
