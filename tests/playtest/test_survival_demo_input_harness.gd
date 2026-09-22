@@ -50,8 +50,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	# Frame-polled movement uses a physical W key routed through InputMap.
 	var before: Vector3 = player.global_position
 	_send_key(tree, KEY_W, true)
-	await tree.physics_frame
-	await tree.physics_frame
+	await _wait_physics(tree, 4)
 	_send_key(tree, KEY_W, false)
 	_expect(failures, "W movement input reaches production Player", player.global_position.distance_to(before) > 0.001)
 
@@ -97,10 +96,12 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			failures.append("inventory Enter could not locate seeded authored tool slot")
 		# Release the inventory capture before exercising the next modal surface.
 		await _tap_key(tree, KEY_I)
-		await tree.physics_frame
-		await tree.physics_frame
+		await _wait_physics(tree, 4)
 
 	# C opens the real crafting screen; its first recipe is activated by Enter.
+	# WeaponRuntimeSession binds deferred from Game._ready; allow that production
+	# composition to settle before inspecting its authored capabilities.
+	await _wait_frames(tree, 4)
 	var crafting_inventory_before: String = inventory.canonical_json() if inventory != null else ""
 	var crafting_equipment_before: String = survival.call("get_equipment_state").canonical_json() if survival != null else ""
 	var crafting_ui = game.get("crafting_ui")
@@ -124,10 +125,10 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	# CraftingScreen owns C close; Escape is intentionally not its shortcut.
 	if crafting_ui != null and bool(crafting_ui.call("is_open")):
 		await _tap_key(tree, KEY_C)
-	await tree.physics_frame
-	await tree.physics_frame
+	await _wait_physics(tree, 4)
 
 	# A normal left-click harvest request is routed through Player -> Survival.
+	await _wait_physics(tree, 30)
 	var harvest_requests: Array[int] = [0]
 	player.harvest_requested.connect(func(_origin: Vector3, _direction: Vector3, _distance: float) -> void: harvest_requests[0] += 1)
 	var harvest_click := InputEventMouseButton.new()
@@ -141,7 +142,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	harvest_interaction.pressed = true
 	await tree.process_frame
 	Input.parse_input_event(harvest_interaction)
-	await tree.process_frame
+	await _wait_physics(tree, 2)
 	_expect(failures, "left-click resource interaction reaches production harvest path", harvest_requests[0] > 0)
 
 	# B/G/LMB traverse the production build/workbench/placement input path.
@@ -152,13 +153,12 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var wood_before: int = inventory.quantity_of("item.resource.wood") if inventory != null else -1
 	var stone_before: int = inventory.quantity_of("item.resource.stone") if inventory != null else -1
 	await _tap_key(tree, KEY_G)
+	await _wait_physics(tree, 4)
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true
 	Input.parse_input_event(click)
-	await tree.process_frame
-	await tree.physics_frame
-	await tree.physics_frame
+	await _wait_physics(tree, 30)
 	var building_after: Dictionary = building_runtime.durable_snapshot() if building_runtime != null else {}
 	var placed: Array = building_after.get("placed_shelters", [])
 	_expect(failures, "G uses the live workbench", bool(building_after.get("workbench_used", false)) and not bool(building_before.get("workbench_used", false)))
@@ -190,6 +190,16 @@ static func _cleanup_save_slot(slot_path: String) -> void:
 	for path in [slot_path, slot_path + SAVE_CANDIDATE_SUFFIX, slot_path + SAVE_BACKUP_SUFFIX]:
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(path)
+
+
+static func _wait_frames(tree: SceneTree, count: int) -> void:
+	for _index in range(count):
+		await tree.process_frame
+
+
+static func _wait_physics(tree: SceneTree, count: int) -> void:
+	for _index in range(count):
+		await tree.physics_frame
 
 static func _send_key(tree: SceneTree, physical_key: Key, pressed: bool) -> void:
 	var event := InputEventKey.new()
