@@ -8,6 +8,7 @@ const WorldDomainSessionState := preload("res://gameplay/world_session/world_dom
 const ItemContainerState := preload("res://gameplay/items/inventory/item_container_state.gd")
 const EquipmentHotbarState := preload("res://gameplay/items/equipment/equipment_hotbar_state.gd")
 const PendingLootState := preload("res://gameplay/loot/runtime/pending_loot_state.gd")
+const BuildingRuntime := preload("res://gameplay/building/building_runtime.gd")
 
 
 static func capture(
@@ -57,6 +58,14 @@ static func capture(
 		failures.append("SAVE runtime Player resume position must be finite")
 	if not failures.is_empty():
 		return _failure(failures)
+	var building_state: Dictionary = {
+		"schema": BuildingRuntime.SNAPSHOT_SCHEMA,
+		"build_tool_active": false,
+		"workbench_used": false,
+		"placed_shelters": [],
+	}
+	if survival.has_method("building_durable_snapshot"):
+		building_state = survival.building_durable_snapshot()
 	return IntegratedGameSaveContract.capture_v2_request({
 		"world_context": session_world_context,
 		"world_session_state": world_session_state,
@@ -67,6 +76,7 @@ static func capture(
 		"resume_position": resume_position,
 		"current_health": int(player.call("get_health")),
 		"current_stamina": float(player.call("get_stamina")),
+		"building_state": building_state,
 	})
 
 

@@ -48,6 +48,12 @@ static func compose(
 	survival.equipped_tool_changed.connect(player.set_equipped_tool)
 	world.set_player(player)
 	survival.set_player(player)
+	if is_continue and startup_candidate.has("building_state") and survival.has_method("restore_building_durable"):
+		var building_restore: Dictionary = survival.restore_building_durable(startup_candidate.get("building_state", {}))
+		if not bool(building_restore.get("success", false)):
+			return _failure(player, "Continue building hydration rejected: %s" % [building_restore.get("diagnostics", [])])
+		if player.has_method("set_build_tool_active"):
+			player.set_build_tool_active(bool(startup_candidate.get("building_state", {}).get("build_tool_active", false)))
 	player.set_equipped_tool(survival.get_equipped_tool())
 
 	if is_continue:

@@ -122,6 +122,21 @@ func request_build_place(origin: Vector3, direction: Vector3, max_distance: floa
 func get_building_runtime():
 	return _building_runtime
 
+func building_durable_snapshot() -> Dictionary:
+	if _building_runtime == null or not _building_runtime.has_method("durable_snapshot"):
+		return {
+			"schema": BuildingRuntime.SNAPSHOT_SCHEMA,
+			"build_tool_active": false,
+			"workbench_used": false,
+			"placed_shelters": [],
+		}
+	return _building_runtime.durable_snapshot()
+
+func restore_building_durable(snapshot: Dictionary) -> Dictionary:
+	if _building_runtime == null or not _building_runtime.has_method("restore_from_durable"):
+		return {"success": false, "diagnostics": ["building runtime is unavailable"]}
+	return _building_runtime.restore_from_durable(snapshot)
+
 
 func _process(delta: float) -> void:
 	if player == null or world == null or settings == null:

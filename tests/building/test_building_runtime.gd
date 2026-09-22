@@ -31,4 +31,19 @@ static func run() -> Array[String]:
 		failures.append("insufficient canonical materials unexpectedly placed a second shelter")
 	if runtime.placed_shelters().size() != 1:
 		failures.append("runtime did not retain exactly one authoritative placement record")
+	var durable: Dictionary = runtime.durable_snapshot()
+	var restored = BuildingRuntime.new().configure(null, inventory, {
+		"item.resource.wood": wood,
+		"item.resource.stone": stone,
+	})
+	var restored_player := Node3D.new()
+	restored_player.global_position = Vector3.ZERO
+	restored.set_player(restored_player)
+	var hydration: Dictionary = restored.restore_from_durable(durable)
+	if not bool(hydration.get("success", false)):
+		failures.append("building durable snapshot restore failed: %s" % hydration.get("diagnostics", []))
+	elif restored.placed_shelters() != runtime.placed_shelters():
+		failures.append("shelter placement did not survive building snapshot/restore")
+	elif not restored.build_tool_active():
+		failures.append("build tool state did not survive building snapshot/restore")
 	return failures

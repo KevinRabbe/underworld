@@ -16,6 +16,7 @@ const WORKBENCH_INTERACT_RADIUS := 3.25
 const SHELTER_WOOD_COST := 4
 const SHELTER_STONE_COST := 2
 const INVENTORY_KEY := "survival_inventory"
+const SNAPSHOT_SCHEMA := "gameplay.building.v1"
 
 var _world = null
 var _inventory = null
@@ -42,6 +43,71 @@ func build_tool_active() -> bool:
 
 func placed_shelters() -> Array[Dictionary]:
 	return _placed_shelters.duplicate(true)
+
+func durable_snapshot() -> Dictionary:
+	return {
+		"schema": SNAPSHOT_SCHEMA,
+		"build_tool_active": _build_tool_active,
+		"workbench_used": _workbench_used,
+		"placed_shelters": _placed_shelters.duplicate(true),
+	}
+
+func restore_from_durable(snapshot: Dictionary) -> Dictionary:
+	var failures: Array[String] = validate_durable_snapshot(snapshot)
+	if not failures.is_empty():
+		return {"success": false, "diagnostics": failures}
+	for child in get_children():
+		if child is StaticBody3D and child != _workbench:
+			child.queue_free()
+	_build_tool_active = bool(snapshot.get("build_tool_active", false))
+	_workbench_used = bool(snapshot.get("workbench_used", false))
+	_placed_shelters.clear()
+	for raw_record in snapshot.get("placed_shelters", []):
+		var record: Dictionary = raw_record.duplicate(true)
+		_placed_shelters.append(record)
+		_realize_shelter(record)
+	return {"success": true, "diagnostics": []}
+
+static func validate_durable_snapshot(snapshot: Dictionary) -> Array[String]:
+	var failures: Array[String] = []
+	var expected := ["build_tool_active", "placed_shelters", "schema", "workbench_used"]
+	var actual: Array[String] = []
+	for key in snapshot.keys():
+		actual.append(str(key))
+	actual.sort()
+	if actual != expected:
+		failures.append("building snapshot keys must be exact expected=%s actual=%s" % [expected, actual])
+	if str(snapshot.get("schema", "")) != SNAPSHOT_SCHEMA:
+		failures.append("building snapshot schema is unsupported")
+	if typeof(snapshot.get("build_tool_active", null)) != TYPE_BOOL:
+		failures.append("building snapshot build_tool_active must be bool")
+	if typeof(snapshot.get("workbench_used", null)) != TYPE_BOOL:
+		failures.append("building snapshot workbench_used must be bool")
+	var shelters: Variant = snapshot.get("placed_shelters", null)
+	if not shelters is Array:
+		failures.append("building snapshot placed_shelters must be Array")
+	else:
+		var seen: Dictionary = {}
+		for index in range(shelters.size()):
+			var record: Variant = shelters[index]
+			if not record is Dictionary:
+				failures.append("building snapshot shelter %d must be Dictionary" % index)
+				continue
+			var shelter: Dictionary = record
+			var record_keys: Array[String] = []
+			for key in shelter.keys():
+				record_keys.append(str(key))
+			record_keys.sort()
+			if record_keys != ["building_id", "position", "stable_id", "stone", "wood"]:
+				failures.append("building snapshot shelter %d keys are invalid" % index)
+			var stable_id := str(shelter.get("stable_id", ""))
+			if stable_id.is_empty() or seen.has(stable_id):
+				failures.append("building snapshot shelter %d has duplicate/empty stable_id" % index)
+			seen[stable_id] = true
+			var position: Variant = shelter.get("position", null)
+			if not position is Vector3 or not _is_finite_vector3(position):
+				failures.append("building snapshot shelter %d position must be finite Vector3" % index)
+	return failures
 
 func workbench_position() -> Vector3:
 	return Vector3.ZERO if _workbench == null else _workbench.global_position
