@@ -59,18 +59,18 @@ func store_in_chest(stable_id: String, item_id: String, quantity: int) -> Dictio
 		return _failure("chest storage requires canonical player inventory")
 	for chest in _placed_chests:
 		if str(chest.get("stable_id", "")) == stable_id:
-		var definition = _definitions.get(item_id, null)
-		if definition == null or not definition is ItemDefinition:
-			return _failure("chest storage item definition is not owned/canonical: %s" % item_id)
-		if _inventory.quantity_of(item_id) < quantity:
-			return _failure("player does not own requested chest quantity: %s" % item_id)
-		var removed: Dictionary = _inventory.remove_stack(item_id, quantity)
-		if not bool(removed.get("success", false)):
-			return _failure("chest storage inventory removal failed: %s" % [removed.get("diagnostics", [])])
-		var contents: Dictionary = chest.get("contents", {})
-		contents[item_id] = int(contents.get(item_id, 0)) + quantity
-		chest["contents"] = contents
-		return {"success": true, "stable_id": stable_id, "contents": contents.duplicate(true), "diagnostics": []}
+			var definition = _definitions.get(item_id, null)
+			if definition == null or not definition is ItemDefinition:
+				return _failure("chest storage item definition is not owned/canonical: %s" % item_id)
+			if _inventory.quantity_of(item_id) < quantity:
+				return _failure("player does not own requested chest quantity: %s" % item_id)
+			var removed: Dictionary = _inventory.remove_stack(item_id, quantity)
+			if not bool(removed.get("success", false)):
+				return _failure("chest storage inventory removal failed: %s" % [removed.get("diagnostics", [])])
+			var contents: Dictionary = chest.get("contents", {})
+			contents[item_id] = int(contents.get(item_id, 0)) + quantity
+			chest["contents"] = contents
+			return {"success": true, "stable_id": stable_id, "contents": contents.duplicate(true), "diagnostics": []}
 	return _failure("unknown chest stable id: %s" % stable_id)
 
 func chest_contents(stable_id: String) -> Dictionary:
