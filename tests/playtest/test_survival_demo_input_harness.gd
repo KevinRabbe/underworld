@@ -156,6 +156,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	# allow the production streamer enough real frames before searching colliders.
 	await _wait_physics(tree, 240)
 	var world = game.get("world")
+	var original_player_position: Vector3 = player.global_position
 	print("[PLAYTEST DIAG] surface chunks=%s pending=%s generated=%s decorations=%s active_objects=%s pickups=%s" % [
 		str(world.call("get_loaded_chunk_count")) if world != null and world.has_method("get_loaded_chunk_count") else "<missing>",
 		str(world.call("get_pending_chunk_count")) if world != null and world.has_method("get_pending_chunk_count") else "<missing>",
@@ -217,6 +218,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			camera_pitch_pivot.rotation.x = atan2(tree_target_position.y - camera_node.global_position.y, maxf(horizontal_distance, 0.001))
 		if player.global_position.distance_to(tree_target_position) > 3.0:
 			player.global_position = tree_target_position - target_direction.normalized() * 2.0
+			if player.has_method("_set_camera_distance"):
+				player.call("_set_camera_distance", 1.0)
 			await _wait_physics(tree, 4)
 			camera_node = player.get("camera")
 			if camera_pitch_pivot != null and camera_node != null:
@@ -247,6 +250,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	_expect(failures, "real nearby plant-fiber pickup reaches canonical inventory", inventory.quantity_of("item.resource.plant_fiber") > fiber_before)
 
 	# B/G/LMB traverse the production build/workbench/placement input path.
+	player.global_position = original_player_position
+	await _wait_physics(tree, 4)
 	await _tap_key(tree, KEY_B)
 	_expect(failures, "B activates production build tool", player.get("build_tool_active") == true)
 	var building_runtime = survival.call("get_building_runtime") if survival != null else null
