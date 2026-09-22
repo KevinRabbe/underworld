@@ -196,6 +196,10 @@ static func capture_v2_request(source: Dictionary) -> Dictionary:
 		"build_tool_active": false,
 		"workbench_used": false,
 		"placed_shelters": [],
+		"placed_chests": [],
+		"claimed_bed_stable_id": "",
+		"selected_building_id": BuildingRuntime.BUILDING_SHELTER_ID,
+		"placed_chests": [], "claimed_bed_stable_id": "", "selected_building_id": BuildingRuntime.BUILDING_SHELTER_ID,
 	})
 	var building_failures := BuildingRuntime.validate_durable_snapshot(building_state)
 	if not building_failures.is_empty():
@@ -391,6 +395,9 @@ static func decode_v2_classified(json_text: String) -> Dictionary:
 		"build_tool_active": false,
 		"workbench_used": false,
 		"placed_shelters": [],
+		"placed_chests": [],
+		"claimed_bed_stable_id": "",
+		"selected_building_id": BuildingRuntime.BUILDING_SHELTER_ID,
 	}
 	var hunting_snapshot: Dictionary = _decode_component_snapshot(
 		str(envelope.get("hunting_json", "")),
@@ -494,6 +501,9 @@ static func clone_v2_candidate(candidate: Dictionary) -> Dictionary:
 			"build_tool_active": false,
 			"workbench_used": false,
 			"placed_shelters": [],
+			"placed_chests": [],
+			"claimed_bed_stable_id": "",
+			"selected_building_id": BuildingRuntime.BUILDING_SHELTER_ID,
 		}),
 		"hunting_state": candidate.get("hunting_state", {"schema": "hunting.skinning.v1", "progression": {"skinning": 0, "last_carcass_id": ""}, "carcasses": []}),
 		"pending_loot_states": pending_variant,

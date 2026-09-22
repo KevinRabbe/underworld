@@ -11,6 +11,8 @@ const InventoryTransactionService := preload("res://gameplay/items/inventory/inv
 const WOOD_ID := "item.resource.wood"
 const STONE_ID := "item.resource.stone"
 const BUILDING_SHELTER_ID := "building.shelter.basic"
+const BUILDING_CHEST_ID := "building.chest.basic"
+const BUILDING_BED_ID := "building.bed.basic"
 const BUILD_TOOL_ID := "item.tool.build"
 const WORKBENCH_INTERACT_RADIUS := 3.25
 const SHELTER_WOOD_COST := 4
@@ -26,6 +28,9 @@ var _workbench: StaticBody3D = null
 var _build_tool_active := false
 var _workbench_used := false
 var _placed_shelters: Array[Dictionary] = []
+var _placed_chests: Array[Dictionary] = []
+var _claimed_bed_stable_id: String = ""
+var _selected_building_id: String = BUILDING_SHELTER_ID
 var _transactions := InventoryTransactionService.new()
 
 func configure(world, inventory, definitions: Dictionary) -> Node:
@@ -44,12 +49,35 @@ func build_tool_active() -> bool:
 func placed_shelters() -> Array[Dictionary]:
 	return _placed_shelters.duplicate(true)
 
+func placed_chests() -> Array[Dictionary]:
+	return _placed_chests.duplicate(true)
+
+func store_in_chest(stable_id: String, item_id: String, quantity: int) -> Dictionary:
+	if quantity <= 0 or item_id.is_empty():
+		return _failure("chest storage requires positive quantity and item id")
+	for chest in _placed_chests:
+		if str(chest.get("stable_id", "")) == stable_id:
+			var contents: Dictionary = chest.get("contents", {})
+			contents[item_id] = int(contents.get(item_id, 0)) + quantity
+			chest["contents"] = contents
+			return {"success": true, "stable_id": stable_id, "contents": contents.duplicate(true), "diagnostics": []}
+	return _failure("unknown chest stable id: %s" % stable_id)
+
+func chest_contents(stable_id: String) -> Dictionary:
+	for chest in _placed_chests:
+		if str(chest.get("stable_id", "")) == stable_id:
+			return chest.get("contents", {}).duplicate(true)
+	return {}
+
 func durable_snapshot() -> Dictionary:
 	return {
 		"schema": SNAPSHOT_SCHEMA,
 		"build_tool_active": _build_tool_active,
 		"workbench_used": _workbench_used,
 		"placed_shelters": _placed_shelters.duplicate(true),
+		"placed_chests": _placed_chests.duplicate(true),
+		"claimed_bed_stable_id": _claimed_bed_stable_id,
+		"selected_building_id": _selected_building_id,
 	}
 
 func restore_from_durable(snapshot: Dictionary) -> Dictionary:
@@ -60,22 +88,30 @@ func restore_from_durable(snapshot: Dictionary) -> Dictionary:
 		if child is StaticBody3D and child != _workbench:
 			child.queue_free()
 	_build_tool_active = bool(snapshot.get("build_tool_active", false))
+	_selected_building_id = str(snapshot.get("selected_building_id", BUILDING_SHELTER_ID))
 	_workbench_used = bool(snapshot.get("workbench_used", false))
+	_claimed_bed_stable_id = str(snapshot.get("claimed_bed_stable_id", ""))
 	_placed_shelters.clear()
 	for raw_record in snapshot.get("placed_shelters", []):
 		var record: Dictionary = raw_record.duplicate(true)
 		_placed_shelters.append(record)
 		_realize_shelter(record)
+	_placed_chests.clear()
+	for raw_record in snapshot.get("placed_chests", []):
+		var chest_record: Dictionary = raw_record.duplicate(true)
+		_placed_chests.append(chest_record)
+		_realize_chest(chest_record)
 	return {"success": true, "diagnostics": []}
 
 static func validate_durable_snapshot(snapshot: Dictionary) -> Array[String]:
 	var failures: Array[String] = []
-	var expected := ["build_tool_active", "placed_shelters", "schema", "workbench_used"]
+	var expected := ["build_tool_active", "claimed_bed_stable_id", "placed_chests", "placed_shelters", "schema", "selected_building_id", "workbench_used"]
+	var legacy_expected := ["build_tool_active", "placed_shelters", "schema", "workbench_used"]
 	var actual: Array[String] = []
 	for key in snapshot.keys():
 		actual.append(str(key))
 	actual.sort()
-	if actual != expected:
+	if actual != expected and actual != legacy_expected:
 		failures.append("building snapshot keys must be exact expected=%s actual=%s" % [expected, actual])
 	if str(snapshot.get("schema", "")) != SNAPSHOT_SCHEMA:
 		failures.append("building snapshot schema is unsupported")
@@ -94,6 +130,10 @@ static func validate_durable_snapshot(snapshot: Dictionary) -> Array[String]:
 				failures.append("building snapshot shelter %d must be Dictionary" % index)
 				continue
 			var shelter: Dictionary = record
+			if str(shelter.get("building_id", "")) == BUILDING_BED_ID:
+				if not shelter.has("stable_id") or not shelter.get("position", null) is Vector3 or not _is_finite_vector3(shelter.position):
+					failures.append("building snapshot bed %d has invalid identity/position" % index)
+				continue
 			var record_keys: Array[String] = []
 			for key in shelter.keys():
 				record_keys.append(str(key))
@@ -128,17 +168,49 @@ static func validate_durable_snapshot(snapshot: Dictionary) -> Array[String]:
 							index, material, expected_amount,
 						]
 					)
+	if actual == legacy_expected:
+		return failures
+	var chests: Variant = snapshot.get("placed_chests", null)
+	if not chests is Array:
+		failures.append("building snapshot placed_chests must be Array")
+	else:
+		for index in range(chests.size()):
+			var chest: Variant = chests[index]
+			if not chest is Dictionary:
+				failures.append("building snapshot chest %d must be Dictionary" % index)
+				continue
+			var chest_keys: Array[String] = []
+			for key in chest.keys(): chest_keys.append(str(key))
+			chest_keys.sort()
+			if chest_keys != ["building_id", "contents", "position", "stable_id"]:
+				failures.append("building snapshot chest %d keys are invalid" % index)
+			if str(chest.get("building_id", "")) != BUILDING_CHEST_ID:
+				failures.append("building snapshot chest %d building_id is not canonical" % index)
+			if not chest.get("position", null) is Vector3 or not _is_finite_vector3(chest.position):
+				failures.append("building snapshot chest %d position must be finite Vector3" % index)
+	if typeof(snapshot.get("claimed_bed_stable_id", null)) != TYPE_STRING:
+		failures.append("building snapshot claimed_bed_stable_id must be String")
+	if str(snapshot.get("selected_building_id", "")) not in [BUILDING_SHELTER_ID, BUILDING_CHEST_ID, BUILDING_BED_ID]:
+		failures.append("building snapshot selected_building_id is not canonical")
 	return failures
 
 func workbench_position() -> Vector3:
 	return Vector3.ZERO if _workbench == null else _workbench.global_position
 
 func toggle_build_tool() -> Dictionary:
-	_build_tool_active = not _build_tool_active
+	if not _build_tool_active:
+		_build_tool_active = true
+		_selected_building_id = BUILDING_SHELTER_ID
+	else:
+		_selected_building_id = {
+			BUILDING_SHELTER_ID: BUILDING_CHEST_ID,
+			BUILDING_CHEST_ID: BUILDING_BED_ID,
+			BUILDING_BED_ID: BUILDING_SHELTER_ID,
+		}.get(_selected_building_id, BUILDING_SHELTER_ID)
 	return {
 		"success": true,
 		"active": _build_tool_active,
-		"building_id": BUILDING_SHELTER_ID,
+		"building_id": _selected_building_id,
 		"diagnostics": [],
 	}
 
@@ -146,7 +218,25 @@ func interact_with_workbench() -> Dictionary:
 	_ensure_workbench()
 	if _player == null or _workbench == null:
 		return _failure("building runtime has no player/workbench")
-	if _player.global_position.distance_to(_workbench.global_position) > WORKBENCH_INTERACT_RADIUS:
+	# Detached runtime fixtures do not have a SceneTree transform hierarchy;
+	# local position is the authoritative equivalent of global_position there.
+	var player_position: Vector3 = _player.position if not _player.is_inside_tree() else _player.global_position
+	var nearest_distance := INF
+	var nearest_chest: Dictionary = {}
+	for chest in _placed_chests:
+		var chest_distance: float = player_position.distance_to(chest.get("position", Vector3.ZERO))
+		if chest_distance <= WORKBENCH_INTERACT_RADIUS and chest_distance < nearest_distance:
+			nearest_distance = chest_distance
+			nearest_chest = chest
+	for bed in _placed_shelters:
+		var bed_distance: float = player_position.distance_to(bed.get("position", Vector3.ZERO))
+		if str(bed.get("building_id", "")) == BUILDING_BED_ID and bed_distance <= WORKBENCH_INTERACT_RADIUS and bed_distance < nearest_distance:
+			_claimed_bed_stable_id = str(bed.get("stable_id", ""))
+			return {"success": true, "active": true, "bed_claimed": _claimed_bed_stable_id, "diagnostics": []}
+	if not nearest_chest.is_empty():
+		return {"success": true, "active": true, "chest_opened": nearest_chest.stable_id, "contents": nearest_chest.contents.duplicate(true), "diagnostics": []}
+	var workbench_position := _workbench.position if not _workbench.is_inside_tree() else _workbench.global_position
+	if player_position.distance_to(workbench_position) > WORKBENCH_INTERACT_RADIUS:
 		return _failure("player is too far from the workbench")
 	_workbench_used = true
 	_build_tool_active = true
@@ -172,6 +262,10 @@ func place_shelter_from_ray(origin: Vector3, direction: Vector3, max_distance: f
 	return place_shelter_at(target)
 
 func place_shelter_at(position: Vector3) -> Dictionary:
+	if _selected_building_id == BUILDING_CHEST_ID:
+		return _place_chest_at(position)
+	if _selected_building_id == BUILDING_BED_ID:
+		return _place_bed_at(position)
 	if not _build_tool_active or not _workbench_used:
 		return _failure("use the workbench before selecting a building piece")
 	if not _is_finite_vector3(position):
@@ -206,6 +300,18 @@ func place_shelter_at(position: Vector3) -> Dictionary:
 		"diagnostics": [],
 	}
 
+func _place_chest_at(position: Vector3) -> Dictionary:
+	var record := {"building_id": BUILDING_CHEST_ID, "stable_id": "building.chest.basic.%03d" % (_placed_chests.size() + 1), "position": position, "contents": {}}
+	_placed_chests.append(record)
+	_realize_chest(record)
+	return {"success": true, "building_id": BUILDING_CHEST_ID, "stable_id": record.stable_id, "position": position, "diagnostics": []}
+
+func _place_bed_at(position: Vector3) -> Dictionary:
+	var record := {"building_id": BUILDING_BED_ID, "stable_id": "building.bed.basic.%03d" % (_placed_shelters.size() + 1), "position": position, "wood": 0, "stone": 0}
+	_placed_shelters.append(record)
+	_realize_shelter(record)
+	return {"success": true, "building_id": BUILDING_BED_ID, "stable_id": record.stable_id, "position": position, "diagnostics": []}
+
 func _ensure_workbench() -> void:
 	if _workbench != null or _player == null:
 		return
@@ -239,6 +345,16 @@ func _realize_shelter(record: Dictionary) -> void:
 	else:
 		body.position = record["position"]
 	_add_box(body, Vector3(2.4, 1.6, 0.35), Color("9b6b3e"))
+
+func _realize_chest(record: Dictionary) -> void:
+	var body := StaticBody3D.new()
+	body.name = str(record["stable_id"])
+	body.set_meta("building_id", BUILDING_CHEST_ID)
+	body.set_meta("stable_id", record["stable_id"])
+	add_child(body)
+	if is_inside_tree(): body.global_position = record["position"]
+	else: body.position = record["position"]
+	_add_box(body, Vector3(1.0, 0.8, 0.8), Color("70472e"))
 
 func _add_box(parent: StaticBody3D, size: Vector3, color: Color) -> void:
 	var mesh := MeshInstance3D.new()

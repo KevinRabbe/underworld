@@ -121,7 +121,14 @@ func request_workbench_interact() -> void:
 		return
 	var result: Dictionary = _building_runtime.interact_with_workbench()
 	if bool(result.get("success", false)):
-		last_action_message = "Workbench: shelter ready"
+		if result.has("chest_opened"):
+			last_action_message = "Chest opened"
+			harvest_result.emit({"type": "building.chest_opened", "stable_id": result.get("chest_opened", ""), "contents": result.get("contents", {})})
+		elif result.has("bed_claimed"):
+			last_action_message = "Bed claimed"
+			harvest_result.emit({"type": "building.bed_claimed", "stable_id": result.get("bed_claimed", "")})
+		else:
+			last_action_message = "Workbench: shelter ready"
 		if player != null and player.has_method("set_build_tool_active"):
 			player.set_build_tool_active(true)
 	else:
