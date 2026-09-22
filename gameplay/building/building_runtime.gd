@@ -100,13 +100,34 @@ static func validate_durable_snapshot(snapshot: Dictionary) -> Array[String]:
 			record_keys.sort()
 			if record_keys != ["building_id", "position", "stable_id", "stone", "wood"]:
 				failures.append("building snapshot shelter %d keys are invalid" % index)
-			var stable_id := str(shelter.get("stable_id", ""))
-			if stable_id.is_empty() or seen.has(stable_id):
+			var building_id: Variant = shelter.get("building_id", null)
+			if typeof(building_id) != TYPE_STRING or str(building_id) != BUILDING_SHELTER_ID:
+				failures.append("building snapshot shelter %d building_id must be canonical shelter String" % index)
+			var stable_id_variant: Variant = shelter.get("stable_id", null)
+			var stable_id := str(stable_id_variant)
+			var stable_suffix := stable_id.trim_prefix("building.shelter.basic.")
+			var stable_id_canonical := (
+				typeof(stable_id_variant) == TYPE_STRING
+				and stable_id.begins_with("building.shelter.basic.")
+				and stable_suffix.is_valid_int()
+				and int(stable_suffix) > 0
+				and stable_id == "building.shelter.basic.%03d" % int(stable_suffix)
+			)
+			if not stable_id_canonical or seen.has(stable_id):
 				failures.append("building snapshot shelter %d has duplicate/empty stable_id" % index)
 			seen[stable_id] = true
 			var position: Variant = shelter.get("position", null)
 			if not position is Vector3 or not _is_finite_vector3(position):
 				failures.append("building snapshot shelter %d position must be finite Vector3" % index)
+			for material in ["wood", "stone"]:
+				var amount: Variant = shelter.get(material, null)
+				var expected_amount: int = SHELTER_WOOD_COST if material == "wood" else SHELTER_STONE_COST
+				if typeof(amount) != TYPE_INT or int(amount) != expected_amount:
+					failures.append(
+						"building snapshot shelter %d %s must be canonical int value %d" % [
+							index, material, expected_amount,
+						]
+					)
 	return failures
 
 func workbench_position() -> Vector3:

@@ -46,4 +46,28 @@ static func run() -> Array[String]:
 		failures.append("shelter placement did not survive building snapshot/restore")
 	elif not restored.build_tool_active():
 		failures.append("build tool state did not survive building snapshot/restore")
+	var record: Dictionary = durable["placed_shelters"][0]
+	for field_case in [
+		{"field": "building_id", "value": 7},
+		{"field": "stable_id", "value": 9},
+		{"field": "wood", "value": 4.0},
+		{"field": "stone", "value": 2.0},
+		{"field": "position", "value": [2.0, 0.0, 0.0]},
+	]:
+		var malformed: Dictionary = durable.duplicate(true)
+		malformed["placed_shelters"][0][field_case["field"]] = field_case["value"]
+		if BuildingRuntime.validate_durable_snapshot(malformed).is_empty():
+			failures.append("building durable validation accepted malformed %s type" % field_case["field"])
+	var bad_value: Dictionary = durable.duplicate(true)
+	bad_value["placed_shelters"][0]["building_id"] = "building.wall.basic"
+	if BuildingRuntime.validate_durable_snapshot(bad_value).is_empty():
+		failures.append("building durable validation accepted unsupported building_id")
+	bad_value = durable.duplicate(true)
+	bad_value["placed_shelters"][0]["wood"] = 3
+	if BuildingRuntime.validate_durable_snapshot(bad_value).is_empty():
+		failures.append("building durable validation accepted unsupported wood cost")
+	bad_value = durable.duplicate(true)
+	bad_value["placed_shelters"][0]["stable_id"] = "building.shelter.basic.1"
+	if BuildingRuntime.validate_durable_snapshot(bad_value).is_empty():
+		failures.append("building durable validation accepted non-canonical stable_id")
 	return failures

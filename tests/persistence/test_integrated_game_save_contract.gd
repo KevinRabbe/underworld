@@ -13,6 +13,8 @@ const EquipmentService := preload("res://gameplay/items/equipment/equipment_serv
 const PendingLootState := preload("res://gameplay/loot/runtime/pending_loot_state.gd")
 const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
 const IntegratedGameSaveContract := preload("res://gameplay/persistence/integrated_game_save_contract.gd")
+const WorldDomainSessionState := preload("res://gameplay/world_session/world_domain_session_state.gd")
+const BuildingRuntime := preload("res://gameplay/building/building_runtime.gd")
 
 const WOOD_ID := "item.resource.wood"
 const AXE_ID := "item.tool.stone_axe"
@@ -27,6 +29,7 @@ static func run() -> Array[String]:
 	_test_empty_and_duplicate_pending_set(failures)
 	_test_strict_outer_and_current_manifest_fail_closed(failures)
 	_test_non_finite_resume_fails_closed(failures)
+	_test_v2_building_continue_contract(failures)
 	return failures
 
 
@@ -221,6 +224,66 @@ static func _test_non_finite_resume_fails_closed(failures: Array[String]) -> voi
 		)
 		if bool(encoded.get("success", false)):
 			failures.append("integrated save accepted non-finite resume position: %s" % bad_position)
+
+
+static func _test_v2_building_continue_contract(failures: Array[String]) -> void:
+	var fixture: Dictionary = _fixture(failures)
+	if fixture.is_empty():
+		return
+	var placed_record: Dictionary = {
+		"building_id": BuildingRuntime.BUILDING_SHELTER_ID,
+		"stable_id": "building.shelter.basic.001",
+		"position": Vector3(2.0, 0.0, -3.5),
+		"wood": BuildingRuntime.SHELTER_WOOD_COST,
+		"stone": BuildingRuntime.SHELTER_STONE_COST,
+	}
+	var building_state: Dictionary = {
+		"schema": BuildingRuntime.SNAPSHOT_SCHEMA,
+		"build_tool_active": true,
+		"workbench_used": true,
+		"placed_shelters": [placed_record],
+	}
+	var captured: Dictionary = IntegratedGameSaveContract.capture_v2_request({
+		"world_context": fixture["context"],
+		"world_session_state": WorldDomainSessionState.new(WorldDomainSessionState.DOMAIN_OVERWORLD, {}),
+		"delta_store": fixture["delta_store"],
+		"inventory_state": fixture["inventory"],
+		"equipment_state": fixture["equipment"],
+		"pending_loot_states": [],
+		"resume_position": fixture["resume_position"],
+		"current_health": 87,
+		"current_stamina": 42.5,
+		"building_state": building_state,
+	})
+	if not _require_success(captured, "building V2 SAVE capture", failures):
+		return
+	var encoded: Dictionary = IntegratedGameSaveContract.encode_v2_request(captured["request"])
+	if not _require_success(encoded, "building V2 SAVE encode", failures):
+		return
+	var decoded: Dictionary = IntegratedGameSaveContract.decode_v2_classified(str(encoded["json"]))
+	if not _require_success(decoded, "building V2 SAVE decode", failures):
+		return
+	if str(decoded.get("classification", "")) != IntegratedGameSaveContract.CLASS_AVAILABLE:
+		failures.append("building V2 SAVE decode was not AVAILABLE")
+		return
+	var candidate: Dictionary = decoded.get("candidate", {})
+	var restored_snapshot: Variant = candidate.get("building_state", null)
+	if not restored_snapshot is Dictionary or restored_snapshot != building_state:
+		failures.append("placed shelter/build-tool state changed through V2 SAVE encode/decode")
+		return
+	var runtime = BuildingRuntime.new().configure(null, fixture["inventory"], {})
+	var player := Node3D.new()
+	runtime.set_player(player)
+	var activation: Dictionary = runtime.restore_from_durable(restored_snapshot)
+	if not _require_success(activation, "building Continue activation", failures):
+		return
+	if not runtime.build_tool_active() or runtime.placed_shelters() != [placed_record]:
+		failures.append("building Continue activation did not restore active tool and shelter")
+	var shelter_node: Node = runtime.get_node_or_null("building.shelter.basic.001")
+	if shelter_node == null or shelter_node.global_position != placed_record["position"]:
+		failures.append("building Continue activation did not realize shelter at saved position")
+	runtime.free()
+	player.free()
 
 
 static func _fixture(failures: Array[String]) -> Dictionary:
