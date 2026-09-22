@@ -110,11 +110,6 @@ func _runtime_valid() -> bool:
 
 func _validated_cargo_records(cargo: Dictionary) -> Dictionary:
 	var failures: Array[String] = []
-	var cargo_keys: Array[String] = []
-	for key in cargo.keys(): cargo_keys.append(str(key))
-	cargo_keys.sort()
-	if cargo_keys != ["max_weight", "schema", "slot_capacity", "slots"]:
-		failures.append("death cache cargo keys are not canonical")
 	if str(cargo.get("schema", "")) != ItemContainerState.SNAPSHOT_SCHEMA:
 		failures.append("death cache cargo inventory schema is unsupported")
 	var slots: Variant = cargo.get("slots", null)
@@ -122,6 +117,8 @@ func _validated_cargo_records(cargo: Dictionary) -> Dictionary:
 		failures.append("death cache cargo slots must be Array")
 	if typeof(cargo.get("slot_capacity", null)) != TYPE_INT or int(cargo.get("slot_capacity", 0)) < 1:
 		failures.append("death cache cargo slot_capacity is invalid")
+	if (typeof(cargo.get("max_weight", null)) != TYPE_INT and typeof(cargo.get("max_weight", null)) != TYPE_FLOAT) or is_nan(float(cargo.get("max_weight", 0.0))) or is_inf(float(cargo.get("max_weight", 0.0))):
+		failures.append("death cache cargo max_weight is invalid")
 	if not slots is Array or not failures.is_empty():
 		return {"success": false, "diagnostics": failures}
 	var records: Array = []
