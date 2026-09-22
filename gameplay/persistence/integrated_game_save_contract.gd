@@ -202,7 +202,6 @@ static func capture_v2_request(source: Dictionary) -> Dictionary:
 		"placed_chests": [],
 		"claimed_bed_stable_id": "",
 		"selected_building_id": BuildingRuntime.BUILDING_SHELTER_ID,
-		"placed_chests": [], "claimed_bed_stable_id": "", "selected_building_id": BuildingRuntime.BUILDING_SHELTER_ID,
 	})
 	var building_failures := BuildingRuntime.validate_durable_snapshot(building_state)
 	if not building_failures.is_empty():
