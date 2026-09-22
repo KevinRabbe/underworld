@@ -6,6 +6,8 @@ const PendingLootState := preload("res://gameplay/loot/runtime/pending_loot_stat
 const InventoryStateCodec := preload("res://gameplay/items/inventory/inventory_state_codec.gd")
 const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
 const GameSaveSlotService := preload("res://gameplay/persistence/game_save_slot_service.gd")
+const EquipmentService := preload("res://gameplay/items/equipment/equipment_service.gd")
+const AxeDefinition := preload("res://content/items/tools/stone_axe_definition.tres")
 
 const CHITIN_ID := "item.resource.burrower_chitin"
 const PROFILE_ID := "loot_profile.creature.burrower.m3"
@@ -73,6 +75,22 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var equipment = survival.get_equipment_state()
 	var cargo_added: Dictionary = inventory.add_stack(chitin, 3, {"death_fixture": true})
 	if not _require_success(cargo_added, "DEATH SAVE cargo fixture", failures):
+		_free_attached(game)
+		_cleanup_slot()
+		return failures
+	var retained_added: Dictionary = inventory.add_instance(AxeDefinition, {"durability": 77})
+	if not _require_success(retained_added, "DEATH SAVE retained-equipment fixture", failures):
+		_free_attached(game)
+		_cleanup_slot()
+		return failures
+	var retained_equipped: Dictionary = EquipmentService.new().equip_from_inventory(
+		equipment,
+		inventory,
+		1,
+		AxeDefinition,
+		GameplaySaveCatalog.SLOT_AXE
+	)
+	if not _require_success(retained_equipped, "DEATH SAVE retained-equipment equip", failures):
 		_free_attached(game)
 		_cleanup_slot()
 		return failures
