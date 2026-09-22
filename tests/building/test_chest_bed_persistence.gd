@@ -14,6 +14,9 @@ static func run() -> Array[String]:
 	var runtime = BuildingRuntime.new().configure(null, inventory, {"item.resource.wood": wood, "item.resource.stone": stone})
 	var player := Node3D.new()
 	runtime.set_player(player)
+	# Normal G interaction authorizes the workbench before selecting a piece.
+	var workbench_result: Dictionary = runtime.interact_with_workbench()
+	_expect(failures, "workbench interaction authorizes building", bool(workbench_result.get("success", false)))
 
 	# B selects the authored chest piece, and placement stays in the runtime seam.
 	runtime.toggle_build_tool()
