@@ -19,7 +19,8 @@ static func capture(
 	survival,
 	player,
 	encounter_controller,
-	hunting_controller = null
+	hunting_controller = null,
+	death_cache_service = null
 ) -> Dictionary:
 	var failures: Array[String] = []
 	if world_settings == null:
@@ -83,6 +84,7 @@ static func capture(
 		"current_stamina": float(player.call("get_stamina")),
 		"building_state": building_state,
 		"hunting_state": hunting_state,
+		"death_cache_state": death_cache_service.durable_snapshot() if death_cache_service != null and death_cache_service.has_method("durable_snapshot") else {"schema": "player.death_cache.v1", "cache": {}},
 	})
 
 

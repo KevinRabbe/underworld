@@ -4,18 +4,23 @@ const PlayerDeathRecoveryControllerScript := preload("res://gameplay/player/life
 const CombatResolverScript := preload("res://gameplay/combat/resolution/combat_resolver.gd")
 const BurrowerEncounterControllerScript := preload("res://gameplay/creatures/spawning/prototype_burrower_encounter_controller.gd")
 const BoarEncounterControllerScript := preload("res://gameplay/hunting/boar_encounter_controller.gd")
+const DeathCacheServiceScript := preload("res://gameplay/player/lifecycle/player_death_cache_service.gd")
 
 
-static func compose_death_recovery(root: Node3D, player, world, world_settings) -> Dictionary:
+static func compose_death_recovery(root: Node3D, player, world, world_settings, survival = null) -> Dictionary:
 	var controller = PlayerDeathRecoveryControllerScript.new()
 	controller.name = "DeathRecovery"
 	root.add_child(controller)
-	var failures: Array[String] = controller.configure(player, world, world_settings)
+	var cache_service = null
+	if survival != null and survival.has_method("get_inventory_state"):
+		cache_service = DeathCacheServiceScript.new().configure(survival.get_inventory_state(), survival.get_equipment_state(), survival.get_item_definitions())
+	var failures: Array[String] = controller.configure(player, world, world_settings, cache_service, survival)
 	if failures.is_empty():
 		player.defeat_requested.connect(controller.request_recovery)
 	return {
 		"success": failures.is_empty(),
 		"controller": controller,
+		"death_cache_service": cache_service,
 		"diagnostics": failures,
 	}
 

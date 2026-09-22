@@ -311,6 +311,13 @@ func state_at(slot_index: int) -> Dictionary:
 	return _slot_snapshot(slot_index)
 
 
+## Clears owned item records at a lifecycle boundary. Callers must retain a
+## detached canonical snapshot before invoking this method.
+func clear_contents() -> void:
+	for index in range(_slots.size()):
+		_slots[index] = null
+
+
 ## Returns the resolved authored definition for presentation/runtime consumers.
 ## Serialized state_at/canonical_snapshot intentionally omit resource objects.
 func definition_at(slot_index: int):

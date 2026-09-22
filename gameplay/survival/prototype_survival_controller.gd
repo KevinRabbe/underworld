@@ -597,6 +597,20 @@ func get_equipment_state():
 	return _equipment
 
 
+func get_item_definitions() -> Array:
+	return _definitions.values()
+
+
+func get_bed_respawn_position() -> Vector3:
+	if _building_runtime == null or not _building_runtime.has_method("placed_shelters"):
+		return Vector3(NAN, NAN, NAN)
+	var shelters: Array = _building_runtime.placed_shelters()
+	if shelters.is_empty():
+		return Vector3(NAN, NAN, NAN)
+	var position: Variant = shelters[0].get("position", Vector3(NAN, NAN, NAN))
+	return position if position is Vector3 else Vector3(NAN, NAN, NAN)
+
+
 func get_item_definition(item_id: String):
 	return _definitions.get(item_id, null)
 
