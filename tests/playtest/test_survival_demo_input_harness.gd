@@ -38,7 +38,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	_expect(failures, "production Survival is composed", survival != null)
 
 	# Frame-polled movement uses a physical W key routed through InputMap.
-	var before := player.global_position
+	var before: Vector3 = player.global_position
 	_send_key(tree, KEY_W, true)
 	await tree.physics_frame
 	await tree.physics_frame
