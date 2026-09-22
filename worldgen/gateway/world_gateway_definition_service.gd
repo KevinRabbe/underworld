@@ -7,13 +7,16 @@ const SeedDeriver := preload("res://worldgen/random/seed_deriver.gd")
 const SeedDomains := preload("res://worldgen/random/seed_domains.gd")
 const CanonicalValue := preload("res://worldgen/validation/canonical_value.gd")
 const StageResult := preload("res://worldgen/pipeline/generation_stage_result.gd")
+const Context := preload("res://worldgen/pipeline/world_generation_context.gd")
 const EndpointDefinition := preload("res://worldgen/gateway/gateway_endpoint_definition.gd")
 const LinkDefinition := preload("res://worldgen/gateway/world_gateway_link_definition.gd")
 
 const STAGE_SOURCE: String = "gateway.source_site"
 const STAGE_DESTINATION: String = "gateway.destination_site"
 const STAGE_LINK: String = "gateway.link"
-const CONTRACT_REVISION: int = 1
+const SOURCE_CONTRACT_REVISION: int = 1
+const DESTINATION_CONTRACT_REVISION: int = 1
+const LINK_CONTRACT_REVISION: int = 1
 const DEFAULT_POLICY_ID: String = "paired"
 const DEFAULT_POLICY_REVISION: int = 1
 
@@ -29,7 +32,8 @@ static func define_source_site(
 		source_domain_id,
 		candidates,
 		STAGE_SOURCE,
-		SeedDomains.GATEWAY_OVERWORLD_SOURCE_SITE
+		SeedDomains.GATEWAY_OVERWORLD_SOURCE_SITE,
+		SOURCE_CONTRACT_REVISION
 	)
 
 
@@ -44,7 +48,8 @@ static func define_destination_site(
 		destination_domain_id,
 		candidates,
 		STAGE_DESTINATION,
-		SeedDomains.GATEWAY_UNDERWORLD_DESTINATION_SITE
+		SeedDomains.GATEWAY_UNDERWORLD_DESTINATION_SITE,
+		DESTINATION_CONTRACT_REVISION
 	)
 
 
@@ -58,25 +63,34 @@ static func define_paired_link(
 	var failures: Array[String] = _feature_contract_failures(
 		context,
 		STAGE_LINK,
-		SeedDomains.GATEWAY_LINK_PAIRING
+		SeedDomains.GATEWAY_LINK_PAIRING,
+		LINK_CONTRACT_REVISION
 	)
-	if not _is_semantic_token(policy_id, 64):
-		failures.append("Gateway link policy id must be a bounded semantic token")
-	if policy_revision <= 0:
-		failures.append("Gateway link policy revision must be positive")
-	if source_endpoint == null or not source_endpoint.has_method("validate"):
-		failures.append("Gateway link requires a source endpoint definition")
-	if destination_endpoint == null or not destination_endpoint.has_method("validate"):
-		failures.append("Gateway link requires a destination endpoint definition")
+	if policy_id != DEFAULT_POLICY_ID or policy_revision != DEFAULT_POLICY_REVISION:
+		failures.append("Gateway link supports only paired@1 policy")
+	if not _is_exact_script_instance(source_endpoint, EndpointDefinition):
+		failures.append("Gateway link requires exact source EndpointDefinition")
+	if not _is_exact_script_instance(destination_endpoint, EndpointDefinition):
+		failures.append("Gateway link requires exact destination EndpointDefinition")
 	if not failures.is_empty():
 		return StageResult.fail(STAGE_LINK, failures)
 
-	failures.append_array(source_endpoint.validate())
-	failures.append_array(destination_endpoint.validate())
-	if source_endpoint.endpoint_kind != EndpointDefinition.KIND_SOURCE:
-		failures.append("Gateway link source endpoint has the wrong semantic kind")
-	if destination_endpoint.endpoint_kind != EndpointDefinition.KIND_DESTINATION:
-		failures.append("Gateway link destination endpoint has the wrong semantic kind")
+	failures.append_array(_captured_endpoint_contract_failures(
+		context,
+		source_endpoint,
+		EndpointDefinition.KIND_SOURCE,
+		STAGE_SOURCE,
+		SeedDomains.GATEWAY_OVERWORLD_SOURCE_SITE,
+		SOURCE_CONTRACT_REVISION
+	))
+	failures.append_array(_captured_endpoint_contract_failures(
+		context,
+		destination_endpoint,
+		EndpointDefinition.KIND_DESTINATION,
+		STAGE_DESTINATION,
+		SeedDomains.GATEWAY_UNDERWORLD_DESTINATION_SITE,
+		DESTINATION_CONTRACT_REVISION
+	))
 	if source_endpoint.domain_id == destination_endpoint.domain_id:
 		failures.append("Gateway paired link requires distinct semantic domains")
 	if source_endpoint.world_id != context.world_id or destination_endpoint.world_id != context.world_id:
@@ -131,6 +145,14 @@ static func define_paired_link(
 	)
 	if provenance == null:
 		return StageResult.fail(STAGE_LINK, ["Gateway link provenance construction failed"])
+	failures.append_array(context.validate_provenance(
+		provenance,
+		STAGE_LINK,
+		"",
+		[source_endpoint.fingerprint, destination_endpoint.fingerprint]
+	))
+	if not failures.is_empty():
+		return StageResult.fail(STAGE_LINK, failures)
 
 	var link = LinkDefinition.new(
 		address,
@@ -159,12 +181,14 @@ static func _define_endpoint(
 	semantic_domain_id: String,
 	candidates: Array,
 	stage_id: String,
-	seed_domain_id: int
+	seed_domain_id: int,
+	expected_revision: int
 ):
 	var failures: Array[String] = _feature_contract_failures(
 		context,
 		stage_id,
-		seed_domain_id
+		seed_domain_id,
+		expected_revision
 	)
 	if not _is_semantic_token(semantic_domain_id, 64):
 		failures.append("Gateway endpoint domain id must be a bounded semantic token")
@@ -235,6 +259,9 @@ static func _define_endpoint(
 	var provenance = context.make_provenance(stage_id)
 	if provenance == null:
 		return StageResult.fail(stage_id, ["Gateway endpoint provenance construction failed"])
+	failures.append_array(context.validate_provenance(provenance, stage_id, "", []))
+	if not failures.is_empty():
+		return StageResult.fail(stage_id, failures)
 	var endpoint = EndpointDefinition.new(
 		selected["address"],
 		endpoint_kind,
@@ -273,17 +300,17 @@ static func _endpoint_address(
 static func _feature_contract_failures(
 	context,
 	stage_id: String,
-	seed_domain_id: int
+	seed_domain_id: int,
+	expected_stage_revision: int
 ) -> Array[String]:
 	var failures: Array[String] = []
-	if context == null:
-		return ["Gateway definition requires a supplied WorldGenerationContext"]
-	failures.append_array(context.validate_structure())
+	if not _is_exact_script_instance(context, Context):
+		return ["Gateway definition requires exact WorldGenerationContext"]
+	failures.append_array(context.validate())
 	if not failures.is_empty():
 		return failures
 
 	var snapshot: Dictionary = context.manifest_snapshot()
-	var expected_stage_revision: int = CONTRACT_REVISION
 	var captured_stage_revision: int = _stage_revision_from_snapshot(snapshot, stage_id)
 	if captured_stage_revision != expected_stage_revision:
 		failures.append(
@@ -312,6 +339,32 @@ static func _feature_contract_failures(
 			"Gateway feature unavailable: pinned seed-domain descriptor mismatch %08x"
 			% seed_domain_id
 		)
+	return failures
+
+
+static func _captured_endpoint_contract_failures(
+	context,
+	endpoint,
+	expected_kind: String,
+	stage_id: String,
+	seed_domain_id: int,
+	expected_revision: int
+) -> Array[String]:
+	var failures: Array[String] = _feature_contract_failures(
+		context,
+		stage_id,
+		seed_domain_id,
+		expected_revision
+	)
+	failures.append_array(endpoint.validate())
+	if endpoint.endpoint_kind != expected_kind:
+		failures.append("Gateway link endpoint has the wrong semantic kind")
+	if endpoint.semantic_revision != expected_revision:
+		failures.append("Gateway link endpoint revision is not captured by the pinned root")
+	if endpoint.world_id != context.world_id:
+		failures.append("Gateway link rejects cross-root endpoint world splice")
+	if endpoint.generator_manifest_id != context.generator_manifest_id:
+		failures.append("Gateway link rejects cross-root endpoint manifest splice")
 	return failures
 
 
@@ -366,3 +419,11 @@ static func _is_semantic_token(value: String, max_length: int) -> bool:
 		if not allowed:
 			return false
 	return true
+
+
+static func _is_exact_script_instance(value, script) -> bool:
+	return (
+		typeof(value) == TYPE_OBJECT
+		and value != null
+		and value.get_script() == script
+	)

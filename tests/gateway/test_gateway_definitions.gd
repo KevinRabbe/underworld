@@ -5,6 +5,85 @@ const GeneratorManifest := preload("res://worldgen/versioning/generator_manifest
 const RootPackage := preload("res://worldgen/versioning/root_generation_identity_package.gd")
 const SeedDomains := preload("res://worldgen/random/seed_domains.gd")
 const GatewayService := preload("res://worldgen/gateway/world_gateway_definition_service.gd")
+const StableAddress := preload("res://worldgen/identity/stable_address.gd")
+const StableId := preload("res://worldgen/identity/stable_id.gd")
+const Provenance := preload("res://worldgen/pipeline/generation_provenance.gd")
+const EndpointDefinition := preload("res://worldgen/gateway/gateway_endpoint_definition.gd")
+const LinkDefinition := preload("res://worldgen/gateway/world_gateway_link_definition.gd")
+
+
+class DuckProvenance extends RefCounted:
+	var _data: Dictionary
+	var fingerprint: String
+
+	func _init(data_value: Dictionary, fingerprint_value: String) -> void:
+		_data = data_value.duplicate(true)
+		fingerprint = fingerprint_value
+
+	func canonical_data() -> Dictionary:
+		return _data.duplicate(true)
+
+
+class DuckAddress extends RefCounted:
+	var _canonical: String
+
+	func _init(canonical_value: String) -> void:
+		_canonical = canonical_value
+
+	func canonical_text() -> String:
+		return _canonical
+
+
+class FakeContext extends RefCounted:
+	var world_seed: int
+	var world_id: String
+	var generator_manifest_id: String
+	var _snapshot: Dictionary
+
+	func _init(real_context) -> void:
+		world_seed = real_context.world_seed
+		world_id = real_context.world_id
+		generator_manifest_id = real_context.generator_manifest_id
+		_snapshot = real_context.manifest_snapshot()
+
+	func validate_structure() -> Array[String]:
+		return []
+
+	func validate() -> Array[String]:
+		return []
+
+	func manifest_snapshot() -> Dictionary:
+		return _snapshot.duplicate(true)
+
+	func make_provenance(stage_id: String):
+		return Provenance.new(world_id, generator_manifest_id, stage_id, 1)
+
+
+class FakeEndpoint extends RefCounted:
+	var stable_id: String
+	var endpoint_kind: String
+	var domain_id: String
+	var world_id: String
+	var generator_manifest_id: String
+	var fingerprint: String
+
+	func _init(
+		stable_id_value: String,
+		kind_value: String,
+		domain_value: String,
+		world_value: String,
+		manifest_value: String,
+		fingerprint_value: String
+	) -> void:
+		stable_id = stable_id_value
+		endpoint_kind = kind_value
+		domain_id = domain_value
+		world_id = world_value
+		generator_manifest_id = manifest_value
+		fingerprint = fingerprint_value
+
+	func validate() -> Array[String]:
+		return []
 
 
 static func run() -> Array[String]:
@@ -12,6 +91,11 @@ static func run() -> Array[String]:
 	_test_current_manifest_contract(failures)
 	_test_deterministic_independent_endpoints_and_link(failures)
 	_test_bidirectional_resolution(failures)
+	_test_exact_authority_admission(failures)
+	_test_captured_endpoint_contract_closure(failures)
+	_test_invalid_link_resolution_fails_closed(failures)
+	_test_supported_policy_and_revision_contracts(failures)
+	_test_typed_provenance_admission(failures)
 	_test_detached_input_boundaries(failures)
 	_test_cross_root_splice_rejected(failures)
 	_test_historical_context_is_compatible_but_gateway_unavailable(failures)
@@ -148,6 +232,276 @@ static func _test_bidirectional_resolution(failures: Array[String]) -> void:
 	_expect_equal(failures, "reverse traversal resolves source domain", str(reverse.get("domain_id", "")), "DOMAIN_A")
 	_expect_true(failures, "wrong-domain traversal fails closed", link.data.resolve_other_endpoint(source.data.stable_id, "DOMAIN_B").is_empty())
 	_expect_true(failures, "malformed endpoint traversal fails closed", link.data.resolve_other_endpoint("sid1:not-canonical", "DOMAIN_A").is_empty())
+
+
+static func _test_exact_authority_admission(failures: Array[String]) -> void:
+	var context = Context.new(918273)
+	var fake_context = FakeContext.new(context)
+	var fake_context_result = GatewayService.define_source_site(
+		fake_context,
+		"DOMAIN_A",
+		_source_candidates(0)
+	)
+	_expect_true(
+		failures,
+		"duck-typed context cannot publish a gateway endpoint",
+		not fake_context_result.success
+	)
+
+	var fake_source_address = StableAddress.from_segments(["not", "a", "gateway", "source"])
+	var fake_destination_address = StableAddress.from_segments(["not", "a", "gateway", "destination"])
+	var fake_source_id = StableId.from_address(fake_source_address)
+	var fake_destination_id = StableId.from_address(fake_destination_address)
+	var fake_source = FakeEndpoint.new(
+		fake_source_id.value(),
+		EndpointDefinition.KIND_SOURCE,
+		"DOMAIN_A",
+		context.world_id,
+		context.generator_manifest_id,
+		"fake-source-fingerprint"
+	)
+	var fake_destination = FakeEndpoint.new(
+		fake_destination_id.value(),
+		EndpointDefinition.KIND_DESTINATION,
+		"DOMAIN_B",
+		context.world_id,
+		context.generator_manifest_id,
+		"fake-destination-fingerprint"
+	)
+	var forged_link = GatewayService.define_paired_link(
+		context,
+		fake_source,
+		fake_destination
+	)
+	_expect_true(
+		failures,
+		"duck-typed endpoint objects cannot publish an authoritative link",
+		not forged_link.success
+	)
+
+	var real_address = StableAddress.from_segments([
+		"gateway",
+		"source",
+		"domain",
+		"DOMAIN_A",
+		"candidate",
+		"duck-address",
+		"revision",
+		str(GatewayService.SOURCE_CONTRACT_REVISION),
+	])
+	var typed_provenance = context.make_provenance(GatewayService.STAGE_SOURCE)
+	var duck_address_endpoint = EndpointDefinition.new(
+		DuckAddress.new(real_address.canonical_text()),
+		EndpointDefinition.KIND_SOURCE,
+		"DOMAIN_A",
+		"duck-address",
+		{"anchor": Vector3.ZERO},
+		GatewayService.SOURCE_CONTRACT_REVISION,
+		context.world_id,
+		context.generator_manifest_id,
+		typed_provenance
+	)
+	_expect_true(
+		failures,
+		"duck-typed StableAddress cannot enter an endpoint definition",
+		not duck_address_endpoint.validate().is_empty()
+	)
+
+
+static func _test_captured_endpoint_contract_closure(failures: Array[String]) -> void:
+	var context = Context.new(314159)
+	var destination = GatewayService.define_destination_site(
+		context,
+		"DOMAIN_B",
+		_destination_candidates(0)
+	)
+	_expect_success(failures, "captured-contract destination fixture succeeds", destination)
+	if not destination.success:
+		return
+
+	var forged_revision: int = GatewayService.SOURCE_CONTRACT_REVISION + 1
+	var forged_address = StableAddress.from_segments([
+		"gateway",
+		"source",
+		"domain",
+		"DOMAIN_A",
+		"candidate",
+		"forged-source",
+		"revision",
+		str(forged_revision),
+	])
+	var forged_provenance = Provenance.new(
+		context.world_id,
+		context.generator_manifest_id,
+		GatewayService.STAGE_SOURCE,
+		forged_revision
+	)
+	var forged_source = EndpointDefinition.new(
+		forged_address,
+		EndpointDefinition.KIND_SOURCE,
+		"DOMAIN_A",
+		"forged-source",
+		{"anchor": Vector3.ZERO},
+		forged_revision,
+		context.world_id,
+		context.generator_manifest_id,
+		forged_provenance
+	)
+	var forged_revision_link = GatewayService.define_paired_link(
+		context,
+		forged_source,
+		destination.data
+	)
+	_expect_true(
+		failures,
+		"uncaptured endpoint revision cannot publish a link",
+		not forged_revision_link.success
+	)
+
+	var snapshot: Dictionary = context.manifest_snapshot()
+	for descriptor_variant in snapshot["seed_domain_descriptors"]:
+		var descriptor: Dictionary = descriptor_variant
+		if int(descriptor.get("domain_id", 0)) == SeedDomains.GATEWAY_OVERWORLD_SOURCE_SITE:
+			descriptor["revision"] = int(descriptor.get("revision", 0)) + 1
+	var mismatched_manifest = GeneratorManifest.from_snapshot(snapshot)
+	var mismatched_context = Context.from_exact_identity(
+		context.world_seed,
+		context.world_id,
+		context.world_id_contract(),
+		mismatched_manifest
+	)
+	var mismatched_domain_result = GatewayService.define_source_site(
+		mismatched_context,
+		"DOMAIN_A",
+		_source_candidates(0)
+	)
+	_expect_true(
+		failures,
+		"mismatched captured source seed-domain revision fails closed",
+		not mismatched_domain_result.success
+	)
+
+
+static func _test_invalid_link_resolution_fails_closed(failures: Array[String]) -> void:
+	var context = Context.new(271828)
+	var source = GatewayService.define_source_site(context, "DOMAIN_A", _source_candidates(0))
+	var destination = GatewayService.define_destination_site(context, "DOMAIN_B", _destination_candidates(0))
+	if not source.success or not destination.success:
+		failures.append("invalid-link resolution fixture endpoints failed")
+		return
+	var link = GatewayService.define_paired_link(context, source.data, destination.data)
+	_expect_success(failures, "invalid-link resolution fixture succeeds", link)
+	if not link.success:
+		return
+	link.data._stable_address = null
+	_expect_true(failures, "mutated link is invalid", not link.data.validate().is_empty())
+	_expect_true(
+		failures,
+		"invalid link cannot resolve destination",
+		link.data.resolve_other_endpoint(source.data.stable_id, "DOMAIN_A").is_empty()
+	)
+	_expect_true(
+		failures,
+		"invalid link cannot resolve paired return",
+		link.data.resolve_other_endpoint(destination.data.stable_id, "DOMAIN_B").is_empty()
+	)
+
+
+static func _test_supported_policy_and_revision_contracts(failures: Array[String]) -> void:
+	_expect_equal(failures, "source contract has independent revision constant", GatewayService.SOURCE_CONTRACT_REVISION, 1)
+	_expect_equal(failures, "destination contract has independent revision constant", GatewayService.DESTINATION_CONTRACT_REVISION, 1)
+	_expect_equal(failures, "link contract has independent revision constant", GatewayService.LINK_CONTRACT_REVISION, 1)
+	var context = Context.new(161803)
+	var source = GatewayService.define_source_site(context, "DOMAIN_A", _source_candidates(0))
+	var destination = GatewayService.define_destination_site(context, "DOMAIN_B", _destination_candidates(0))
+	if not source.success or not destination.success:
+		failures.append("policy rejection fixture endpoints failed")
+		return
+	var wrong_id = GatewayService.define_paired_link(
+		context,
+		source.data,
+		destination.data,
+		"unsupported-policy",
+		1
+	)
+	var wrong_revision = GatewayService.define_paired_link(
+		context,
+		source.data,
+		destination.data,
+		GatewayService.DEFAULT_POLICY_ID,
+		99
+	)
+	_expect_true(failures, "unsupported policy id fails closed", not wrong_id.success)
+	_expect_true(failures, "unsupported policy revision fails closed", not wrong_revision.success)
+
+
+static func _test_typed_provenance_admission(failures: Array[String]) -> void:
+	var context = Context.new(141421)
+	var real_provenance = context.make_provenance(GatewayService.STAGE_SOURCE)
+	var duck_provenance = DuckProvenance.new(
+		real_provenance.canonical_data(),
+		real_provenance.fingerprint
+	)
+	var source_address = StableAddress.from_segments([
+		"gateway",
+		"source",
+		"domain",
+		"DOMAIN_A",
+		"candidate",
+		"typed-source",
+		"revision",
+		str(GatewayService.SOURCE_CONTRACT_REVISION),
+	])
+	var duck_endpoint = EndpointDefinition.new(
+		source_address,
+		EndpointDefinition.KIND_SOURCE,
+		"DOMAIN_A",
+		"typed-source",
+		{"anchor": Vector3.ZERO},
+		GatewayService.SOURCE_CONTRACT_REVISION,
+		context.world_id,
+		context.generator_manifest_id,
+		duck_provenance
+	)
+	_expect_true(
+		failures,
+		"duck-typed endpoint provenance fails exact admission",
+		not duck_endpoint.validate().is_empty()
+	)
+
+	var source = GatewayService.define_source_site(context, "DOMAIN_A", _source_candidates(0))
+	var destination = GatewayService.define_destination_site(context, "DOMAIN_B", _destination_candidates(0))
+	if not source.success or not destination.success:
+		failures.append("typed link provenance fixture endpoints failed")
+		return
+	var real_link = GatewayService.define_paired_link(context, source.data, destination.data)
+	_expect_success(failures, "typed link provenance fixture succeeds", real_link)
+	if not real_link.success:
+		return
+	var link_duck_provenance = DuckProvenance.new(
+		real_link.data.provenance_snapshot(),
+		real_link.data.provenance_fingerprint
+	)
+	var duck_link = LinkDefinition.new(
+		real_link.data.stable_address,
+		real_link.data.source_endpoint_id,
+		real_link.data.source_domain_id,
+		real_link.data.destination_endpoint_id,
+		real_link.data.destination_domain_id,
+		real_link.data.policy_id,
+		real_link.data.policy_revision,
+		real_link.data.bidirectional,
+		real_link.data.semantic_revision,
+		real_link.data.pairing_variant,
+		real_link.data.world_id,
+		real_link.data.generator_manifest_id,
+		link_duck_provenance
+	)
+	_expect_true(
+		failures,
+		"duck-typed link provenance fails exact admission",
+		not duck_link.validate().is_empty()
+	)
 
 
 static func _test_detached_input_boundaries(failures: Array[String]) -> void:

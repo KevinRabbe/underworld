@@ -4,11 +4,14 @@ class_name UnderworldGatewayEndpointDefinition
 const StableAddress := preload("res://worldgen/identity/stable_address.gd")
 const StableId := preload("res://worldgen/identity/stable_id.gd")
 const CanonicalValue := preload("res://worldgen/validation/canonical_value.gd")
+const Provenance := preload("res://worldgen/pipeline/generation_provenance.gd")
 
 const KIND_SOURCE: String = "source"
 const KIND_DESTINATION: String = "destination"
 const STAGE_SOURCE: String = "gateway.source_site"
 const STAGE_DESTINATION: String = "gateway.destination_site"
+const SOURCE_SEMANTIC_REVISION: int = 1
+const DESTINATION_SEMANTIC_REVISION: int = 1
 
 var _stable_address
 var _stable_id: String = ""
@@ -19,6 +22,7 @@ var _locator: Dictionary = {}
 var _semantic_revision: int = 0
 var _world_id: String = ""
 var _generator_manifest_id: String = ""
+var _provenance_type_accepted: bool = false
 var _provenance_data: Dictionary = {}
 var _provenance_fingerprint: String = ""
 var _fingerprint: String = ""
@@ -105,7 +109,8 @@ func _init(
 	_semantic_revision = semantic_revision_value
 	_world_id = world_id_value
 	_generator_manifest_id = generator_manifest_id_value
-	if provenance_value != null and provenance_value.has_method("canonical_data"):
+	_provenance_type_accepted = _is_exact_script_instance(provenance_value, Provenance)
+	if _provenance_type_accepted:
 		_provenance_data = provenance_value.canonical_data().duplicate(true)
 		_provenance_fingerprint = str(provenance_value.fingerprint)
 	_fingerprint = _compute_fingerprint()
@@ -147,8 +152,13 @@ func validate() -> Array[String]:
 		failures.append("Gateway endpoint requires a bounded semantic domain id")
 	if not _is_semantic_token(_candidate_key, 96):
 		failures.append("Gateway endpoint requires a bounded semantic candidate key")
-	if _semantic_revision <= 0:
-		failures.append("Gateway endpoint semantic revision must be positive")
+	var expected_revision: int = (
+		SOURCE_SEMANTIC_REVISION
+		if _endpoint_kind == KIND_SOURCE
+		else DESTINATION_SEMANTIC_REVISION
+	)
+	if _semantic_revision != expected_revision:
+		failures.append("Gateway endpoint semantic revision is unsupported")
 	if _world_id.is_empty():
 		failures.append("Gateway endpoint requires world_id")
 	if _generator_manifest_id.is_empty():
@@ -180,9 +190,12 @@ func validate() -> Array[String]:
 	var expected_stage: String = (
 		STAGE_SOURCE if _endpoint_kind == KIND_SOURCE else STAGE_DESTINATION
 	)
+	if not _provenance_type_accepted:
+		failures.append("Gateway endpoint requires exact GenerationProvenance")
 	if _provenance_data.is_empty():
 		failures.append("Gateway endpoint requires generation provenance")
 	else:
+		failures.append_array(_provenance_schema_failures(expected_stage))
 		if str(_provenance_data.get("world_id", "")) != _world_id:
 			failures.append("Gateway endpoint provenance world mismatch")
 		if str(_provenance_data.get("generator_manifest_id", "")) != _generator_manifest_id:
@@ -200,6 +213,37 @@ func validate() -> Array[String]:
 	return failures
 
 
+func _provenance_schema_failures(expected_stage: String) -> Array[String]:
+	var failures: Array[String] = []
+	var expected_keys: Array[String] = [
+		"contract_revision",
+		"world_id",
+		"generator_manifest_id",
+		"region_id",
+		"region_address",
+		"stage_id",
+		"stage_contract_revision",
+		"source_stage_fingerprints",
+	]
+	if _provenance_data.size() != expected_keys.size():
+		failures.append("Gateway endpoint provenance schema mismatch")
+	for key in expected_keys:
+		if not _provenance_data.has(key):
+			failures.append("Gateway endpoint provenance missing field: " + key)
+	if int(_provenance_data.get("contract_revision", 0)) != Provenance.CONTRACT_REVISION:
+		failures.append("Gateway endpoint provenance contract revision mismatch")
+	if str(_provenance_data.get("stage_id", "")) != expected_stage:
+		failures.append("Gateway endpoint provenance stage mismatch")
+	if not str(_provenance_data.get("region_id", "")).is_empty():
+		failures.append("Gateway endpoint provenance must be root-scoped")
+	if not str(_provenance_data.get("region_address", "")).is_empty():
+		failures.append("Gateway endpoint provenance must not carry a region address")
+	var sources_variant = _provenance_data.get("source_stage_fingerprints", null)
+	if typeof(sources_variant) != TYPE_ARRAY or not sources_variant.is_empty():
+		failures.append("Gateway endpoint provenance ancestry must be empty")
+	return failures
+
+
 func _compute_fingerprint() -> String:
 	var canonical: String = CanonicalValue.fingerprint(canonical_data())
 	if canonical.is_empty():
@@ -208,9 +252,17 @@ func _compute_fingerprint() -> String:
 
 
 static func _copy_address(address):
-	if address == null:
+	if not _is_exact_script_instance(address, StableAddress):
 		return null
 	return StableAddress.parse(address.canonical_text())
+
+
+static func _is_exact_script_instance(value, script) -> bool:
+	return (
+		typeof(value) == TYPE_OBJECT
+		and value != null
+		and value.get_script() == script
+	)
 
 
 static func _is_semantic_token(value: String, max_length: int) -> bool:

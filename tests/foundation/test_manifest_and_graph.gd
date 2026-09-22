@@ -6,6 +6,8 @@ const GraphCanonicalizer := preload("res://worldgen/validation/graph_canonicaliz
 const GraphValidator := preload("res://worldgen/validation/graph_validator.gd")
 const SampleGraph := preload("res://tests/foundation/sample_graph_fixture.gd")
 
+const GATEWAY_AWARE_FOUNDATION_MANIFEST_ID: String = "gm-sha256:cb5674049cfdb0c0f6291c35fbc85382cddf4707bfbd2531d669f78b6e35471e"
+
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -81,10 +83,11 @@ static func _test_manifest_vector(failures: Array[String]) -> void:
 		1
 	)
 	var manifest_id: String = manifest.manifest_id()
-	_expect_true(
+	_expect_equal(
 		failures,
-		"foundation GeneratorManifest has canonical SHA-256 identity",
-		manifest_id.begins_with("gm-sha256:") and manifest_id.length() == 74
+		"gateway-aware foundation GeneratorManifest identity is exact",
+		manifest_id,
+		GATEWAY_AWARE_FOUNDATION_MANIFEST_ID
 	)
 
 
