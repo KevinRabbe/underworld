@@ -31,6 +31,11 @@ func add_pickups_to_chunk_data(chunk_coord: Vector2i, data: Dictionary) -> void:
 	mixed_seed ^= chunk_coord.x * 83492791
 	mixed_seed ^= chunk_coord.y * 297121507
 	rng.seed = mixed_seed
+	# Keep the frozen legacy-v2 branch/stone stream byte-for-byte stable. New
+	# authored pickup families must use an independent stream rather than
+	# consuming draws from the accepted migration RNG sequence.
+	var fiber_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	fiber_rng.seed = mixed_seed ^ 0x6D2B79F5
 
 	for base_z in range(0, resolution - 1, step):
 		for base_x in range(0, resolution - 1, step):
@@ -76,11 +81,11 @@ func add_pickups_to_chunk_data(chunk_coord: Vector2i, data: Dictionary) -> void:
 			var fiber_chance: float = settings.plant_fiber_pickup_density * (
 				0.65 + forest_density * 0.70 + shore_factor * 0.20 + buildability * 0.10
 			)
-			if rng.randf() < fiber_chance:
-				var fiber_scale: float = rng.randf_range(0.45, 0.80)
-				var fiber_yaw: float = rng.randf_range(0.0, TAU)
+			if fiber_rng.randf() < fiber_chance:
+				var fiber_scale: float = fiber_rng.randf_range(0.45, 0.80)
+				var fiber_yaw: float = fiber_rng.randf_range(0.0, TAU)
 				var fiber_basis: Basis = Basis(Vector3.UP, fiber_yaw).scaled(
-					Vector3(fiber_scale, rng.randf_range(0.12, 0.20), fiber_scale * 0.45)
+					Vector3(fiber_scale, fiber_rng.randf_range(0.12, 0.20), fiber_scale * 0.45)
 				)
 				plant_fiber_transforms.append(Transform3D(
 					fiber_basis,
