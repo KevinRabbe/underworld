@@ -161,6 +161,51 @@ Escalate only when existing authority cannot decide the next action, for example
 
 Routine review classification, bounded repair, source refill, focused validation, and movement to the next already-defined player truth are not reasons to ask "continue?".
 
+## Worker economics — do not spend Codex on standalone read-only work
+
+Treat an autonomous Codex worker as an implementation/review execution resource, not a planning analyst.
+
+Default worker assignment:
+
+```text
+WRITE
+  implementation
+  bounded repair
+  accepted-head adapter
+  focused regression owned by the packet
+  integration wrapper when authorized
+
+or
+
+REVIEW
+  independent immutable-source review required by governance
+```
+
+Avoid:
+
+```text
+READ-ONLY WORKER
+  -> inspect
+  -> summarize
+  -> stop
+```
+
+That pattern consumes a worker without changing repository state or producing a required independent verdict.
+
+A short read-only diagnostic is acceptable inside a write-capable lane when it immediately answers:
+
+```text
+what exact source must change?
+what test owns the failure?
+is the packet still lawful?
+```
+
+and then flows directly into implementation.
+
+If the answer is "no write is currently lawful", release that worker and use capacity elsewhere. Do not manufacture a long read-only backlog to keep it occupied.
+
+The only intentionally long read-only lane is an **independent review**, because its non-mutation is itself part of the governance theorem.
+
 ## Refill algorithm
 
 Whenever a worker finishes or becomes blocked:
@@ -170,12 +215,12 @@ Whenever a worker finishes or becomes blocked:
 3. among equal-ready packets, prefer the one with the largest downstream release;
 4. if candidates contend on a source mutex, the nearer player truth wins;
 5. if the nearer candidate is blocked, do not idle the mutex—take the next lawful candidate;
-6. if no direct packet is ready, prepay a disjoint prerequisite for the next one or two player truths;
+6. if no direct packet is ready, implement a lawful disjoint prerequisite for the next one or two player truths; use read-only preflight only when no write-capable prerequisite exists;
 7. never manufacture semantic edges from runner/workflow/file serialization.
 
 This means a diagram such as `A -> B -> C` is mandatory only when the issue contract says the edges are semantic. A preferred turnover order is not automatically a dependency graph.
 
-## Blocked / preflight execution loop
+## Blocked fallback — minimal preflight only
 
 A long run must not collapse into:
 
@@ -186,15 +231,14 @@ read #33
 -> exit
 ```
 
-When the ready implementation set is empty because of governance, review ownership, or evidence selection, enter this loop:
+When the ready implementation set is empty because of governance, review ownership, or evidence selection, do not assign a full standalone Codex worker to generic preflight. If the current context is already active, use this minimal fallback:
 
 ```text
 refresh blocker once
 -> freeze exact blocker state
--> build blocked-mode backlog
--> execute read-only preflight items
--> record newly learned facts
--> continue until backlog is materially exhausted
+-> perform only the smallest diagnostic needed for the next write/review turn
+-> record genuinely new blocking facts
+-> release/repurpose the worker if no write-capable work is lawful
 ```
 
 Good blocked-mode outputs include:
@@ -222,7 +266,7 @@ Bad blocked-mode activity includes:
 
 ### Blocked-mode work stealing
 
-Treat read-only preflight as a work-stealing pool. If the immediate blocker has already been audited, move downstream without claiming source:
+Do not treat read-only preflight as a work-stealing pool. If the immediate blocker has already been audited, prefer a lawful downstream **write-capable** packet:
 
 1. next Phase/milestone source packet;
 2. next shared-path integration seam;
