@@ -216,8 +216,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		if camera_pitch_pivot != null and camera_node != null:
 			var horizontal_distance: float = Vector2(target_direction.x, target_direction.z).length()
 			camera_pitch_pivot.rotation.x = atan2(tree_target_position.y - camera_node.global_position.y, maxf(horizontal_distance, 0.001))
-		if player.global_position.distance_to(tree_target_position) > 3.0:
-			player.global_position = tree_target_position - target_direction.normalized() * 2.0
+		if player.global_position.distance_to(tree_target_position) > 1.0:
+			player.global_position = tree_target_position - target_direction.normalized() * 0.5
 			if player.has_method("_set_camera_distance"):
 				player.call("_set_camera_distance", 1.0)
 			await _wait_physics(tree, 4)
@@ -241,7 +241,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		await _wait_physics(tree, 30)
 	var gate = app.get_gameplay_input_gate() if app.has_method("get_gameplay_input_gate") else null
 	var gameplay_enabled := bool(player.call("gameplay_input_enabled")) if player.has_method("gameplay_input_enabled") else false
-	print("[PLAYTEST DIAG] harvest requests=%d mouse_mode=%d gameplay_input_enabled=%s gate_allowed=%s" % [harvest_requests[0], Input.mouse_mode, str(gameplay_enabled), str(gate.call("allows_player_input")) if gate != null else "<missing>"])
+	print("[PLAYTEST DIAG] harvest requests=%d mouse_mode=%d gameplay_input_enabled=%s gate_allowed=%s action=%s" % [harvest_requests[0], Input.mouse_mode, str(gameplay_enabled), str(gate.call("allows_player_input")) if gate != null else "<missing>", str(survival.get("last_action_message")) if survival != null else "<missing>"])
 	_expect(failures, "left-click resource interaction reaches production harvest path", harvest_requests[0] > 0)
 	_expect(failures, "three real tree clicks produce canonical wood", tree_body != null and inventory.quantity_of("item.resource.wood") >= wood_before_harvest + 4)
 	if not tree_object_id.is_empty() and world != null and world.has_method("is_world_object_destroyed"):
