@@ -218,17 +218,26 @@ func _ensure_workbench() -> void:
 		forward = Vector3.FORWARD
 	var position := _player.global_position + forward.normalized() * 2.0
 	position.y = _player.global_position.y - 0.8
-	_workbench.global_position = position
 	add_child(_workbench)
+	# Detached contract fixtures do not have a SceneTree, so assigning
+	# global_position before attachment is invalid and can collapse the saved
+	# transform. Attach first, then use the local transform for detached roots.
+	if is_inside_tree():
+		_workbench.global_position = position
+	else:
+		_workbench.position = position
 	_add_box(_workbench, Vector3(1.2, 0.9, 0.8), Color("6d432b"))
 
 func _realize_shelter(record: Dictionary) -> void:
 	var body := StaticBody3D.new()
 	body.name = str(record["stable_id"])
-	body.global_position = record["position"]
 	body.set_meta("building_id", record["building_id"])
 	body.set_meta("stable_id", record["stable_id"])
 	add_child(body)
+	if is_inside_tree():
+		body.global_position = record["position"]
+	else:
+		body.position = record["position"]
 	_add_box(body, Vector3(2.4, 1.6, 0.35), Color("9b6b3e"))
 
 func _add_box(parent: StaticBody3D, size: Vector3, color: Color) -> void:
