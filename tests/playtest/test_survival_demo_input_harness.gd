@@ -118,6 +118,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			await tree.process_frame
 			var weapon_session_after = game.get_node_or_null("WeaponRuntimeSession")
 			var craft_result: Dictionary = weapon_session_after.call("last_result") if weapon_session_after != null else {}
+			print("[PLAYTEST DIAG] craft last_result=%s" % [str(craft_result)])
 			var crafting_inventory_after: String = inventory.canonical_json() if inventory != null else ""
 			var crafting_equipment_after: String = survival.call("get_equipment_state").canonical_json() if survival != null else ""
 			_expect(failures, "crafting Enter reports successful recipe transaction", bool(craft_result.get("success", false)) and bool(craft_result.get("craft_succeeded", false)))

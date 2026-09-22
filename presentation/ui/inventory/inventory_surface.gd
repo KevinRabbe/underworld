@@ -114,6 +114,7 @@ func _ensure_ui() -> void:
 	_status_label = Label.new()
 	column.add_child(_status_label)
 	_grid = GridContainer.new()
+	_grid.name = "GridContainer"
 	_grid.columns = 4
 	_grid.add_theme_constant_override("h_separation", 8)
 	_grid.add_theme_constant_override("v_separation", 8)
