@@ -83,10 +83,16 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		_free_attached(game)
 		_cleanup_slot()
 		return failures
+	var retained_slot: int = int(retained_added.get("slot", -1))
+	if retained_slot < 0:
+		failures.append("DEATH SAVE retained-equipment fixture omitted source slot")
+		_free_attached(game)
+		_cleanup_slot()
+		return failures
 	var retained_equipped: Dictionary = EquipmentService.new().equip_from_inventory(
 		equipment,
 		inventory,
-		1,
+		retained_slot,
 		AxeDefinition,
 		GameplaySaveCatalog.SLOT_AXE
 	)
