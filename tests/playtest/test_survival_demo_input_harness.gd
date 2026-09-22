@@ -70,6 +70,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 				_expect(failures, "inventory slot selection routes to production equip", survival.call("get_equipment_state") != null)
 		# Release the inventory capture before exercising the next modal surface.
 		await _tap_key(tree, KEY_I)
+		await tree.physics_frame
+		await tree.physics_frame
 
 	# C opens the real crafting screen; its first recipe is activated by Enter.
 	var crafting_ui = game.get("crafting_ui")
@@ -81,6 +83,11 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			(recipe_list.get_child(0) as Control).grab_focus()
 			await _tap_key(tree, KEY_ENTER)
 		_expect(failures, "crafting UI remains live after craft/equip input", crafting_ui.has_method("render_snapshot"))
+	# CraftingScreen owns C close; Escape is intentionally not its shortcut.
+	if crafting_ui != null and bool(crafting_ui.call("is_open")):
+		await _tap_key(tree, KEY_C)
+	await tree.physics_frame
+	await tree.physics_frame
 
 	# A normal left-click harvest request is routed through Player -> Survival.
 	var harvest_requests: Array[int] = [0]
@@ -100,9 +107,6 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	_expect(failures, "left-click resource interaction reaches production harvest path", harvest_requests[0] > 0)
 
 	# B/G/LMB traverse the production build/workbench/placement input path.
-	# CraftingScreen owns C close; Escape is intentionally not its shortcut.
-	if crafting_ui != null and bool(crafting_ui.call("is_open")):
-		await _tap_key(tree, KEY_C)
 	await _tap_key(tree, KEY_B)
 	_expect(failures, "B activates production build tool", player.get("build_tool_active") == true)
 	await _tap_key(tree, KEY_G)
@@ -111,11 +115,15 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	click.pressed = true
 	Input.parse_input_event(click)
 	await tree.process_frame
+	await tree.physics_frame
+	await tree.physics_frame
 	_expect(failures, "G/LMB building path reaches composed Survival", survival != null and survival.has_method("get_building_runtime"))
 
 	# Durable save/continue uses the application boundary and the production snapshot.
 	if app.has_method("save_current_game"):
 		var save_result: Dictionary = app.call("save_current_game")
+		if not bool(save_result.get("success", false)):
+			print("[PLAYTEST INPUT HARNESS] save diagnostics: %s" % [save_result.get("diagnostics", [])])
 		_expect(failures, "production save returns success", bool(save_result.get("success", false)))
 		if bool(save_result.get("success", false)) and app.has_method("show_title"):
 			app.call("show_title")
