@@ -104,9 +104,6 @@ func get_skinning_service():
 	return _skinning_service
 
 
-func get_item_definitions() -> Array:
-	return _definitions.values()
-
 func request_build_tool() -> void:
 	if _building_runtime == null:
 		return
