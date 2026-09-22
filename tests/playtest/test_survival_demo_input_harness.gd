@@ -155,6 +155,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	await _wait_physics(tree, 30)
 	var world = game.get("world")
 	var tree_body: StaticBody3D = null
+	var tree_object_id := ""
 	var tree_distance := INF
 	for candidate in game.find_children("*", "StaticBody3D", true, false):
 		if not candidate.has_meta("world_object_type") or str(candidate.get_meta("world_object_type")) != "tree":
@@ -163,6 +164,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		if distance < tree_distance:
 			tree_body = candidate as StaticBody3D
 			tree_distance = distance
+			tree_object_id = str(candidate.get_meta("world_object_id"))
 	if tree_body != null:
 		var target_direction := tree_body.global_position - player.global_position
 		target_direction.y = 0.0
@@ -187,8 +189,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	print("[PLAYTEST DIAG] harvest requests=%d mouse_mode=%d gameplay_input_enabled=%s gate_allowed=%s" % [harvest_requests[0], Input.mouse_mode, str(gameplay_enabled), str(gate.call("allows_player_input")) if gate != null else "<missing>"])
 	_expect(failures, "left-click resource interaction reaches production harvest path", harvest_requests[0] > 0)
 	_expect(failures, "three real tree clicks produce canonical wood", tree_body != null and inventory.quantity_of("item.resource.wood") >= wood_before_harvest + 4)
-	if tree_body != null and world != null and world.has_method("is_world_object_destroyed"):
-		_expect(failures, "three real tree clicks destroy the world tree", bool(world.call("is_world_object_destroyed", str(tree_body.get_meta("world_object_id")))))
+	if not tree_object_id.is_empty() and world != null and world.has_method("is_world_object_destroyed"):
+		_expect(failures, "three real tree clicks destroy the world tree", bool(world.call("is_world_object_destroyed", tree_object_id)))
 	await _wait_physics(tree, 120)
 	_expect(failures, "real nearby plant-fiber pickup reaches canonical inventory", inventory.quantity_of("item.resource.plant_fiber") > fiber_before)
 
