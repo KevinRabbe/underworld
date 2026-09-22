@@ -4,6 +4,7 @@ signal harvest_requested(origin: Vector3, direction: Vector3, max_distance: floa
 signal attack_requested(execution: Dictionary)
 signal hotbar_slot_requested(slot: int)
 signal craft_requested(recipe_id: String)
+signal food_requested
 signal build_tool_requested
 signal workbench_interact_requested
 signal build_place_requested(origin: Vector3, direction: Vector3, max_distance: float)
@@ -44,6 +45,7 @@ const NORMAL_FOV := 75.0
 const SPRINT_FOV := 79.0
 const RESPAWN_FALL_HEIGHT := -100.0
 const MAX_HEALTH := 100
+const MAX_FOOD := 100.0
 const DAMAGE_INVULNERABILITY := 0.45
 const POST_RESPAWN_INVULNERABILITY := 1.0
 const DEFEAT_REASON_DAMAGE: StringName = &"damage"
@@ -60,6 +62,8 @@ var build_tool_active: bool = false
 var tool_swing_timer: float = 0.0
 var damage_invulnerability_timer: float = 0.0
 var health: int = MAX_HEALTH
+var food: float = MAX_FOOD
+var starvation_timer: float = 0.0
 var equipped_tool_visual: String = "hands"
 var sprinting_this_frame: bool = false
 var defeated: bool = false
@@ -149,6 +153,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("hotbar_slot_4"):
 		hotbar_slot_requested.emit(4)
 		return
+	if event.is_action_pressed("eat_food"):
+		food_requested.emit()
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
 			KEY_B:
@@ -202,6 +209,7 @@ func _physics_process(delta: float) -> void:
 	input_buffer.tick(delta)
 	_try_consume_buffered_action()
 	stamina.tick(delta)
+	_tick_food(delta)
 
 
 func set_harvest_range(distance: float) -> void:
@@ -258,7 +266,28 @@ func get_max_stamina() -> float:
 	return stamina.max_stamina
 
 
-func restore_current_vitals(current_health: Variant, current_stamina: Variant) -> Dictionary:
+func get_food() -> float:
+	return food
+
+
+func get_max_food() -> float:
+	return MAX_FOOD
+
+
+func restore_food(amount: Variant) -> Dictionary:
+	if defeated or (typeof(amount) != TYPE_FLOAT and typeof(amount) != TYPE_INT):
+		return {"success": false, "diagnostics": ["food restore requires a living Player and numeric amount"]}
+	var value: float = float(amount)
+	if is_nan(value) or is_inf(value) or value <= 0.0:
+		return {"success": false, "diagnostics": ["food restore amount must be finite and > 0"]}
+	if food >= MAX_FOOD:
+		return {"success": false, "diagnostics": ["food is already full"]}
+	food = minf(MAX_FOOD, food + value)
+	starvation_timer = 0.0
+	return {"success": true, "diagnostics": [], "food": food}
+
+
+func restore_current_vitals(current_health: Variant, current_stamina: Variant, current_food: Variant = MAX_FOOD) -> Dictionary:
 	var failures: Array[String] = []
 	if defeated:
 		failures.append("Continue vitals hydration rejects defeated Player")
@@ -280,13 +309,33 @@ func restore_current_vitals(current_health: Variant, current_stamina: Variant) -
 			failures.append("Continue current_stamina must be >= 0")
 		elif stamina_value > get_max_stamina() + 0.0001:
 			failures.append("Continue current_stamina exceeds current effective max Stamina")
+	if typeof(current_food) != TYPE_INT and typeof(current_food) != TYPE_FLOAT:
+		failures.append("Continue current_food must be numeric")
+	else:
+		var food_value: float = float(current_food)
+		if is_nan(food_value) or is_inf(food_value) or food_value < 0.0 or food_value > MAX_FOOD:
+			failures.append("Continue current_food must be finite and within effective maximum")
 	if not failures.is_empty():
 		failures.sort()
 		return {"success": false, "diagnostics": failures}
 
 	health = int(current_health)
 	stamina.current_stamina = float(current_stamina)
+	food = float(current_food)
 	return {"success": true, "diagnostics": []}
+
+
+func _tick_food(delta: float) -> void:
+	if delta <= 0.0 or is_nan(delta) or is_inf(delta):
+		return
+	food = maxf(0.0, food - delta * 0.04)
+	if food > 0.0 or defeated:
+		starvation_timer = 0.0
+		return
+	starvation_timer += delta
+	if starvation_timer >= 8.0:
+		starvation_timer = 0.0
+		_apply_damage(1, global_position if is_inside_tree() else Vector3.ZERO)
 
 
 func get_action_state_name() -> String:
@@ -382,7 +431,8 @@ func _apply_damage(amount: int, source_position: Vector3) -> void:
 	if animation_controller != null:
 		animation_controller.present_hit()
 
-	var away: Vector3 = global_position - source_position
+	var player_position: Vector3 = global_position if is_inside_tree() else Vector3.ZERO
+	var away: Vector3 = player_position - source_position
 	away.y = 0.0
 	if not away.is_zero_approx():
 		away = away.normalized()
@@ -1050,6 +1100,7 @@ func _ensure_default_input_actions() -> void:
 	_add_remappable_key_action("hotbar_slot_2", KEY_2)
 	_add_remappable_key_action("hotbar_slot_3", KEY_3)
 	_add_remappable_key_action("hotbar_slot_4", KEY_4)
+	_add_remappable_key_action("eat_food", KEY_Z)
 
 
 func _add_key_action(action_name: StringName, physical_key: Key) -> void:

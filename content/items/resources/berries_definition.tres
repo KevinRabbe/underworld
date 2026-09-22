@@ -1,0 +1,14 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://gameplay/items/definitions/food_item_definition.gd" id="1_definition"]
+
+[resource]
+script = ExtResource("1_definition")
+content_id = "item.food.berries"
+definition_family = "item"
+schema_revision = 1
+category_ids = Array[String]( ["category.item.food"] )
+capability_ids = Array[String]( ["capability.consumable.food"] )
+stack_limit = 20
+unit_weight = 0.1
+food_value = 25.0

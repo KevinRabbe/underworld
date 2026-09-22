@@ -14,6 +14,7 @@ const SurfaceHarvestInventoryService := preload("res://gameplay/survival/surface
 const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
 const BuildingRuntime := preload("res://gameplay/building/building_runtime.gd")
 const SkinningService := preload("res://gameplay/hunting/skinning/skinning_service.gd")
+const FoodItemDefinition := preload("res://gameplay/items/definitions/food_item_definition.gd")
 
 const WOOD_ID := "item.resource.wood"
 const STONE_ID := "item.resource.stone"
@@ -21,6 +22,7 @@ const PLANT_FIBER_ID := "item.resource.plant_fiber"
 const AXE_ID := "item.tool.stone_axe"
 const PICKAXE_ID := "item.tool.stone_pickaxe"
 const KNIFE_ID := "item.tool.skinning_knife"
+const BERRIES_ID := "item.food.berries"
 const SLOT_HANDS := "equipment_slot.hotbar.hands"
 const SLOT_AXE := "equipment_slot.hotbar.axe"
 const SLOT_PICKAXE := "equipment_slot.hotbar.pickaxe"
@@ -424,6 +426,30 @@ func select_hotbar_slot(slot: int) -> void:
 	else:
 		last_action_message = "Equipment selected"
 	equipped_tool_changed.emit(equipped_tool)
+
+
+func consume_food() -> Dictionary:
+	if _inventory == null or player == null or not player.has_method("restore_food"):
+		return {"success": false, "diagnostics": ["food runtime is unavailable"]}
+	var food_definition = _definitions.get(BERRIES_ID, null)
+	if food_definition == null or not food_definition is FoodItemDefinition:
+		return {"success": false, "diagnostics": ["food definition is unavailable"]}
+	if float(player.call("get_food")) >= float(player.call("get_max_food")):
+		last_action_message = "Food is full"
+		return {"success": false, "diagnostics": ["food is already full"]}
+	var removed: Dictionary = _inventory.remove_stack(BERRIES_ID, 1)
+	if not bool(removed.get("success", false)):
+		last_action_message = "No food to eat"
+		return removed
+	var restored: Dictionary = player.call("restore_food", food_definition.food_value)
+	if not bool(restored.get("success", false)):
+		_inventory.add_stack(food_definition, 1)
+		return restored
+	_sync_legacy_mirrors()
+	last_action_message = "Ate berries (+%d food)" % int(food_definition.food_value)
+	var event := {"type": "food.consumed", "item_id": BERRIES_ID, "food": restored.get("food", 0.0)}
+	harvest_result.emit(event)
+	return {"success": true, "diagnostics": [], "event": event}
 
 func equip_inventory_slot(source_slot: int, target_slot_key: String) -> Dictionary:
 	if _inventory == null or _equipment == null:

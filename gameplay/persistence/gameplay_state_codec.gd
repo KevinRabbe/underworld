@@ -46,8 +46,8 @@ static func decode_equipment(
 	)
 
 
-static func encode_player_vitals(current_health: Variant, current_stamina: Variant) -> Dictionary:
-	return PlayerVitalsCodec.encode(current_health, current_stamina)
+static func encode_player_vitals(current_health: Variant, current_stamina: Variant, current_food: Variant = 100.0) -> Dictionary:
+	return PlayerVitalsCodec.encode(current_health, current_stamina, current_food)
 
 
 static func decode_player_vitals(snapshot: Variant) -> Dictionary:

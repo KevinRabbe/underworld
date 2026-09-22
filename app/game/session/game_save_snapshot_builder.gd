@@ -82,6 +82,7 @@ static func capture(
 		"resume_position": resume_position,
 		"current_health": int(player.call("get_health")),
 		"current_stamina": float(player.call("get_stamina")),
+		"current_food": float(player.call("get_food")) if player.has_method("get_food") else 100.0,
 		"building_state": building_state,
 		"hunting_state": hunting_state,
 		"death_cache_state": death_cache_service.durable_snapshot() if death_cache_service != null and death_cache_service.has_method("durable_snapshot") else {"schema": "player.death_cache.v1", "cache": {}},

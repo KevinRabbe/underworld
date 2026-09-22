@@ -645,7 +645,8 @@ func _validate_continue_candidate(candidate: Dictionary) -> Array[String]:
 	else:
 		var vitals_validation: Dictionary = GameplayStateCodecScript.encode_player_vitals(
 			vitals_variant.get("current_health", null),
-			vitals_variant.get("current_stamina", null)
+			vitals_variant.get("current_stamina", null),
+			vitals_variant.get("current_food", 100.0)
 		)
 		if not bool(vitals_validation.get("success", false)):
 			for diagnostic in vitals_validation.get("diagnostics", []):

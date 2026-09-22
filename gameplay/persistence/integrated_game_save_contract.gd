@@ -100,7 +100,7 @@ static func validate_envelope(envelope: Dictionary) -> Array[String]:
 # only value-owned snapshots/canonical component JSON leave this function.
 static func capture_v2_request(source: Dictionary) -> Dictionary:
 	var failures: Array[String] = []
-	_validate_exact_keys(source, V2_CAPTURE_SOURCE_KEYS, "v2 SAVE capture source", failures, ["building_state", "hunting_state", "death_cache_state"])
+	_validate_exact_keys(source, V2_CAPTURE_SOURCE_KEYS, "v2 SAVE capture source", failures, ["building_state", "hunting_state", "death_cache_state", "current_food"])
 	if not failures.is_empty():
 		return _failure(failures)
 
@@ -227,7 +227,8 @@ static func capture_v2_request(source: Dictionary) -> Dictionary:
 
 	var vitals_result: Dictionary = GameplayStateCodec.encode_player_vitals(
 		source.get("current_health", null),
-		source.get("current_stamina", null)
+		source.get("current_stamina", null),
+		source.get("current_food", 100.0)
 	)
 	if not bool(vitals_result.get("success", false)):
 		return _prefixed_failure("v2 SAVE player vitals", vitals_result.get("diagnostics", []))
@@ -522,6 +523,7 @@ static func clone_v2_candidate(candidate: Dictionary) -> Dictionary:
 		"resume_position": resume_variant,
 		"current_health": vitals_variant.get("current_health", null),
 		"current_stamina": vitals_variant.get("current_stamina", null),
+		"current_food": vitals_variant.get("current_food", 100.0),
 	})
 	if not bool(captured.get("success", false)):
 		return _prefixed_failure("v2 candidate clone capture", captured.get("diagnostics", []))
