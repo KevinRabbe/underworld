@@ -41,6 +41,9 @@ static func run() -> Array[String]:
 	_expect(failures, "bed interaction claims canonical bed", str(claim_result.get("bed_claimed", "")) == str(bed_result.get("stable_id", "")))
 
 	var snapshot: Dictionary = runtime.durable_snapshot()
+	var duplicate_chest_snapshot := snapshot.duplicate(true)
+	duplicate_chest_snapshot["placed_chests"].append(duplicate_chest_snapshot["placed_chests"][0].duplicate(true))
+	_expect(failures, "duplicate chest stable identity is rejected", not bool(BuildingRuntime.validate_durable_snapshot(duplicate_chest_snapshot).is_empty()))
 	var restored = BuildingRuntime.new().configure(null, inventory, {"item.resource.wood": wood, "item.resource.stone": stone})
 	var restored_player := Node3D.new()
 	restored.set_player(restored_player)

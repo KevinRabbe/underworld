@@ -53,6 +53,8 @@ func request_recovery(reason: StringName) -> bool:
 		var cache_result: Dictionary = _death_cache.capture_death(_player.get("global_position"))
 		if not bool(cache_result.get("success", false)):
 			_record_failure(cache_result.get("diagnostics", []))
+			_pending = false
+			_pending_reason = &""
 			return false
 	call_deferred("try_commit_recovery")
 	return true

@@ -197,6 +197,7 @@ static func validate_durable_snapshot(snapshot: Dictionary) -> Array[String]:
 	if not chests is Array:
 		failures.append("building snapshot placed_chests must be Array")
 	else:
+		var seen_chests: Dictionary = {}
 		for index in range(chests.size()):
 			var chest: Variant = chests[index]
 			if not chest is Dictionary:
@@ -214,6 +215,9 @@ static func validate_durable_snapshot(snapshot: Dictionary) -> Array[String]:
 			var chest_suffix := chest_id.trim_prefix("building.chest.basic.")
 			if typeof(chest_id_variant) != TYPE_STRING or not chest_id.begins_with("building.chest.basic.") or not chest_suffix.is_valid_int() or int(chest_suffix) <= 0 or chest_id != "building.chest.basic.%03d" % int(chest_suffix):
 				failures.append("building snapshot chest %d stable_id is not canonical" % index)
+			if seen_chests.has(chest_id):
+				failures.append("building snapshot chest %d has duplicate stable_id" % index)
+			seen_chests[chest_id] = true
 			var contents: Variant = chest.get("contents", null)
 			if not contents is Dictionary:
 				failures.append("building snapshot chest %d contents must be Dictionary" % index)
