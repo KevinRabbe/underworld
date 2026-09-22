@@ -179,5 +179,7 @@ static func _failure(messages: Array) -> Dictionary:
 	var diagnostics: Array[String] = []
 	for message in messages:
 		diagnostics.append(str(message))
+	if diagnostics.is_empty():
+		diagnostics.append("death cache operation rejected malformed or incompatible state")
 	diagnostics.sort()
 	return {"success": false, "diagnostics": diagnostics, "events": []}
