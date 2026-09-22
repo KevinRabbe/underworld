@@ -103,6 +103,9 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	harvest_click.button_index = MOUSE_BUTTON_LEFT
 	harvest_click.pressed = true
 	Input.parse_input_event(harvest_click)
+	# The first click in a normal session captures the mouse; the next click is
+	# the actual gameplay interaction and must traverse Player._unhandled_input.
+	Input.parse_input_event(harvest_click)
 	await tree.process_frame
 	_expect(failures, "left-click resource interaction reaches production harvest path", harvest_requests[0] > 0)
 
@@ -139,6 +142,8 @@ static func _send_key(tree: SceneTree, physical_key: Key, pressed: bool) -> void
 	var event := InputEventKey.new()
 	event.physical_keycode = physical_key
 	event.keycode = physical_key
+	event.key_label = physical_key
+	event.unicode = physical_key
 	event.pressed = pressed
 	Input.parse_input_event(event)
 
