@@ -82,6 +82,10 @@ func legacy_persistence_enabled() -> bool:
 
 func set_player(player_node: Node3D) -> void:
 	player = player_node
+	if _building_runtime != null:
+		_building_runtime.set_player(player)
+	_sync_legacy_mirrors()
+	equipped_tool_changed.emit(equipped_tool)
 
 
 func set_hunting_controller(controller: Node) -> void:
@@ -100,10 +104,6 @@ func get_skinning_service():
 
 func get_item_definitions() -> Array:
 	return _definitions.values()
-	if _building_runtime != null:
-		_building_runtime.set_player(player)
-	_sync_legacy_mirrors()
-	equipped_tool_changed.emit(equipped_tool)
 
 func request_build_tool() -> void:
 	if _building_runtime == null:

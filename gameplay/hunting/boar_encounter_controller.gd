@@ -131,13 +131,18 @@ func _spawn_initial_boar() -> void:
 	var id := "boar_%d" % _serial
 	var boar: CharacterBody3D = BoarScript.new()
 	boar.configure(id, player, origin, {"health": 48, "move_speed": 2.6, "detection_range": 14.0, "attack_range": 1.7, "attack_damage": 8, "attack_cooldown": 1.4, "attack_windup": 0.5})
-	boar.died.connect(_on_boar_died.bind(id))
+	boar.died.connect(_on_boar_died)
 	add_child(boar)
 	active_boar = boar
 	boar_spawned.emit(id, origin)
 
 
-func _on_boar_died(boar_id: String, death_position: Vector3) -> void:
+func _on_boar_died(boar_id: String) -> void:
+	# The shared creature death signal carries only the enemy id. Capture the
+	# boar's position while the emitting node is still valid.
+	var death_position := Vector3.ZERO
+	if active_boar != null and is_instance_valid(active_boar):
+		death_position = active_boar.global_position
 	if active_boar != null and is_instance_valid(active_boar):
 		active_boar = null
 	var carcass := CarcassScript.new()

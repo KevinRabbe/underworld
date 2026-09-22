@@ -1,6 +1,7 @@
 extends RefCounted
 
 const SurvivalScript := preload("res://gameplay/survival/prototype_survival_controller.gd")
+const BoarEncounterControllerScript := preload("res://gameplay/hunting/boar_encounter_controller.gd")
 
 
 class FakeSettings:
@@ -50,4 +51,29 @@ static func run() -> Array[String]:
 	if inventory.canonical_json() != before:
 		failures.append("replayed skinning mutated inventory")
 	survival.free()
+	_run_boar_death_contract(failures)
 	return failures
+
+
+static func _run_boar_death_contract(failures: Array[String]) -> void:
+	var controller = BoarEncounterControllerScript.new()
+	var world := Node3D.new()
+	var player := Node3D.new()
+	controller.configure(world, player, FakeSettings.new())
+	var boar = controller.active_boar
+	if boar == null or not is_instance_valid(boar):
+		failures.append("boar encounter did not spawn a boar for death contract")
+		controller.free()
+		world.free()
+		player.free()
+		return
+	var expected_position: Vector3 = boar.global_position
+	boar.apply_damage(999, expected_position + Vector3.RIGHT)
+	var carcass = controller.get_carcass("carcass.boar_1")
+	if carcass == null or not is_instance_valid(carcass):
+		failures.append("boar death did not create a carcass")
+	elif not carcass.global_position.is_equal_approx(expected_position):
+		failures.append("boar carcass did not preserve the death position")
+	controller.free()
+	world.free()
+	player.free()
