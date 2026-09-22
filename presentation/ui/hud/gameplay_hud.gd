@@ -1,7 +1,7 @@
 extends CanvasLayer
 
 const GameplayHudReadModel := preload("res://presentation/ui/hud/gameplay_hud_read_model.gd")
-const UnderworldTheme := preload("res://presentation/ui/theme/underworld_theme.tres")
+const UNDERWORLD_THEME_PATH := "res://presentation/ui/theme/underworld_theme.tres"
 
 const REFRESH_INTERVAL := 0.05
 
@@ -110,7 +110,7 @@ func _ensure_ui() -> void:
 	_root.name = "GameplayHUDRoot"
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.theme = UnderworldTheme
+	_root.theme = _load_underworld_theme()
 	add_child(_root)
 
 	var vitals_panel := PanelContainer.new()
@@ -300,3 +300,8 @@ static func _hotbar_text(entry: Dictionary) -> String:
 static func _display_state(value: String) -> String:
 	var clean: String = value.strip_edges()
 	return clean.replace("_", " ").capitalize() if not clean.is_empty() else "Idle"
+
+func _load_underworld_theme() -> Theme:
+	if not ResourceLoader.exists(UNDERWORLD_THEME_PATH):
+		return null
+	return ResourceLoader.load(UNDERWORLD_THEME_PATH) as Theme

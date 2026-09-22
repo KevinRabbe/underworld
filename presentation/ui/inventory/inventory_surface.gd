@@ -1,6 +1,6 @@
 extends CanvasLayer
 
-const UnderworldTheme := preload("res://presentation/ui/theme/underworld_theme.tres")
+const UNDERWORLD_THEME_PATH := "res://presentation/ui/theme/underworld_theme.tres"
 
 var _inventory = null
 var _equipment = null
@@ -89,7 +89,7 @@ func _ensure_ui() -> void:
 	_root = Control.new()
 	_root.name = "InventorySurface"
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_root.theme = UnderworldTheme
+	_root.theme = _load_underworld_theme()
 	_root.mouse_filter = Control.MOUSE_FILTER_STOP
 	_root.visible = false
 	add_child(_root)
@@ -178,3 +178,8 @@ static func _slot_text(index: int, record: Dictionary) -> String:
 	var item_name := str(definition.content_id) if definition != null else "Invalid"
 	var quantity := int(state.get("quantity", 1))
 	return "%d\n%s x%d" % [index + 1, item_name, quantity]
+
+func _load_underworld_theme() -> Theme:
+	if not ResourceLoader.exists(UNDERWORLD_THEME_PATH):
+		return null
+	return ResourceLoader.load(UNDERWORLD_THEME_PATH) as Theme

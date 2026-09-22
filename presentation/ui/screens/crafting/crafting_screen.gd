@@ -4,7 +4,7 @@ extends CanvasLayer
 ## The screen owns presentation/input only; crafting authority remains in the
 ## runtime session and its recipe registry.
 
-const UnderworldTheme := preload("res://presentation/ui/theme/underworld_theme.tres")
+const UNDERWORLD_THEME_PATH := "res://presentation/ui/theme/underworld_theme.tres"
 
 var _runtime_session = null
 var _input_gate: Node = null
@@ -68,7 +68,7 @@ func _ensure_ui() -> void:
 	_root.name = "CraftingRoot"
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.theme = UnderworldTheme
+	_root.theme = _load_underworld_theme()
 	add_child(_root)
 
 	_panel = PanelContainer.new()
@@ -215,3 +215,8 @@ static func _display_name(identifier: String) -> String:
 		value = value.get_slice(".", value.get_slice_count(".") - 1)
 	value = value.replace("_", " ")
 	return value.capitalize()
+
+func _load_underworld_theme() -> Theme:
+	if not ResourceLoader.exists(UNDERWORLD_THEME_PATH):
+		return null
+	return ResourceLoader.load(UNDERWORLD_THEME_PATH) as Theme
