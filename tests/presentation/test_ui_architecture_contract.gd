@@ -9,6 +9,7 @@ const BUTTON_PROTOTYPE_SIZE := Vector2(96, 48)
 const BUTTON_ORNAMENT_SAFE_HORIZONTAL := 20.0
 const BUTTON_ORNAMENT_SAFE_VERTICAL := 14.0
 const COMPACT_VIEWPORT := Vector2(960, 540)
+const CRAFTING_SCREEN_PATH := "res://presentation/ui/screens/crafting/crafting_screen.gd"
 
 
 static func run() -> Array[String]:
@@ -23,6 +24,7 @@ static func run() -> Array[String]:
 	_test_structured_component_contract(failures)
 	_test_reuse_fixture_contract(failures)
 	_test_title_consumes_contract(failures)
+	_test_crafting_surface_contract(failures)
 	return failures
 
 
@@ -186,3 +188,21 @@ static func _test_title_consumes_contract(failures: Array[String]) -> void:
 		if panel_minimum.x + safe_width > COMPACT_VIEWPORT.x or panel_minimum.y + safe_height > COMPACT_VIEWPORT.y:
 			failures.append("accepted title minimum composition must fit the 960x540 compact responsive smoke viewport")
 	title.free()
+
+
+static func _test_crafting_surface_contract(failures: Array[String]) -> void:
+	var script = ResourceLoader.load(CRAFTING_SCREEN_PATH)
+	if script == null or not script is GDScript:
+		failures.append("production crafting surface script must load")
+		return
+	var surface = script.new()
+	if surface == null or not surface.has_method("configure") or not surface.has_method("render_snapshot"):
+		failures.append("production crafting surface must expose configure and render_snapshot seams")
+		return
+	surface.configure(null, null, null)
+	var snapshot: Dictionary = surface.render_snapshot()
+	if bool(snapshot.get("open", true)):
+		failures.append("crafting surface must start closed")
+	if not str(snapshot.get("status", "")).contains("unavailable"):
+		failures.append("crafting surface must expose unavailable runtime state")
+	surface.free()
