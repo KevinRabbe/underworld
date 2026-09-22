@@ -303,13 +303,29 @@ branch codex/persistence-legacy-v1-compat-001
 base origin/main
 ```
 
-At this snapshot the branch/commit is not remote-visible, so it is not yet an immutable review candidate.
+The candidate is now remote-visible and frozen:
+
+```text
+#905 / PR #906
+source 741faee4d2dc273f3ff3491c75c31f88d8ca1451
+tree   78f50a1e8f8482e4717682c415368e176eee5c72
+base   main@1c258ab681023d296425a574f769a4f73841ebf9
+relation 1 ahead / 0 behind
+2 paths
+IMPLEMENTATION WIP=0
+```
+
+Independent review card:
+
+```text
+#907 REVIEW-PERSISTENCE-LEGACY-V1-COMPAT-001
+READY / REVIEW WIP=0
+```
 
 Current exact continuation is:
 
 ```text
-publish #905 candidate
--> independent #905 review
+#907 independent review of exact #906 head
 -> #299/PM acceptance + landing
 -> rerun #433 exact-head CI
 -> publish immutable repaired #433 freeze
