@@ -38,6 +38,25 @@ After V5, continue convergence work until #499's complete Biome-1 acceptance tre
 
 The active worker should stop for owner input only on a genuine unresolved decision/evidence authority, not at ordinary task boundaries.
 
+## Worker allocation override — write-first
+
+Current owner direction:
+
+> **Do not spend Codex worker slots on standalone read-only tasks.**
+
+Operational interpretation:
+
+```text
+worker slot
+-> lawful implementation / repair / integration source
+OR
+-> required independent review
+```
+
+Read-only diagnostics should be short and embedded in a write-capable task. Do not launch a worker whose whole deliverable is another audit/preflight/status report.
+
+Historical P0-B1..B7 blocked-mode audits below are retained as recorded context, but they are **not a reusable worker queue**. Do not replay them and do not create analogous long read-only backlogs unless PM explicitly requests one.
+
 ## Current gate
 
 At snapshot time:
