@@ -356,6 +356,21 @@ func find_nearest_active_world_object_body(world_position: Vector3, object_type:
 			nearest_distance = distance
 	return nearest
 
+func find_nearest_pickup_position(world_position: Vector3, object_type: String) -> Vector3:
+	var nearest: Vector3 = Vector3.INF
+	var nearest_distance: float = INF
+	for chunk in chunks.values():
+		if not chunk.has_method("find_nearest_pickup_position"):
+			continue
+		var candidate: Vector3 = chunk.find_nearest_pickup_position(object_type, world_position)
+		if candidate == Vector3.INF:
+			continue
+		var distance: float = candidate.distance_to(world_position)
+		if distance < nearest_distance:
+			nearest = candidate
+			nearest_distance = distance
+	return nearest
+
 
 func get_last_generation_ms() -> float:
 	return last_generation_ms

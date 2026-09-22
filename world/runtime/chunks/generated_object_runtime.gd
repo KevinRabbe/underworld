@@ -58,6 +58,21 @@ func nearest_active_body(object_type: String, local_position: Vector3):
 			nearest_distance = distance
 	return nearest
 
+func nearest_pickup_position(object_type: String, local_position: Vector3) -> Vector3:
+	var transforms: Array = _plant_fiber_transforms if object_type == "plant_fiber" else _branch_transforms if object_type == "branch" else _loose_stone_transforms if object_type == "loose_stone" else []
+	var destroyed: Dictionary = _destroyed_plant_fiber_indices if object_type == "plant_fiber" else _destroyed_branch_indices if object_type == "branch" else _destroyed_loose_stone_indices if object_type == "loose_stone" else {}
+	var nearest := Vector3.INF
+	var nearest_distance: float = INF
+	for index in range(transforms.size()):
+		if destroyed.has(index):
+			continue
+		var position: Vector3 = (transforms[index] as Transform3D).origin
+		var distance: float = position.distance_to(local_position)
+		if distance < nearest_distance:
+			nearest = position
+			nearest_distance = distance
+	return nearest
+
 
 func build(
 	host: Node3D,
