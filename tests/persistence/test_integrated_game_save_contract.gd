@@ -284,7 +284,7 @@ static func _test_v2_building_continue_contract(failures: Array[String]) -> void
 		failures.append("building Continue activation did not restore active tool and shelter")
 	var shelter_node: Node = null
 	for child in runtime.get_children():
-		if child.name == placed_record["stable_id"]:
+		if str(child.get_meta("stable_id", "")) == placed_record["stable_id"]:
 			shelter_node = child
 			break
 	if shelter_node == null or shelter_node.global_position != placed_record["position"]:
