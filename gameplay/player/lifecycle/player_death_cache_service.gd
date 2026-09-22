@@ -147,7 +147,7 @@ func _validated_cargo_records(cargo: Dictionary) -> Dictionary:
 		var state_keys: Array[String] = []
 		for key in state.keys(): state_keys.append(str(key))
 		state_keys.sort()
-		var expected_state_keys: Array[String] = ["item_id", "quantity", "stack_state"] if kind == "stack" else ["item_id", "per_copy_state"]
+		var expected_state_keys = ["item_id", "quantity", "stack_state"] if kind == "stack" else ["item_id", "per_copy_state"]
 		if state_keys != expected_state_keys:
 			failures.append("death cache cargo item state keys are not canonical")
 		var definition = _definitions.get(item_id, null)
