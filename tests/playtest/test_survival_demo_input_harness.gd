@@ -78,7 +78,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	if survival != null and inventory_surface != null:
 		var equipment = survival.call("get_equipment_state")
 		var equipment_before: String = equipment.canonical_json() if equipment != null else ""
-		var grid = inventory_surface.get_node_or_null("InventorySurface/InventoryPanel/MarginContainer/VBoxContainer/GridContainer")
+		var grid = inventory_surface.find_child("GridContainer", true, false)
 		var axe_slot := -1
 		if grid != null:
 			for index in range(inventory.slot_capacity()):
@@ -109,15 +109,15 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	await _tap_key(tree, KEY_C)
 	_expect(failures, "C opens production crafting surface", crafting_ui != null and bool(crafting_ui.call("is_open")))
 	if crafting_ui != null and bool(crafting_ui.call("is_open")):
-		var recipe_list = crafting_ui.get_node_or_null("CraftingRoot/CraftingPanel/MarginContainer/VBoxContainer/RecipeList")
+		var recipe_list = crafting_ui.find_child("RecipeList", true, false)
 		var weapon_session = game.get_node_or_null("WeaponRuntimeSession")
-		print("[PLAYTEST DIAG] crafting capabilities=%d recipe_buttons=%d session_configured=%s" % [weapon_session.call("craft_capabilities").size() if weapon_session != null else -1, recipe_list.get_child_count() if recipe_list != null else -1, str(weapon_session.call("is_configured")) if weapon_session != null else "<missing>")
+		print("[PLAYTEST DIAG] crafting capabilities=%d recipe_buttons=%d session_configured=%s" % [weapon_session.call("craft_capabilities").size() if weapon_session != null else -1, recipe_list.get_child_count() if recipe_list != null else -1, str(weapon_session.call("is_configured")) if weapon_session != null else "<missing>"])
 		if recipe_list != null and recipe_list.get_child_count() > 0:
 			(recipe_list.get_child(0) as Control).grab_focus()
 			await _tap_key(tree, KEY_ENTER)
 			await tree.process_frame
-			var weapon_session = game.get_node_or_null("WeaponRuntimeSession")
-			var craft_result: Dictionary = weapon_session.call("last_result") if weapon_session != null else {}
+			var weapon_session_after = game.get_node_or_null("WeaponRuntimeSession")
+			var craft_result: Dictionary = weapon_session_after.call("last_result") if weapon_session_after != null else {}
 			var crafting_inventory_after: String = inventory.canonical_json() if inventory != null else ""
 			var crafting_equipment_after: String = survival.call("get_equipment_state").canonical_json() if survival != null else ""
 			_expect(failures, "crafting Enter reports successful recipe transaction", bool(craft_result.get("success", false)) and bool(craft_result.get("craft_succeeded", false)))
@@ -144,10 +144,12 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	harvest_interaction.button_index = MOUSE_BUTTON_LEFT
 	harvest_interaction.pressed = true
 	await tree.process_frame
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	Input.parse_input_event(harvest_interaction)
 	await _wait_physics(tree, 2)
 	var gate = app.get_gameplay_input_gate() if app.has_method("get_gameplay_input_gate") else null
-	print("[PLAYTEST DIAG] harvest requests=%d mouse_mode=%d gameplay_input_enabled=%s gate_allowed=%s" % [harvest_requests[0], Input.mouse_mode, str(player.gameplay_input_enabled()), str(gate.call("allows_player_input")) if gate != null else "<missing>"])
+	var gameplay_enabled := bool(player.call("gameplay_input_enabled")) if player.has_method("gameplay_input_enabled") else false
+	print("[PLAYTEST DIAG] harvest requests=%d mouse_mode=%d gameplay_input_enabled=%s gate_allowed=%s" % [harvest_requests[0], Input.mouse_mode, str(gameplay_enabled), str(gate.call("allows_player_input")) if gate != null else "<missing>"])
 	_expect(failures, "left-click resource interaction reaches production harvest path", harvest_requests[0] > 0)
 
 	# B/G/LMB traverse the production build/workbench/placement input path.
@@ -162,11 +164,12 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	Input.parse_input_event(click)
 	await _wait_physics(tree, 30)
 	var building_after: Dictionary = building_runtime.durable_snapshot() if building_runtime != null else {}
 	var placed: Array = building_after.get("placed_shelters", [])
-	print("[PLAYTEST DIAG] building before=%s after=%s player_build_tool=%s" % [str(building_before), str(building_after), str(player.build_tool_active)])
+	print("[PLAYTEST DIAG] building before=%s after=%s player_build_tool=%s" % [str(building_before), str(building_after), str(player.get("build_tool_active"))])
 	_expect(failures, "G uses the live workbench", bool(building_after.get("workbench_used", false)) and not bool(building_before.get("workbench_used", false)))
 	_expect(failures, "G/LMB places authored shelter and consumes materials", placed.size() > int(building_before.get("placed_shelters", []).size()) and inventory.quantity_of("item.resource.wood") == wood_before - 4 and inventory.quantity_of("item.resource.stone") == stone_before - 2)
 
