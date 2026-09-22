@@ -175,6 +175,24 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			tree_body = candidate as StaticBody3D
 			tree_distance = distance
 			tree_object_id = str(candidate.get_meta("world_object_id"))
+	if tree_body == null and world != null:
+		var chunks_variant: Variant = world.get("chunks")
+		if chunks_variant is Dictionary:
+			for chunk_variant in (chunks_variant as Dictionary).values():
+				if chunk_variant == null:
+					continue
+				var generated = chunk_variant.get("_generated_objects") if chunk_variant.has_method("get") else null
+				var object_root = generated.get("_world_object_root") if generated != null and generated.has_method("get") else null
+				if object_root == null:
+					continue
+				for candidate in object_root.get_children():
+					if not candidate.has_meta("world_object_type") or str(candidate.get_meta("world_object_type")) != "tree":
+						continue
+					var distance: float = player.global_position.distance_to(candidate.global_position)
+					if distance < tree_distance:
+						tree_body = candidate as StaticBody3D
+						tree_distance = distance
+						tree_object_id = str(candidate.get_meta("world_object_id"))
 	if tree_body != null:
 		var target_direction: Vector3 = tree_body.global_position - player.global_position
 		target_direction.y = 0.0
