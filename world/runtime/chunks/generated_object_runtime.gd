@@ -48,7 +48,11 @@ func nearest_active_body(object_type: String, local_position: Vector3):
 		var body: Node3D = body_variant as Node3D
 		if body == null or not is_instance_valid(body):
 			continue
-		var distance: float = body.position.distance_to(local_position)
+		var body_position: Vector3 = body.position
+		var collision := body.get_node_or_null("CollisionShape3D") as CollisionShape3D
+		if collision != null:
+			body_position += collision.position
+		var distance: float = body_position.distance_to(local_position)
 		if distance < nearest_distance:
 			nearest = body
 			nearest_distance = distance
