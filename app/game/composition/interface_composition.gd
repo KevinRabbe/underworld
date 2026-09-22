@@ -3,6 +3,7 @@ extends RefCounted
 const GameplayHudScript := preload("res://presentation/ui/hud/gameplay_hud.gd")
 const DebugHudScript := preload("res://presentation/ui/debug/debug_hud.gd")
 const CraftingScreenScript := preload("res://presentation/ui/screens/crafting/crafting_screen.gd")
+const InventorySurfaceScript := preload("res://presentation/ui/inventory/inventory_surface.gd")
 
 
 static func bind_gameplay_audio(root: Node) -> Dictionary:
@@ -36,6 +37,23 @@ static func compose_gameplay_hud(
 	return {
 		"success": failures.is_empty(),
 		"gameplay_hud": gameplay_hud,
+		"diagnostics": failures,
+}
+
+
+static func compose_inventory_surface(
+	root: Node,
+	survival,
+	input_gate: Node,
+	focus_stack: Node
+) -> Dictionary:
+	var surface = InventorySurfaceScript.new()
+	surface.name = "InventorySurface"
+	root.add_child(surface)
+	var failures: Array[String] = surface.configure(survival, input_gate, focus_stack)
+	return {
+		"success": failures.is_empty(),
+		"inventory_surface": surface,
 		"diagnostics": failures,
 	}
 
