@@ -103,7 +103,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			axe_button.pressed.connect(func() -> void: pressed_count[0] += 1)
 			axe_button.grab_focus()
 			print("[PLAYTEST DIAG] axe button focused=%s disabled=%s equipment_before=%s" % [str(axe_button.has_focus()), str(axe_button.disabled), equipment_before])
-			await _tap_key(tree, KEY_ENTER)
+			await _tap_action(tree, &"ui_accept")
 			var equipment_after: String = equipment.canonical_json() if equipment != null else ""
 			var selected = equipment.selected_definition() if equipment != null else null
 			print("[PLAYTEST DIAG] axe button pressed=%d equipment_after=%s selected=%s" % [pressed_count[0], equipment_after, str(selected.content_id) if selected != null else "<none>"])
@@ -242,6 +242,19 @@ static func _send_key(tree: SceneTree, physical_key: Key, pressed: bool) -> void
 
 static func _tap_key(tree: SceneTree, physical_key: Key) -> void:
 	_send_key(tree, physical_key, true)
+	await tree.process_frame
+
+
+static func _tap_action(tree: SceneTree, action: StringName) -> void:
+	var press := InputEventAction.new()
+	press.action = action
+	press.pressed = true
+	Input.parse_input_event(press)
+	await tree.process_frame
+	var release := InputEventAction.new()
+	release.action = action
+	release.pressed = false
+	Input.parse_input_event(release)
 	await tree.process_frame
 	_send_key(tree, physical_key, false)
 	await tree.process_frame
