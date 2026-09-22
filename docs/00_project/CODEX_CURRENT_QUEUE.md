@@ -274,6 +274,62 @@ RUNNER-PENDING
 
 This replaces the prior blocked-mode stop condition that required an external #539 reviewer event.
 
+## Current Phase-0 delta — #905 Persistence compatibility blocks #433 refreeze
+
+The #539 replacement review returned `REPAIR-REQUIRED` for frozen #433. The same #433 / PR #530 implementation lane has since produced repair head:
+
+```text
+5870d2564dd5fa820da8abec3525117f1aead556
+```
+
+The bounded Gateway repair is source-complete, but exact-head CI is 27/28 because accepted-main-side legacy-v1 Persistence compatibility still assumes the historical pre-Gateway manifest as though it were today's current default.
+
+Do **not** widen #433 into Persistence.
+
+Current blocker is now:
+
+```text
+#905 PERSISTENCE-LEGACY-V1-COMPAT-001
+
+EDIT gameplay/persistence/legacy_v1_game_save_codec.gd
+EDIT tests/persistence/test_legacy_v1_game_save_codec_parity.gd
+```
+
+A separate implementation context reports local candidate:
+
+```text
+741faee4d2dc273f3ff3491c75c31f88d8ca1451
+branch codex/persistence-legacy-v1-compat-001
+base origin/main
+```
+
+At this snapshot the branch/commit is not remote-visible, so it is not yet an immutable review candidate.
+
+Current exact continuation is:
+
+```text
+publish #905 candidate
+-> independent #905 review
+-> #299/PM acceptance + landing
+-> rerun #433 exact-head CI
+-> publish immutable repaired #433 freeze
+-> reactivate same #539 card
+-> consumable #539 PASS
+-> #299 accept #433
+-> paired #807/#601
+-> #663
+-> #718
+-> explicit PHASE-0 EXIT
+```
+
+#905 semantics:
+- current exact Gateway-aware manifest remains `gm-sha256:cb5674049cfdb0c0f6291c35fbc85382cddf4707bfbd2531d669f78b6e35471e`;
+- exact supported historical pre-Gateway manifest remains `gm-sha256:c3fb0a2e53be0593b588a6f9b375d087886ab55111b9ca1a78a5c09bf99a302f` through explicit historical reconstruction;
+- arbitrary/stale/mixed vectors fail closed;
+- v2/integrated SAVE stays untouched.
+
+Future autonomous runs should treat #905 publication/review/landing as the nearest Phase-0 turn until it is accepted.
+
 ## First post-EXIT integration car
 
 The controlling R1 execution handoff currently starts with:
