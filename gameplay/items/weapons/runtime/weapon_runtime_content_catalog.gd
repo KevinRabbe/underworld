@@ -13,6 +13,7 @@ const RecipeFamilyValidator := preload("res://gameplay/crafting/validation/recip
 const CharacterSemanticSchemaCatalog := preload("res://presentation/characters/animation/character_semantic_schema_catalog.gd")
 
 const WOOD_PATH := "res://content/items/resources/wood_definition.tres"
+const STONE_PATH := "res://content/items/resources/stone_definition.tres"
 const IRON_PATH := "res://content/items/resources/iron_chunk_definition.tres"
 const SWORD_PATH := "res://content/items/weapons/iron_sword_definition.tres"
 const ATTACK_SET_PATH := "res://content/items/weapons/iron_sword_attack_set.tres"
@@ -44,6 +45,7 @@ const HARVEST_TOOL := "capability.harvest_tool"
 
 const PRODUCTION_PATHS: Array[String] = [
 	WOOD_PATH,
+	STONE_PATH,
 	IRON_PATH,
 	SWORD_PATH,
 	ATTACK_SET_PATH,
