@@ -314,6 +314,31 @@ func select_hotbar_slot(slot: int) -> void:
 		last_action_message = "Equipment selected"
 	equipped_tool_changed.emit(equipped_tool)
 
+func equip_inventory_slot(source_slot: int, target_slot_key: String) -> Dictionary:
+	if _inventory == null or _equipment == null:
+		return {"success": false, "diagnostics": ["survival equipment state is unavailable"]}
+	var source_record: Dictionary = _inventory.state_at(source_slot)
+	var definition = source_record.get("definition", null)
+	if definition == null:
+		return {"success": false, "diagnostics": ["inventory slot is empty"]}
+	var result: Dictionary = _equipment_service.equip_from_inventory(
+		_equipment,
+		_inventory,
+		source_slot,
+		definition,
+		target_slot_key
+	)
+	if not bool(result.get("success", false)):
+		return result
+	var slot_key: String = target_slot_key
+	var hotbar_bindings: Array = _equipment.canonical_snapshot().get("hotbar_bindings", [])
+	for binding in hotbar_bindings:
+		if binding is Dictionary and str(binding.get("slot_key", "")) == slot_key:
+			_equipment.select_hotbar(int(binding.get("hotbar", 0)))
+			break
+	_sync_legacy_mirrors()
+	equipped_tool_changed.emit(equipped_tool)
+	return result
 
 func request_craft(recipe_id: String) -> void:
 	# Temporary compatibility bridge for the existing C/V prototype controls.
