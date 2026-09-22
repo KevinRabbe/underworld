@@ -11,6 +11,8 @@ extends RefCounted
 ## PASS and never replaces production input with service-level shortcuts.
 
 const AppRootScene: PackedScene = preload("res://app/app_root.tscn")
+const SAVE_CANDIDATE_SUFFIX := ".candidate"
+const SAVE_BACKUP_SUFFIX := ".previous"
 
 static func run_runtime(tree: SceneTree) -> Array[String]:
 	var failures: Array[String] = []
@@ -18,12 +20,19 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	if app == null:
 		failures.append("BLOCKED: production AppRoot could not instantiate (scene/resource limitation)")
 		return failures
+	# Never probe or overwrite the user's default slot from an automated run.
+	var save_slot_path := "user://codex_playtest_%d.json" % Time.get_ticks_usec()
+	if not app.has_method("configure_save_slot_path") or not bool(app.call("configure_save_slot_path", save_slot_path)):
+		failures.append("BLOCKED: production AppRoot rejected isolated playtest SAVE slot")
+		_cleanup_save_slot(save_slot_path)
+		return failures
 	tree.root.add_child(app)
 	await tree.process_frame
 	if not app.has_method("start_new_game") or not bool(app.call("start_new_game")):
 		failures.append("BLOCKED: production Game startup failed (SceneTree/rendering/import limitation)")
 		app.queue_free()
 		await tree.process_frame
+		_cleanup_save_slot(save_slot_path)
 		return failures
 	await tree.process_frame
 	await tree.process_frame
@@ -31,6 +40,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	if game == null or not is_instance_valid(game) or game.get("player") == null:
 		failures.append("production Game did not expose composed Player after startup")
 		app.queue_free()
+		_cleanup_save_slot(save_slot_path)
 		return failures
 	var player: Node = game.get("player")
 	var survival = game.get("survival")
@@ -172,7 +182,14 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 
 	app.queue_free()
 	await tree.process_frame
+	_cleanup_save_slot(save_slot_path)
 	return failures
+
+
+static func _cleanup_save_slot(slot_path: String) -> void:
+	for path in [slot_path, slot_path + SAVE_CANDIDATE_SUFFIX, slot_path + SAVE_BACKUP_SUFFIX]:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(path)
 
 static func _send_key(tree: SceneTree, physical_key: Key, pressed: bool) -> void:
 	var event := InputEventKey.new()
