@@ -181,7 +181,8 @@ func build_save_request() -> Dictionary:
 		world_delta_store,
 		survival,
 		player,
-		encounter_controller
+		encounter_controller,
+		get_node_or_null("BoarEncounters")
 	)
 
 
@@ -454,6 +455,14 @@ func _create_combat() -> void:
 	)
 	combat_resolver = composition.get("combat_resolver", null)
 	encounter_controller = composition.get("encounter_controller", null)
+	var hunting_controller = composition.get("hunting_controller", null)
+	if hunting_controller != null:
+		hunting_controller.configure_skinning_service(survival)
+		survival.set_hunting_controller(hunting_controller)
+		if _startup_mode == STARTUP_CONTINUE and _startup_candidate.has("hunting_state"):
+			var hunting_restore: Dictionary = hunting_controller.restore_durable_snapshot(_startup_candidate.get("hunting_state", {}))
+			if not bool(hunting_restore.get("success", false)):
+				push_error("SAVE hunting hydration rejected: %s" % [hunting_restore.get("diagnostics", [])])
 	var import_result: Dictionary = composition.get("import_result", {})
 	if not import_result.is_empty():
 		if not bool(import_result.get("success", false)):

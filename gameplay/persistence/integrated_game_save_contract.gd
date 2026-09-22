@@ -97,7 +97,7 @@ static func validate_envelope(envelope: Dictionary) -> Array[String]:
 # only value-owned snapshots/canonical component JSON leave this function.
 static func capture_v2_request(source: Dictionary) -> Dictionary:
 	var failures: Array[String] = []
-	_validate_exact_keys(source, V2_CAPTURE_SOURCE_KEYS, "v2 SAVE capture source", failures, ["building_state"])
+	_validate_exact_keys(source, V2_CAPTURE_SOURCE_KEYS, "v2 SAVE capture source", failures, ["building_state", "hunting_state"])
 	if not failures.is_empty():
 		return _failure(failures)
 
@@ -203,6 +203,12 @@ static func capture_v2_request(source: Dictionary) -> Dictionary:
 	var building_wire: Dictionary = TypedJsonWire.encode(building_state, "v2 SAVE building")
 	if not bool(building_wire.get("success", false)):
 		return _prefixed_failure("v2 SAVE building wire", building_wire.get("diagnostics", []))
+	var hunting_state: Dictionary = source.get("hunting_state", {
+		"schema": "hunting.skinning.v1", "progression": {"skinning": 0, "last_carcass_id": ""}, "carcasses": []
+	})
+	var hunting_wire: Dictionary = TypedJsonWire.encode(hunting_state, "v2 SAVE hunting")
+	if not bool(hunting_wire.get("success", false)):
+		return _prefixed_failure("v2 SAVE hunting wire", hunting_wire.get("diagnostics", []))
 
 	var pending_capture: Dictionary = _capture_pending_loot_jsons(pending_variant, registry)
 	if not bool(pending_capture.get("success", false)):
@@ -224,6 +230,7 @@ static func capture_v2_request(source: Dictionary) -> Dictionary:
 		"inventory_json": str(inventory_wire.get("json", "")),
 		"equipment_json": str(equipment_wire.get("json", "")),
 		"building_json": str(building_wire.get("json", "")),
+		"hunting_json": str(hunting_wire.get("json", "")),
 		"pending_loot_jsons": pending_capture.get("jsons", []).duplicate(),
 		"player_resume": {
 			"domain": active_domain,
@@ -385,6 +392,15 @@ static func decode_v2_classified(json_text: String) -> Dictionary:
 		"workbench_used": false,
 		"placed_shelters": [],
 	}
+	var hunting_snapshot: Dictionary = _decode_component_snapshot(
+		str(envelope.get("hunting_json", "")),
+		"hunting",
+		failures
+	) if envelope.has("hunting_json") else {
+		"schema": "hunting.skinning.v1",
+		"progression": {"skinning": 0, "last_carcass_id": ""},
+		"carcasses": [],
+	}
 	if not failures.is_empty():
 		return _classified_failure(CLASS_INVALID, failures)
 	var inventory_result: Dictionary = GameplayStateCodec.decode_inventory(inventory_snapshot, registry)
@@ -407,6 +423,9 @@ static func decode_v2_classified(json_text: String) -> Dictionary:
 	var building_failures := BuildingRuntime.validate_durable_snapshot(building_snapshot)
 	if not building_failures.is_empty():
 		return _classified_failure(CLASS_INVALID, _prefixed_messages("building", building_failures))
+	var hunting_failures := _validate_hunting_snapshot(hunting_snapshot)
+	if not hunting_failures.is_empty():
+		return _classified_failure(CLASS_INVALID, _prefixed_messages("hunting", hunting_failures))
 
 	var pending_result: Dictionary = _decode_pending_loot_jsons(
 		envelope.get("pending_loot_jsons", []),
@@ -443,6 +462,7 @@ static func decode_v2_classified(json_text: String) -> Dictionary:
 			"inventory_state": inventory_result.get("state", null),
 			"equipment_state": equipment_result.get("state", null),
 			"building_state": building_snapshot.duplicate(true),
+			"hunting_state": hunting_snapshot.duplicate(true),
 			"pending_loot_states": pending_result.get("states", []).duplicate(),
 			"resume_position": resume_result.get("position", Vector3.ZERO),
 			"player_vitals": vitals_result.get("state", {}).duplicate(true),
@@ -475,6 +495,7 @@ static func clone_v2_candidate(candidate: Dictionary) -> Dictionary:
 			"workbench_used": false,
 			"placed_shelters": [],
 		}),
+		"hunting_state": candidate.get("hunting_state", {"schema": "hunting.skinning.v1", "progression": {"skinning": 0, "last_carcass_id": ""}, "carcasses": []}),
 		"pending_loot_states": pending_variant,
 		"world_session_state": session,
 		"resume_position": resume_variant,
@@ -498,7 +519,7 @@ static func clone_v2_candidate(candidate: Dictionary) -> Dictionary:
 
 static func validate_v2_request(request: Dictionary) -> Array[String]:
 	var failures: Array[String] = []
-	_validate_exact_keys(request, V2_REQUEST_KEYS, "integrated save v2 request", failures, ["building_json"])
+	_validate_exact_keys(request, V2_REQUEST_KEYS, "integrated save v2 request", failures, ["building_json", "hunting_json"])
 	if typeof(request.get("world_seed", null)) != TYPE_INT:
 		failures.append("integrated save v2 world_seed must be int")
 	for field in ["root_identity", "world_session", "player_resume", "player_vitals"]:
@@ -513,6 +534,11 @@ static func validate_v2_request(request: Dictionary) -> Array[String]:
 		or str(request.get("building_json", "")).is_empty()
 	):
 		failures.append("integrated save v2 building_json must be non-empty String")
+	if request.has("hunting_json") and (
+		typeof(request.get("hunting_json")) != TYPE_STRING
+		or str(request.get("hunting_json", "")).is_empty()
+	):
+		failures.append("integrated save v2 hunting_json must be non-empty String")
 	var raw_pending: Variant = request.get("pending_loot_jsons", null)
 	if not raw_pending is Array:
 		failures.append("integrated save v2 pending_loot_jsons must be Array")
@@ -568,7 +594,7 @@ static func validate_v2_request(request: Dictionary) -> Array[String]:
 
 static func validate_v2_envelope(envelope: Dictionary) -> Array[String]:
 	var failures: Array[String] = []
-	_validate_exact_keys(envelope, V2_ROOT_KEYS, "integrated save v2", failures, ["building_json"])
+	_validate_exact_keys(envelope, V2_ROOT_KEYS, "integrated save v2", failures, ["building_json", "hunting_json"])
 	if str(envelope.get("schema", "")) != V2_SCHEMA_NAME:
 		failures.append("unsupported integrated save v2 schema: %s" % str(envelope.get("schema", "")))
 	if typeof(envelope.get("save_schema_version", null)) != TYPE_INT:
@@ -682,6 +708,32 @@ static func _v2_resume_from_envelope(raw_resume: Variant) -> Dictionary:
 		),
 		"diagnostics": [],
 	}
+
+
+static func _validate_hunting_snapshot(snapshot: Dictionary) -> Array[String]:
+	var failures: Array[String] = []
+	if str(snapshot.get("schema", "")) != "hunting.skinning.v1":
+		failures.append("unsupported hunting snapshot schema")
+	var progression: Variant = snapshot.get("progression", null)
+	if not progression is Dictionary:
+		failures.append("hunting progression must be Dictionary")
+	elif int(progression.get("skinning", 0)) < 0:
+		failures.append("hunting skinning progression must be >= 0")
+	var carcasses: Variant = snapshot.get("carcasses", null)
+	if not carcasses is Array:
+		failures.append("hunting carcasses must be Array")
+	else:
+		var seen: Dictionary = {}
+		for index in range(carcasses.size()):
+			var entry: Variant = carcasses[index]
+			if not entry is Dictionary:
+				failures.append("hunting carcass %d must be Dictionary" % index)
+				continue
+			var id := str(entry.get("carcass_id", ""))
+			if id.is_empty() or seen.has(id):
+				failures.append("hunting carcass identity must be unique and non-empty")
+			seen[id] = true
+	return failures
 
 
 static func _classified_failure(classification: String, messages: Array) -> Dictionary:

@@ -13,12 +13,14 @@ const EquipmentService := preload("res://gameplay/items/equipment/equipment_serv
 const SurfaceHarvestInventoryService := preload("res://gameplay/survival/surface_harvest_inventory_service.gd")
 const GameplaySaveCatalog := preload("res://gameplay/persistence/gameplay_save_catalog.gd")
 const BuildingRuntime := preload("res://gameplay/building/building_runtime.gd")
+const SkinningService := preload("res://gameplay/hunting/skinning/skinning_service.gd")
 
 const WOOD_ID := "item.resource.wood"
 const STONE_ID := "item.resource.stone"
 const PLANT_FIBER_ID := "item.resource.plant_fiber"
 const AXE_ID := "item.tool.stone_axe"
 const PICKAXE_ID := "item.tool.stone_pickaxe"
+const KNIFE_ID := "item.tool.skinning_knife"
 const SLOT_HANDS := "equipment_slot.hotbar.hands"
 const SLOT_AXE := "equipment_slot.hotbar.axe"
 const SLOT_PICKAXE := "equipment_slot.hotbar.pickaxe"
@@ -52,6 +54,8 @@ var _transactions = InventoryTransactionService.new()
 var _harvest_inventory = null
 var _definitions: Dictionary = {}
 var _building_runtime: Node = null
+var _skinning_service = null
+var _hunting_controller: Node = null
 
 
 func configure(
@@ -78,6 +82,24 @@ func legacy_persistence_enabled() -> bool:
 
 func set_player(player_node: Node3D) -> void:
 	player = player_node
+
+
+func set_hunting_controller(controller: Node) -> void:
+	_hunting_controller = controller
+
+
+func skinning_progression_snapshot() -> Dictionary:
+	if _skinning_service == null:
+		return {"skinning": 0, "last_carcass_id": ""}
+	return _skinning_service.progression_snapshot()
+
+
+func get_skinning_service():
+	return _skinning_service
+
+
+func get_item_definitions() -> Array:
+	return _definitions.values()
 	if _building_runtime != null:
 		_building_runtime.set_player(player)
 	_sync_legacy_mirrors()
@@ -166,6 +188,14 @@ func try_harvest(origin: Vector3, direction: Vector3, max_distance: float) -> vo
 		return
 
 	var collider: Object = result.get("collider")
+	if collider != null and collider.has_meta("carcass_id") and _hunting_controller != null:
+		var skin_result: Dictionary = _hunting_controller.skin_carcass(
+			str(collider.get_meta("carcass_id")),
+			_skins_distance_to_player(collider)
+		)
+		last_action_message = "Skinned boar +%d meat +%d hide" % [2, 1] if bool(skin_result.get("success", false)) else str(skin_result.get("diagnostics", ["Cannot skin"])[0])
+		harvest_result.emit({"type": "skinning.completed" if bool(skin_result.get("success", false)) else "skinning.failed", "result": skin_result})
+		return
 	if collider == null or not collider.has_meta("world_object_id"):
 		last_action_message = "Nothing harvestable"
 		return
@@ -382,6 +412,8 @@ func select_hotbar_slot(slot: int) -> void:
 		last_action_message = "Stone Axe equipped"
 	elif equipped_tool == "stone_pickaxe":
 		last_action_message = "Stone Pickaxe equipped"
+	elif equipped_tool == "skinning_knife":
+		last_action_message = "Skinning Knife equipped"
 	else:
 		last_action_message = "Equipment selected"
 	equipped_tool_changed.emit(equipped_tool)
@@ -435,15 +467,21 @@ func request_craft(recipe_id: String) -> void:
 		target_hotbar = 3
 		wood_cost = settings.stone_pickaxe_wood_cost
 		stone_cost = settings.stone_pickaxe_stone_cost
+	elif recipe_id == "skinning_knife":
+		tool_id = KNIFE_ID
+		target_slot = SLOT_UTILITY
+		target_hotbar = 4
+		wood_cost = 2
+		stone_cost = 1
 	else:
 		return
 
 	if has_tool(recipe_id):
-		last_action_message = "%s already crafted" % ["Stone Axe" if recipe_id == "stone_axe" else "Stone Pickaxe"]
+		last_action_message = "%s already crafted" % _craft_display_name(recipe_id)
 		return
 	if gathered_wood < wood_cost or gathered_stone < stone_cost:
 		last_action_message = "%s needs %d wood + %d stone" % [
-			"Axe" if recipe_id == "stone_axe" else "Pickaxe",
+			_craft_display_name(recipe_id),
 			wood_cost,
 			stone_cost,
 		]
@@ -485,9 +523,19 @@ func request_craft(recipe_id: String) -> void:
 		return
 	_equipment.select_hotbar(target_hotbar)
 	_sync_legacy_mirrors()
-	last_action_message = "Crafted Stone Axe" if recipe_id == "stone_axe" else "Crafted Stone Pickaxe"
+	last_action_message = "Crafted %s" % _craft_display_name(recipe_id)
 	equipped_tool_changed.emit(equipped_tool)
 	craft_completed.emit(recipe_id, tool_id)
+
+
+func _craft_display_name(recipe_id: String) -> String:
+	if recipe_id == "stone_axe":
+		return "Stone Axe"
+	if recipe_id == "stone_pickaxe":
+		return "Stone Pickaxe"
+	if recipe_id == "skinning_knife":
+		return "Skinning Knife"
+	return recipe_id
 
 
 func get_resource_counts() -> Vector2i:
@@ -516,12 +564,12 @@ func get_selected_hotbar_slot() -> int:
 func has_tool(tool_id: String) -> bool:
 	if tool_id == "hands":
 		return true
-	var semantic_id: String = AXE_ID if tool_id == "stone_axe" else PICKAXE_ID if tool_id == "stone_pickaxe" else ""
+	var semantic_id: String = AXE_ID if tool_id == "stone_axe" else PICKAXE_ID if tool_id == "stone_pickaxe" else KNIFE_ID if tool_id == "skinning_knife" else ""
 	if semantic_id.is_empty() or _inventory == null or _equipment == null:
 		return false
 	if _inventory.quantity_of(semantic_id) > 0:
 		return true
-	var slot_key: String = SLOT_AXE if semantic_id == AXE_ID else SLOT_PICKAXE
+	var slot_key: String = SLOT_AXE if semantic_id == AXE_ID else SLOT_PICKAXE if semantic_id == PICKAXE_ID else SLOT_UTILITY
 	var definition = _equipment.definition_at(slot_key)
 	return definition != null and definition is ItemDefinition and str(definition.content_id) == semantic_id
 
@@ -581,9 +629,20 @@ func _configure_semantic_runtime() -> void:
 		_equipment,
 		_definitions.values()
 	)
+	_skinning_service = SkinningService.new().configure(
+		_inventory,
+		_equipment,
+		_definitions.values()
+	)
 	_building_runtime = BuildingRuntime.new().configure(world, _inventory, _definitions)
 	_building_runtime.name = "BuildingRuntime"
 	add_child(_building_runtime)
+
+
+func _skins_distance_to_player(collider: Object) -> float:
+	if player == null or not collider is Node3D:
+		return INF
+	return player.global_position.distance_to((collider as Node3D).global_position)
 
 
 func _find_inventory_instance_slot(item_id: String) -> int:
@@ -619,6 +678,8 @@ func _sync_legacy_mirrors() -> void:
 		equipped_tool = "stone_axe"
 	elif item_id == PICKAXE_ID:
 		equipped_tool = "stone_pickaxe"
+	elif item_id == KNIFE_ID:
+		equipped_tool = "skinning_knife"
 	else:
 		equipped_tool = "hands"
 

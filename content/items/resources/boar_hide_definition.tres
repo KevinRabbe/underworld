@@ -1,0 +1,13 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://gameplay/items/definitions/item_definition.gd" id="1_definition"]
+
+[resource]
+script = ExtResource("1_definition")
+content_id = "item.resource.boar_hide"
+definition_family = "item"
+schema_revision = 1
+category_ids = Array[String](["category.item.resource.hide"])
+capability_ids = Array[String]([])
+stack_limit = 20
+unit_weight = 0.4

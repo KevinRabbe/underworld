@@ -166,6 +166,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_V:
 				craft_requested.emit("stone_pickaxe")
 				return
+			KEY_N:
+				craft_requested.emit("skinning_knife")
+				return
 
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_LEFT:

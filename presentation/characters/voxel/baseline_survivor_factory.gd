@@ -89,6 +89,8 @@ static func build() -> Resource:
 			_tool_part("axe_head", "stone_axe", _axe_head_cells(), Vector3i.ZERO),
 			_tool_part("pickaxe_handle", "stone_pickaxe", _box(Vector3i(0,-9,0), Vector3i(0,4,0), LEATHER), Vector3i.ZERO),
 			_tool_part("pickaxe_head", "stone_pickaxe", _pickaxe_head_cells(), Vector3i.ZERO),
+			_tool_part("knife_handle", "skinning_knife", _box(Vector3i(0,-7,0), Vector3i(0,2,0), LEATHER), Vector3i.ZERO),
+			_tool_part("knife_blade", "skinning_knife", _knife_blade_cells(), Vector3i.ZERO),
 		]),
 	]
 	var character := CharacterScript.new()
@@ -521,6 +523,13 @@ static func _pickaxe_head_cells() -> Array[Dictionary]:
 		var y: int = 4 - absi(x) / 3
 		cells.append({"position": Vector3i(x, y, 0), "palette_index": METAL})
 		cells.append({"position": Vector3i(x, y, 1), "palette_index": METAL})
+	return cells
+
+
+static func _knife_blade_cells() -> Array[Dictionary]:
+	var cells: Array[Dictionary] = []
+	for y in range(0, 4):
+		cells.append({"position": Vector3i(1, y, 0), "palette_index": METAL})
 	return cells
 
 
