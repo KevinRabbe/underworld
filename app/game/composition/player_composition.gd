@@ -42,9 +42,12 @@ static func compose(
 	player.harvest_requested.connect(survival.try_harvest)
 	player.hotbar_slot_requested.connect(survival.select_hotbar_slot)
 	player.craft_requested.connect(survival.request_craft)
-	player.build_tool_requested.connect(survival.request_build_tool)
-	player.workbench_interact_requested.connect(survival.request_workbench_interact)
-	player.build_place_requested.connect(survival.request_build_place)
+	if player.has_signal(&"build_tool_requested") and survival.has_method("request_build_tool"):
+		player.build_tool_requested.connect(survival.request_build_tool)
+	if player.has_signal(&"workbench_interact_requested") and survival.has_method("request_workbench_interact"):
+		player.workbench_interact_requested.connect(survival.request_workbench_interact)
+	if player.has_signal(&"build_place_requested") and survival.has_method("request_build_place"):
+		player.build_place_requested.connect(survival.request_build_place)
 	survival.equipped_tool_changed.connect(player.set_equipped_tool)
 	world.set_player(player)
 	survival.set_player(player)
