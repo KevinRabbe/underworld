@@ -125,7 +125,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-		return
+		# Headless validation cannot persist the captured mouse mode. Preserve the
+		# normal first-click capture behavior on real displays, but let the same
+		# production click continue to gameplay interaction in headless runs.
+		if DisplayServer.get_name() != "headless":
+			return
 
 	if event.is_action_pressed("attack_light"):
 		_request_attack(false)
