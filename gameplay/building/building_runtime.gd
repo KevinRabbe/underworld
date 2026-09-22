@@ -348,7 +348,7 @@ func place_shelter_at(position: Vector3) -> Dictionary:
 func _place_chest_at(position: Vector3) -> Dictionary:
 	var admission := _validate_placement_admission(position)
 	if not admission.is_empty():
-		return _failure(admission)
+		return _failure("; ".join(admission))
 	var record := {"building_id": BUILDING_CHEST_ID, "stable_id": "building.chest.basic.%03d" % (_placed_chests.size() + 1), "position": position, "contents": {}}
 	_placed_chests.append(record)
 	_realize_chest(record)
@@ -357,7 +357,7 @@ func _place_chest_at(position: Vector3) -> Dictionary:
 func _place_bed_at(position: Vector3) -> Dictionary:
 	var admission := _validate_placement_admission(position)
 	if not admission.is_empty():
-		return _failure(admission)
+		return _failure("; ".join(admission))
 	var record := {"building_id": BUILDING_BED_ID, "stable_id": "building.bed.basic.%03d" % (_placed_shelters.size() + 1), "position": position, "wood": 0, "stone": 0}
 	_placed_shelters.append(record)
 	_realize_shelter(record)
