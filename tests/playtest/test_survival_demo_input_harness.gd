@@ -201,7 +201,11 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 						tree_distance = distance
 						tree_object_id = str(candidate.get_meta("world_object_id"))
 	if tree_body != null:
-		var target_direction: Vector3 = tree_body.global_position - player.global_position
+		var tree_target_position: Vector3 = tree_body.global_position
+		var tree_collision := tree_body.get_node_or_null("CollisionShape3D") as CollisionShape3D
+		if tree_collision != null:
+			tree_target_position = tree_collision.global_position
+		var target_direction: Vector3 = tree_target_position - player.global_position
 		target_direction.y = 0.0
 		var camera_yaw = player.get("camera_yaw")
 		if camera_yaw != null and not target_direction.is_zero_approx():
