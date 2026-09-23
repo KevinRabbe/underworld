@@ -3,14 +3,15 @@ class_name UnderworldVoxelCharacterPresentationProvider
 
 const VoxelCharacter := preload("res://presentation/characters/voxel/voxel_character_presentation.gd")
 const VoxelAnimationRuntimeFactory := preload("res://presentation/characters/voxel/voxel_animation_runtime_factory.gd")
+const BaselineFactory := preload("res://presentation/characters/voxel/baseline_survivor_factory.gd")
 const HELD_ITEM_FALLBACK_MODE: StringName = &"hidden"
 
 var character_definition: Resource
 var _last_held_item_diagnostic: String = ""
 
 
-func _init(definition: Resource = null) -> void:
-	character_definition = definition
+func _init(definition: Resource = null, body_type: String = "male") -> void:
+	character_definition = definition if definition != null else BaselineFactory.build_variant("female" if body_type.to_lower() == "female" else "male")
 
 
 func create_presentation():

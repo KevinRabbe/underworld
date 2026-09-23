@@ -123,6 +123,20 @@ static func build_variant(variant_id: String) -> Resource:
 		character.presentation_id = "character.voxel.grounded_survivor.unarmored"
 		character.faceted_outfit_definition = null
 		character.allow_unarmored_faceted_body = true
+	elif variant_id == "female":
+		character.presentation_id = "character.voxel.grounded_survivor.female"
+		character.faceted_body_profile = FacetedProfileScript.new().configure("character.body.frontier_female", {
+			"shoulder_width": 0.51, "chest_width": 0.43, "chest_depth": 0.28,
+			"waist_width": 0.33, "pelvis_width": 0.45, "thigh_diameter": 0.19,
+			"calf_diameter": 0.145, "ankle_width": 0.095, "arm_mass": 0.90,
+		})
+	elif variant_id == "male":
+		character.presentation_id = "character.voxel.grounded_survivor.male"
+		character.faceted_body_profile = FacetedProfileScript.new().configure("character.body.frontier_male", {
+			"shoulder_width": 0.62, "chest_width": 0.52, "chest_depth": 0.34,
+			"waist_width": 0.41, "pelvis_width": 0.43, "thigh_diameter": 0.21,
+			"calf_diameter": 0.18, "ankle_width": 0.105, "arm_mass": 1.08,
+		})
 	elif variant_id == "work":
 		character.palette.entries[CLOTH]["color"] = Color("6b6252")
 		character.palette.entries[CANVAS_LIGHT]["color"] = Color("aa956f")

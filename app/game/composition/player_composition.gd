@@ -28,7 +28,15 @@ static func compose(
 
 	player.name = "Player"
 	# Presentation must be injected before add_child(), so Player._ready() never owns a hard-coded body implementation.
-	player.character_presentation_provider = VoxelCharacterPresentationProviderScript.new()
+	var body_type := "male"
+	var profile_character: Variant = startup_candidate.get("profile", {}).get("character", null)
+	if not profile_character is Dictionary:
+		profile_character = startup_candidate.get("character", null)
+	if profile_character is Dictionary:
+		var appearance: Variant = profile_character.get("appearance", {})
+		if appearance is Dictionary:
+			body_type = str(appearance.get("body_type", "male"))
+	player.character_presentation_provider = VoxelCharacterPresentationProviderScript.new(null, body_type)
 	root.add_child(player)
 	var spawn_position: Vector3
 	if is_continue:

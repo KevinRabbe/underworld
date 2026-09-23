@@ -20,6 +20,13 @@ static func run() -> Array[String]:
 		_clear_path_and_transients(stale_path)
 	var character := Catalog.create_character("Test Survivor", path)
 	_expect(failures, "character creation succeeds", bool(character.get("success", false)))
+	_expect(failures, "new characters persist explicit male body identity", bool(character.get("success", false)) and str(character["character"].get("appearance", {}).get("body_type", "")) == "male")
+	var female_path := "user://profile_catalog_female.json"
+	_clear_path_and_transients(female_path)
+	var female_character := Catalog.create_character("Female Survivor", female_path, "female")
+	_expect(failures, "character creation persists explicit female body identity", bool(female_character.get("success", false)) and str(female_character["character"].get("appearance", {}).get("body_type", "")) == "female")
+	var female_reload := Catalog.load_catalog(female_path)
+	_expect(failures, "female body identity survives catalog reload", bool(female_reload.get("success", false)) and str(female_reload["catalog"]["characters"][0].get("appearance", {}).get("body_type", "")) == "female")
 	var world := Catalog.create_world("Test World", 424242, path)
 	_expect(failures, "world creation succeeds: " + str(world.get("diagnostics", [])), bool(world.get("success", false)))
 	if bool(character.get("success", false)) and bool(world.get("success", false)):
@@ -55,6 +62,7 @@ static func run() -> Array[String]:
 	old_catalog_file = null
 	var old_loaded := Catalog.load_catalog(old_catalog_path)
 	_expect(failures, "older catalog without saved-pair fields remains readable: " + str(old_loaded.get("diagnostics", [])), bool(old_loaded.get("success", false)) and not bool(Catalog.saved_pair(old_catalog_path).get("success", false)))
+	_expect(failures, "legacy character without appearance defaults deterministically to male", bool(old_loaded.get("success", false)) and str(old_loaded["catalog"]["characters"][0].get("appearance", {}).get("body_type", "")) == "male")
 	var corrupt_path := "user://profile_catalog_corrupt.json"
 	var corrupt_file := FileAccess.open(corrupt_path, FileAccess.WRITE)
 	corrupt_file.store_string("{not-json")

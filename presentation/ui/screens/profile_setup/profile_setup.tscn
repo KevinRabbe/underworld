@@ -55,6 +55,14 @@ unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "Test Survivor"
 
+[node name="BodyLabel" type="Label" parent="Center/Panel/Stack"]
+layout_mode = 2
+text = "BODY"
+
+[node name="BodySelect" type="OptionButton" parent="Center/Panel/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+
 [node name="WorldLabel" type="Label" parent="Center/Panel/Stack"]
 layout_mode = 2
 text = "WORLD NAME"
