@@ -64,7 +64,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		var restored_a1: Node = app.get("current_scene")
 		if str(restored_a1.get("prepared_mode")) != "continue" or float(restored_a1.get("prepared_candidate").get("resume_position", Vector3.ZERO).x) != 11.0:
 			failures.append("existing A/W1 did not restore its isolated state")
-		if str(restored_a1.get("prepared_profile", {}).get("character", {}).get("appearance", {}).get("body_type", "")) != "male":
+		if _prepared_body_type(restored_a1) != "male":
 			failures.append("existing A/W1 Continue dropped Character-owned male appearance")
 	if not bool(app.call("show_title")) or not bool(app.call("start_new_game", profile_b2)):
 		failures.append("existing B/W2 did not route to Continue")
@@ -72,7 +72,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		var restored_b2: Node = app.get("current_scene")
 		if str(restored_b2.get("prepared_mode")) != "continue" or float(restored_b2.get("prepared_candidate").get("resume_position", Vector3.ZERO).x) != 22.0:
 			failures.append("existing B/W2 did not restore its isolated state")
-		if str(restored_b2.get("prepared_profile", {}).get("character", {}).get("appearance", {}).get("body_type", "")) != "female":
+		if _prepared_body_type(restored_b2) != "female":
 			failures.append("existing B/W2 Continue dropped Character-owned female appearance")
 	if not bool(app.call("show_title")) or not bool(app.call("start_new_game", profile_a2)):
 		failures.append("A/W2 did not start independently")
@@ -90,7 +90,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		var active_b2: Dictionary = app.get("_active_profile")
 		if str(active_b2.get("character", {}).get("character_id", "")) != str(character_b["character"]["character_id"]):
 			failures.append("Continue did not restore last saved B/W2 pair")
-		if str(app.get("current_scene").get("prepared_profile", {}).get("character", {}).get("appearance", {}).get("body_type", "")) != "female":
+		if _prepared_body_type(app.get("current_scene")) != "female":
 			failures.append("last saved B/W2 Continue dropped Character-owned female appearance")
 	if not bool(app.call("show_title")) or not bool(app.call("start_new_game", profile_a1)):
 		failures.append("A/W1 switch-back route failed")
@@ -106,7 +106,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			var active_a1: Dictionary = app.get("_active_profile")
 			if str(active_a1.get("character", {}).get("character_id", "")) != str(character_a["character"]["character_id"]):
 				failures.append("Continue did not retarget to last saved A/W1 pair")
-			if str(app.get("current_scene").get("prepared_profile", {}).get("character", {}).get("appearance", {}).get("body_type", "")) != "male":
+			if _prepared_body_type(app.get("current_scene")) != "male":
 				failures.append("last saved A/W1 Continue dropped Character-owned male appearance")
 	app.free()
 	await tree.process_frame
@@ -187,6 +187,20 @@ static func _cleanup_slots(character_a: Dictionary, character_b: Dictionary, wor
 			for transient in [path, path + GameSaveSlotService.CANDIDATE_SUFFIX, path + GameSaveSlotService.BACKUP_SUFFIX]:
 				if FileAccess.file_exists(transient):
 					DirAccess.remove_absolute(ProjectSettings.globalize_path(transient))
+
+static func _prepared_body_type(node: Node) -> String:
+	if node == null:
+		return ""
+	var profile_variant: Variant = node.get("prepared_profile")
+	if not profile_variant is Dictionary:
+		return ""
+	var character_variant: Variant = profile_variant.get("character", {})
+	if not character_variant is Dictionary:
+		return ""
+	var appearance_variant: Variant = character_variant.get("appearance", {})
+	if not appearance_variant is Dictionary:
+		return ""
+	return str(appearance_variant.get("body_type", ""))
 
 static func _cleanup_catalog(path: String) -> void:
 	for transient in [path, path + ".candidate", path + ".backup"]:
