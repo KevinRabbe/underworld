@@ -10,8 +10,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var failures: Array[String] = []
 	var catalog_path := ProfileCatalog.PATH
 	_cleanup_catalog(catalog_path)
-	var character_a: Dictionary = ProfileCatalog.create_character("Pair A", catalog_path)
-	var character_b: Dictionary = ProfileCatalog.create_character("Pair B", catalog_path)
+	var character_a: Dictionary = ProfileCatalog.create_character("Pair A", catalog_path, "male")
+	var character_b: Dictionary = ProfileCatalog.create_character("Pair B", catalog_path, "female")
 	var world_one: Dictionary = ProfileCatalog.create_world("Pair One", 4242, catalog_path)
 	var world_two: Dictionary = ProfileCatalog.create_world("Pair Two", 4343, catalog_path)
 	if not bool(character_a.get("success", false)) or not bool(character_b.get("success", false)) or not bool(world_one.get("success", false)) or not bool(world_two.get("success", false)):
@@ -64,12 +64,16 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		var restored_a1: Node = app.get("current_scene")
 		if str(restored_a1.get("prepared_mode")) != "continue" or float(restored_a1.get("prepared_candidate").get("resume_position", Vector3.ZERO).x) != 11.0:
 			failures.append("existing A/W1 did not restore its isolated state")
+		if str(restored_a1.get("prepared_profile", {}).get("character", {}).get("appearance", {}).get("body_type", "")) != "male":
+			failures.append("existing A/W1 Continue dropped Character-owned male appearance")
 	if not bool(app.call("show_title")) or not bool(app.call("start_new_game", profile_b2)):
 		failures.append("existing B/W2 did not route to Continue")
 	else:
 		var restored_b2: Node = app.get("current_scene")
 		if str(restored_b2.get("prepared_mode")) != "continue" or float(restored_b2.get("prepared_candidate").get("resume_position", Vector3.ZERO).x) != 22.0:
 			failures.append("existing B/W2 did not restore its isolated state")
+		if str(restored_b2.get("prepared_profile", {}).get("character", {}).get("appearance", {}).get("body_type", "")) != "female":
+			failures.append("existing B/W2 Continue dropped Character-owned female appearance")
 	if not bool(app.call("show_title")) or not bool(app.call("start_new_game", profile_a2)):
 		failures.append("A/W2 did not start independently")
 	else:
@@ -86,6 +90,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		var active_b2: Dictionary = app.get("_active_profile")
 		if str(active_b2.get("character", {}).get("character_id", "")) != str(character_b["character"]["character_id"]):
 			failures.append("Continue did not restore last saved B/W2 pair")
+		if str(app.get("current_scene").get("prepared_profile", {}).get("character", {}).get("appearance", {}).get("body_type", "")) != "female":
+			failures.append("last saved B/W2 Continue dropped Character-owned female appearance")
 	if not bool(app.call("show_title")) or not bool(app.call("start_new_game", profile_a1)):
 		failures.append("A/W1 switch-back route failed")
 	else:
@@ -100,6 +106,8 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			var active_a1: Dictionary = app.get("_active_profile")
 			if str(active_a1.get("character", {}).get("character_id", "")) != str(character_a["character"]["character_id"]):
 				failures.append("Continue did not retarget to last saved A/W1 pair")
+			if str(app.get("current_scene").get("prepared_profile", {}).get("character", {}).get("appearance", {}).get("body_type", "")) != "male":
+				failures.append("last saved A/W1 Continue dropped Character-owned male appearance")
 	app.free()
 	await tree.process_frame
 	# Restart the real AppRoot against the same catalog and pair slots. CONTINUE

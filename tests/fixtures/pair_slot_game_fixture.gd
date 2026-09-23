@@ -30,10 +30,14 @@ func prepare_continue(candidate: Dictionary) -> bool:
 		return false
 	prepared_mode = &"continue"
 	prepared_candidate = candidate.duplicate(true)
-	# The production route passes only the validated candidate to CONTINUE.
-	# Preserve its world seed so a subsequent SAVE remains bound to the same
-	# generated world instead of falling back to the fixture seed.
-	prepared_profile = {"world": {"world_seed": int(candidate.get("world_seed", 217217))}}
+	# Presentation metadata is carried separately from the gameplay candidate.
+	# Preserve it when the production AppRoot supplies it; retain the fixture's
+	# world-seed fallback for callers that intentionally provide only save bytes.
+	var profile_variant: Variant = candidate.get("profile", null)
+	if profile_variant is Dictionary:
+		prepared_profile = profile_variant.duplicate(true)
+	else:
+		prepared_profile = {"world": {"world_seed": int(candidate.get("world_seed", 217217))}}
 	return true
 
 func build_save_request() -> Dictionary:
