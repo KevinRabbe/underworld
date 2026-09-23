@@ -85,8 +85,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	if not bool(first_pair.get("success", false)) or str(first_pair.get("content_fingerprint", "")) != "lifecycle-fingerprint-1":
 		failures.append("first SAVE did not durably bind exact pair and fingerprint")
 	app.call("show_title")
-	app.queue_free()
-	await tree.process_frame
+	app.free()
 
 	# A fresh AppRoot instance proves the catalog binding survives process reload.
 	var restarted: Node = app_scene.instantiate()
@@ -134,8 +133,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	if bool(restarted.call("continue_game")):
 		failures.append("stale saved binding authorized a newer slot after binding failure")
 
-	restarted.queue_free()
-	await tree.process_frame
+	restarted.free()
 	_cleanup_catalog(catalog_path)
 	return failures
 
