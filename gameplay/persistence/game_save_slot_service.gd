@@ -64,11 +64,20 @@ func persist_candidate_json(
 	if not condition_failures.is_empty():
 		return _failure(condition_failures)
 
+	# Candidate staging is part of the serialized promotion transaction. The
+	# lock must be held before any candidate cleanup/write so another governed
+	# writer cannot replace the candidate between reread and promotion.
+	var lock_path := slot_path + PROMOTION_LOCK_SUFFIX
+	var lock_error := _acquire_promotion_lock(lock_path)
+	if lock_error != OK:
+		return _precondition_stale(CLASS_AVAILABLE, ["SAVE promotion lock is already held"])
+
 	var candidate_path: String = slot_path + CANDIDATE_SUFFIX
 	var backup_path: String = slot_path + BACKUP_SUFFIX
 	_remove_file_if_present(candidate_path)
 	var candidate_file: FileAccess = FileAccess.open(candidate_path, FileAccess.WRITE)
 	if candidate_file == null:
+		_release_promotion_lock(lock_path)
 		return _failure(["SAVE candidate could not be opened for write: %s" % candidate_path])
 	candidate_file.store_string(candidate_json)
 	candidate_file.flush()
@@ -77,6 +86,7 @@ func persist_candidate_json(
 	var reread: Dictionary = _decode_existing_file(candidate_path)
 	if str(reread.get("classification", CLASS_INVALID)) != CLASS_AVAILABLE:
 		_remove_file_if_present(candidate_path)
+		_release_promotion_lock(lock_path)
 		return _prefixed_failure(
 			"SAVE candidate reread",
 			["candidate classified %s" % str(reread.get("classification", CLASS_INVALID))] + reread.get("diagnostics", [])
@@ -84,17 +94,8 @@ func persist_candidate_json(
 	var reread_text: String = str(reread.get("json", ""))
 	if reread_text != candidate_json:
 		_remove_file_if_present(candidate_path)
+		_release_promotion_lock(lock_path)
 		return _failure(["SAVE candidate reread bytes differ from written candidate"])
-
-	# Serialize the entire precondition/backup/promotion transaction. The lock is
-	# acquired with an atomic directory-create, so every governed writer observes
-	# one final mutation boundary instead of racing between the precondition and
-	# rename operations.
-	var lock_path := slot_path + PROMOTION_LOCK_SUFFIX
-	var lock_error := _acquire_promotion_lock(lock_path)
-	if lock_error != OK:
-		_remove_file_if_present(candidate_path)
-		return _precondition_stale(CLASS_AVAILABLE, ["SAVE promotion lock is already held"])
 
 	# Conditional overwrite consent is a compare-and-swap check against the
 	# protected canonical bytes at the final mutation boundary. Candidate staging
@@ -302,8 +303,7 @@ func _acquire_promotion_lock(lock_path: String) -> int:
 	var absolute_lock_path := ProjectSettings.globalize_path(lock_path)
 	var result := DirAccess.make_dir_absolute(absolute_lock_path)
 	if result == OK:
-		_write_promotion_lock_owner(lock_path)
-		return OK
+		return _write_promotion_lock_owner(lock_path)
 	if result != ERR_ALREADY_EXISTS:
 		return result
 	if not _promotion_lock_is_stale(lock_path):
@@ -311,7 +311,7 @@ func _acquire_promotion_lock(lock_path: String) -> int:
 	_remove_promotion_lock(lock_path)
 	result = DirAccess.make_dir_absolute(absolute_lock_path)
 	if result == OK:
-		_write_promotion_lock_owner(lock_path)
+		return _write_promotion_lock_owner(lock_path)
 	return result
 
 
@@ -319,12 +319,15 @@ func _release_promotion_lock(lock_path: String) -> void:
 	_remove_promotion_lock(lock_path)
 
 
-func _write_promotion_lock_owner(lock_path: String) -> void:
+func _write_promotion_lock_owner(lock_path: String) -> int:
 	var owner := FileAccess.open(lock_path + "/" + PROMOTION_LOCK_OWNER, FileAccess.WRITE)
 	if owner == null:
-		return
+		_remove_promotion_lock(lock_path)
+		return ERR_CANT_CREATE
 	owner.store_string(str(Time.get_unix_time_from_system()) + "\n" + str(OS.get_process_id()))
 	owner.flush()
+	owner = null
+	return OK
 
 
 func _promotion_lock_is_stale(lock_path: String) -> bool:
