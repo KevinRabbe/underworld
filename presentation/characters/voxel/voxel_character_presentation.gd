@@ -207,7 +207,7 @@ func _realize_faceted_body(mesh_data) -> void:
 
 func _try_realize_production_body() -> bool:
 	var scene_path := str(character_definition.production_body_scene_path)
-	if scene_path.is_empty() or not ResourceLoader.exists(scene_path):
+	if scene_path.is_empty() or not FileAccess.file_exists(scene_path):
 		return false
 	var packed := load(scene_path) as PackedScene
 	if packed == null:
