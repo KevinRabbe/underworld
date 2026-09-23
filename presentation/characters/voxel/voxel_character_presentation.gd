@@ -32,6 +32,7 @@ var animation_tree: AnimationTree
 var current_animation_state: StringName = &"idle"
 var death_pose_active: bool = false
 var faceted_body_mesh: MeshInstance3D
+var production_body_mesh: MeshInstance3D
 var locomotion_point_indices: Dictionary = {}
 
 
@@ -135,7 +136,9 @@ func _build_presentation_visuals() -> void:
 			for diagnostic in faceted_data.diagnostics:
 				push_error("Faceted survivor: %s" % diagnostic)
 		else:
-			_realize_faceted_body(faceted_data)
+			var production_realized := _try_realize_production_body()
+			if not production_realized:
+				_realize_faceted_body(faceted_data)
 			totals["parts"] += 1
 			totals["triangles"] += int(faceted_data.metrics.get("triangles", 0))
 			totals["vertices"] += int(faceted_data.metrics.get("vertices", 0))
@@ -200,6 +203,38 @@ func _realize_faceted_body(mesh_data) -> void:
 	for bone_index in range(skeleton.get_bone_count()):
 		skin.add_bind(bone_index, skeleton.get_bone_global_rest(bone_index).affine_inverse())
 	faceted_body_mesh.skin = skin
+
+
+func _try_realize_production_body() -> bool:
+	var scene_path := str(character_definition.production_body_scene_path)
+	if scene_path.is_empty() or not ResourceLoader.exists(scene_path):
+		return false
+	var packed := load(scene_path) as PackedScene
+	if packed == null:
+		push_warning("Blender body asset could not be loaded: %s" % scene_path)
+		return false
+	var imported_root := packed.instantiate()
+	var meshes := imported_root.find_children("*", "MeshInstance3D", true, false)
+	if meshes.is_empty():
+		imported_root.queue_free()
+		push_warning("Blender body asset has no MeshInstance3D: %s" % scene_path)
+		return false
+	var imported_mesh: MeshInstance3D = meshes[0]
+	imported_mesh.get_parent().remove_child(imported_mesh)
+	imported_root.queue_free()
+	production_body_mesh = imported_mesh
+	production_body_mesh.name = "BlenderBaseBody"
+	add_child(production_body_mesh)
+	# The Blender armature uses the same ordered prototype humanoid bone contract.
+	# Rebind the imported skin to the production Skeleton3D so the existing
+	# animation runtime, held-item sockets, and gameplay rig remain authoritative.
+	production_body_mesh.skeleton = NodePath("../Skeleton3D")
+	var production_skin := Skin.new()
+	for bone_index in range(skeleton.get_bone_count()):
+		production_skin.add_bind(bone_index, skeleton.get_bone_global_rest(bone_index).affine_inverse())
+	production_body_mesh.skin = production_skin
+	production_body_mesh.scale = Vector3.ONE * character_definition.presentation_scale
+	return true
 
 
 func _build_presentation_face_details() -> void:

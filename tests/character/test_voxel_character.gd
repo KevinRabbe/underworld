@@ -61,6 +61,17 @@ static func _test_definition_contract(failures: Array[String]) -> void:
 	_expect_true(failures, "anatomy variants preserve presentation height", is_equal_approx(slim_variant.faceted_body_profile.height, 1.8) and is_equal_approx(heavy_variant.faceted_body_profile.height, 1.8))
 	var male_variant = BaselineFactory.build_variant("male")
 	var female_variant = BaselineFactory.build_variant("female")
+	_expect_equal(failures, "male production body is Blender-authored and repository-integrated", male_variant.production_body_scene_path, "res://content/characters/base_meshes/underworld_male_base_body.glb")
+	_expect_equal(failures, "female production body is Blender-authored and repository-integrated", female_variant.production_body_scene_path, "res://content/characters/base_meshes/underworld_female_base_body.glb")
+	_expect_true(failures, "Blender male base mesh source and export exist", FileAccess.file_exists("res://content/characters/base_meshes/underworld_base_bodies.blend") and ResourceLoader.exists(male_variant.production_body_scene_path))
+	_expect_true(failures, "Blender female base mesh export exists", ResourceLoader.exists(female_variant.production_body_scene_path))
+	var male_scene := load(male_variant.production_body_scene_path) as PackedScene
+	var female_scene := load(female_variant.production_body_scene_path) as PackedScene
+	var male_instance := male_scene.instantiate() if male_scene != null else null
+	var female_instance := female_scene.instantiate() if female_scene != null else null
+	_expect_true(failures, "Blender base exports contain shared-rig mesh nodes", male_instance != null and not male_instance.find_children("*", "MeshInstance3D", true, false).is_empty() and not male_instance.find_children("*", "Skeleton3D", true, false).is_empty() and female_instance != null and not female_instance.find_children("*", "MeshInstance3D", true, false).is_empty() and not female_instance.find_children("*", "Skeleton3D", true, false).is_empty())
+	if male_instance != null: male_instance.free()
+	if female_instance != null: female_instance.free()
 	_expect_true(failures, "male and female body foundations validate", male_variant.validate_definition().is_empty() and female_variant.validate_definition().is_empty())
 	_expect_true(failures, "male and female bodies are visibly distinct presentation profiles", male_variant.canonical_fingerprint() != female_variant.canonical_fingerprint() and male_variant.faceted_body_profile.canonical_fingerprint() != female_variant.faceted_body_profile.canonical_fingerprint())
 	_expect_equal(failures, "male and female bodies share the humanoid rig contract", male_variant.rig_profile_id, female_variant.rig_profile_id)

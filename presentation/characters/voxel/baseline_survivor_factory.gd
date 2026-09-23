@@ -125,6 +125,7 @@ static func build_variant(variant_id: String) -> Resource:
 		character.allow_unarmored_faceted_body = true
 	elif variant_id == "female":
 		character.presentation_id = "character.voxel.grounded_survivor.female"
+		character.production_body_scene_path = "res://content/characters/base_meshes/underworld_female_base_body.glb"
 		character.faceted_body_profile = FacetedProfileScript.new().configure("character.body.frontier_female", {
 			"shoulder_width": 0.51, "chest_width": 0.43, "chest_depth": 0.28,
 			"waist_width": 0.33, "pelvis_width": 0.45, "thigh_diameter": 0.19,
@@ -132,6 +133,7 @@ static func build_variant(variant_id: String) -> Resource:
 		})
 	elif variant_id == "male":
 		character.presentation_id = "character.voxel.grounded_survivor.male"
+		character.production_body_scene_path = "res://content/characters/base_meshes/underworld_male_base_body.glb"
 		character.faceted_body_profile = FacetedProfileScript.new().configure("character.body.frontier_male", {
 			"shoulder_width": 0.62, "chest_width": 0.52, "chest_depth": 0.34,
 			"waist_width": 0.41, "pelvis_width": 0.43, "thigh_diameter": 0.21,
