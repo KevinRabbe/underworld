@@ -15,7 +15,9 @@ static func run() -> Array[String]:
 		"user://profile_catalog_recovery.json",
 		"user://profile_catalog_binding_failure.json",
 		"user://profile_catalog_invalid_backup.json",
-		"user://profile_catalog_corrupt_binding.json"
+		"user://profile_catalog_corrupt_binding.json",
+		"user://profile_catalog_female.json",
+		"user://profile_catalog_invalid_body.json"
 	]:
 		_clear_path_and_transients(stale_path)
 	var character := Catalog.create_character("Test Survivor", path)
@@ -27,6 +29,13 @@ static func run() -> Array[String]:
 	_expect(failures, "character creation persists explicit female body identity", bool(female_character.get("success", false)) and str(female_character["character"].get("appearance", {}).get("body_type", "")) == "female")
 	var female_reload := Catalog.load_catalog(female_path)
 	_expect(failures, "female body identity survives catalog reload", bool(female_reload.get("success", false)) and str(female_reload["catalog"]["characters"][0].get("appearance", {}).get("body_type", "")) == "female")
+	var female_world_1 := Catalog.create_world("Female World One", 11, female_path)
+	var female_world_2 := Catalog.create_world("Female World Two", 22, female_path)
+	if bool(female_world_1.get("success", false)) and bool(female_world_2.get("success", false)):
+		Catalog.select_pair(female_character["character"]["character_id"], female_world_1["world"]["world_id"], female_path)
+		Catalog.select_pair(female_character["character"]["character_id"], female_world_2["world"]["world_id"], female_path)
+		var cross_world_reload := Catalog.load_catalog(female_path)
+		_expect(failures, "character-owned female body survives cross-world selection", bool(cross_world_reload.get("success", false)) and str(cross_world_reload["catalog"]["characters"][0].get("appearance", {}).get("body_type", "")) == "female")
 	var world := Catalog.create_world("Test World", 424242, path)
 	_expect(failures, "world creation succeeds: " + str(world.get("diagnostics", [])), bool(world.get("success", false)))
 	if bool(character.get("success", false)) and bool(world.get("success", false)):
@@ -63,6 +72,13 @@ static func run() -> Array[String]:
 	var old_loaded := Catalog.load_catalog(old_catalog_path)
 	_expect(failures, "older catalog without saved-pair fields remains readable: " + str(old_loaded.get("diagnostics", [])), bool(old_loaded.get("success", false)) and not bool(Catalog.saved_pair(old_catalog_path).get("success", false)))
 	_expect(failures, "legacy character without appearance defaults deterministically to male", bool(old_loaded.get("success", false)) and str(old_loaded["catalog"]["characters"][0].get("appearance", {}).get("body_type", "")) == "male")
+	var invalid_body_path := "user://profile_catalog_invalid_body.json"
+	var invalid_body_file := FileAccess.open(invalid_body_path, FileAccess.WRITE)
+	if invalid_body_file != null:
+		invalid_body_file.store_string(JSON.stringify({"schema": "underworld.profile-catalog.v1", "characters": [{"character_id": "character:invalid-body", "display_name": "Invalid Body", "appearance": {"body_type": "unknown"}}], "worlds": []}))
+	invalid_body_file = null
+	var invalid_body_loaded := Catalog.load_catalog(invalid_body_path)
+	_expect(failures, "invalid body type defaults safely to male", bool(invalid_body_loaded.get("success", false)) and str(invalid_body_loaded["catalog"]["characters"][0].get("appearance", {}).get("body_type", "")) == "male")
 	var corrupt_path := "user://profile_catalog_corrupt.json"
 	var corrupt_file := FileAccess.open(corrupt_path, FileAccess.WRITE)
 	corrupt_file.store_string("{not-json")
