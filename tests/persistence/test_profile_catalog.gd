@@ -74,7 +74,7 @@ static func run() -> Array[String]:
 	staged_candidate = null
 	var recovered := Catalog.load_catalog(recovery_path)
 	_expect(failures, "missing canonical recovers valid backup", bool(recovered.get("success", false)) and str(recovered["catalog"]["characters"][0]["display_name"]) == "Keep Me")
-	_expect(failures, "recovered catalog is not treated as empty", recovered["catalog"]["characters"].size() == 1)
+	_expect(failures, "recovered catalog is not treated as empty", bool(recovered.get("success", false)) and recovered["catalog"]["characters"].size() == 1)
 	_expect(failures, "recovered saved-pair metadata survives", bool(Catalog.saved_pair(recovery_path).get("success", false)))
 	_expect(failures, "recovery removes stale candidate", not FileAccess.file_exists(recovery_path + ".candidate"))
 	var promoted := Catalog.create_world("After Recovery", 77, recovery_path)
