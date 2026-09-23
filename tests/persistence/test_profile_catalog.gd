@@ -18,12 +18,12 @@ static func run() -> Array[String]:
 		_expect(failures, "last pair reloads", bool(last.get("success", false)))
 		_expect(failures, "character name persists", str(last["character"]["display_name"]) == "Test Survivor")
 		_expect(failures, "world seed persists", int(last["world"]["world_seed"]) == 424242)
-		var saved := Catalog.record_successful_save(character["character"]["character_id"], world["world"]["world_id"], "wid1:canonical-world", 424242, path)
+		var saved := Catalog.record_successful_save(character["character"]["character_id"], world["world"]["world_id"], "wid1:canonical-world", 424242, "save-fingerprint-1", path)
 		_expect(failures, "successful save pair binding persists", bool(saved.get("success", false)))
 		var saved_pair := Catalog.saved_pair(path)
 		_expect(failures, "saved pair resolves canonical world identity", bool(saved_pair.get("success", false)) and str(saved_pair.get("canonical_world_id", "")) == "wid1:canonical-world")
 		var migrated_path := "user://profile_catalog_legacy_migration.json"
-		var migrated := Catalog.migrate_legacy_save("wid1:legacy-world", 77, migrated_path)
+		var migrated := Catalog.migrate_legacy_save("wid1:legacy-world", 77, "legacy-fingerprint-1", migrated_path)
 		_expect(failures, "legacy save migration creates durable pair", bool(migrated.get("success", false)))
 		var migrated_pair := Catalog.saved_pair(migrated_path)
 		_expect(failures, "legacy migration preserves canonical world identity", bool(migrated_pair.get("success", false)) and str(migrated_pair.get("canonical_world_id", "")) == "wid1:legacy-world")
@@ -48,7 +48,7 @@ static func run() -> Array[String]:
 	_expect(failures, "invalid catalog schema remains preserved", invalid_preserved != null and str(JSON.parse_string(invalid_preserved.get_as_text()).get("characters", null)) == "{}")
 	invalid_preserved = null
 	var recovery_path := "user://profile_catalog_recovery.json"
-	var recovery_catalog := {"schema": "underworld.profile-catalog.v1", "characters": [{"character_id": "character:keep", "display_name": "Keep Me"}], "worlds": [], "last_character_id": "character:keep", "last_world_id": ""}
+	var recovery_catalog := {"schema": "underworld.profile-catalog.v1", "characters": [{"character_id": "character:keep", "display_name": "Keep Me"}], "worlds": [{"world_id": "world:keep", "world_name": "Keep World", "world_seed": 9}], "last_character_id": "character:keep", "last_world_id": "world:keep", "saved_character_id": "character:keep", "saved_world_id": "world:keep", "saved_canonical_world_id": "wid1:keep", "saved_world_seed": 9, "saved_content_fingerprint": "keep-fingerprint"}
 	var recovery_file := FileAccess.open(recovery_path + ".backup", FileAccess.WRITE)
 	if recovery_file != null:
 		recovery_file.store_string(JSON.stringify(recovery_catalog))
@@ -60,6 +60,7 @@ static func run() -> Array[String]:
 	var recovered := Catalog.load_catalog(recovery_path)
 	_expect(failures, "missing canonical recovers valid backup", bool(recovered.get("success", false)) and str(recovered["catalog"]["characters"][0]["display_name"]) == "Keep Me")
 	_expect(failures, "recovered catalog is not treated as empty", recovered["catalog"]["characters"].size() == 1)
+	_expect(failures, "recovered saved-pair metadata survives", bool(Catalog.saved_pair(recovery_path).get("success", false)))
 	_expect(failures, "recovery removes stale candidate", not FileAccess.file_exists(recovery_path + ".candidate"))
 	var promoted := Catalog.create_world("After Recovery", 77, recovery_path)
 	_expect(failures, "promotion after recovery succeeds", bool(promoted.get("success", false)))
@@ -73,6 +74,12 @@ static func run() -> Array[String]:
 	_expect(failures, "invalid backup with missing canonical fails closed", not bool(invalid_backup_load.get("success", false)))
 	var invalid_backup_create := Catalog.create_character("Must Not Replace Backup", invalid_backup_path)
 	_expect(failures, "invalid backup cannot be overwritten by create", not bool(invalid_backup_create.get("success", false)))
+	var corrupt_binding_path := "user://profile_catalog_corrupt_binding.json"
+	var corrupt_binding_file := FileAccess.open(corrupt_binding_path, FileAccess.WRITE)
+	if corrupt_binding_file != null:
+		corrupt_binding_file.store_string(JSON.stringify({"schema": "underworld.profile-catalog.v1", "characters": [], "worlds": [], "saved_character_id": 4, "saved_world_id": "", "saved_canonical_world_id": "", "saved_world_seed": 0, "saved_content_fingerprint": ""}))
+	corrupt_binding_file = null
+	_expect(failures, "malformed saved-pair metadata fails closed", not bool(Catalog.load_catalog(corrupt_binding_path).get("success", false)))
 	if FileAccess.file_exists(corrupt_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(corrupt_path))
 	if FileAccess.file_exists(invalid_schema_path):
@@ -83,6 +90,8 @@ static func run() -> Array[String]:
 	for transient in [invalid_backup_path, invalid_backup_path + ".backup"]:
 		if FileAccess.file_exists(transient):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(transient))
+	if FileAccess.file_exists(corrupt_binding_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(corrupt_binding_path))
 	if FileAccess.file_exists(path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	return failures

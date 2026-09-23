@@ -139,7 +139,8 @@ func save_current_game() -> Dictionary:
 		var profile_world = _active_profile.get("world", {})
 		var world_id := str(profile_world.get("world_id", "")) if profile_world is Dictionary else ""
 		var seed := int(profile_world.get("world_seed", 0)) if profile_world is Dictionary else 0
-		if not bool(ProfileCatalog.record_successful_save(character_id, world_id, canonical_world_id, seed).get("success", false)):
+		var content_fingerprint := str(saved.get("content_fingerprint", ""))
+		if not bool(ProfileCatalog.record_successful_save(character_id, world_id, canonical_world_id, seed, content_fingerprint).get("success", false)):
 			return _failure(["SAVE succeeded but saved profile pair binding failed"])
 	return saved
 
@@ -161,12 +162,13 @@ func continue_game() -> bool:
 		return false
 	var pair: Dictionary = ProfileCatalog.saved_pair()
 	if not bool(pair.get("success", false)):
-		var migrated := ProfileCatalog.migrate_legacy_save(canonical_world_id, int(candidate_variant["world_seed"]))
+		var migrated := ProfileCatalog.migrate_legacy_save(canonical_world_id, int(candidate_variant["world_seed"]), str(loaded.get("content_fingerprint", "")))
 		if not bool(migrated.get("success", false)):
 			return false
 		pair = ProfileCatalog.saved_pair()
-	if not bool(pair.get("success", false)) or str(pair.get("canonical_world_id", "")) != canonical_world_id:
+	if not bool(pair.get("success", false)) or str(pair.get("canonical_world_id", "")) != canonical_world_id or int(pair.get("world_seed", -1)) != int(candidate_variant["world_seed"]) or str(pair.get("content_fingerprint", "")) != str(loaded.get("content_fingerprint", "")):
 		return false
+	_active_profile = {"character": pair["character"].duplicate(true), "world": pair["world"].duplicate(true)}
 	return _replace_game_scene(true, candidate_variant)
 
 

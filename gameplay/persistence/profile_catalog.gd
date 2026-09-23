@@ -55,6 +55,19 @@ static func _read_catalog(path: String) -> Dictionary:
 		return {"exists": true, "success": false, "diagnostic": "Profile catalog has invalid last character selection"}
 	if parsed.has("last_world_id") and not parsed["last_world_id"] is String:
 		return {"exists": true, "success": false, "diagnostic": "Profile catalog has invalid last world selection"}
+	var saved_keys := ["saved_character_id", "saved_world_id", "saved_canonical_world_id", "saved_world_seed", "saved_content_fingerprint"]
+	var saved_present := 0
+	for key in saved_keys:
+		if parsed.has(key):
+			saved_present += 1
+	if saved_present != 0 and saved_present != saved_keys.size():
+		return {"exists": true, "success": false, "diagnostic": "Profile catalog has incomplete saved-pair metadata"}
+	if saved_present == saved_keys.size():
+		for key in ["saved_character_id", "saved_world_id", "saved_canonical_world_id", "saved_content_fingerprint"]:
+			if not parsed[key] is String:
+				return {"exists": true, "success": false, "diagnostic": "Profile catalog has invalid saved-pair string metadata"}
+		if not parsed["saved_world_seed"] is int:
+			return {"exists": true, "success": false, "diagnostic": "Profile catalog has invalid saved-pair seed metadata"}
 	var result := _empty()
 	result["characters"] = _sanitize_records(parsed.get("characters", []), "character_id", ["display_name"])
 	result["worlds"] = _sanitize_records(parsed.get("worlds", []), "world_id", ["world_name", "world_seed"])
@@ -130,24 +143,26 @@ static func saved_pair(path: String = PATH) -> Dictionary:
 	var character = _find(catalog["characters"], "character_id", str(catalog.get("saved_character_id", "")))
 	var world = _find(catalog["worlds"], "world_id", str(catalog.get("saved_world_id", "")))
 	var canonical_id := str(catalog.get("saved_canonical_world_id", ""))
-	return {"success": character != null and world != null and not canonical_id.is_empty(), "character": character, "world": world, "canonical_world_id": canonical_id, "catalog": catalog, "diagnostics": []}
+	var fingerprint := str(catalog.get("saved_content_fingerprint", ""))
+	return {"success": character != null and world != null and not canonical_id.is_empty() and not fingerprint.is_empty(), "character": character, "world": world, "canonical_world_id": canonical_id, "world_seed": int(catalog.get("saved_world_seed", 0)), "content_fingerprint": fingerprint, "catalog": catalog, "diagnostics": []}
 
-static func record_successful_save(character_id: String, world_id: String, canonical_world_id: String, seed: int, path: String = PATH) -> Dictionary:
+static func record_successful_save(character_id: String, world_id: String, canonical_world_id: String, seed: int, content_fingerprint: String, path: String = PATH) -> Dictionary:
 	var loaded := load_catalog(path)
 	if not bool(loaded.get("success", false)):
 		return loaded
 	var catalog: Dictionary = loaded["catalog"]
-	if _find(catalog["characters"], "character_id", character_id) == null or _find(catalog["worlds"], "world_id", world_id) == null or canonical_world_id.is_empty():
+	if _find(catalog["characters"], "character_id", character_id) == null or _find(catalog["worlds"], "world_id", world_id) == null or canonical_world_id.is_empty() or content_fingerprint.is_empty():
 		return _failure("Saved pair references unknown profile identity")
 	catalog["saved_character_id"] = character_id
 	catalog["saved_world_id"] = world_id
 	catalog["saved_canonical_world_id"] = canonical_world_id
 	catalog["saved_world_seed"] = seed
+	catalog["saved_content_fingerprint"] = content_fingerprint
 	if not _write(catalog, path):
 		return _failure("Saved profile pair could not be persisted")
 	return {"success": true, "catalog": catalog, "diagnostics": []}
 
-static func migrate_legacy_save(canonical_world_id: String, seed: int, path: String = PATH) -> Dictionary:
+static func migrate_legacy_save(canonical_world_id: String, seed: int, content_fingerprint: String, path: String = PATH) -> Dictionary:
 	var loaded := load_catalog(path)
 	if not bool(loaded.get("success", false)):
 		return loaded
@@ -167,12 +182,13 @@ static func migrate_legacy_save(canonical_world_id: String, seed: int, path: Str
 	catalog["saved_world_id"] = world["world_id"]
 	catalog["saved_canonical_world_id"] = canonical_world_id
 	catalog["saved_world_seed"] = seed
+	catalog["saved_content_fingerprint"] = content_fingerprint
 	if not _write(catalog, path):
 		return _failure("Legacy save profile migration could not be persisted")
 	return {"success": true, "catalog": catalog, "character": character, "world": world, "diagnostics": []}
 
 static func _empty() -> Dictionary:
-	return {"schema": SCHEMA, "characters": [], "worlds": [], "last_character_id": "", "last_world_id": "", "saved_character_id": "", "saved_world_id": "", "saved_canonical_world_id": "", "saved_world_seed": 0}
+	return {"schema": SCHEMA, "characters": [], "worlds": [], "last_character_id": "", "last_world_id": "", "saved_character_id": "", "saved_world_id": "", "saved_canonical_world_id": "", "saved_world_seed": 0, "saved_content_fingerprint": ""}
 
 static func _sanitize_records(raw: Variant, id_key: String, required: Array) -> Array:
 	var result: Array = []
