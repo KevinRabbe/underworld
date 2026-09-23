@@ -99,6 +99,7 @@ static func run() -> Array[String]:
 	_expect(failures, "invalid catalog schema remains preserved", invalid_preserved_data is Dictionary and invalid_preserved_data.get("characters", null) is Dictionary)
 	invalid_preserved = null
 	var recovery_path := "user://profile_catalog_recovery.json"
+	_clear_path_and_transients(recovery_path)
 	var recovery_catalog := {"schema": "underworld.profile-catalog.v1", "characters": [{"character_id": "character:keep", "display_name": "Keep Me"}], "worlds": [{"world_id": "world:keep", "world_name": "Keep World", "world_seed": 9}], "last_character_id": "character:keep", "last_world_id": "world:keep", "saved_character_id": "character:keep", "saved_world_id": "world:keep", "saved_canonical_world_id": "wid1:keep", "saved_world_seed": 9, "saved_content_fingerprint": "keep-fingerprint"}
 	var recovery_file := FileAccess.open(recovery_path + ".backup", FileAccess.WRITE)
 	if recovery_file != null:
