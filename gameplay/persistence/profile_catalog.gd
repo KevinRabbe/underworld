@@ -40,7 +40,10 @@ static func _read_catalog(path: String) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return {"exists": true, "success": false, "diagnostic": "Profile catalog exists but cannot be opened"}
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	var parser := JSON.new()
+	if parser.parse(file.get_as_text()) != OK:
+		return {"exists": true, "success": false, "diagnostic": "Profile catalog is malformed JSON"}
+	var parsed: Variant = parser.data
 	if not parsed is Dictionary:
 		return {"exists": true, "success": false, "diagnostic": "Profile catalog is malformed JSON"}
 	if str(parsed.get("schema", "")) != SCHEMA:
