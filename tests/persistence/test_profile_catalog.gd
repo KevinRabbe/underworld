@@ -29,6 +29,8 @@ static func run() -> Array[String]:
 		_expect(failures, "legacy migration preserves canonical world identity", bool(migrated_pair.get("success", false)) and str(migrated_pair.get("canonical_world_id", "")) == "wid1:legacy-world")
 		if FileAccess.file_exists(migrated_path):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(migrated_path))
+	var rejected_legacy := Catalog.migrate_legacy_save("wid1:legacy-world", 77, "", "user://profile_catalog_rejected_legacy.json")
+	_expect(failures, "legacy migration rejects missing save fingerprint", not bool(rejected_legacy.get("success", false)))
 	var corrupt_path := "user://profile_catalog_corrupt.json"
 	var corrupt_file := FileAccess.open(corrupt_path, FileAccess.WRITE)
 	corrupt_file.store_string("{not-json")
@@ -65,6 +67,7 @@ static func run() -> Array[String]:
 	var promoted := Catalog.create_world("After Recovery", 77, recovery_path)
 	_expect(failures, "promotion after recovery succeeds", bool(promoted.get("success", false)))
 	_expect(failures, "successful promotion leaves no backup", not FileAccess.file_exists(recovery_path + ".backup"))
+	_expect(failures, "successful promotion leaves no candidate", not FileAccess.file_exists(recovery_path + ".candidate"))
 	var invalid_backup_path := "user://profile_catalog_invalid_backup.json"
 	var invalid_backup_file := FileAccess.open(invalid_backup_path + ".backup", FileAccess.WRITE)
 	if invalid_backup_file != null:

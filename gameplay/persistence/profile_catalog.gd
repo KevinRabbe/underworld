@@ -163,6 +163,8 @@ static func record_successful_save(character_id: String, world_id: String, canon
 	return {"success": true, "catalog": catalog, "diagnostics": []}
 
 static func migrate_legacy_save(canonical_world_id: String, seed: int, content_fingerprint: String, path: String = PATH) -> Dictionary:
+	if canonical_world_id.is_empty() or content_fingerprint.is_empty():
+		return _failure("Legacy SAVE migration requires canonical world identity and content fingerprint")
 	var loaded := load_catalog(path)
 	if not bool(loaded.get("success", false)):
 		return loaded
