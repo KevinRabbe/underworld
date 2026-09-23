@@ -67,6 +67,10 @@ static func _test_definition_contract(failures: Array[String]) -> void:
 	var male_mesh = FacetedCompiler.compile(male_variant.faceted_body_profile, male_variant.palette, male_variant.faceted_outfit_definition)
 	var female_mesh = FacetedCompiler.compile(female_variant.faceted_body_profile, female_variant.palette, female_variant.faceted_outfit_definition)
 	_expect_true(failures, "male and female body foundations compile through the production faceted pipeline", male_mesh.success and female_mesh.success)
+	var male_provider = VoxelProvider.new(null, "male")
+	var female_provider = VoxelProvider.new(null, "female")
+	_expect_true(failures, "production provider selects male and female definitions", male_provider.character_definition != null and female_provider.character_definition != null and male_provider.character_definition.presentation_id.ends_with(".male") and female_provider.character_definition.presentation_id.ends_with(".female"))
+	_expect_equal(failures, "production provider keeps shared rig for both bodies", male_provider.character_definition.rig_profile_id, female_provider.character_definition.rig_profile_id)
 	var hair_variant = BaselineFactory.build()
 	hair_variant.faceted_hair_id = "hair.frontier.cropped.control"
 	_expect_true(failures, "hair selection changes presentation identity only", hair_variant.canonical_fingerprint() != character.canonical_fingerprint() and hair_variant.rig_profile_id == character.rig_profile_id)
