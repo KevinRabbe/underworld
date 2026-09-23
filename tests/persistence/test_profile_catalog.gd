@@ -53,11 +53,23 @@ static func run() -> Array[String]:
 	var promoted := Catalog.create_world("After Recovery", 77, recovery_path)
 	_expect(failures, "promotion after recovery succeeds", bool(promoted.get("success", false)))
 	_expect(failures, "successful promotion leaves no backup", not FileAccess.file_exists(recovery_path + ".backup"))
+	var invalid_backup_path := "user://profile_catalog_invalid_backup.json"
+	var invalid_backup_file := FileAccess.open(invalid_backup_path + ".backup", FileAccess.WRITE)
+	if invalid_backup_file != null:
+		invalid_backup_file.store_string("{invalid-backup")
+	invalid_backup_file = null
+	var invalid_backup_load := Catalog.load_catalog(invalid_backup_path)
+	_expect(failures, "invalid backup with missing canonical fails closed", not bool(invalid_backup_load.get("success", false)))
+	var invalid_backup_create := Catalog.create_character("Must Not Replace Backup", invalid_backup_path)
+	_expect(failures, "invalid backup cannot be overwritten by create", not bool(invalid_backup_create.get("success", false)))
 	if FileAccess.file_exists(corrupt_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(corrupt_path))
 	if FileAccess.file_exists(invalid_schema_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(invalid_schema_path))
 	for transient in [recovery_path, recovery_path + ".candidate", recovery_path + ".backup"]:
+		if FileAccess.file_exists(transient):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(transient))
+	for transient in [invalid_backup_path, invalid_backup_path + ".backup"]:
 		if FileAccess.file_exists(transient):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(transient))
 	if FileAccess.file_exists(path):

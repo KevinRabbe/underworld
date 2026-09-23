@@ -16,6 +16,8 @@ static func load_catalog(path: String = PATH) -> Dictionary:
 				_remove_if_exists(path + ".candidate")
 				return {"success": true, "catalog": backup["catalog"], "diagnostics": ["Recovered profile catalog from backup"]}
 			return _failure("Profile catalog canonical file is missing and backup recovery failed")
+		if bool(backup.get("exists", false)):
+			return _failure(str(backup.get("diagnostic", "Profile catalog backup is invalid")))
 		var candidate := _read_catalog(path + ".candidate")
 		if bool(candidate.get("success", false)) and _promote_candidate(path):
 			return {"success": true, "catalog": candidate["catalog"], "diagnostics": ["Recovered profile catalog from candidate"]}
