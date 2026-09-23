@@ -70,18 +70,15 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	game_root.free()
 
 	var save_service := LifecycleSaveService.new()
-	print("[PROFILE LIFECYCLE] setup complete")
 	var app: Node = app_scene.instantiate()
 	app.call("configure_route_scenes", title_scene, game_scene)
 	app.set("_save_slot_service", save_service)
 	tree.root.add_child(app)
 	await tree.process_frame
-	print("[PROFILE LIFECYCLE] first app ready")
 	var profile := {"character": character_a["character"], "world": world_one["world"]}
 	if not bool(app.call("start_new_game", profile)):
 		failures.append("A + World1 did not start")
-	var first_save := app.call("save_current_game")
-	print("[PROFILE LIFECYCLE] first save returned")
+	var first_save: Variant = app.call("save_current_game")
 	if not bool(first_save.get("success", false)):
 		failures.append("A + World1 SAVE failed")
 	var first_pair := ProfileCatalog.saved_pair(catalog_path)
@@ -89,7 +86,6 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		failures.append("first SAVE did not durably bind exact pair and fingerprint")
 	app.call("show_title")
 	app.free()
-	print("[PROFILE LIFECYCLE] first app freed")
 
 	# A fresh AppRoot instance proves the catalog binding survives process reload.
 	var restarted: Node = app_scene.instantiate()
@@ -97,15 +93,13 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	restarted.set("_save_slot_service", save_service)
 	tree.root.add_child(restarted)
 	await tree.process_frame
-	print("[PROFILE LIFECYCLE] restarted app ready")
 	if not bool(restarted.call("continue_game")):
 		failures.append("fresh-process CONTINUE did not restore A + World1")
 	else:
 		var active: Dictionary = restarted.get("_active_profile")
 		if str(active.get("character", {}).get("character_id", "")) != str(character_a["character"]["character_id"]):
 			failures.append("CONTINUE active profile was not exact saved Character A")
-	var selected_b := ProfileCatalog.select_pair(character_b["character"]["character_id"], world_one["world"]["world_id"], catalog_path)
-	print("[PROFILE LIFECYCLE] selected B")
+	var selected_b: Dictionary = ProfileCatalog.select_pair(character_b["character"]["character_id"], world_one["world"]["world_id"], catalog_path)
 	if not bool(selected_b.get("success", false)) or not bool(restarted.call("show_title")) or not bool(restarted.call("continue_game")):
 		failures.append("B + World1 selection incorrectly blocked saved-pair Continue")
 	else:
@@ -113,7 +107,6 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		if str(active_b_case.get("character", {}).get("character_id", "")) != str(character_a["character"]["character_id"]):
 			failures.append("B + World1 Continue was misattributed to selected Character B")
 	ProfileCatalog.select_pair(character_a["character"]["character_id"], world_two["world"]["world_id"], catalog_path)
-	print("[PROFILE LIFECYCLE] selected World2")
 	if not bool(restarted.call("show_title")) or not bool(restarted.call("continue_game")):
 		failures.append("A + World2 selection incorrectly blocked saved-pair Continue")
 	else:
@@ -122,7 +115,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			failures.append("A + World2 Continue was misattributed to selected World2")
 
 	# The second SAVE refreshes the exact binding for the active saved pair.
-	var second_save := restarted.call("save_current_game")
+	var second_save: Variant = restarted.call("save_current_game")
 	var second_pair := ProfileCatalog.saved_pair(catalog_path)
 	if not bool(second_save.get("success", false)) or str(second_pair.get("content_fingerprint", "")) != "lifecycle-fingerprint-2":
 		failures.append("Continue -> SAVE again did not refresh the exact binding")
@@ -130,10 +123,10 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 
 	# Make the profile binding promotion fail after the gameplay slot commits.
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path(catalog_path + ".candidate"))
-	var failed_binding_save := restarted.call("continue_game")
+	var failed_binding_save: Variant = restarted.call("continue_game")
 	if not failed_binding_save:
 		failures.append("precondition CONTINUE before binding-failure injection failed")
-	var binding_failure := restarted.call("save_current_game")
+	var binding_failure: Variant = restarted.call("save_current_game")
 	if bool(binding_failure.get("success", false)):
 		failures.append("binding write failure was not surfaced after slot commit")
 	restarted.call("show_title")
