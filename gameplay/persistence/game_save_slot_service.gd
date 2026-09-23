@@ -22,6 +22,7 @@ const _REPLACE_CONDITION_KEYS: Array[String] = ["expected_content_fingerprint", 
 const _NO_PROTECTED_CONDITION_KEYS: Array[String] = ["mode"]
 
 var _rename_operation: Callable = Callable()
+var _promotion_lock_tokens: Dictionary = {}
 
 
 static func pair_slot_path(character_id: String, world_id: String) -> String:
@@ -303,45 +304,101 @@ func _acquire_promotion_lock(lock_path: String) -> int:
 	var absolute_lock_path := ProjectSettings.globalize_path(lock_path)
 	var result := DirAccess.make_dir_absolute(absolute_lock_path)
 	if result == OK:
-		return _write_promotion_lock_owner(lock_path)
+		var token := _new_promotion_lock_token()
+		var owner_result := _write_promotion_lock_owner(lock_path, token)
+		if owner_result == OK:
+			_promotion_lock_tokens[lock_path] = token
+		return owner_result
 	if result != ERR_ALREADY_EXISTS:
 		return result
-	if not _promotion_lock_is_stale(lock_path):
+	var observed_owner := _read_promotion_lock_owner(lock_path)
+	if not _promotion_lock_is_stale(observed_owner):
 		return result
-	_remove_promotion_lock(lock_path)
+	# Reclaim by atomically moving the exact stale lock instance away. A
+	# competing writer can then create a fresh lock at the original path without
+	# an old reclaimer being able to delete that new owner (ABA protection).
+	var quarantine_path := "%s.reclaim-%s" % [lock_path, _new_promotion_lock_token()]
+	if not _quarantine_stale_promotion_lock(lock_path, observed_owner, quarantine_path):
+		return ERR_ALREADY_EXISTS
 	result = DirAccess.make_dir_absolute(absolute_lock_path)
 	if result == OK:
-		return _write_promotion_lock_owner(lock_path)
+		var token := _new_promotion_lock_token()
+		var owner_result := _write_promotion_lock_owner(lock_path, token)
+		if owner_result == OK:
+			_promotion_lock_tokens[lock_path] = token
+		return owner_result
 	return result
 
 
 func _release_promotion_lock(lock_path: String) -> void:
-	_remove_promotion_lock(lock_path)
+	var token := str(_promotion_lock_tokens.get(lock_path, ""))
+	if token.is_empty():
+		return
+	var owner := _read_promotion_lock_owner(lock_path)
+	if _owner_has_token(owner, token):
+		_remove_promotion_lock(lock_path)
+	_promotion_lock_tokens.erase(lock_path)
 
 
-func _write_promotion_lock_owner(lock_path: String) -> int:
+func _write_promotion_lock_owner(lock_path: String, token: String) -> int:
 	var owner := FileAccess.open(lock_path + "/" + PROMOTION_LOCK_OWNER, FileAccess.WRITE)
 	if owner == null:
 		_remove_promotion_lock(lock_path)
 		return ERR_CANT_CREATE
-	owner.store_string(str(Time.get_unix_time_from_system()) + "\n" + str(OS.get_process_id()))
+	owner.store_string(_owner_text_for_token(str(Time.get_unix_time_from_system()), token))
 	owner.flush()
 	owner = null
 	return OK
 
 
-func _promotion_lock_is_stale(lock_path: String) -> bool:
+func _read_promotion_lock_owner(lock_path: String) -> String:
 	var owner_path := lock_path + "/" + PROMOTION_LOCK_OWNER
 	if not FileAccess.file_exists(owner_path):
-		return true
+		return ""
 	var owner := FileAccess.open(owner_path, FileAccess.READ)
 	if owner == null:
-		return true
-	var timestamp := int(str(owner.get_line()).strip_edges())
+		return ""
+	var text := owner.get_as_text()
 	owner = null
+	return text
+
+
+func _promotion_lock_is_stale(owner_text: String) -> bool:
+	if owner_text.is_empty():
+		return true
+	var lines := owner_text.split("\n")
+	if lines.is_empty():
+		return true
+	var timestamp := int(str(lines[0]).strip_edges())
 	if timestamp <= 0:
 		return true
 	return Time.get_unix_time_from_system() - timestamp > PROMOTION_LOCK_STALE_AFTER_SECONDS
+
+
+func _quarantine_stale_promotion_lock(lock_path: String, observed_owner: String, quarantine_path: String) -> bool:
+	if _read_promotion_lock_owner(lock_path) != observed_owner:
+		return false
+	var result := int(DirAccess.rename_absolute(
+		ProjectSettings.globalize_path(lock_path),
+		ProjectSettings.globalize_path(quarantine_path)
+	))
+	if result != OK:
+		return false
+	_remove_promotion_lock(quarantine_path)
+	return true
+
+
+func _owner_text_for_token(timestamp_or_owner: String, token: String) -> String:
+	return timestamp_or_owner + "\n" + str(OS.get_process_id()) + "\n" + token
+
+
+func _owner_has_token(owner_text: String, token: String) -> bool:
+	var lines := owner_text.split("\n")
+	return lines.size() >= 3 and str(lines[2]).strip_edges() == token
+
+
+func _new_promotion_lock_token() -> String:
+	return "%s-%s-%s" % [str(Time.get_ticks_usec()), str(OS.get_process_id()), str(randi())]
 
 
 func _remove_promotion_lock(lock_path: String) -> void:
