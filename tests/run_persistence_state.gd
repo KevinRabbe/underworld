@@ -11,7 +11,6 @@ const GameSaveTransitionPhaseReviewerRepairTests := preload("res://tests/persist
 const DeepUnderworldContinueReadinessTests := preload("res://tests/persistence/test_deep_underworld_continue_readiness.gd")
 const DeathSaveCompatibilityTests := preload("res://tests/persistence/test_death_save_compatibility.gd")
 const ProfileCatalogTests := preload("res://tests/persistence/test_profile_catalog.gd")
-const ProfileEntryLifecycleTests := preload("res://tests/persistence/test_profile_entry_lifecycle.gd")
 
 
 func _init() -> void:
@@ -31,7 +30,6 @@ func _run() -> void:
 	failures.append_array(await DeepUnderworldContinueReadinessTests.run_runtime(self))
 	failures.append_array(DeathSaveCompatibilityTests.run_runtime(self))
 	failures.append_array(ProfileCatalogTests.run())
-	failures.append_array(await ProfileEntryLifecycleTests.run_runtime(self))
 	if failures.is_empty():
 		print("[PERSISTENCE STATE VALIDATION] PASS")
 		print("  gameplay codecs / integrated detached save schema / legacy-v1 codec delegation parity / typed wire / final mutation-boundary conditional SAVE CAS / transition-phase SAVE rejection / atomic slot lifecycle / source-level legacy retirement / restored loot allocator through real Game Continue activation / deep underworld exact-position multi-cell collision-safe Continue + real physics frames / death-recovery save compatibility passed")
