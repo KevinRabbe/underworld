@@ -21,6 +21,7 @@ static func run() -> Array[String]:
 	_test_missing_probe_is_non_mutating(failures)
 	_test_valid_save_probe_and_load(failures)
 	_test_conditional_save_preconditions(failures)
+	_test_no_protected_target_race_after_probe(failures)
 	_test_invalid_candidate_preserves_previous_slot(failures)
 	_test_promotion_failure_restores_previous_slot(failures)
 	_test_legacy_v1_probe_and_load_are_incompatible(failures)
@@ -169,6 +170,47 @@ static func _test_conditional_save_preconditions(failures: Array[String]) -> voi
 	if str(service.probe_slot(TEST_SLOT).get("classification", "")) != GameSaveSlotService.CLASS_AVAILABLE:
 		failures.append("require-no-protected SAVE against NONE did not produce AVAILABLE slot")
 	_assert_no_internal_artifacts(failures, "require-no-protected SAVE against NONE")
+
+
+static func _test_no_protected_target_race_after_probe(failures: Array[String]) -> void:
+	var fixture: Dictionary = _fixture(failures)
+	if fixture.is_empty():
+		return
+	_cleanup()
+	var protected_encoded: Dictionary = IntegratedGameSaveContract.encode_v2_request(fixture["request"])
+	if not _require_success(protected_encoded, "race protected candidate encode", failures):
+		return
+	var protected_json := str(protected_encoded.get("json", ""))
+	var replacement_request: Dictionary = fixture["request"].duplicate(true)
+	replacement_request["player_resume"]["x"] = float(replacement_request["player_resume"].get("x", 0.0)) + 1.0
+	var replacement_encoded: Dictionary = IntegratedGameSaveContract.encode_v2_request(replacement_request)
+	if not _require_success(replacement_encoded, "race replacement candidate encode", failures):
+		return
+	var replacement_json := str(replacement_encoded.get("json", ""))
+	var service = GameSaveSlotService.new().configure_rename_operation(
+		func(from_path: String, to_path: String) -> int:
+			if from_path == TEST_SLOT + GameSaveSlotService.CANDIDATE_SUFFIX and to_path == TEST_SLOT:
+				var protected_file := FileAccess.open(TEST_SLOT, FileAccess.WRITE)
+				if protected_file == null:
+					return ERR_CANT_CREATE
+				protected_file.store_string(protected_json)
+				protected_file.flush()
+				return ERR_ALREADY_EXISTS
+			return int(DirAccess.rename_absolute(
+				ProjectSettings.globalize_path(from_path),
+				ProjectSettings.globalize_path(to_path)
+			))
+	)
+	var result: Dictionary = service.persist_candidate_json(
+		replacement_json,
+		TEST_SLOT,
+		{"mode": GameSaveSlotService.SAVE_CONDITION_REQUIRE_NO_PROTECTED_TARGET}
+	)
+	if bool(result.get("success", false)):
+		failures.append("require-no-protected SAVE unexpectedly overwrote destination appearing after probe")
+	if _read_text(TEST_SLOT) != protected_json:
+		failures.append("destination appearing after probe was not preserved byte-for-byte")
+	_assert_no_internal_artifacts(failures, "require-no-protected race after probe")
 
 
 static func _test_invalid_candidate_preserves_previous_slot(failures: Array[String]) -> void:

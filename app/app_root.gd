@@ -265,7 +265,11 @@ func _migrate_legacy_slot(legacy: Dictionary, pair_slot: String) -> bool:
 	var existing := _save_slot_service.probe_slot(pair_slot)
 	if str(existing.get("classification", GameSaveSlotService.CLASS_INVALID)) != GameSaveSlotService.CLASS_NONE:
 		return str(existing.get("classification", "")) == GameSaveSlotService.CLASS_AVAILABLE
-	var migrated := _save_slot_service.persist_candidate_json(str(legacy.get("json", "")), pair_slot)
+	var migrated := _save_slot_service.persist_candidate_json(
+		str(legacy.get("json", "")),
+		pair_slot,
+		{"mode": GameSaveSlotService.SAVE_CONDITION_REQUIRE_NO_PROTECTED_TARGET}
+	)
 	return bool(migrated.get("success", false))
 
 
