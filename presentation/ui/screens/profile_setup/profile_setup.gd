@@ -15,14 +15,17 @@ signal back_requested
 func _ready() -> void:
 	start_button.pressed.connect(_on_start)
 	back_button.pressed.connect(func(): back_requested.emit())
-	var catalog := ProfileCatalog.load_catalog()
-	if catalog["characters"].size() > 0:
-		character_name.text = str(catalog["characters"][0].get("display_name", ""))
-	if catalog["worlds"].size() > 0:
-		world_name.text = str(catalog["worlds"][0].get("world_name", ""))
-		world_seed.text = str(catalog["worlds"][0].get("world_seed", 1))
+	var catalog_result := ProfileCatalog.load_catalog()
+	if bool(catalog_result.get("success", false)):
+		var catalog: Dictionary = catalog_result["catalog"]
+		if catalog["characters"].size() > 0:
+			character_name.text = str(catalog["characters"][0].get("display_name", ""))
+		if catalog["worlds"].size() > 0:
+			world_name.text = str(catalog["worlds"][0].get("world_name", ""))
+			world_seed.text = str(catalog["worlds"][0].get("world_seed", 1))
 	else:
-		world_seed.text = "1"
+		status.text = str(catalog_result.get("diagnostics", ["Profile catalog is unavailable"])[0])
+	world_seed.text = "1" if world_seed.text.is_empty() else world_seed.text
 	character_name.call_deferred("grab_focus")
 
 func _on_start() -> void:

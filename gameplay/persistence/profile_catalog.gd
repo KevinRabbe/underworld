@@ -9,25 +9,30 @@ const SCHEMA := "underworld.profile-catalog.v1"
 
 static func load_catalog(path: String = PATH) -> Dictionary:
 	if not FileAccess.file_exists(path):
-		return _empty()
+		return {"success": true, "catalog": _empty(), "diagnostics": []}
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
-		return _empty()
+		return _failure("Profile catalog exists but cannot be opened")
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
-	if not parsed is Dictionary or str(parsed.get("schema", "")) != SCHEMA:
-		return _empty()
+	if not parsed is Dictionary:
+		return _failure("Profile catalog is malformed JSON")
+	if str(parsed.get("schema", "")) != SCHEMA:
+		return _failure("Profile catalog schema is unsupported")
 	var result := _empty()
 	result["characters"] = _sanitize_records(parsed.get("characters", []), "character_id", ["display_name"])
 	result["worlds"] = _sanitize_records(parsed.get("worlds", []), "world_id", ["world_name", "world_seed"])
 	result["last_character_id"] = str(parsed.get("last_character_id", ""))
 	result["last_world_id"] = str(parsed.get("last_world_id", ""))
-	return result
+	return {"success": true, "catalog": result, "diagnostics": []}
 
 static func create_character(display_name: String, path: String = PATH) -> Dictionary:
 	var name := display_name.strip_edges()
 	if name.is_empty():
 		return _failure("Character name must not be empty")
-	var catalog := load_catalog(path)
+	var loaded := load_catalog(path)
+	if not bool(loaded.get("success", false)):
+		return loaded
+	var catalog: Dictionary = loaded["catalog"]
 	var id := "character:%s" % (name.to_lower().sha256_text().substr(0, 16))
 	var suffix := 1
 	while _find(catalog["characters"], "character_id", id) != null:
@@ -42,7 +47,10 @@ static func create_world(world_name: String, seed: int, path: String = PATH) -> 
 	var name := world_name.strip_edges()
 	if name.is_empty():
 		return _failure("World name must not be empty")
-	var catalog := load_catalog(path)
+	var loaded := load_catalog(path)
+	if not bool(loaded.get("success", false)):
+		return loaded
+	var catalog: Dictionary = loaded["catalog"]
 	var id := "world:%d:%s" % [seed, name.to_lower().sha256_text().substr(0, 12)]
 	var suffix := 1
 	while _find(catalog["worlds"], "world_id", id) != null:
@@ -54,7 +62,10 @@ static func create_world(world_name: String, seed: int, path: String = PATH) -> 
 	return {"success": true, "world": catalog["worlds"][-1].duplicate(true), "catalog": catalog}
 
 static func select_pair(character_id: String, world_id: String, path: String = PATH) -> Dictionary:
-	var catalog := load_catalog(path)
+	var loaded := load_catalog(path)
+	if not bool(loaded.get("success", false)):
+		return loaded
+	var catalog: Dictionary = loaded["catalog"]
 	if _find(catalog["characters"], "character_id", character_id) == null:
 		return _failure("Selected character does not exist")
 	if _find(catalog["worlds"], "world_id", world_id) == null:
@@ -66,10 +77,13 @@ static func select_pair(character_id: String, world_id: String, path: String = P
 	return {"success": true, "catalog": catalog}
 
 static func last_pair(path: String = PATH) -> Dictionary:
-	var catalog := load_catalog(path)
+	var loaded := load_catalog(path)
+	if not bool(loaded.get("success", false)):
+		return loaded
+	var catalog: Dictionary = loaded["catalog"]
 	var character = _find(catalog["characters"], "character_id", catalog["last_character_id"])
 	var world = _find(catalog["worlds"], "world_id", catalog["last_world_id"])
-	return {"success": character != null and world != null, "character": character, "world": world, "catalog": catalog}
+	return {"success": character != null and world != null, "character": character, "world": world, "catalog": catalog, "diagnostics": []}
 
 static func _empty() -> Dictionary:
 	return {"schema": SCHEMA, "characters": [], "worlds": [], "last_character_id": "", "last_world_id": ""}
@@ -96,11 +110,25 @@ static func _find(records: Array, key: String, value: String):
 	return null
 
 static func _write(catalog: Dictionary, path: String) -> bool:
-	var file := FileAccess.open(path, FileAccess.WRITE)
+	var candidate_path := path + ".candidate"
+	var file := FileAccess.open(candidate_path, FileAccess.WRITE)
 	if file == null:
 		return false
 	file.store_string(JSON.stringify(catalog, "", false))
 	file.flush()
+	file = null
+	var verify := FileAccess.open(candidate_path, FileAccess.READ)
+	if verify == null or JSON.parse_string(verify.get_as_text()) == null:
+		return false
+	verify = null
+	if FileAccess.file_exists(path):
+		var backup_path := path + ".backup"
+		if FileAccess.file_exists(backup_path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(backup_path))
+		if not DirAccess.rename_absolute(ProjectSettings.globalize_path(path), ProjectSettings.globalize_path(backup_path)) == OK:
+			return false
+	if DirAccess.rename_absolute(ProjectSettings.globalize_path(candidate_path), ProjectSettings.globalize_path(path)) != OK:
+		return false
 	return true
 
 static func _failure(message: String) -> Dictionary:

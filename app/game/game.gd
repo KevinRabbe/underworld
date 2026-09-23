@@ -99,11 +99,15 @@ func prepare_new_game(profile: Dictionary = {}) -> bool:
 
 func _prepare_new_game_state(profile: Dictionary = {}) -> bool:
 	var initial_settings = WorldSettingsScript.new()
-	if profile.has("world_seed"):
-		if typeof(profile["world_seed"]) != TYPE_INT:
+	var world_seed_variant: Variant = profile.get("world_seed", null)
+	var world_variant: Variant = profile.get("world", null)
+	if world_seed_variant == null and world_variant is Dictionary:
+		world_seed_variant = world_variant.get("world_seed", null)
+	if world_seed_variant != null:
+		if typeof(world_seed_variant) != TYPE_INT:
 			push_error("NEW profile world_seed must be int")
 			return false
-		initial_settings.world_seed = int(profile["world_seed"])
+		initial_settings.world_seed = int(world_seed_variant)
 	if enable_map015_fixture:
 		initial_settings.world_seed = 1
 	var context = WorldGenerationContextScript.new(int(initial_settings.world_seed))

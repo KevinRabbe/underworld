@@ -29,6 +29,11 @@ func _run() -> void:
 			await process_frame
 			if str(app.call("current_route_id")) != "game":
 				failures.append("profile setup did not start selected world")
+			else:
+				var game: Node = app.get("current_scene")
+				var context = game.get("_session_world_context") if game != null else null
+				if context == null or int(context.world_seed) != 12345:
+					failures.append("entered world seed did not reach production world context")
 	app.queue_free()
 	await process_frame
 	if failures.is_empty():
