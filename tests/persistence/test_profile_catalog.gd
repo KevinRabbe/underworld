@@ -22,15 +22,28 @@ static func run() -> Array[String]:
 		_expect(failures, "successful save pair binding persists", bool(saved.get("success", false)))
 		var saved_pair := Catalog.saved_pair(path)
 		_expect(failures, "saved pair resolves canonical world identity", bool(saved_pair.get("success", false)) and str(saved_pair.get("canonical_world_id", "")) == "wid1:canonical-world")
+		var refreshed := Catalog.record_successful_save(character["character"]["character_id"], world["world"]["world_id"], "wid1:canonical-world", 424242, "save-fingerprint-2", path)
+		var refreshed_pair := Catalog.saved_pair(path)
+		_expect(failures, "subsequent save refreshes exact binding fingerprint", bool(refreshed.get("success", false)) and str(refreshed_pair.get("content_fingerprint", "")) == "save-fingerprint-2")
 		var migrated_path := "user://profile_catalog_legacy_migration.json"
 		var migrated := Catalog.migrate_legacy_save("wid1:legacy-world", 77, "legacy-fingerprint-1", migrated_path)
 		_expect(failures, "legacy save migration creates durable pair", bool(migrated.get("success", false)))
 		var migrated_pair := Catalog.saved_pair(migrated_path)
 		_expect(failures, "legacy migration preserves canonical world identity", bool(migrated_pair.get("success", false)) and str(migrated_pair.get("canonical_world_id", "")) == "wid1:legacy-world")
+		var migrated_again := Catalog.migrate_legacy_save("wid1:legacy-world", 77, "legacy-fingerprint-1", migrated_path)
+		var migrated_catalog := Catalog.load_catalog(migrated_path)
+		_expect(failures, "repeated legacy migration is idempotent", bool(migrated_again.get("success", false)) and migrated_catalog["catalog"]["characters"].size() == 1 and migrated_catalog["catalog"]["worlds"].size() == 1)
 		if FileAccess.file_exists(migrated_path):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(migrated_path))
 	var rejected_legacy := Catalog.migrate_legacy_save("wid1:legacy-world", 77, "", "user://profile_catalog_rejected_legacy.json")
 	_expect(failures, "legacy migration rejects missing save fingerprint", not bool(rejected_legacy.get("success", false)))
+	var old_catalog_path := "user://profile_catalog_old_schema.json"
+	var old_catalog_file := FileAccess.open(old_catalog_path, FileAccess.WRITE)
+	if old_catalog_file != null:
+		old_catalog_file.store_string(JSON.stringify({"schema": "underworld.profile-catalog.v1", "characters": [{"character_id": "character:old", "display_name": "Old"}], "worlds": [{"world_id": "world:old", "world_name": "Old World", "world_seed": 1}]}))
+	old_catalog_file = null
+	var old_loaded := Catalog.load_catalog(old_catalog_path)
+	_expect(failures, "older catalog without saved-pair fields remains readable", bool(old_loaded.get("success", false)) and not bool(Catalog.saved_pair(old_catalog_path).get("success", false)))
 	var corrupt_path := "user://profile_catalog_corrupt.json"
 	var corrupt_file := FileAccess.open(corrupt_path, FileAccess.WRITE)
 	corrupt_file.store_string("{not-json")
@@ -68,6 +81,16 @@ static func run() -> Array[String]:
 	_expect(failures, "promotion after recovery succeeds", bool(promoted.get("success", false)))
 	_expect(failures, "successful promotion leaves no backup", not FileAccess.file_exists(recovery_path + ".backup"))
 	_expect(failures, "successful promotion leaves no candidate", not FileAccess.file_exists(recovery_path + ".candidate"))
+	var failed_binding_path := "user://profile_catalog_binding_failure.json"
+	var failed_binding_character := Catalog.create_character("Binding Survivor", failed_binding_path)
+	var failed_binding_world := Catalog.create_world("Binding World", 12, failed_binding_path)
+	if bool(failed_binding_character.get("success", false)) and bool(failed_binding_world.get("success", false)):
+		Catalog.record_successful_save(failed_binding_character["character"]["character_id"], failed_binding_world["world"]["world_id"], "wid1:binding", 12, "old-fingerprint", failed_binding_path)
+		DirAccess.make_dir_absolute(ProjectSettings.globalize_path(failed_binding_path + ".candidate"))
+		var failed_binding := Catalog.record_successful_save(failed_binding_character["character"]["character_id"], failed_binding_world["world"]["world_id"], "wid1:binding", 12, "new-fingerprint", failed_binding_path)
+		var preserved_binding := Catalog.saved_pair(failed_binding_path)
+		_expect(failures, "binding write failure reports failure", not bool(failed_binding.get("success", false)))
+		_expect(failures, "binding write failure preserves last successful fingerprint", str(preserved_binding.get("content_fingerprint", "")) == "old-fingerprint")
 	var invalid_backup_path := "user://profile_catalog_invalid_backup.json"
 	var invalid_backup_file := FileAccess.open(invalid_backup_path + ".backup", FileAccess.WRITE)
 	if invalid_backup_file != null:
@@ -95,6 +118,11 @@ static func run() -> Array[String]:
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(transient))
 	if FileAccess.file_exists(corrupt_binding_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(corrupt_binding_path))
+	for transient in [old_catalog_path, failed_binding_path, failed_binding_path + ".candidate"]:
+		if FileAccess.file_exists(transient):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(transient))
+		elif DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(transient)):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(transient))
 	if FileAccess.file_exists(path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	return failures
