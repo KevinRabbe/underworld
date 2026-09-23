@@ -21,7 +21,7 @@ static func run() -> Array[String]:
 	var character := Catalog.create_character("Test Survivor", path)
 	_expect(failures, "character creation succeeds", bool(character.get("success", false)))
 	var world := Catalog.create_world("Test World", 424242, path)
-	_expect(failures, "world creation succeeds", bool(world.get("success", false)))
+	_expect(failures, "world creation succeeds: " + str(world.get("diagnostics", [])), bool(world.get("success", false)))
 	if bool(character.get("success", false)) and bool(world.get("success", false)):
 		var selected := Catalog.select_pair(character["character"]["character_id"], world["world"]["world_id"], path)
 		_expect(failures, "character/world pair selection persists", bool(selected.get("success", false)))
@@ -54,7 +54,7 @@ static func run() -> Array[String]:
 		old_catalog_file.store_string(JSON.stringify({"schema": "underworld.profile-catalog.v1", "characters": [{"character_id": "character:old", "display_name": "Old"}], "worlds": [{"world_id": "world:old", "world_name": "Old World", "world_seed": 1}]}))
 	old_catalog_file = null
 	var old_loaded := Catalog.load_catalog(old_catalog_path)
-	_expect(failures, "older catalog without saved-pair fields remains readable", bool(old_loaded.get("success", false)) and not bool(Catalog.saved_pair(old_catalog_path).get("success", false)))
+	_expect(failures, "older catalog without saved-pair fields remains readable: " + str(old_loaded.get("diagnostics", [])), bool(old_loaded.get("success", false)) and not bool(Catalog.saved_pair(old_catalog_path).get("success", false)))
 	var corrupt_path := "user://profile_catalog_corrupt.json"
 	var corrupt_file := FileAccess.open(corrupt_path, FileAccess.WRITE)
 	corrupt_file.store_string("{not-json")
@@ -84,9 +84,9 @@ static func run() -> Array[String]:
 		staged_candidate.store_string(JSON.stringify(Catalog._empty()))
 	staged_candidate = null
 	var recovered := Catalog.load_catalog(recovery_path)
-	_expect(failures, "missing canonical recovers valid backup", bool(recovered.get("success", false)) and str(recovered["catalog"]["characters"][0]["display_name"]) == "Keep Me")
-	_expect(failures, "recovered catalog is not treated as empty", bool(recovered.get("success", false)) and recovered["catalog"]["characters"].size() == 1)
-	_expect(failures, "recovered saved-pair metadata survives", bool(Catalog.saved_pair(recovery_path).get("success", false)))
+	_expect(failures, "missing canonical recovers valid backup: " + str(recovered.get("diagnostics", [])), bool(recovered.get("success", false)) and str(recovered["catalog"]["characters"][0]["display_name"]) == "Keep Me")
+	_expect(failures, "recovered catalog is not treated as empty: " + str(recovered.get("diagnostics", [])), bool(recovered.get("success", false)) and recovered["catalog"]["characters"].size() == 1)
+	_expect(failures, "recovered saved-pair metadata survives: " + str(Catalog.saved_pair(recovery_path).get("diagnostics", [])), bool(Catalog.saved_pair(recovery_path).get("success", false)))
 	_expect(failures, "recovery removes stale candidate", not FileAccess.file_exists(recovery_path + ".candidate"))
 	var promoted := Catalog.create_world("After Recovery", 77, recovery_path)
 	_expect(failures, "promotion after recovery succeeds", bool(promoted.get("success", false)))
