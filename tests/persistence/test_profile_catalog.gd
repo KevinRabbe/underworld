@@ -36,10 +36,30 @@ static func run() -> Array[String]:
 	var invalid_preserved := FileAccess.open(invalid_schema_path, FileAccess.READ)
 	_expect(failures, "invalid catalog schema remains preserved", invalid_preserved != null and str(JSON.parse_string(invalid_preserved.get_as_text()).get("characters", null)) == "{}")
 	invalid_preserved = null
+	var recovery_path := "user://profile_catalog_recovery.json"
+	var recovery_catalog := {"schema": "underworld.profile-catalog.v1", "characters": [{"character_id": "character:keep", "display_name": "Keep Me"}], "worlds": [], "last_character_id": "character:keep", "last_world_id": ""}
+	var recovery_file := FileAccess.open(recovery_path + ".backup", FileAccess.WRITE)
+	if recovery_file != null:
+		recovery_file.store_string(JSON.stringify(recovery_catalog))
+	recovery_file = null
+	var staged_candidate := FileAccess.open(recovery_path + ".candidate", FileAccess.WRITE)
+	if staged_candidate != null:
+		staged_candidate.store_string(JSON.stringify(Catalog._empty()))
+	staged_candidate = null
+	var recovered := Catalog.load_catalog(recovery_path)
+	_expect(failures, "missing canonical recovers valid backup", bool(recovered.get("success", false)) and str(recovered["catalog"]["characters"][0]["display_name"]) == "Keep Me")
+	_expect(failures, "recovered catalog is not treated as empty", recovered["catalog"]["characters"].size() == 1)
+	_expect(failures, "recovery removes stale candidate", not FileAccess.file_exists(recovery_path + ".candidate"))
+	var promoted := Catalog.create_world("After Recovery", 77, recovery_path)
+	_expect(failures, "promotion after recovery succeeds", bool(promoted.get("success", false)))
+	_expect(failures, "successful promotion leaves no backup", not FileAccess.file_exists(recovery_path + ".backup"))
 	if FileAccess.file_exists(corrupt_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(corrupt_path))
 	if FileAccess.file_exists(invalid_schema_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(invalid_schema_path))
+	for transient in [recovery_path, recovery_path + ".candidate", recovery_path + ".backup"]:
+		if FileAccess.file_exists(transient):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(transient))
 	if FileAccess.file_exists(path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	return failures

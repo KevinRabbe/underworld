@@ -8,32 +8,57 @@ const PATH := "user://underworld_profiles.json"
 const SCHEMA := "underworld.profile-catalog.v1"
 
 static func load_catalog(path: String = PATH) -> Dictionary:
-	if not FileAccess.file_exists(path):
+	var canonical := _read_catalog(path)
+	if not bool(canonical.get("exists", false)):
+		var backup := _read_catalog(path + ".backup")
+		if bool(backup.get("success", false)):
+			if _restore_backup(path):
+				_remove_if_exists(path + ".candidate")
+				return {"success": true, "catalog": backup["catalog"], "diagnostics": ["Recovered profile catalog from backup"]}
+			return _failure("Profile catalog canonical file is missing and backup recovery failed")
+		var candidate := _read_catalog(path + ".candidate")
+		if bool(candidate.get("success", false)) and _promote_candidate(path):
+			return {"success": true, "catalog": candidate["catalog"], "diagnostics": ["Recovered profile catalog from candidate"]}
+		if bool(candidate.get("exists", false)):
+			return _failure("Profile catalog canonical file is missing and transient state is invalid")
 		return {"success": true, "catalog": _empty(), "diagnostics": []}
+	if not bool(canonical.get("success", false)):
+		var invalid_backup := _read_catalog(path + ".backup")
+		if bool(invalid_backup.get("success", false)) and _restore_backup(path):
+			_remove_if_exists(path + ".candidate")
+			return {"success": true, "catalog": invalid_backup["catalog"], "diagnostics": ["Recovered invalid profile catalog from backup"]}
+		return _failure(str(canonical.get("diagnostic", "Profile catalog is invalid")))
+	_remove_if_exists(path + ".candidate")
+	_remove_if_exists(path + ".backup")
+	return {"success": true, "catalog": canonical["catalog"], "diagnostics": []}
+
+static func _read_catalog(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {"exists": false, "success": false}
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
-		return _failure("Profile catalog exists but cannot be opened")
+		return {"exists": true, "success": false, "diagnostic": "Profile catalog exists but cannot be opened"}
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	if not parsed is Dictionary:
-		return _failure("Profile catalog is malformed JSON")
+		return {"exists": true, "success": false, "diagnostic": "Profile catalog is malformed JSON"}
 	if str(parsed.get("schema", "")) != SCHEMA:
-		return _failure("Profile catalog schema is unsupported")
+		return {"exists": true, "success": false, "diagnostic": "Profile catalog schema is unsupported"}
 	if not parsed.get("characters", null) is Array or not parsed.get("worlds", null) is Array:
-		return _failure("Profile catalog schema has invalid record collections")
+		return {"exists": true, "success": false, "diagnostic": "Profile catalog schema has invalid record collections"}
 	if not _records_valid(parsed["characters"], "character_id", ["display_name"]):
-		return _failure("Profile catalog contains invalid character records")
+		return {"exists": true, "success": false, "diagnostic": "Profile catalog contains invalid character records"}
 	if not _records_valid(parsed["worlds"], "world_id", ["world_name", "world_seed"]):
-		return _failure("Profile catalog contains invalid world records")
+		return {"exists": true, "success": false, "diagnostic": "Profile catalog contains invalid world records"}
 	if parsed.has("last_character_id") and not parsed["last_character_id"] is String:
-		return _failure("Profile catalog has invalid last character selection")
+		return {"exists": true, "success": false, "diagnostic": "Profile catalog has invalid last character selection"}
 	if parsed.has("last_world_id") and not parsed["last_world_id"] is String:
-		return _failure("Profile catalog has invalid last world selection")
+		return {"exists": true, "success": false, "diagnostic": "Profile catalog has invalid last world selection"}
 	var result := _empty()
 	result["characters"] = _sanitize_records(parsed.get("characters", []), "character_id", ["display_name"])
 	result["worlds"] = _sanitize_records(parsed.get("worlds", []), "world_id", ["world_name", "world_seed"])
 	result["last_character_id"] = str(parsed.get("last_character_id", ""))
 	result["last_world_id"] = str(parsed.get("last_world_id", ""))
-	return {"success": true, "catalog": result, "diagnostics": []}
+	return {"exists": true, "success": true, "catalog": result, "diagnostics": []}
 
 static func create_character(display_name: String, path: String = PATH) -> Dictionary:
 	var name := display_name.strip_edges()
@@ -135,6 +160,7 @@ static func _find(records: Array, key: String, value: String):
 
 static func _write(catalog: Dictionary, path: String) -> bool:
 	var candidate_path := path + ".candidate"
+	var backup_path := path + ".backup"
 	var file := FileAccess.open(candidate_path, FileAccess.WRITE)
 	if file == null:
 		return false
@@ -146,14 +172,30 @@ static func _write(catalog: Dictionary, path: String) -> bool:
 		return false
 	verify = null
 	if FileAccess.file_exists(path):
-		var backup_path := path + ".backup"
 		if FileAccess.file_exists(backup_path):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(backup_path))
 		if not DirAccess.rename_absolute(ProjectSettings.globalize_path(path), ProjectSettings.globalize_path(backup_path)) == OK:
 			return false
 	if DirAccess.rename_absolute(ProjectSettings.globalize_path(candidate_path), ProjectSettings.globalize_path(path)) != OK:
+		if FileAccess.file_exists(backup_path):
+			DirAccess.rename_absolute(ProjectSettings.globalize_path(backup_path), ProjectSettings.globalize_path(path))
 		return false
+	_remove_if_exists(backup_path)
+	_remove_if_exists(candidate_path)
 	return true
+
+static func _promote_candidate(path: String) -> bool:
+	return DirAccess.rename_absolute(ProjectSettings.globalize_path(path + ".candidate"), ProjectSettings.globalize_path(path)) == OK
+
+static func _restore_backup(path: String) -> bool:
+	if not FileAccess.file_exists(path + ".backup"):
+		return false
+	_remove_if_exists(path)
+	return DirAccess.rename_absolute(ProjectSettings.globalize_path(path + ".backup"), ProjectSettings.globalize_path(path)) == OK
+
+static func _remove_if_exists(path: String) -> void:
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 static func _failure(message: String) -> Dictionary:
 	return {"success": false, "diagnostics": [message]}
