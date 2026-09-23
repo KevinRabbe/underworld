@@ -118,6 +118,24 @@ static func run() -> Array[String]:
 		corrupt_binding_file.store_string(JSON.stringify({"schema": "underworld.profile-catalog.v1", "characters": [], "worlds": [], "saved_character_id": 4, "saved_world_id": "", "saved_canonical_world_id": "", "saved_world_seed": 0, "saved_content_fingerprint": ""}))
 	corrupt_binding_file = null
 	_expect(failures, "malformed saved-pair metadata fails closed", not bool(Catalog.load_catalog(corrupt_binding_path).get("success", false)))
+	var partial_binding_path := "user://profile_catalog_partial_binding.json"
+	var partial_binding_file := FileAccess.open(partial_binding_path, FileAccess.WRITE)
+	if partial_binding_file != null:
+		partial_binding_file.store_string(JSON.stringify({
+			"schema": "underworld.profile-catalog.v1",
+			"characters": [{"character_id": "character:partial", "display_name": "Partial"}],
+			"worlds": [{"world_id": "world:partial", "world_name": "Partial World", "world_seed": 12}],
+			"saved_character_id": "character:partial",
+			"saved_world_id": "world:partial",
+			"saved_canonical_world_id": "",
+			"saved_world_seed": 12,
+			"saved_content_fingerprint": ""
+		}))
+	partial_binding_file = null
+	var partial_binding_load := Catalog.load_catalog(partial_binding_path)
+	_expect(failures, "partially populated saved-pair metadata fails closed", not bool(partial_binding_load.get("success", false)))
+	var partial_binding_create := Catalog.create_character("Must Not Replace Partial Binding", partial_binding_path)
+	_expect(failures, "partial binding cannot be overwritten by create", not bool(partial_binding_create.get("success", false)))
 	if FileAccess.file_exists(corrupt_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(corrupt_path))
 	if FileAccess.file_exists(invalid_schema_path):
@@ -130,6 +148,8 @@ static func run() -> Array[String]:
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(transient))
 	if FileAccess.file_exists(corrupt_binding_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(corrupt_binding_path))
+	if FileAccess.file_exists(partial_binding_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(partial_binding_path))
 	for transient in [old_catalog_path, failed_binding_path, failed_binding_path + ".candidate"]:
 		if FileAccess.file_exists(transient):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(transient))

@@ -81,10 +81,17 @@ static func _read_catalog(path: String) -> Dictionary:
 		result["saved_content_fingerprint"] = str(parsed["saved_content_fingerprint"])
 		var saved_values := [result["saved_character_id"], result["saved_world_id"], result["saved_canonical_world_id"], result["saved_content_fingerprint"]]
 		var binding_empty := true
+		var binding_complete := true
 		for value in saved_values:
 			if not str(value).is_empty():
 				binding_empty = false
-		if not binding_empty:
+			else:
+				binding_complete = false
+		if result["saved_world_seed"] != 0:
+			binding_empty = false
+		if not binding_empty and not binding_complete:
+			return {"exists": true, "success": false, "diagnostic": "Profile catalog has partially populated saved-pair metadata"}
+		if binding_complete:
 			var saved_character = _find(result["characters"], "character_id", result["saved_character_id"])
 			var saved_world = _find(result["worlds"], "world_id", result["saved_world_id"])
 			if saved_character == null or saved_world == null or int(saved_world.get("world_seed", 0)) != result["saved_world_seed"]:
