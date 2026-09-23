@@ -29,7 +29,10 @@ func prepare_continue(candidate: Dictionary) -> bool:
 		return false
 	prepared_mode = &"continue"
 	prepared_candidate = candidate.duplicate(true)
-	prepared_profile.clear()
+	# The production route passes only the validated candidate to CONTINUE.
+	# Preserve its world seed so a subsequent SAVE remains bound to the same
+	# generated world instead of falling back to the fixture seed.
+	prepared_profile = {"world": {"world_seed": int(candidate.get("world_seed", 217217))}}
 	return true
 
 func build_save_request() -> Dictionary:
