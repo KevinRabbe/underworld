@@ -1,3 +1,11 @@
+import os
+
+# The repaired generator is kept in a separately auditable module while this
+# historical entrypoint remains the documented command used by CI/artists.
+_repaired = os.path.join(os.path.dirname(__file__), "create_base_bodies_repaired.py")
+exec(compile(open(_repaired, "rb").read(), _repaired, "exec"), globals(), globals())
+raise SystemExit
+
 import bpy
 import os
 from mathutils import Vector
