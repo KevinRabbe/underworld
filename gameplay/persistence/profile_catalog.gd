@@ -66,7 +66,7 @@ static func _read_catalog(path: String) -> Dictionary:
 		for key in ["saved_character_id", "saved_world_id", "saved_canonical_world_id", "saved_content_fingerprint"]:
 			if not parsed[key] is String:
 				return {"exists": true, "success": false, "diagnostic": "Profile catalog has invalid saved-pair string metadata"}
-		if not parsed["saved_world_seed"] is int:
+		if not _is_integer_number(parsed["saved_world_seed"]):
 			return {"exists": true, "success": false, "diagnostic": "Profile catalog has invalid saved-pair seed metadata"}
 	var result := _empty()
 	result["characters"] = _sanitize_records(parsed.get("characters", []), "character_id", ["display_name"])
@@ -231,7 +231,7 @@ static func _records_valid(raw: Array, id_key: String, required: Array) -> bool:
 			if not value.has(key):
 				return false
 			if key == "world_seed":
-				if not value[key] is int:
+				if not _is_integer_number(value[key]):
 					return false
 			elif not value[key] is String or str(value[key]).is_empty():
 				return false
@@ -242,6 +242,13 @@ static func _find(records: Array, key: String, value: String):
 		if str(record.get(key, "")) == value:
 			return record
 	return null
+
+static func _is_integer_number(value: Variant) -> bool:
+	if value is int:
+		return true
+	if value is float:
+		return is_equal_approx(value, floor(value))
+	return false
 
 static func _write(catalog: Dictionary, path: String) -> bool:
 	var candidate_path := path + ".candidate"
