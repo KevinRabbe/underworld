@@ -77,8 +77,12 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		failures.append("A/W1 switch-back route failed")
 	else:
 		var save_a1_again: Dictionary = app.call("save_current_game")
-		if not bool(save_a1_again.get("success", false)) or not bool(app.call("show_title")) or not bool(app.call("continue_game")):
-			failures.append("A/W1 switch-back SAVE did not retarget Continue")
+		if not bool(save_a1_again.get("success", false)):
+			failures.append("A/W1 switch-back SAVE failed: " + str(save_a1_again.get("diagnostics", [])))
+		elif not bool(app.call("show_title")):
+			failures.append("A/W1 switch-back could not return to title")
+		elif not bool(app.call("continue_game")):
+			failures.append("A/W1 switch-back Continue failed")
 		else:
 			var active_a1: Dictionary = app.get("_active_profile")
 			if str(active_a1.get("character", {}).get("character_id", "")) != str(character_a["character"]["character_id"]):
