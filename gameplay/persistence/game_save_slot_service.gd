@@ -3,6 +3,8 @@ extends RefCounted
 const IntegratedGameSaveContract := preload("res://gameplay/persistence/integrated_game_save_contract.gd")
 
 const DEFAULT_SLOT_PATH := "user://underworld_m3_slot.json"
+const PAIR_SLOT_PREFIX := "user://underworld_pair_"
+const PAIR_SLOT_SUFFIX := ".json"
 const CANDIDATE_SUFFIX := ".candidate"
 const BACKUP_SUFFIX := ".previous"
 
@@ -17,6 +19,11 @@ const _REPLACE_CONDITION_KEYS: Array[String] = ["expected_content_fingerprint", 
 const _NO_PROTECTED_CONDITION_KEYS: Array[String] = ["mode"]
 
 var _rename_operation: Callable = Callable()
+
+
+static func pair_slot_path(character_id: String, world_id: String) -> String:
+	var pair_key := (character_id + "\u001f" + world_id).sha256_text()
+	return PAIR_SLOT_PREFIX + pair_key + PAIR_SLOT_SUFFIX
 
 
 func configure_rename_operation(operation: Callable) -> RefCounted:

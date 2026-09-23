@@ -85,6 +85,7 @@ func show_title() -> bool:
 	current_scene.connect("continue_requested", Callable(self, "_on_continue_requested"))
 	current_scene.connect("quit_requested", Callable(self, "_on_quit_requested"))
 	if current_scene.has_method("set_continue_available"):
+		_refresh_continue_slot_path()
 		var probe: Dictionary = _save_slot_service.probe_slot(_save_slot_path)
 		current_scene.call(
 			"set_continue_available",
@@ -108,8 +109,25 @@ func show_profile_setup() -> bool:
 func start_new_game(profile: Dictionary = {}) -> bool:
 	if _current_route == ROUTE_GAME and current_scene != null and is_instance_valid(current_scene):
 		return false
+	if profile.is_empty():
+		return _replace_game_scene(false, profile)
+	var pair_slot := _pair_slot_for_profile(profile)
+	if pair_slot.is_empty():
+		return false
+	var classified: Dictionary = _save_slot_service.probe_slot(pair_slot)
+	var classification := str(classified.get("classification", GameSaveSlotService.CLASS_INVALID))
+	if classification == GameSaveSlotService.CLASS_INVALID or classification == GameSaveSlotService.CLASS_INCOMPATIBLE:
+		return false
+	_save_slot_path = pair_slot
+	if classification == GameSaveSlotService.CLASS_AVAILABLE:
+		var loaded: Dictionary = _save_slot_service.load_slot(pair_slot)
+		var candidate: Variant = loaded.get("candidate", null)
+		if not candidate is Dictionary or not _candidate_matches_profile(candidate, profile):
+			return false
+		_active_profile = profile.duplicate(true)
+		return _replace_game_scene(true, candidate)
 	var started := _replace_game_scene(false, profile)
-	if started and not profile.is_empty():
+	if started:
 		_active_profile = profile.duplicate(true)
 	return started
 
@@ -150,7 +168,20 @@ func continue_game() -> bool:
 		return false
 	if _transition_in_progress:
 		return false
-	var loaded: Dictionary = _save_slot_service.load_slot(_save_slot_path)
+	var pair: Dictionary = ProfileCatalog.saved_pair()
+	var loaded: Dictionary
+	if bool(pair.get("success", false)):
+		var saved_slot := GameSaveSlotService.pair_slot_path(str(pair["character"]["character_id"]), str(pair["world"]["world_id"]))
+		loaded = _save_slot_service.load_slot(saved_slot)
+		if str(loaded.get("classification", GameSaveSlotService.CLASS_INVALID)) == GameSaveSlotService.CLASS_NONE:
+			var legacy := _save_slot_service.load_slot(GameSaveSlotService.DEFAULT_SLOT_PATH)
+			if str(legacy.get("classification", GameSaveSlotService.CLASS_INVALID)) == GameSaveSlotService.CLASS_AVAILABLE:
+				if not _migrate_legacy_slot(legacy, saved_slot):
+					return false
+				loaded = _save_slot_service.load_slot(saved_slot)
+		_save_slot_path = saved_slot
+	else:
+		loaded = _save_slot_service.load_slot(GameSaveSlotService.DEFAULT_SLOT_PATH)
 	if str(loaded.get("classification", GameSaveSlotService.CLASS_INVALID)) != GameSaveSlotService.CLASS_AVAILABLE:
 		return false
 	var candidate_variant: Variant = loaded.get("candidate", null)
@@ -160,16 +191,67 @@ func continue_game() -> bool:
 	var canonical_world_id := str(context.world_id) if context != null else ""
 	if canonical_world_id.is_empty() or typeof(candidate_variant.get("world_seed", null)) != TYPE_INT:
 		return false
-	var pair: Dictionary = ProfileCatalog.saved_pair()
 	if not bool(pair.get("success", false)):
 		var migrated := ProfileCatalog.migrate_legacy_save(canonical_world_id, int(candidate_variant["world_seed"]), str(loaded.get("content_fingerprint", "")))
 		if not bool(migrated.get("success", false)):
 			return false
 		pair = ProfileCatalog.saved_pair()
+		if not bool(pair.get("success", false)):
+			return false
+		var migrated_slot := GameSaveSlotService.pair_slot_path(str(pair["character"]["character_id"]), str(pair["world"]["world_id"]))
+		if not _migrate_legacy_slot(loaded, migrated_slot):
+			return false
+		loaded = _save_slot_service.load_slot(migrated_slot)
+		_save_slot_path = migrated_slot
 	if not bool(pair.get("success", false)) or str(pair.get("canonical_world_id", "")) != canonical_world_id or int(pair.get("world_seed", -1)) != int(candidate_variant["world_seed"]) or str(pair.get("content_fingerprint", "")) != str(loaded.get("content_fingerprint", "")):
+		return false
+	if not _candidate_matches_profile(candidate_variant, {"world": pair["world"]}):
 		return false
 	_active_profile = {"character": pair["character"].duplicate(true), "world": pair["world"].duplicate(true)}
 	return _replace_game_scene(true, candidate_variant)
+
+
+func _pair_slot_for_profile(profile: Dictionary) -> String:
+	var character: Variant = profile.get("character", null)
+	var world: Variant = profile.get("world", null)
+	if not character is Dictionary or not world is Dictionary:
+		return ""
+	var character_id := str(character.get("character_id", ""))
+	var world_id := str(world.get("world_id", ""))
+	if character_id.is_empty() or world_id.is_empty():
+		return ""
+	return GameSaveSlotService.pair_slot_path(character_id, world_id)
+
+
+func _candidate_matches_profile(candidate: Dictionary, profile: Dictionary) -> bool:
+	var world: Variant = profile.get("world", null)
+	if not world is Dictionary:
+		return false
+	var context: Variant = candidate.get("world_context", null)
+	if context == null or str(context.world_id).is_empty():
+		return false
+	return int(candidate.get("world_seed", -1)) == int(world.get("world_seed", -2))
+
+
+func _migrate_legacy_slot(legacy: Dictionary, pair_slot: String) -> bool:
+	if str(legacy.get("classification", GameSaveSlotService.CLASS_INVALID)) != GameSaveSlotService.CLASS_AVAILABLE:
+		return false
+	var existing := _save_slot_service.probe_slot(pair_slot)
+	if str(existing.get("classification", GameSaveSlotService.CLASS_INVALID)) != GameSaveSlotService.CLASS_NONE:
+		return str(existing.get("classification", "")) == GameSaveSlotService.CLASS_AVAILABLE
+	var migrated := _save_slot_service.persist_candidate_json(str(legacy.get("json", "")), pair_slot)
+	return bool(migrated.get("success", false))
+
+
+func _refresh_continue_slot_path() -> void:
+	var pair := ProfileCatalog.saved_pair()
+	if bool(pair.get("success", false)):
+		var saved_slot := GameSaveSlotService.pair_slot_path(str(pair["character"]["character_id"]), str(pair["world"]["world_id"]))
+		var probe := _save_slot_service.probe_slot(saved_slot)
+		if str(probe.get("classification", "")) == GameSaveSlotService.CLASS_AVAILABLE:
+			_save_slot_path = saved_slot
+			return
+	_save_slot_path = GameSaveSlotService.DEFAULT_SLOT_PATH
 
 
 func quit_application() -> void:
