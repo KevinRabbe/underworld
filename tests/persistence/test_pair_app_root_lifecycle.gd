@@ -45,6 +45,19 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var save_b2: Dictionary = app.call("save_current_game")
 	if not bool(save_b2.get("success", false)):
 		failures.append("B/W2 SAVE failed: " + str(save_b2.get("diagnostics", [])))
+	else:
+		# A forced gameplay SAVE failure must not move the last-successfully-saved
+		# pair or corrupt the already durable B/W2 slot.
+		app.get("current_scene").set("fail_saves", 1)
+		var failed_b2: Dictionary = app.call("save_current_game")
+		if bool(failed_b2.get("success", false)):
+			failures.append("forced B/W2 SAVE unexpectedly succeeded")
+		elif not bool(app.call("show_title")) or not bool(app.call("continue_game")):
+			failures.append("SAVE failure made last saved B/W2 pair unreachable")
+		else:
+			var retained_b2: Dictionary = app.get("_active_profile")
+			if str(retained_b2.get("character", {}).get("character_id", "")) != str(character_b["character"]["character_id"]):
+				failures.append("SAVE failure changed last saved pair")
 	if not bool(app.call("show_title")) or not bool(app.call("start_new_game", profile_a1)):
 		failures.append("existing A/W1 did not route to Continue")
 	else:
@@ -88,6 +101,48 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 			if str(active_a1.get("character", {}).get("character_id", "")) != str(character_a["character"]["character_id"]):
 				failures.append("Continue did not retarget to last saved A/W1 pair")
 	app.free()
+	await tree.process_frame
+	# Restart the real AppRoot against the same catalog and pair slots. CONTINUE
+	# must still resolve the durable A/W1 binding after process lifecycle reset.
+	var restarted_app: Node = app_scene.instantiate()
+	restarted_app.call("configure_route_scenes", title_scene, game_scene)
+	tree.root.add_child(restarted_app)
+	await tree.process_frame
+	if not bool(restarted_app.call("continue_game")):
+		failures.append("restart CONTINUE failed")
+	else:
+		var restarted_profile: Dictionary = restarted_app.get("_active_profile")
+		if str(restarted_profile.get("character", {}).get("character_id", "")) != str(character_a["character"]["character_id"]):
+			failures.append("restart did not restore last saved A/W1 pair")
+	restarted_app.free()
+	# Exercise the accepted global-slot compatibility path through real AppRoot:
+	# remove only the deterministic A/W1 slot, stage the exact bytes in the
+	# legacy slot, and require Continue to recreate/use the Pair Slot without
+	# deleting the legacy source.
+	var pair_service = GameSaveSlotService.new()
+	var a1_slot := GameSaveSlotService.pair_slot_path(str(character_a["character"]["character_id"]), str(world_one["world"]["world_id"]))
+	var legacy_json := _read(a1_slot)
+	_cleanup_paths([a1_slot, GameSaveSlotService.DEFAULT_SLOT_PATH])
+	var staged_legacy := pair_service.persist_candidate_json(legacy_json, GameSaveSlotService.DEFAULT_SLOT_PATH)
+	if not bool(staged_legacy.get("success", false)):
+		failures.append("legacy global fixture could not be staged")
+	else:
+		var migrated_app: Node = app_scene.instantiate()
+		migrated_app.call("configure_route_scenes", title_scene, game_scene)
+		tree.root.add_child(migrated_app)
+		await tree.process_frame
+		if not bool(migrated_app.call("continue_game")):
+			failures.append("legacy global migration Continue failed")
+		else:
+			var migrated_profile: Dictionary = migrated_app.get("_active_profile")
+			if str(migrated_profile.get("character", {}).get("character_id", "")) != str(character_a["character"]["character_id"]):
+				failures.append("legacy migration restored the wrong Character pair")
+			if str(pair_service.probe_slot(a1_slot).get("classification", "")) != GameSaveSlotService.CLASS_AVAILABLE:
+				failures.append("legacy migration did not recreate Pair Slot")
+		if not FileAccess.file_exists(GameSaveSlotService.DEFAULT_SLOT_PATH):
+			failures.append("legacy migration deleted the source slot")
+		migrated_app.free()
+	_cleanup_paths([a1_slot, GameSaveSlotService.DEFAULT_SLOT_PATH])
 	_cleanup_slots(character_a, character_b, world_one, world_two)
 	_cleanup_catalog(catalog_path)
 	return failures
@@ -104,3 +159,13 @@ static func _cleanup_catalog(path: String) -> void:
 	for transient in [path, path + ".candidate", path + ".backup"]:
 		if FileAccess.file_exists(transient):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(transient))
+
+static func _read(path: String) -> String:
+	var file := FileAccess.open(path, FileAccess.READ)
+	return file.get_as_text() if file != null else ""
+
+static func _cleanup_paths(paths: Array) -> void:
+	for path in paths:
+		for transient in [path, path + GameSaveSlotService.CANDIDATE_SUFFIX, path + GameSaveSlotService.BACKUP_SUFFIX]:
+			if FileAccess.file_exists(transient):
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(transient))

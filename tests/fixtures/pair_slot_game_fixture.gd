@@ -9,6 +9,7 @@ var prepared_mode: StringName = &""
 var prepared_candidate: Dictionary = {}
 var prepared_profile: Dictionary = {}
 var gameplay_input_gate: Node = null
+var fail_saves: int = 0
 
 func configure_gameplay_input_gate(gate: Node) -> bool:
 	if is_inside_tree() or gate == null or not is_instance_valid(gate):
@@ -36,6 +37,9 @@ func prepare_continue(candidate: Dictionary) -> bool:
 	return true
 
 func build_save_request() -> Dictionary:
+	if fail_saves > 0:
+		fail_saves -= 1
+		return {"success": false, "diagnostics": ["fixture-forced SAVE failure"]}
 	var failures: Array[String] = []
 	var fixture: Dictionary = SlotFixtures._fixture(failures)
 	if not failures.is_empty() or fixture.is_empty():
