@@ -90,15 +90,24 @@ func _bind_player_input_authority(candidate: Node, gate: Node) -> bool:
 	return candidate.get("_gameplay_input_gate") == gate
 
 
-func prepare_new_game() -> bool:
+func prepare_new_game(profile: Dictionary = {}) -> bool:
 	if is_inside_tree():
 		push_error("Game startup must be prepared before entering the SceneTree")
 		return false
-	return _prepare_new_game_state()
+	return _prepare_new_game_state(profile)
 
 
-func _prepare_new_game_state() -> bool:
+func _prepare_new_game_state(profile: Dictionary = {}) -> bool:
 	var initial_settings = WorldSettingsScript.new()
+	var world_seed_variant: Variant = profile.get("world_seed", null)
+	var world_variant: Variant = profile.get("world", null)
+	if world_seed_variant == null and world_variant is Dictionary:
+		world_seed_variant = world_variant.get("world_seed", null)
+	if world_seed_variant != null:
+		if typeof(world_seed_variant) != TYPE_INT:
+			push_error("NEW profile world_seed must be int")
+			return false
+		initial_settings.world_seed = int(world_seed_variant)
 	if enable_map015_fixture:
 		initial_settings.world_seed = 1
 	var context = WorldGenerationContextScript.new(int(initial_settings.world_seed))
@@ -115,7 +124,7 @@ func _prepare_new_game_state() -> bool:
 		{}
 	)
 	_startup_mode = STARTUP_NEW
-	_startup_candidate.clear()
+	_startup_candidate = profile.duplicate(true)
 	_restored_pending_loot_states.clear()
 	_startup_prepared = true
 	return true

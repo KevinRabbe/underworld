@@ -1,0 +1,90 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://presentation/ui/screens/profile_setup/profile_setup.gd" id="1"]
+[ext_resource type="Theme" path="res://presentation/ui/theme/underworld_theme.tres" id="2"]
+
+[node name="ProfileSetup" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2")
+script = ExtResource("1")
+
+[node name="Background" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_type_variation = &"ScreenBackground"
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(460, 0)
+layout_mode = 2
+theme_type_variation = &"MenuPanel"
+
+[node name="Stack" type="VBoxContainer" parent="Center/Panel"]
+layout_mode = 2
+theme_type_variation = &"MenuStack"
+
+[node name="Title" type="Label" parent="Center/Panel/Stack"]
+layout_mode = 2
+theme_type_variation = &"TitleLabel"
+text = "BEGIN YOUR JOURNEY"
+horizontal_alignment = 1
+
+[node name="CharacterLabel" type="Label" parent="Center/Panel/Stack"]
+layout_mode = 2
+text = "CHARACTER NAME"
+
+[node name="CharacterName" type="LineEdit" parent="Center/Panel/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "Test Survivor"
+
+[node name="WorldLabel" type="Label" parent="Center/Panel/Stack"]
+layout_mode = 2
+text = "WORLD NAME"
+
+[node name="WorldName" type="LineEdit" parent="Center/Panel/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "Test World"
+
+[node name="SeedLabel" type="Label" parent="Center/Panel/Stack"]
+layout_mode = 2
+text = "WORLD SEED"
+
+[node name="WorldSeed" type="LineEdit" parent="Center/Panel/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "1"
+
+[node name="Status" type="Label" parent="Center/Panel/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"StatusLabel"
+horizontal_alignment = 1
+
+[node name="StartButton" type="Button" parent="Center/Panel/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "CREATE AND START"
+
+[node name="BackButton" type="Button" parent="Center/Panel/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "BACK"
