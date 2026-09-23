@@ -6,10 +6,12 @@ const GameSaveSlotService := preload("res://gameplay/persistence/game_save_slot_
 
 const ROUTE_NONE: StringName = &""
 const ROUTE_TITLE: StringName = &"title"
+const ROUTE_PROFILE_SETUP: StringName = &"profile_setup"
 const ROUTE_GAME: StringName = &"game"
 
 const GAME_SCENE: PackedScene = preload("res://app/game/game.tscn")
 const TITLE_SCREEN_SCENE: PackedScene = preload("res://presentation/ui/screens/title/title_screen.tscn")
+const PROFILE_SETUP_SCENE: PackedScene = preload("res://presentation/ui/screens/profile_setup/profile_setup.tscn")
 
 @onready var scene_host: Node = $SceneHost
 @onready var gameplay_input_gate: Node = $GameplayInputGate
@@ -89,10 +91,22 @@ func show_title() -> bool:
 	return true
 
 
-func start_new_game() -> bool:
+func show_profile_setup() -> bool:
+	if _current_route == ROUTE_PROFILE_SETUP and current_scene != null and is_instance_valid(current_scene):
+		return false
+	if not _replace_scene(PROFILE_SETUP_SCENE, ROUTE_PROFILE_SETUP):
+		return false
+	if current_scene == null:
+		return false
+	current_scene.connect("start_requested", Callable(self, "_on_profile_start_requested"))
+	current_scene.connect("back_requested", Callable(self, "show_title"))
+	return true
+
+
+func start_new_game(profile: Dictionary = {}) -> bool:
 	if _current_route == ROUTE_GAME and current_scene != null and is_instance_valid(current_scene):
 		return false
-	return _replace_game_scene(false, {})
+	return _replace_game_scene(false, profile)
 
 
 func save_current_game() -> Dictionary:
@@ -159,8 +173,10 @@ func _replace_game_scene(is_continue: bool, candidate: Dictionary) -> bool:
 	var prepared: bool
 	if is_continue:
 		prepared = bool(next_scene.call(preparation_method, candidate))
-	else:
+	elif candidate.is_empty():
 		prepared = bool(next_scene.call(preparation_method))
+	else:
+		prepared = bool(next_scene.call(preparation_method, candidate))
 	if not prepared:
 		next_scene.free()
 		_transition_in_progress = false
@@ -232,11 +248,21 @@ func _commit_prepared_scene(next_scene: Node, route_id: StringName) -> bool:
 
 
 func _on_new_game_requested() -> void:
-	start_new_game()
+	# Contract fixtures inject a replacement game scene and intentionally exercise
+	# the low-level NEW route. The shipped production scene goes through the
+	# character/world entry surface first.
+	if _game_scene == GAME_SCENE:
+		show_profile_setup()
+	else:
+		start_new_game()
 
 
 func _on_continue_requested() -> void:
 	continue_game()
+
+
+func _on_profile_start_requested(profile: Dictionary) -> void:
+	start_new_game(profile)
 
 
 func _on_quit_requested() -> void:
