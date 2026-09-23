@@ -22,6 +22,7 @@ static func run() -> Array[String]:
 	_test_valid_save_probe_and_load(failures)
 	_test_conditional_save_preconditions(failures)
 	_test_no_protected_target_race_after_probe(failures)
+	_test_abandoned_promotion_lock_recovers(failures)
 	_test_invalid_candidate_preserves_previous_slot(failures)
 	_test_promotion_failure_restores_previous_slot(failures)
 	_test_legacy_v1_probe_and_load_are_incompatible(failures)
@@ -234,6 +235,58 @@ static func _test_invalid_candidate_preserves_previous_slot(failures: Array[Stri
 	_assert_no_internal_artifacts(failures, "candidate validation failure")
 
 
+static func _test_abandoned_promotion_lock_recovers(failures: Array[String]) -> void:
+	_cleanup()
+	var lock_path := TEST_SLOT + GameSaveSlotService.PROMOTION_LOCK_SUFFIX
+	var lock_absolute := ProjectSettings.globalize_path(lock_path)
+	if DirAccess.make_dir_absolute(lock_absolute) != OK:
+		failures.append("abandoned-lock regression could not stage lock directory")
+		return
+	var owner := FileAccess.open(lock_path + "/" + GameSaveSlotService.PROMOTION_LOCK_OWNER, FileAccess.WRITE)
+	if owner == null:
+		failures.append("abandoned-lock regression could not stage owner token")
+		return
+	owner.store_string(str(Time.get_unix_time_from_system() - 1000) + "\n0")
+	owner.flush()
+	owner = null
+	var fixture: Dictionary = _fixture(failures)
+	if fixture.is_empty():
+		return
+	var service = GameSaveSlotService.new()
+	var recovered: Dictionary = service.save_slot(fixture["request_object"], TEST_SLOT)
+	if not _require_success(recovered, "abandoned promotion lock recovery", failures):
+		return
+	if not FileAccess.file_exists(TEST_SLOT):
+		failures.append("abandoned promotion lock recovery did not restore legitimate SAVE")
+	if DirAccess.dir_exists_absolute(lock_absolute):
+		failures.append("abandoned promotion lock was not removed after recovery")
+	var protected_before := _read_text(TEST_SLOT)
+	if protected_before.is_empty():
+		failures.append("abandoned-lock regression could not establish protected canonical")
+		return
+	var abandoned_again := DirAccess.make_dir_absolute(lock_absolute)
+	if abandoned_again != OK:
+		failures.append("abandoned-lock regression could not restage lock")
+		return
+	var owner_again := FileAccess.open(lock_path + "/" + GameSaveSlotService.PROMOTION_LOCK_OWNER, FileAccess.WRITE)
+	if owner_again == null:
+		failures.append("abandoned-lock regression could not restage owner token")
+		return
+	owner_again.store_string(str(Time.get_unix_time_from_system() - 1000) + "\n0")
+	owner_again.flush()
+	owner_again = null
+	var rejected: Dictionary = service.persist_candidate_json(
+		protected_before,
+		TEST_SLOT,
+		{"mode": GameSaveSlotService.SAVE_CONDITION_REQUIRE_NO_PROTECTED_TARGET}
+	)
+	if bool(rejected.get("success", false)):
+		failures.append("abandoned-lock recovery unexpectedly replaced protected canonical")
+	if _read_text(TEST_SLOT) != protected_before:
+		failures.append("abandoned-lock recovery changed protected canonical bytes")
+	_cleanup()
+
+
 static func _test_promotion_failure_restores_previous_slot(failures: Array[String]) -> void:
 	if not FileAccess.file_exists(TEST_SLOT):
 		failures.append("promotion-failure regression requires valid existing slot")
@@ -439,6 +492,12 @@ static func _cleanup() -> void:
 	]:
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var lock_path := TEST_SLOT + GameSaveSlotService.PROMOTION_LOCK_SUFFIX
+	var owner_path := lock_path + "/" + GameSaveSlotService.PROMOTION_LOCK_OWNER
+	if FileAccess.file_exists(owner_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(owner_path))
+	if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(lock_path)):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(lock_path))
 
 
 static func _assert_no_internal_artifacts(failures: Array[String], label: String) -> void:

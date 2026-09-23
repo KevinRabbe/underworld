@@ -7,6 +7,9 @@ const PAIR_SLOT_PREFIX := "user://underworld_pair_"
 const PAIR_SLOT_SUFFIX := ".json"
 const CANDIDATE_SUFFIX := ".candidate"
 const BACKUP_SUFFIX := ".previous"
+const PROMOTION_LOCK_SUFFIX := ".promotion-lock"
+const PROMOTION_LOCK_OWNER := "owner"
+const PROMOTION_LOCK_STALE_AFTER_SECONDS := 120
 
 const CLASS_NONE: String = IntegratedGameSaveContract.CLASS_NONE
 const CLASS_AVAILABLE: String = IntegratedGameSaveContract.CLASS_AVAILABLE
@@ -87,7 +90,7 @@ func persist_candidate_json(
 	# acquired with an atomic directory-create, so every governed writer observes
 	# one final mutation boundary instead of racing between the precondition and
 	# rename operations.
-	var lock_path := slot_path + ".promotion-lock"
+	var lock_path := slot_path + PROMOTION_LOCK_SUFFIX
 	var lock_error := _acquire_promotion_lock(lock_path)
 	if lock_error != OK:
 		_remove_file_if_present(candidate_path)
@@ -296,10 +299,52 @@ func _rename_no_replace(from_path: String, to_path: String) -> int:
 
 
 func _acquire_promotion_lock(lock_path: String) -> int:
-	return DirAccess.make_dir_absolute(ProjectSettings.globalize_path(lock_path))
+	var absolute_lock_path := ProjectSettings.globalize_path(lock_path)
+	var result := DirAccess.make_dir_absolute(absolute_lock_path)
+	if result == OK:
+		_write_promotion_lock_owner(lock_path)
+		return OK
+	if result != ERR_ALREADY_EXISTS:
+		return result
+	if not _promotion_lock_is_stale(lock_path):
+		return result
+	_remove_promotion_lock(lock_path)
+	result = DirAccess.make_dir_absolute(absolute_lock_path)
+	if result == OK:
+		_write_promotion_lock_owner(lock_path)
+	return result
 
 
 func _release_promotion_lock(lock_path: String) -> void:
+	_remove_promotion_lock(lock_path)
+
+
+func _write_promotion_lock_owner(lock_path: String) -> void:
+	var owner := FileAccess.open(lock_path + "/" + PROMOTION_LOCK_OWNER, FileAccess.WRITE)
+	if owner == null:
+		return
+	owner.store_string(str(Time.get_unix_time_from_system()) + "\n" + str(OS.get_process_id()))
+	owner.flush()
+
+
+func _promotion_lock_is_stale(lock_path: String) -> bool:
+	var owner_path := lock_path + "/" + PROMOTION_LOCK_OWNER
+	if not FileAccess.file_exists(owner_path):
+		return true
+	var owner := FileAccess.open(owner_path, FileAccess.READ)
+	if owner == null:
+		return true
+	var timestamp := int(str(owner.get_line()).strip_edges())
+	owner = null
+	if timestamp <= 0:
+		return true
+	return Time.get_unix_time_from_system() - timestamp > PROMOTION_LOCK_STALE_AFTER_SECONDS
+
+
+func _remove_promotion_lock(lock_path: String) -> void:
+	var owner_path := lock_path + "/" + PROMOTION_LOCK_OWNER
+	if FileAccess.file_exists(owner_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(owner_path))
 	if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(lock_path)):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(lock_path))
 
