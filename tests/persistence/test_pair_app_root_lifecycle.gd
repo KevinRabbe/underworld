@@ -115,13 +115,38 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		if str(restarted_profile.get("character", {}).get("character_id", "")) != str(character_a["character"]["character_id"]):
 			failures.append("restart did not restore last saved A/W1 pair")
 	restarted_app.free()
+	# A stale global legacy save must be rejected before it can poison the
+	# absent deterministic A/W1 Pair Slot. Title must also remain disabled rather
+	# than falling back to an unrelated global candidate.
+	var pair_service = GameSaveSlotService.new()
+	var a1_slot := GameSaveSlotService.pair_slot_path(str(character_a["character"]["character_id"]), str(world_one["world"]["world_id"]))
+	var b2_slot := GameSaveSlotService.pair_slot_path(str(character_b["character"]["character_id"]), str(world_two["world"]["world_id"]))
+	var legacy_json := _read(a1_slot)
+	var stale_legacy_json := _read(b2_slot)
+	_cleanup_paths([a1_slot, GameSaveSlotService.DEFAULT_SLOT_PATH])
+	var staged_stale_legacy := pair_service.persist_candidate_json(stale_legacy_json, GameSaveSlotService.DEFAULT_SLOT_PATH)
+	if not bool(staged_stale_legacy.get("success", false)):
+		failures.append("stale legacy global fixture could not be staged")
+	else:
+		var stale_app: Node = app_scene.instantiate()
+		stale_app.call("configure_route_scenes", title_scene, game_scene)
+		tree.root.add_child(stale_app)
+		await tree.process_frame
+		var stale_title: Node = stale_app.get("current_scene")
+		var stale_continue_button: Button = stale_title.get("continue_button")
+		if stale_continue_button == null or not stale_continue_button.disabled:
+			failures.append("stale legacy fallback incorrectly enabled Title CONTINUE")
+		if bool(stale_app.call("continue_game")):
+			failures.append("stale legacy fallback incorrectly restored a mismatched pair")
+		if str(pair_service.probe_slot(a1_slot).get("classification", "")) != GameSaveSlotService.CLASS_NONE:
+			failures.append("stale legacy candidate poisoned the absent Pair Slot")
+		if not FileAccess.file_exists(GameSaveSlotService.DEFAULT_SLOT_PATH):
+			failures.append("stale legacy source was deleted while being rejected")
+		stale_app.free()
 	# Exercise the accepted global-slot compatibility path through real AppRoot:
 	# remove only the deterministic A/W1 slot, stage the exact bytes in the
 	# legacy slot, and require Continue to recreate/use the Pair Slot without
 	# deleting the legacy source.
-	var pair_service = GameSaveSlotService.new()
-	var a1_slot := GameSaveSlotService.pair_slot_path(str(character_a["character"]["character_id"]), str(world_one["world"]["world_id"]))
-	var legacy_json := _read(a1_slot)
 	_cleanup_paths([a1_slot, GameSaveSlotService.DEFAULT_SLOT_PATH])
 	var staged_legacy := pair_service.persist_candidate_json(legacy_json, GameSaveSlotService.DEFAULT_SLOT_PATH)
 	if not bool(staged_legacy.get("success", false)):

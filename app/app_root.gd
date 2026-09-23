@@ -176,6 +176,8 @@ func continue_game() -> bool:
 		if str(loaded.get("classification", GameSaveSlotService.CLASS_INVALID)) == GameSaveSlotService.CLASS_NONE:
 			var legacy := _save_slot_service.load_slot(GameSaveSlotService.DEFAULT_SLOT_PATH)
 			if str(legacy.get("classification", GameSaveSlotService.CLASS_INVALID)) == GameSaveSlotService.CLASS_AVAILABLE:
+				if not _legacy_matches_saved_pair(legacy, pair):
+					return false
 				if not _migrate_legacy_slot(legacy, saved_slot):
 					return false
 				loaded = _save_slot_service.load_slot(saved_slot)
@@ -233,6 +235,30 @@ func _candidate_matches_profile(candidate: Dictionary, profile: Dictionary) -> b
 	return int(candidate.get("world_seed", -1)) == int(world.get("world_seed", -2))
 
 
+func _legacy_matches_saved_pair(legacy: Dictionary, pair: Dictionary) -> bool:
+	if not bool(pair.get("success", false)):
+		return false
+	if str(legacy.get("classification", GameSaveSlotService.CLASS_INVALID)) != GameSaveSlotService.CLASS_AVAILABLE:
+		return false
+	var candidate_variant: Variant = legacy.get("candidate", null)
+	if not candidate_variant is Dictionary:
+		return false
+	var context: Variant = candidate_variant.get("world_context", null)
+	if context == null:
+		return false
+	var canonical_world_id := str(context.world_id)
+	var fingerprint := str(legacy.get("content_fingerprint", ""))
+	if canonical_world_id.is_empty() or fingerprint.is_empty():
+		return false
+	if canonical_world_id != str(pair.get("canonical_world_id", "")):
+		return false
+	if int(candidate_variant.get("world_seed", -1)) != int(pair.get("world_seed", -2)):
+		return false
+	if fingerprint != str(pair.get("content_fingerprint", "")):
+		return false
+	return _candidate_matches_profile(candidate_variant, {"world": pair.get("world", {})})
+
+
 func _migrate_legacy_slot(legacy: Dictionary, pair_slot: String) -> bool:
 	if str(legacy.get("classification", GameSaveSlotService.CLASS_INVALID)) != GameSaveSlotService.CLASS_AVAILABLE:
 		return false
@@ -251,6 +277,13 @@ func _refresh_continue_slot_path() -> void:
 		if str(probe.get("classification", "")) == GameSaveSlotService.CLASS_AVAILABLE:
 			_save_slot_path = saved_slot
 			return
+		if str(probe.get("classification", "")) == GameSaveSlotService.CLASS_NONE:
+			var legacy := _save_slot_service.load_slot(GameSaveSlotService.DEFAULT_SLOT_PATH)
+			if _legacy_matches_saved_pair(legacy, pair):
+				_save_slot_path = GameSaveSlotService.DEFAULT_SLOT_PATH
+				return
+		_save_slot_path = saved_slot
+		return
 	_save_slot_path = GameSaveSlotService.DEFAULT_SLOT_PATH
 
 
