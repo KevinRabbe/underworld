@@ -3,8 +3,13 @@ extends RefCounted
 const IntegratedGameSaveContract := preload("res://gameplay/persistence/integrated_game_save_contract.gd")
 
 const DEFAULT_SLOT_PATH := "user://underworld_m3_slot.json"
+const PAIR_SLOT_PREFIX := "user://underworld_pair_"
+const PAIR_SLOT_SUFFIX := ".json"
 const CANDIDATE_SUFFIX := ".candidate"
 const BACKUP_SUFFIX := ".previous"
+const PROMOTION_LOCK_SUFFIX := ".promotion-lock"
+const PROMOTION_LOCK_OWNER := "owner"
+const PROMOTION_LOCK_STALE_AFTER_SECONDS := 120
 
 const CLASS_NONE: String = IntegratedGameSaveContract.CLASS_NONE
 const CLASS_AVAILABLE: String = IntegratedGameSaveContract.CLASS_AVAILABLE
@@ -17,6 +22,12 @@ const _REPLACE_CONDITION_KEYS: Array[String] = ["expected_content_fingerprint", 
 const _NO_PROTECTED_CONDITION_KEYS: Array[String] = ["mode"]
 
 var _rename_operation: Callable = Callable()
+var _promotion_lock_tokens: Dictionary = {}
+
+
+static func pair_slot_path(character_id: String, world_id: String) -> String:
+	var pair_key := (character_id + "\u001f" + world_id).sha256_text()
+	return PAIR_SLOT_PREFIX + pair_key + PAIR_SLOT_SUFFIX
 
 
 func configure_rename_operation(operation: Callable) -> RefCounted:
@@ -54,11 +65,20 @@ func persist_candidate_json(
 	if not condition_failures.is_empty():
 		return _failure(condition_failures)
 
+	# Candidate staging is part of the serialized promotion transaction. The
+	# lock must be held before any candidate cleanup/write so another governed
+	# writer cannot replace the candidate between reread and promotion.
+	var lock_path := slot_path + PROMOTION_LOCK_SUFFIX
+	var lock_error := _acquire_promotion_lock(lock_path)
+	if lock_error != OK:
+		return _precondition_stale(CLASS_AVAILABLE, ["SAVE promotion lock is already held"])
+
 	var candidate_path: String = slot_path + CANDIDATE_SUFFIX
 	var backup_path: String = slot_path + BACKUP_SUFFIX
 	_remove_file_if_present(candidate_path)
 	var candidate_file: FileAccess = FileAccess.open(candidate_path, FileAccess.WRITE)
 	if candidate_file == null:
+		_release_promotion_lock(lock_path)
 		return _failure(["SAVE candidate could not be opened for write: %s" % candidate_path])
 	candidate_file.store_string(candidate_json)
 	candidate_file.flush()
@@ -67,6 +87,7 @@ func persist_candidate_json(
 	var reread: Dictionary = _decode_existing_file(candidate_path)
 	if str(reread.get("classification", CLASS_INVALID)) != CLASS_AVAILABLE:
 		_remove_file_if_present(candidate_path)
+		_release_promotion_lock(lock_path)
 		return _prefixed_failure(
 			"SAVE candidate reread",
 			["candidate classified %s" % str(reread.get("classification", CLASS_INVALID))] + reread.get("diagnostics", [])
@@ -74,14 +95,16 @@ func persist_candidate_json(
 	var reread_text: String = str(reread.get("json", ""))
 	if reread_text != candidate_json:
 		_remove_file_if_present(candidate_path)
+		_release_promotion_lock(lock_path)
 		return _failure(["SAVE candidate reread bytes differ from written candidate"])
 
 	# Conditional overwrite consent is a compare-and-swap check against the
 	# protected canonical bytes at the final mutation boundary. Candidate staging
-	# and exact reread may take time, so an earlier check cannot authorize later
-	# backup/promotion after another writer has replaced the slot.
+	# and exact reread may take time, so the check must occur while the promotion
+	# lock is held.
 	var precondition: Dictionary = _check_save_precondition(slot_path, condition)
 	if not bool(precondition.get("success", false)):
+		_release_promotion_lock(lock_path)
 		_remove_file_if_present(candidate_path)
 		return precondition
 
@@ -90,18 +113,21 @@ func persist_candidate_json(
 	if had_previous:
 		var backup_error: int = _rename_file(slot_path, backup_path)
 		if backup_error != OK:
+			_release_promotion_lock(lock_path)
 			_remove_file_if_present(candidate_path)
 			return _failure(["SAVE could not preserve previous slot before promotion: %s" % error_string(backup_error)])
-	var promote_error: int = _rename_file(candidate_path, slot_path)
+	var promote_error: int = _rename_no_replace(candidate_path, slot_path)
 	if promote_error != OK:
 		var failures: Array[String] = ["SAVE candidate promotion failed: %s" % error_string(promote_error)]
 		if had_previous and FileAccess.file_exists(backup_path):
 			var restore_error: int = _rename_file(backup_path, slot_path)
 			if restore_error != OK:
 				failures.append("SAVE previous slot restoration failed: %s" % error_string(restore_error))
+		_release_promotion_lock(lock_path)
 		_remove_file_if_present(candidate_path)
 		return _failure(failures)
 	_remove_file_if_present(backup_path)
+	_release_promotion_lock(lock_path)
 	return {
 		"success": true,
 		"classification": CLASS_AVAILABLE,
@@ -263,6 +289,124 @@ func _rename_file(from_path: String, to_path: String) -> int:
 			return ERR_INVALID_DATA
 		return int(result)
 	return int(DirAccess.rename_absolute(ProjectSettings.globalize_path(from_path), ProjectSettings.globalize_path(to_path)))
+
+
+func _rename_no_replace(from_path: String, to_path: String) -> int:
+	# The promotion lock makes this existence check and rename one governed
+	# transaction. Never ask Godot's rename to replace a target for a guarded
+	# promotion.
+	if FileAccess.file_exists(to_path):
+		return ERR_ALREADY_EXISTS
+	return _rename_file(from_path, to_path)
+
+
+func _acquire_promotion_lock(lock_path: String) -> int:
+	var absolute_lock_path := ProjectSettings.globalize_path(lock_path)
+	var result := DirAccess.make_dir_absolute(absolute_lock_path)
+	if result == OK:
+		var acquired_token := _new_promotion_lock_token()
+		var acquired_result := _write_promotion_lock_owner(lock_path, acquired_token)
+		if acquired_result == OK:
+			_promotion_lock_tokens[lock_path] = acquired_token
+		return acquired_result
+	if result != ERR_ALREADY_EXISTS:
+		return result
+	var observed_owner := _read_promotion_lock_owner(lock_path)
+	if not _promotion_lock_is_stale(observed_owner):
+		return result
+	# Reclaim by atomically moving the exact stale lock instance away. A
+	# competing writer can then create a fresh lock at the original path without
+	# an old reclaimer being able to delete that new owner (ABA protection).
+	var quarantine_path := "%s.reclaim-%s" % [lock_path, _new_promotion_lock_token()]
+	if not _quarantine_stale_promotion_lock(lock_path, observed_owner, quarantine_path):
+		return ERR_ALREADY_EXISTS
+	result = DirAccess.make_dir_absolute(absolute_lock_path)
+	if result == OK:
+		var reclaimed_token := _new_promotion_lock_token()
+		var reclaimed_result := _write_promotion_lock_owner(lock_path, reclaimed_token)
+		if reclaimed_result == OK:
+			_promotion_lock_tokens[lock_path] = reclaimed_token
+		return reclaimed_result
+	return result
+
+
+func _release_promotion_lock(lock_path: String) -> void:
+	var token := str(_promotion_lock_tokens.get(lock_path, ""))
+	if token.is_empty():
+		return
+	var owner := _read_promotion_lock_owner(lock_path)
+	if _owner_has_token(owner, token):
+		_remove_promotion_lock(lock_path)
+	_promotion_lock_tokens.erase(lock_path)
+
+
+func _write_promotion_lock_owner(lock_path: String, token: String) -> int:
+	var owner := FileAccess.open(lock_path + "/" + PROMOTION_LOCK_OWNER, FileAccess.WRITE)
+	if owner == null:
+		_remove_promotion_lock(lock_path)
+		return ERR_CANT_CREATE
+	owner.store_string(_owner_text_for_token(str(Time.get_unix_time_from_system()), token))
+	owner.flush()
+	owner = null
+	return OK
+
+
+func _read_promotion_lock_owner(lock_path: String) -> String:
+	var owner_path := lock_path + "/" + PROMOTION_LOCK_OWNER
+	if not FileAccess.file_exists(owner_path):
+		return ""
+	var owner := FileAccess.open(owner_path, FileAccess.READ)
+	if owner == null:
+		return ""
+	var text := owner.get_as_text()
+	owner = null
+	return text
+
+
+func _promotion_lock_is_stale(owner_text: String) -> bool:
+	if owner_text.is_empty():
+		return true
+	var lines := owner_text.split("\n")
+	if lines.is_empty():
+		return true
+	var timestamp := int(str(lines[0]).strip_edges())
+	if timestamp <= 0:
+		return true
+	return Time.get_unix_time_from_system() - timestamp > PROMOTION_LOCK_STALE_AFTER_SECONDS
+
+
+func _quarantine_stale_promotion_lock(lock_path: String, observed_owner: String, quarantine_path: String) -> bool:
+	if _read_promotion_lock_owner(lock_path) != observed_owner:
+		return false
+	var result := int(DirAccess.rename_absolute(
+		ProjectSettings.globalize_path(lock_path),
+		ProjectSettings.globalize_path(quarantine_path)
+	))
+	if result != OK:
+		return false
+	_remove_promotion_lock(quarantine_path)
+	return true
+
+
+func _owner_text_for_token(timestamp_or_owner: String, token: String) -> String:
+	return timestamp_or_owner + "\n" + str(OS.get_process_id()) + "\n" + token
+
+
+func _owner_has_token(owner_text: String, token: String) -> bool:
+	var lines := owner_text.split("\n")
+	return lines.size() >= 3 and str(lines[2]).strip_edges() == token
+
+
+func _new_promotion_lock_token() -> String:
+	return "%s-%s-%s" % [str(Time.get_ticks_usec()), str(OS.get_process_id()), str(randi())]
+
+
+func _remove_promotion_lock(lock_path: String) -> void:
+	var owner_path := lock_path + "/" + PROMOTION_LOCK_OWNER
+	if FileAccess.file_exists(owner_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(owner_path))
+	if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(lock_path)):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(lock_path))
 
 
 static func _remove_file_if_present(path: String) -> void:

@@ -99,6 +99,11 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		var active: Dictionary = restarted.get("_active_profile")
 		if str(active.get("character", {}).get("character_id", "")) != str(character_a["character"]["character_id"]):
 			failures.append("CONTINUE active profile was not exact saved Character A")
+	restarted.call("show_title")
+	var selected_existing_start: Variant = restarted.call("start_new_game", {"character": character_a["character"], "world": world_one["world"]})
+	var existing_game: Node = restarted.get("current_scene")
+	if not bool(selected_existing_start) or existing_game == null or str(existing_game.get("prepared_mode")) != "continue":
+		failures.append("PLAY selected existing A + World1 did not route through pair Continue")
 	var selected_b: Dictionary = ProfileCatalog.select_pair(character_b["character"]["character_id"], world_one["world"]["world_id"], catalog_path)
 	if not bool(selected_b.get("success", false)) or not bool(restarted.call("show_title")) or not bool(restarted.call("continue_game")):
 		failures.append("B + World1 selection incorrectly blocked saved-pair Continue")
