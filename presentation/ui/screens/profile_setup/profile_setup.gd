@@ -6,6 +6,7 @@ signal start_requested(profile)
 signal back_requested
 
 @onready var character_name: LineEdit = %CharacterName
+@onready var body_select: OptionButton = %BodySelect
 @onready var world_name: LineEdit = %WorldName
 @onready var world_seed: LineEdit = %WorldSeed
 @onready var character_select: OptionButton = %CharacterSelect
@@ -19,6 +20,10 @@ func _ready() -> void:
 	start_button.pressed.connect(_on_start)
 	select_button.pressed.connect(_on_select_existing)
 	back_button.pressed.connect(func(): back_requested.emit())
+	body_select.add_item("Male")
+	body_select.set_item_metadata(0, "male")
+	body_select.add_item("Female")
+	body_select.set_item_metadata(1, "female")
 	var catalog_result := ProfileCatalog.load_catalog()
 	if bool(catalog_result.get("success", false)):
 		var catalog: Dictionary = catalog_result["catalog"]
@@ -30,6 +35,9 @@ func _ready() -> void:
 			world_select.set_item_metadata(world_select.item_count - 1, world.duplicate(true))
 		if catalog["characters"].size() > 0:
 			character_name.text = str(catalog["characters"][0].get("display_name", ""))
+			var existing_appearance: Variant = catalog["characters"][0].get("appearance", {})
+			if existing_appearance is Dictionary:
+				body_select.select(1 if str(existing_appearance.get("body_type", "male")) == "female" else 0)
 		if catalog["worlds"].size() > 0:
 			world_name.text = str(catalog["worlds"][0].get("world_name", ""))
 			world_seed.text = str(catalog["worlds"][0].get("world_seed", 1))
@@ -63,7 +71,8 @@ func _on_start() -> void:
 	if name.is_empty() or selected_world_name.is_empty() or not seed_text.is_valid_int():
 		status.text = "Enter a character name, world name, and integer seed."
 		return
-	var character_result := ProfileCatalog.create_character(name)
+	var body_type := str(body_select.get_selected_metadata())
+	var character_result := ProfileCatalog.create_character(name, ProfileCatalog.PATH, body_type)
 	if not bool(character_result.get("success", false)):
 		status.text = str(character_result.get("diagnostics", ["Character creation failed"])[0])
 		return

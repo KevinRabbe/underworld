@@ -41,6 +41,7 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	var expected_weapon_contract: String = fixture["weapon_contract"]
 	var expected_resume: Vector3 = fixture["resume_position"]
 	var stable_id: String = fixture["stable_id"]
+	var expected_profile: Dictionary = fixture["candidate"]["profile"]
 
 	var game: Node = packed.instantiate()
 	game.set("enable_debug_hud", false)
@@ -50,6 +51,9 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		game.free()
 		_cleanup_slot()
 		return failures
+	var prepared_candidate_variant: Variant = game.get("_startup_candidate")
+	if not prepared_candidate_variant is Dictionary or prepared_candidate_variant.get("profile", {}) != expected_profile:
+		failures.append("Continue preparation dropped Character-owned appearance metadata")
 	if game.is_inside_tree():
 		failures.append("Game entered SceneTree during prepare_continue")
 
@@ -327,6 +331,13 @@ static func _fixture(failures: Array[String]) -> Dictionary:
 		"resume_position": resume_position,
 		"stable_id": stable_id,
 		"candidate": {
+			"profile": {
+				"character": {
+					"character_id": "character:runtime-female",
+					"appearance": {"body_type": "female"},
+				},
+				"world": {"world_id": "world:runtime", "world_seed": TEST_SEED},
+			},
 			"world_context": context,
 			"world_seed": TEST_SEED,
 			"world_id": context.world_id,

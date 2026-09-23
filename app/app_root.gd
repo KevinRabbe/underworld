@@ -125,7 +125,9 @@ func start_new_game(profile: Dictionary = {}) -> bool:
 		if not candidate is Dictionary or not _candidate_matches_profile(candidate, profile):
 			return false
 		_active_profile = profile.duplicate(true)
-		return _replace_game_scene(true, candidate)
+		var continue_candidate: Dictionary = candidate.duplicate(true)
+		continue_candidate["profile"] = _active_profile.duplicate(true)
+		return _replace_game_scene(true, continue_candidate)
 	var started := _replace_game_scene(false, profile)
 	if started:
 		_active_profile = profile.duplicate(true)
@@ -210,7 +212,9 @@ func continue_game() -> bool:
 	if not _candidate_matches_profile(candidate_variant, {"world": pair["world"]}):
 		return false
 	_active_profile = {"character": pair["character"].duplicate(true), "world": pair["world"].duplicate(true)}
-	return _replace_game_scene(true, candidate_variant)
+	var continue_candidate: Dictionary = candidate_variant.duplicate(true)
+	continue_candidate["profile"] = _active_profile.duplicate(true)
+	return _replace_game_scene(true, continue_candidate)
 
 
 func _pair_slot_for_profile(profile: Dictionary) -> String:

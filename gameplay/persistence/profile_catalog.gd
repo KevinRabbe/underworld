@@ -70,6 +70,12 @@ static func _read_catalog(path: String) -> Dictionary:
 			return {"exists": true, "success": false, "diagnostic": "Profile catalog has invalid saved-pair seed metadata"}
 	var result := _empty()
 	result["characters"] = _sanitize_records(parsed.get("characters", []), "character_id", ["display_name"])
+	for character in result["characters"]:
+		var appearance: Variant = character.get("appearance", {})
+		var body_type := "male"
+		if appearance is Dictionary:
+			body_type = _normalize_body_type(str(appearance.get("body_type", "male")))
+		character["appearance"] = {"body_type": body_type}
 	result["worlds"] = _sanitize_records(parsed.get("worlds", []), "world_id", ["world_name", "world_seed"])
 	result["last_character_id"] = str(parsed.get("last_character_id", ""))
 	result["last_world_id"] = str(parsed.get("last_world_id", ""))
@@ -98,10 +104,11 @@ static func _read_catalog(path: String) -> Dictionary:
 				return {"exists": true, "success": false, "diagnostic": "Profile catalog saved-pair metadata references unknown identity"}
 	return {"exists": true, "success": true, "catalog": result, "diagnostics": []}
 
-static func create_character(display_name: String, path: String = PATH) -> Dictionary:
+static func create_character(display_name: String, path: String = PATH, body_type: String = "male") -> Dictionary:
 	var name := display_name.strip_edges()
 	if name.is_empty():
 		return _failure("Character name must not be empty")
+	body_type = _normalize_body_type(body_type)
 	var loaded := load_catalog(path)
 	if not bool(loaded.get("success", false)):
 		return loaded
@@ -111,7 +118,7 @@ static func create_character(display_name: String, path: String = PATH) -> Dicti
 	while _find(catalog["characters"], "character_id", id) != null:
 		id = "character:%s-%d" % [name.to_lower().sha256_text().substr(0, 12), suffix]
 		suffix += 1
-	catalog["characters"].append({"character_id": id, "display_name": name, "created_at": int(Time.get_unix_time_from_system())})
+	catalog["characters"].append({"character_id": id, "display_name": name, "appearance": {"body_type": body_type}, "created_at": int(Time.get_unix_time_from_system())})
 	if not _write(catalog, path):
 		return _failure("Character catalog could not be persisted")
 	return {"success": true, "character": catalog["characters"][-1].duplicate(true), "catalog": catalog}
@@ -256,6 +263,9 @@ static func _is_integer_number(value: Variant) -> bool:
 	if value is float:
 		return is_equal_approx(value, floor(value))
 	return false
+
+static func _normalize_body_type(value: String) -> String:
+	return "female" if value.to_lower() == "female" else "male"
 
 static func _write(catalog: Dictionary, path: String) -> bool:
 	var candidate_path := path + ".candidate"

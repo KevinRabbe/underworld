@@ -137,6 +137,10 @@ func prepare_continue(candidate: Dictionary) -> bool:
 	if enable_map015_fixture:
 		push_error("MAP-015 developer fixture cannot be combined with durable Continue state")
 		return false
+	# Profile/appearance metadata is Character-owned presentation context, not
+	# part of the integrated gameplay-save bytes. Preserve it across the
+	# detached gameplay candidate clone so Continue can select the same body.
+	var presentation_profile: Variant = candidate.get("profile", null)
 
 	var clone_result: Dictionary = IntegratedGameSaveContractScript.clone_v2_candidate(candidate)
 	if not bool(clone_result.get("success", false)):
@@ -148,6 +152,8 @@ func prepare_continue(candidate: Dictionary) -> bool:
 		push_error("Continue preparation clone did not return a candidate Dictionary")
 		return false
 	var owned_candidate: Dictionary = owned_candidate_variant
+	if presentation_profile is Dictionary:
+		owned_candidate["profile"] = presentation_profile.duplicate(true)
 	var failures: Array[String] = _validate_continue_candidate(owned_candidate)
 	failures.append_array(_preflight_pending_loot_restore(owned_candidate))
 	if not failures.is_empty():
