@@ -73,6 +73,18 @@ unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "1"
 
+[node name="ExistingLabel" type="Label" parent="Center/Panel/Stack"]
+layout_mode = 2
+text = "EXISTING CHARACTER / WORLD"
+
+[node name="CharacterSelect" type="OptionButton" parent="Center/Panel/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="WorldSelect" type="OptionButton" parent="Center/Panel/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+
 [node name="Status" type="Label" parent="Center/Panel/Stack"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -83,6 +95,11 @@ horizontal_alignment = 1
 unique_name_in_owner = true
 layout_mode = 2
 text = "CREATE AND START"
+
+[node name="SelectButton" type="Button" parent="Center/Panel/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "USE SELECTED"
 
 [node name="BackButton" type="Button" parent="Center/Panel/Stack"]
 unique_name_in_owner = true

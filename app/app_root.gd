@@ -3,6 +3,7 @@ extends Node
 signal route_changed(route_id)
 
 const GameSaveSlotService := preload("res://gameplay/persistence/game_save_slot_service.gd")
+const ProfileCatalog := preload("res://gameplay/persistence/profile_catalog.gd")
 
 const ROUTE_NONE: StringName = &""
 const ROUTE_TITLE: StringName = &"title"
@@ -84,9 +85,10 @@ func show_title() -> bool:
 	current_scene.connect("quit_requested", Callable(self, "_on_quit_requested"))
 	if current_scene.has_method("set_continue_available"):
 		var probe: Dictionary = _save_slot_service.probe_slot(_save_slot_path)
+		var pair: Dictionary = ProfileCatalog.last_pair()
 		current_scene.call(
 			"set_continue_available",
-			str(probe.get("classification", GameSaveSlotService.CLASS_INVALID)) == GameSaveSlotService.CLASS_AVAILABLE
+			str(probe.get("classification", GameSaveSlotService.CLASS_INVALID)) == GameSaveSlotService.CLASS_AVAILABLE and bool(pair.get("success", false))
 		)
 	return true
 
@@ -137,6 +139,11 @@ func continue_game() -> bool:
 		return false
 	var candidate_variant: Variant = loaded.get("candidate", null)
 	if not candidate_variant is Dictionary:
+		return false
+	var pair: Dictionary = ProfileCatalog.last_pair()
+	if not bool(pair.get("success", false)):
+		return false
+	if str(candidate_variant.get("world_id", "")) != str(pair["world"].get("world_id", "")):
 		return false
 	return _replace_game_scene(true, candidate_variant)
 
