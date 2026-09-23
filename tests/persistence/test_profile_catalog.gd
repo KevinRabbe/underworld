@@ -18,6 +18,17 @@ static func run() -> Array[String]:
 		_expect(failures, "last pair reloads", bool(last.get("success", false)))
 		_expect(failures, "character name persists", str(last["character"]["display_name"]) == "Test Survivor")
 		_expect(failures, "world seed persists", int(last["world"]["world_seed"]) == 424242)
+		var saved := Catalog.record_successful_save(character["character"]["character_id"], world["world"]["world_id"], "wid1:canonical-world", 424242, path)
+		_expect(failures, "successful save pair binding persists", bool(saved.get("success", false)))
+		var saved_pair := Catalog.saved_pair(path)
+		_expect(failures, "saved pair resolves canonical world identity", bool(saved_pair.get("success", false)) and str(saved_pair.get("canonical_world_id", "")) == "wid1:canonical-world")
+		var migrated_path := "user://profile_catalog_legacy_migration.json"
+		var migrated := Catalog.migrate_legacy_save("wid1:legacy-world", 77, migrated_path)
+		_expect(failures, "legacy save migration creates durable pair", bool(migrated.get("success", false)))
+		var migrated_pair := Catalog.saved_pair(migrated_path)
+		_expect(failures, "legacy migration preserves canonical world identity", bool(migrated_pair.get("success", false)) and str(migrated_pair.get("canonical_world_id", "")) == "wid1:legacy-world")
+		if FileAccess.file_exists(migrated_path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(migrated_path))
 	var corrupt_path := "user://profile_catalog_corrupt.json"
 	var corrupt_file := FileAccess.open(corrupt_path, FileAccess.WRITE)
 	corrupt_file.store_string("{not-json")

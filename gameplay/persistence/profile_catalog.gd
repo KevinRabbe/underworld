@@ -122,8 +122,57 @@ static func last_pair(path: String = PATH) -> Dictionary:
 	var world = _find(catalog["worlds"], "world_id", catalog["last_world_id"])
 	return {"success": character != null and world != null, "character": character, "world": world, "catalog": catalog, "diagnostics": []}
 
+static func saved_pair(path: String = PATH) -> Dictionary:
+	var loaded := load_catalog(path)
+	if not bool(loaded.get("success", false)):
+		return loaded
+	var catalog: Dictionary = loaded["catalog"]
+	var character = _find(catalog["characters"], "character_id", str(catalog.get("saved_character_id", "")))
+	var world = _find(catalog["worlds"], "world_id", str(catalog.get("saved_world_id", "")))
+	var canonical_id := str(catalog.get("saved_canonical_world_id", ""))
+	return {"success": character != null and world != null and not canonical_id.is_empty(), "character": character, "world": world, "canonical_world_id": canonical_id, "catalog": catalog, "diagnostics": []}
+
+static func record_successful_save(character_id: String, world_id: String, canonical_world_id: String, seed: int, path: String = PATH) -> Dictionary:
+	var loaded := load_catalog(path)
+	if not bool(loaded.get("success", false)):
+		return loaded
+	var catalog: Dictionary = loaded["catalog"]
+	if _find(catalog["characters"], "character_id", character_id) == null or _find(catalog["worlds"], "world_id", world_id) == null or canonical_world_id.is_empty():
+		return _failure("Saved pair references unknown profile identity")
+	catalog["saved_character_id"] = character_id
+	catalog["saved_world_id"] = world_id
+	catalog["saved_canonical_world_id"] = canonical_world_id
+	catalog["saved_world_seed"] = seed
+	if not _write(catalog, path):
+		return _failure("Saved profile pair could not be persisted")
+	return {"success": true, "catalog": catalog, "diagnostics": []}
+
+static func migrate_legacy_save(canonical_world_id: String, seed: int, path: String = PATH) -> Dictionary:
+	var loaded := load_catalog(path)
+	if not bool(loaded.get("success", false)):
+		return loaded
+	var catalog: Dictionary = loaded["catalog"]
+	var character = _find(catalog["characters"], "character_id", "character:legacy-recovered")
+	if character == null:
+		character = {"character_id": "character:legacy-recovered", "display_name": "Recovered Survivor", "created_at": int(Time.get_unix_time_from_system())}
+		catalog["characters"].append(character)
+	var world_id := "world:legacy:%s" % canonical_world_id.sha256_text().substr(0, 16)
+	var world = _find(catalog["worlds"], "world_id", world_id)
+	if world == null:
+		world = {"world_id": world_id, "world_name": "Recovered World", "world_seed": seed, "created_at": int(Time.get_unix_time_from_system())}
+		catalog["worlds"].append(world)
+	catalog["last_character_id"] = character["character_id"]
+	catalog["last_world_id"] = world["world_id"]
+	catalog["saved_character_id"] = character["character_id"]
+	catalog["saved_world_id"] = world["world_id"]
+	catalog["saved_canonical_world_id"] = canonical_world_id
+	catalog["saved_world_seed"] = seed
+	if not _write(catalog, path):
+		return _failure("Legacy save profile migration could not be persisted")
+	return {"success": true, "catalog": catalog, "character": character, "world": world, "diagnostics": []}
+
 static func _empty() -> Dictionary:
-	return {"schema": SCHEMA, "characters": [], "worlds": [], "last_character_id": "", "last_world_id": ""}
+	return {"schema": SCHEMA, "characters": [], "worlds": [], "last_character_id": "", "last_world_id": "", "saved_character_id": "", "saved_world_id": "", "saved_canonical_world_id": "", "saved_world_seed": 0}
 
 static func _sanitize_records(raw: Variant, id_key: String, required: Array) -> Array:
 	var result: Array = []

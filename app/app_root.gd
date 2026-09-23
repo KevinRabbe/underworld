@@ -27,6 +27,7 @@ var _title_scene: PackedScene = TITLE_SCREEN_SCENE
 var _game_scene: PackedScene = GAME_SCENE
 var _save_slot_service = GameSaveSlotService.new()
 var _save_slot_path: String = GameSaveSlotService.DEFAULT_SLOT_PATH
+var _active_profile: Dictionary = {}
 
 
 func configure_route_scenes(title_scene: PackedScene, game_scene: PackedScene) -> bool:
@@ -85,10 +86,9 @@ func show_title() -> bool:
 	current_scene.connect("quit_requested", Callable(self, "_on_quit_requested"))
 	if current_scene.has_method("set_continue_available"):
 		var probe: Dictionary = _save_slot_service.probe_slot(_save_slot_path)
-		var pair: Dictionary = ProfileCatalog.last_pair()
 		current_scene.call(
 			"set_continue_available",
-			str(probe.get("classification", GameSaveSlotService.CLASS_INVALID)) == GameSaveSlotService.CLASS_AVAILABLE and bool(pair.get("success", false))
+			str(probe.get("classification", GameSaveSlotService.CLASS_INVALID)) == GameSaveSlotService.CLASS_AVAILABLE
 		)
 	return true
 
@@ -108,7 +108,10 @@ func show_profile_setup() -> bool:
 func start_new_game(profile: Dictionary = {}) -> bool:
 	if _current_route == ROUTE_GAME and current_scene != null and is_instance_valid(current_scene):
 		return false
-	return _replace_game_scene(false, profile)
+	var started := _replace_game_scene(false, profile)
+	if started and not profile.is_empty():
+		_active_profile = profile.duplicate(true)
+	return started
 
 
 func save_current_game() -> Dictionary:
@@ -126,7 +129,19 @@ func save_current_game() -> Dictionary:
 		return request
 	# The application boundary deliberately does not know the SAVE schema. The
 	# successful detached request object is forwarded byte-for-value unchanged.
-	return _save_slot_service.save_slot(request, _save_slot_path)
+	var saved := _save_slot_service.save_slot(request, _save_slot_path)
+	if bool(saved.get("success", false)) and not _active_profile.is_empty():
+		var persisted := _save_slot_service.load_slot(_save_slot_path)
+		var persisted_candidate: Variant = persisted.get("candidate", null)
+		var context = persisted_candidate.get("world_context", null) if persisted_candidate is Dictionary else null
+		var canonical_world_id := str(context.world_id) if context != null else ""
+		var character_id := str(_active_profile.get("character", {}).get("character_id", ""))
+		var profile_world = _active_profile.get("world", {})
+		var world_id := str(profile_world.get("world_id", "")) if profile_world is Dictionary else ""
+		var seed := int(profile_world.get("world_seed", 0)) if profile_world is Dictionary else 0
+		if not bool(ProfileCatalog.record_successful_save(character_id, world_id, canonical_world_id, seed).get("success", false)):
+			return _failure(["SAVE succeeded but saved profile pair binding failed"])
+	return saved
 
 
 func continue_game() -> bool:
@@ -140,10 +155,17 @@ func continue_game() -> bool:
 	var candidate_variant: Variant = loaded.get("candidate", null)
 	if not candidate_variant is Dictionary:
 		return false
-	var pair: Dictionary = ProfileCatalog.last_pair()
-	if not bool(pair.get("success", false)):
+	var context = candidate_variant.get("world_context", null)
+	var canonical_world_id := str(context.world_id) if context != null else ""
+	if canonical_world_id.is_empty() or typeof(candidate_variant.get("world_seed", null)) != TYPE_INT:
 		return false
-	if str(candidate_variant.get("world_id", "")) != str(pair["world"].get("world_id", "")):
+	var pair: Dictionary = ProfileCatalog.saved_pair()
+	if not bool(pair.get("success", false)):
+		var migrated := ProfileCatalog.migrate_legacy_save(canonical_world_id, int(candidate_variant["world_seed"]))
+		if not bool(migrated.get("success", false)):
+			return false
+		pair = ProfileCatalog.saved_pair()
+	if not bool(pair.get("success", false)) or str(pair.get("canonical_world_id", "")) != canonical_world_id:
 		return false
 	return _replace_game_scene(true, candidate_variant)
 
