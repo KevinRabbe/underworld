@@ -83,12 +83,23 @@ func persist_candidate_json(
 		_remove_file_if_present(candidate_path)
 		return _failure(["SAVE candidate reread bytes differ from written candidate"])
 
+	# Serialize the entire precondition/backup/promotion transaction. The lock is
+	# acquired with an atomic directory-create, so every governed writer observes
+	# one final mutation boundary instead of racing between the precondition and
+	# rename operations.
+	var lock_path := slot_path + ".promotion-lock"
+	var lock_error := _acquire_promotion_lock(lock_path)
+	if lock_error != OK:
+		_remove_file_if_present(candidate_path)
+		return _precondition_stale(CLASS_AVAILABLE, ["SAVE promotion lock is already held"])
+
 	# Conditional overwrite consent is a compare-and-swap check against the
 	# protected canonical bytes at the final mutation boundary. Candidate staging
-	# and exact reread may take time, so an earlier check cannot authorize later
-	# backup/promotion after another writer has replaced the slot.
+	# and exact reread may take time, so the check must occur while the promotion
+	# lock is held.
 	var precondition: Dictionary = _check_save_precondition(slot_path, condition)
 	if not bool(precondition.get("success", false)):
+		_release_promotion_lock(lock_path)
 		_remove_file_if_present(candidate_path)
 		return precondition
 
@@ -97,18 +108,21 @@ func persist_candidate_json(
 	if had_previous:
 		var backup_error: int = _rename_file(slot_path, backup_path)
 		if backup_error != OK:
+			_release_promotion_lock(lock_path)
 			_remove_file_if_present(candidate_path)
 			return _failure(["SAVE could not preserve previous slot before promotion: %s" % error_string(backup_error)])
-	var promote_error: int = _rename_file(candidate_path, slot_path)
+	var promote_error: int = _rename_no_replace(candidate_path, slot_path)
 	if promote_error != OK:
 		var failures: Array[String] = ["SAVE candidate promotion failed: %s" % error_string(promote_error)]
 		if had_previous and FileAccess.file_exists(backup_path):
 			var restore_error: int = _rename_file(backup_path, slot_path)
 			if restore_error != OK:
 				failures.append("SAVE previous slot restoration failed: %s" % error_string(restore_error))
+		_release_promotion_lock(lock_path)
 		_remove_file_if_present(candidate_path)
 		return _failure(failures)
 	_remove_file_if_present(backup_path)
+	_release_promotion_lock(lock_path)
 	return {
 		"success": true,
 		"classification": CLASS_AVAILABLE,
@@ -270,6 +284,24 @@ func _rename_file(from_path: String, to_path: String) -> int:
 			return ERR_INVALID_DATA
 		return int(result)
 	return int(DirAccess.rename_absolute(ProjectSettings.globalize_path(from_path), ProjectSettings.globalize_path(to_path)))
+
+
+func _rename_no_replace(from_path: String, to_path: String) -> int:
+	# The promotion lock makes this existence check and rename one governed
+	# transaction. Never ask Godot's rename to replace a target for a guarded
+	# promotion.
+	if FileAccess.file_exists(to_path):
+		return ERR_ALREADY_EXISTS
+	return _rename_file(from_path, to_path)
+
+
+func _acquire_promotion_lock(lock_path: String) -> int:
+	return DirAccess.make_dir_absolute(ProjectSettings.globalize_path(lock_path))
+
+
+func _release_promotion_lock(lock_path: String) -> void:
+	if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(lock_path)):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(lock_path))
 
 
 static func _remove_file_if_present(path: String) -> void:
