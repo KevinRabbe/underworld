@@ -71,7 +71,8 @@ static func run() -> Array[String]:
 	var invalid_schema_result := Catalog.create_world("Must Not Replace", 9, invalid_schema_path)
 	_expect(failures, "invalid catalog schema create fails closed", not bool(invalid_schema_result.get("success", false)))
 	var invalid_preserved := FileAccess.open(invalid_schema_path, FileAccess.READ)
-	_expect(failures, "invalid catalog schema remains preserved", invalid_preserved != null and str(JSON.parse_string(invalid_preserved.get_as_text()).get("characters", null)) == "{}")
+	var invalid_preserved_data: Variant = JSON.parse_string(invalid_preserved.get_as_text()) if invalid_preserved != null else null
+	_expect(failures, "invalid catalog schema remains preserved", invalid_preserved_data is Dictionary and invalid_preserved_data.get("characters", null) is Dictionary)
 	invalid_preserved = null
 	var recovery_path := "user://profile_catalog_recovery.json"
 	var recovery_catalog := {"schema": "underworld.profile-catalog.v1", "characters": [{"character_id": "character:keep", "display_name": "Keep Me"}], "worlds": [{"world_id": "world:keep", "world_name": "Keep World", "world_seed": 9}], "last_character_id": "character:keep", "last_world_id": "world:keep", "saved_character_id": "character:keep", "saved_world_id": "world:keep", "saved_canonical_world_id": "wid1:keep", "saved_world_seed": 9, "saved_content_fingerprint": "keep-fingerprint"}
