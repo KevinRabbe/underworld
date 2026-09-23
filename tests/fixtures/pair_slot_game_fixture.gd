@@ -40,6 +40,7 @@ func build_save_request() -> Dictionary:
 	if profile_world is Dictionary:
 		var seed := int(profile_world.get("world_seed", 217217))
 		request["world_context"] = WorldGenerationContext.new(seed)
+		request["world_seed"] = seed
 		var marker := 11.0 if seed == 4242 else 22.0
 		request["resume_position"] = Vector3(marker, 32.0, -11.5)
 	return {"success": true, "request": request}
