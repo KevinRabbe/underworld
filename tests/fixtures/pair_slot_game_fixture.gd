@@ -1,6 +1,8 @@
 extends Node
 
 const WorldGenerationContext := preload("res://worldgen/pipeline/world_generation_context.gd")
+const WorldDomainSessionState := preload("res://gameplay/world_session/world_domain_session_state.gd")
+const IntegratedGameSaveContract := preload("res://gameplay/persistence/integrated_game_save_contract.gd")
 const SlotFixtures := preload("res://tests/persistence/test_game_save_slot_service.gd")
 
 var prepared_mode: StringName = &""
@@ -39,8 +41,17 @@ func build_save_request() -> Dictionary:
 	var profile_world: Variant = prepared_profile.get("world", null)
 	if profile_world is Dictionary:
 		var seed := int(profile_world.get("world_seed", 217217))
-		request["world_context"] = WorldGenerationContext.new(seed)
-		request["world_seed"] = seed
 		var marker := 11.0 if seed == 4242 else 22.0
-		request["resume_position"] = Vector3(marker, 32.0, -11.5)
+		var recaptured := IntegratedGameSaveContract.capture_v2_request({
+			"world_context": WorldGenerationContext.new(seed),
+			"world_session_state": WorldDomainSessionState.new(WorldDomainSessionState.DOMAIN_OVERWORLD, {}),
+			"delta_store": fixture["delta_store"],
+			"inventory_state": fixture["inventory"],
+			"equipment_state": fixture["equipment"],
+			"pending_loot_states": [],
+			"resume_position": Vector3(marker, 32.0, -11.5),
+			"current_health": 83,
+			"current_stamina": 47.25,
+		})
+		return recaptured
 	return {"success": true, "request": request}

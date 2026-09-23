@@ -39,12 +39,12 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 		failures.append("A/W1 NEW route failed")
 	var save_a1: Dictionary = app.call("save_current_game")
 	if not bool(save_a1.get("success", false)):
-		failures.append("A/W1 SAVE failed")
+		failures.append("A/W1 SAVE failed: " + str(save_a1.get("diagnostics", [])))
 	if not bool(app.call("show_title")) or not bool(app.call("start_new_game", profile_b2)):
 		failures.append("B/W2 NEW route failed")
 	var save_b2: Dictionary = app.call("save_current_game")
 	if not bool(save_b2.get("success", false)):
-		failures.append("B/W2 SAVE failed")
+		failures.append("B/W2 SAVE failed: " + str(save_b2.get("diagnostics", [])))
 	if not bool(app.call("show_title")) or not bool(app.call("start_new_game", profile_a1)):
 		failures.append("existing A/W1 did not route to Continue")
 	else:
