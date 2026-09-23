@@ -304,11 +304,11 @@ func _acquire_promotion_lock(lock_path: String) -> int:
 	var absolute_lock_path := ProjectSettings.globalize_path(lock_path)
 	var result := DirAccess.make_dir_absolute(absolute_lock_path)
 	if result == OK:
-		var token := _new_promotion_lock_token()
-		var owner_result := _write_promotion_lock_owner(lock_path, token)
-		if owner_result == OK:
-			_promotion_lock_tokens[lock_path] = token
-		return owner_result
+		var acquired_token := _new_promotion_lock_token()
+		var acquired_result := _write_promotion_lock_owner(lock_path, acquired_token)
+		if acquired_result == OK:
+			_promotion_lock_tokens[lock_path] = acquired_token
+		return acquired_result
 	if result != ERR_ALREADY_EXISTS:
 		return result
 	var observed_owner := _read_promotion_lock_owner(lock_path)
@@ -322,11 +322,11 @@ func _acquire_promotion_lock(lock_path: String) -> int:
 		return ERR_ALREADY_EXISTS
 	result = DirAccess.make_dir_absolute(absolute_lock_path)
 	if result == OK:
-		var token := _new_promotion_lock_token()
-		var owner_result := _write_promotion_lock_owner(lock_path, token)
-		if owner_result == OK:
-			_promotion_lock_tokens[lock_path] = token
-		return owner_result
+		var reclaimed_token := _new_promotion_lock_token()
+		var reclaimed_result := _write_promotion_lock_owner(lock_path, reclaimed_token)
+		if reclaimed_result == OK:
+			_promotion_lock_tokens[lock_path] = reclaimed_token
+		return reclaimed_result
 	return result
 
 

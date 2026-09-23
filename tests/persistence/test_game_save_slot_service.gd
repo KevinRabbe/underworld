@@ -240,25 +240,6 @@ static func _test_abandoned_promotion_lock_recovers(failures: Array[String]) -> 
 	_cleanup()
 
 
-static func _test_promotion_lock_owner_token_protects_release(failures: Array[String]) -> void:
-	_cleanup()
-	var lock_path := TEST_SLOT + GameSaveSlotService.PROMOTION_LOCK_SUFFIX
-	var first = GameSaveSlotService.new()
-	if first._acquire_promotion_lock(lock_path) != OK:
-		failures.append("owner-token regression could not acquire initial promotion lock")
-		return
-	var replacement_owner := FileAccess.open(lock_path + "/" + GameSaveSlotService.PROMOTION_LOCK_OWNER, FileAccess.WRITE)
-	if replacement_owner == null:
-		failures.append("owner-token regression could not replace on-disk owner")
-		first._release_promotion_lock(lock_path)
-		return
-	replacement_owner.store_string(str(Time.get_unix_time_from_system()) + "\n" + str(OS.get_process_id()) + "\nreplacement-owner")
-	replacement_owner.flush()
-	replacement_owner = null
-	first._release_promotion_lock(lock_path)
-	if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(lock_path)):
-		failures.append("stale owner release removed a replacement owner's lock")
-	_cleanup()
 	var lock_path := TEST_SLOT + GameSaveSlotService.PROMOTION_LOCK_SUFFIX
 	var lock_absolute := ProjectSettings.globalize_path(lock_path)
 	if DirAccess.make_dir_absolute(lock_absolute) != OK:
@@ -306,6 +287,27 @@ static func _test_promotion_lock_owner_token_protects_release(failures: Array[St
 		failures.append("abandoned-lock recovery unexpectedly replaced protected canonical")
 	if _read_text(TEST_SLOT) != protected_before:
 		failures.append("abandoned-lock recovery changed protected canonical bytes")
+	_cleanup()
+
+
+static func _test_promotion_lock_owner_token_protects_release(failures: Array[String]) -> void:
+	_cleanup()
+	var lock_path := TEST_SLOT + GameSaveSlotService.PROMOTION_LOCK_SUFFIX
+	var first = GameSaveSlotService.new()
+	if first._acquire_promotion_lock(lock_path) != OK:
+		failures.append("owner-token regression could not acquire initial promotion lock")
+		return
+	var replacement_owner := FileAccess.open(lock_path + "/" + GameSaveSlotService.PROMOTION_LOCK_OWNER, FileAccess.WRITE)
+	if replacement_owner == null:
+		failures.append("owner-token regression could not replace on-disk owner")
+		first._release_promotion_lock(lock_path)
+		return
+	replacement_owner.store_string(str(Time.get_unix_time_from_system()) + "\n" + str(OS.get_process_id()) + "\nreplacement-owner")
+	replacement_owner.flush()
+	replacement_owner = null
+	first._release_promotion_lock(lock_path)
+	if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(lock_path)):
+		failures.append("stale owner release removed a replacement owner's lock")
 	_cleanup()
 
 
