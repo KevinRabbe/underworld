@@ -73,6 +73,22 @@ static func _read_catalog(path: String) -> Dictionary:
 	result["worlds"] = _sanitize_records(parsed.get("worlds", []), "world_id", ["world_name", "world_seed"])
 	result["last_character_id"] = str(parsed.get("last_character_id", ""))
 	result["last_world_id"] = str(parsed.get("last_world_id", ""))
+	if saved_present == saved_keys.size():
+		result["saved_character_id"] = str(parsed["saved_character_id"])
+		result["saved_world_id"] = str(parsed["saved_world_id"])
+		result["saved_canonical_world_id"] = str(parsed["saved_canonical_world_id"])
+		result["saved_world_seed"] = int(parsed["saved_world_seed"])
+		result["saved_content_fingerprint"] = str(parsed["saved_content_fingerprint"])
+		var saved_values := [result["saved_character_id"], result["saved_world_id"], result["saved_canonical_world_id"], result["saved_content_fingerprint"]]
+		var binding_empty := true
+		for value in saved_values:
+			if not str(value).is_empty():
+				binding_empty = false
+		if not binding_empty:
+			var saved_character = _find(result["characters"], "character_id", result["saved_character_id"])
+			var saved_world = _find(result["worlds"], "world_id", result["saved_world_id"])
+			if saved_character == null or saved_world == null or int(saved_world.get("world_seed", 0)) != result["saved_world_seed"]:
+				return {"exists": true, "success": false, "diagnostic": "Profile catalog saved-pair metadata references unknown identity"}
 	return {"exists": true, "success": true, "catalog": result, "diagnostics": []}
 
 static func create_character(display_name: String, path: String = PATH) -> Dictionary:

@@ -5,6 +5,7 @@ extends Node
 
 var prepared_mode: StringName = &""
 var prepared_candidate: Dictionary = {}
+var prepared_profile: Dictionary = {}
 var gameplay_input_gate: Node = null
 var gate_configured_inside_tree: bool = false
 
@@ -19,11 +20,12 @@ func configure_gameplay_input_gate(gate: Node) -> bool:
 	return true
 
 
-func prepare_new_game() -> bool:
+func prepare_new_game(profile: Dictionary = {}) -> bool:
 	if is_inside_tree() or gameplay_input_gate == null or reject_new_preparation:
 		return false
 	prepared_mode = &"new"
 	prepared_candidate.clear()
+	prepared_profile = profile.duplicate(true)
 	return true
 
 
@@ -33,3 +35,7 @@ func prepare_continue(candidate: Dictionary) -> bool:
 	prepared_mode = &"continue"
 	prepared_candidate = candidate.duplicate(true)
 	return true
+
+
+func build_save_request() -> Dictionary:
+	return {"success": true, "request": {}}
