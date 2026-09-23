@@ -5,8 +5,19 @@ const Catalog := preload("res://gameplay/persistence/profile_catalog.gd")
 static func run() -> Array[String]:
 	var failures: Array[String] = []
 	var path := "user://profile_catalog_contract.json"
-	if FileAccess.file_exists(path):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	for stale_path in [
+		path,
+		"user://profile_catalog_legacy_migration.json",
+		"user://profile_catalog_rejected_legacy.json",
+		"user://profile_catalog_old_schema.json",
+		"user://profile_catalog_corrupt.json",
+		"user://profile_catalog_invalid_schema.json",
+		"user://profile_catalog_recovery.json",
+		"user://profile_catalog_binding_failure.json",
+		"user://profile_catalog_invalid_backup.json",
+		"user://profile_catalog_corrupt_binding.json"
+	]:
+		_clear_path_and_transients(stale_path)
 	var character := Catalog.create_character("Test Survivor", path)
 	_expect(failures, "character creation succeeds", bool(character.get("success", false)))
 	var world := Catalog.create_world("Test World", 424242, path)
@@ -130,3 +141,10 @@ static func run() -> Array[String]:
 static func _expect(failures: Array[String], label: String, condition: bool) -> void:
 	if not condition:
 		failures.append(label)
+
+static func _clear_path_and_transients(path: String) -> void:
+	for candidate in [path, path + ".candidate", path + ".backup"]:
+		if FileAccess.file_exists(candidate):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(candidate))
+		elif DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(candidate)):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(candidate))
