@@ -18,6 +18,16 @@ static func load_catalog(path: String = PATH) -> Dictionary:
 		return _failure("Profile catalog is malformed JSON")
 	if str(parsed.get("schema", "")) != SCHEMA:
 		return _failure("Profile catalog schema is unsupported")
+	if not parsed.get("characters", null) is Array or not parsed.get("worlds", null) is Array:
+		return _failure("Profile catalog schema has invalid record collections")
+	if not _records_valid(parsed["characters"], "character_id", ["display_name"]):
+		return _failure("Profile catalog contains invalid character records")
+	if not _records_valid(parsed["worlds"], "world_id", ["world_name", "world_seed"]):
+		return _failure("Profile catalog contains invalid world records")
+	if parsed.has("last_character_id") and not parsed["last_character_id"] is String:
+		return _failure("Profile catalog has invalid last character selection")
+	if parsed.has("last_world_id") and not parsed["last_world_id"] is String:
+		return _failure("Profile catalog has invalid last world selection")
 	var result := _empty()
 	result["characters"] = _sanitize_records(parsed.get("characters", []), "character_id", ["display_name"])
 	result["worlds"] = _sanitize_records(parsed.get("worlds", []), "world_id", ["world_name", "world_seed"])
@@ -102,6 +112,20 @@ static func _sanitize_records(raw: Variant, id_key: String, required: Array) -> 
 		if valid:
 			result.append(value.duplicate(true))
 	return result
+
+static func _records_valid(raw: Array, id_key: String, required: Array) -> bool:
+	for value in raw:
+		if not value is Dictionary or not value.has(id_key) or not value[id_key] is String or str(value[id_key]).is_empty():
+			return false
+		for key in required:
+			if not value.has(key):
+				return false
+			if key == "world_seed":
+				if not value[key] is int:
+					return false
+			elif not value[key] is String or str(value[key]).is_empty():
+				return false
+	return true
 
 static func _find(records: Array, key: String, value: String):
 	for record in records:

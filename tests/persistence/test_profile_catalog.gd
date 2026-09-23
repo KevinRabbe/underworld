@@ -27,8 +27,19 @@ static func run() -> Array[String]:
 	var preserved := FileAccess.open(corrupt_path, FileAccess.READ)
 	_expect(failures, "corrupt catalog remains preserved", preserved != null and preserved.get_as_text() == "{not-json")
 	preserved = null
+	var invalid_schema_path := "user://profile_catalog_invalid_schema.json"
+	var invalid_schema_file := FileAccess.open(invalid_schema_path, FileAccess.WRITE)
+	invalid_schema_file.store_string(JSON.stringify({"schema": "underworld.profile-catalog.v1", "characters": {}, "worlds": []}))
+	invalid_schema_file = null
+	var invalid_schema_result := Catalog.create_world("Must Not Replace", 9, invalid_schema_path)
+	_expect(failures, "invalid catalog schema create fails closed", not bool(invalid_schema_result.get("success", false)))
+	var invalid_preserved := FileAccess.open(invalid_schema_path, FileAccess.READ)
+	_expect(failures, "invalid catalog schema remains preserved", invalid_preserved != null and str(JSON.parse_string(invalid_preserved.get_as_text()).get("characters", null)) == "{}")
+	invalid_preserved = null
 	if FileAccess.file_exists(corrupt_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(corrupt_path))
+	if FileAccess.file_exists(invalid_schema_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(invalid_schema_path))
 	if FileAccess.file_exists(path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	return failures
