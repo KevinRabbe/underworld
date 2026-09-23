@@ -262,6 +262,27 @@ static func run_runtime(tree: SceneTree) -> Array[String]:
 	_expect(failures, "B activates production build tool", player.get("build_tool_active") == true)
 	var building_runtime = survival.call("get_building_runtime") if survival != null else null
 	var building_before: Dictionary = building_runtime.durable_snapshot() if building_runtime != null else {}
+	var workbench_position := Vector3.INF
+	var workbench_radius := -1.0
+	if building_runtime != null and building_runtime.has_method("workbench_position"):
+		workbench_position = building_runtime.call("workbench_position")
+		var constants: Dictionary = building_runtime.get_script().get_script_constant_map() if building_runtime.get_script() != null else {}
+		workbench_radius = float(constants.get("WORKBENCH_INTERACT_RADIUS", -1.0))
+		if workbench_position != Vector3.INF and workbench_radius > 0.0:
+			# The tree probe temporarily teleports the player. Re-enter the real
+			# composed Workbench's legal interaction envelope before sending G.
+			player.global_position = workbench_position
+			await _wait_physics(tree, 2)
+			var workbench_distance: float = player.global_position.distance_to(workbench_position)
+			if workbench_distance > workbench_radius:
+				player.global_position = workbench_position
+				await _wait_physics(tree, 1)
+				workbench_distance = player.global_position.distance_to(workbench_position)
+			_expect(failures, "player setup is within composed workbench interaction radius", workbench_distance <= workbench_radius)
+		else:
+			failures.append("BLOCKED: composed workbench position/radius is invalid")
+	else:
+		failures.append("BLOCKED: composed building runtime did not expose workbench position/radius")
 	var wood_before: int = inventory.quantity_of("item.resource.wood") if inventory != null else -1
 	var stone_before: int = inventory.quantity_of("item.resource.stone") if inventory != null else -1
 	await _tap_key(tree, KEY_G)
