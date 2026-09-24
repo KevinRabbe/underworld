@@ -2,66 +2,66 @@
   {
     "height": 0.1,
     "reference_width": 70,
-    "result_width": 1024
+    "result_width": 84
   },
   {
     "height": 0.18,
     "reference_width": 70,
-    "result_width": 1024
+    "result_width": 80
   },
   {
     "height": 0.25,
     "reference_width": 73,
-    "result_width": 1024
+    "result_width": 117
   },
   {
     "height": 0.35,
     "reference_width": 70,
-    "result_width": 1024
+    "result_width": 113
   },
   {
     "height": 0.43,
     "reference_width": 33,
-    "result_width": 1024
+    "result_width": 97
   },
   {
     "height": 0.5,
     "reference_width": 24,
-    "result_width": 1024
+    "result_width": 123
   },
   {
     "height": 0.55,
     "reference_width": 50,
-    "result_width": 1024
+    "result_width": 92
   },
   {
     "height": 0.62,
     "reference_width": null,
-    "result_width": 1024
+    "result_width": 99
   },
   {
     "height": 0.72,
     "reference_width": 83,
-    "result_width": 1024
+    "result_width": 75
   },
   {
     "height": 0.76,
     "reference_width": 84,
-    "result_width": 1024
+    "result_width": 82
   },
   {
     "height": 0.83,
     "reference_width": 86,
-    "result_width": 1024
+    "result_width": 65
   },
   {
     "height": 0.89,
     "reference_width": 89,
-    "result_width": 1024
+    "result_width": 99
   },
   {
     "height": 0.95,
     "reference_width": null,
-    "result_width": 1024
+    "result_width": null
   }
 ]
