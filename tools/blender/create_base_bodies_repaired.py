@@ -253,11 +253,11 @@ def build_male_topology():
         if 0.13 <= abs(x) <= 0.25 and 0.34 <= z <= 0.56:
             knee = math.exp(-(((abs(x) - 0.195) / 0.075) ** 2) - (((z - 0.455) / 0.090) ** 2))
             if y < 0.12:
-                vertex.co.y -= 0.024 * knee
+                vertex.co.y -= 0.034 * knee
             vertex.co.x += (1.0 if x >= 0.0 else -1.0) * 0.009 * knee
         if 0.13 <= abs(x) <= 0.24 and 0.10 <= z <= 0.40:
             calf = math.exp(-(((abs(x) - 0.195) / 0.080) ** 2) - (((z - 0.285) / 0.145) ** 2))
-            vertex.co.y += 0.009 * calf
+            vertex.co.y += 0.014 * calf
             vertex.co.x += (1.0 if x >= 0.0 else -1.0) * 0.005 * calf
         if 0.11 <= abs(x) <= 0.25 and 0.70 <= z <= 0.99:
             hip = math.exp(-(((abs(x) - 0.185) / 0.100) ** 2) - (((z - 0.835) / 0.145) ** 2))
@@ -271,9 +271,9 @@ def build_male_topology():
             quad = math.exp(-(((abs(x) - 0.185) / 0.085) ** 2) - (((z - 0.675) / 0.190) ** 2))
             hamstring = math.exp(-(((abs(x) - 0.185) / 0.090) ** 2) - (((z - 0.665) / 0.180) ** 2))
             if y < 0.03:
-                vertex.co.y -= 0.012 * quad
+                vertex.co.y -= 0.017 * quad
             elif y > 0.10:
-                vertex.co.y += 0.010 * hamstring
+                vertex.co.y += 0.014 * hamstring
         if abs(x) <= 0.27 and z <= 0.15 and -0.16 <= y <= 0.13:
             heel = math.exp(-(((y - 0.050) / 0.070) ** 2) - (((z - 0.085) / 0.055) ** 2))
             instep = math.exp(-(((y + 0.018) / 0.075) ** 2) - (((z - 0.105) / 0.050) ** 2))
