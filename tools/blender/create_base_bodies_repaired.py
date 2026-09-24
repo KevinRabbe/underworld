@@ -181,6 +181,9 @@ def build_male_topology():
             vertex.co.x += (1.0 if x >= 0.0 else -1.0) * 0.007 * shoulder_trap
             if y < 0.12:
                 vertex.co.y -= 0.010 * shoulder_trap
+        if y < 0.05 and 0.035 <= abs(x) <= 0.19 and 1.50 <= z <= 1.62:
+            clavicle = math.exp(-(((abs(x) - 0.105) / 0.090) ** 2) - (((z - 1.565) / 0.055) ** 2))
+            vertex.co.y += 0.008 * clavicle
         if abs(x) > 0.76 and 0.98 <= z <= 1.12:
             side = 1.0 if x >= 0.0 else -1.0
             palm = math.exp(-(((abs(x) - 0.84) / 0.095) ** 2) - (((z - 1.05) / 0.075) ** 2))
