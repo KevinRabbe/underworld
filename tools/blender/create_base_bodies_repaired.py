@@ -83,9 +83,11 @@ def assign_smooth_weights(mesh):
 def _ring_surface(verts, faces, rings, sides=16, cap_start=True, cap_end=True):
     """Append a deterministic quad-ring surface from (center, rx, ry) rings."""
     start=len(verts)
-    for z,cx,cy,rx,ry in rings:
+    for ring in rings:
+        z,cx,cy,rx,ry = ring[:5]; front_bias = ring[5] if len(ring) > 5 else 0.0; back_bias = ring[6] if len(ring) > 6 else 0.0
         for i in range(sides):
-            a=2.0*math.pi*i/sides; verts.append((cx+rx*math.cos(a), cy+ry*math.sin(a), z))
+            a=2.0*math.pi*i/sides; sy=math.sin(a); bias=front_bias if sy < 0 else back_bias
+            verts.append((cx+rx*math.cos(a), cy+(ry+bias)*sy, z))
     for r in range(len(rings)-1):
         for i in range(sides):
             a=start+r*sides+i; b=start+r*sides+(i+1)%sides; c=start+(r+1)*sides+(i+1)%sides; d=start+(r+1)*sides+i; faces.append((a,b,c,d))
@@ -109,7 +111,7 @@ def _segment_surface(verts, faces, points, radii, sides=10, cap_start=True, cap_
 def build_male_topology():
     verts=[]; faces=[]
     # Torso cage: broad chest, explicit abdomen and a real chest-to-waist taper.
-    _ring_surface(verts,faces,[(0.48,0,.08,.205,.120),(0.56,0,.08,.225,.135),(0.66,0,.08,.220,.130),(0.76,0,.08,.180,.115),(0.84,0,.08,.205,.130),(0.96,0,.08,.220,.140),(1.08,0,.08,.175,.105),(1.20,0,.08,.180,.108),(1.32,0,.08,.205,.120),(1.44,0,.08,.270,.145),(1.54,0,.08,.285,.140),(1.61,0,.08,.205,.105),(1.68,0,.08,.120,.090),(1.73,0,.08,.085,.075)],16,True,True)
+    _ring_surface(verts,faces,[(0.48,0,.08,.205,.120),(0.56,0,.08,.225,.135),(0.66,0,.08,.220,.130),(0.76,0,.08,.180,.115),(0.84,0,.08,.205,.130),(0.96,0,.08,.220,.140),(1.08,0,.08,.175,.105),(1.20,0,.08,.180,.108),(1.32,0,.08,.205,.120,.012,.004),(1.44,0,.08,.270,.145,.032,.012),(1.54,0,.08,.285,.140,.024,.010),(1.61,0,.08,.205,.105,.010,.006),(1.68,0,.08,.120,.090),(1.73,0,.08,.085,.075)],16,True,True)
     _ring_surface(verts,faces,[(1.70,0,.08,.085,.068),(1.77,0,.08,.105,.080),(1.88,0,.08,.102,.086),(1.96,0,.08,.080,.070),(2.00,0,.08,.030,.030)],14,True,True)
     # Arms: shoulder, elbow and wrist landmarks are explicit rings, not tubes.
     for s in (-1,1):
