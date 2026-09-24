@@ -63,5 +63,7 @@ for gender in ("male", "female"):
         for x,y in chosen: ap[x,y]=255
         b=alpha.getbbox(); pad=3; b=(max(0,b[0]-pad),max(0,b[1]-pad),min(crop.width,b[2]+pad),min(crop.height,b[3]+pad))
         clean=crop.crop(b); alpha=alpha.crop(b)
-        canvas=Image.new("RGB",(clean.width,clean.height),(58,58,58)); canvas.paste(clean,(0,0),alpha)
-        canvas.save(OUT/f"validated_reference_{gender}_{view}.png")
+        # Keep the raw photographic crop intact. The component alpha is only a
+        # validation/alignment artifact and is never used as the body image.
+        clean.save(OUT/f"validated_reference_raw_{gender}_{view}.png")
+        alpha.save(OUT/f"validated_component_mask_{gender}_{view}.png")
