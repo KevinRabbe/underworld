@@ -150,14 +150,14 @@ def build_male_topology():
         if y < 0.02:
             if 1.30 <= z <= 1.54:
                 pectoral = math.exp(-(((abs(x) - 0.090) / 0.095) ** 2) - (((z - 1.435) / 0.125) ** 2))
-                vertex.co.y -= 0.110 * pectoral
+                vertex.co.y -= 0.135 * pectoral
             if 1.08 <= z <= 1.36:
                 abdomen = math.exp(-((x / 0.145) ** 2) - (((z - 1.225) / 0.145) ** 2))
-                vertex.co.y -= 0.040 * abdomen
+                vertex.co.y -= 0.052 * abdomen
                 sternum = math.exp(-((x / 0.030) ** 2) - (((z - 1.405) / 0.165) ** 2))
                 vertex.co.y += 0.012 * sternum
                 oblique = math.exp(-(((abs(x) - 0.105) / 0.060) ** 2) - (((z - 1.205) / 0.120) ** 2))
-                vertex.co.y -= 0.018 * oblique
+                vertex.co.y -= 0.024 * oblique
                 ab_line_upper = math.exp(-((x / 0.115) ** 2) - (((z - 1.285) / 0.015) ** 2))
                 ab_line_lower = math.exp(-((x / 0.105) ** 2) - (((z - 1.185) / 0.015) ** 2))
                 vertex.co.y += 0.006 * (ab_line_upper + ab_line_lower)
