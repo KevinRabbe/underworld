@@ -34,8 +34,12 @@ def components(mask):
 for gender in ("male", "female"):
     source=Image.open(SOURCES[gender]).convert("RGB")
     for view in ("front", "side"):
-        crop=source.crop(BOXES[(gender,view)]); gray=crop.convert("L")
-        mask=gray.point(lambda p: 255 if p>=48 else 0).filter(ImageFilter.MaxFilter(3))
+        crop=source.crop(BOXES[(gender,view)]); rgb=crop.load(); mask=Image.new("L",crop.size,0); mp=mask.load()
+        for yy in range(crop.height):
+            for xx in range(crop.width):
+                rr,gg,bb=rgb[xx,yy]
+                if max(rr,gg,bb)-min(rr,gg,bb)>=14 and max(rr,gg,bb)>=48: mp[xx,yy]=255
+        mask=mask.filter(ImageFilter.MaxFilter(3))
         comps=components(mask); viable=[]
         for c in comps:
             ys=[p[1] for p in c]; xs=[p[0] for p in c]; height=max(ys)-min(ys)+1
