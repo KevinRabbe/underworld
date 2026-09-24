@@ -288,6 +288,11 @@ def build_male_topology():
         if 0.55 <= v.co.z <= 1.02 and 0.09 <= abs(v.co.x) <= 0.28:
             hip_group.add([v.index], 1.0, "REPLACE")
     hip_relax=obj.modifiers.new("MaleHipTransitionRelaxation","SMOOTH"); hip_relax.factor=0.32; hip_relax.iterations=1; hip_relax.vertex_group=hip_group.name
+    shoulder_group=obj.vertex_groups.new(name="MaleShoulderTransitionRelax")
+    for v in obj.data.vertices:
+        if 1.28 <= v.co.z <= 1.60 and 0.18 <= abs(v.co.x) <= 0.58:
+            shoulder_group.add([v.index], 1.0, "REPLACE")
+    shoulder_relax=obj.modifiers.new("MaleShoulderTransitionRelaxation","SMOOTH"); shoulder_relax.factor=0.26; shoulder_relax.iterations=1; shoulder_relax.vertex_group=shoulder_group.name
     smooth=obj.modifiers.new("MaleTopologySubdivision","SUBSURF"); smooth.subdivision_type='CATMULL_CLARK'; smooth.levels=1; smooth.render_levels=1
     armature=make_armature("MaleBaseBody"); assign_smooth_weights(obj); mod=obj.modifiers.new("SharedHumanoidRig","ARMATURE"); mod.object=armature; obj.parent=armature; return obj,armature
 
