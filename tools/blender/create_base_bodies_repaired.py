@@ -283,6 +283,11 @@ def build_male_topology():
     obj.data.update()
     for poly in obj.data.polygons: poly.use_smooth=True
     relax=obj.modifiers.new("MaleSurfaceRelaxation","SMOOTH"); relax.factor=0.20; relax.iterations=2
+    hip_group=obj.vertex_groups.new(name="MaleHipTransitionRelax")
+    for v in obj.data.vertices:
+        if 0.55 <= v.co.z <= 1.02 and 0.09 <= abs(v.co.x) <= 0.28:
+            hip_group.add([v.index], 1.0, "REPLACE")
+    hip_relax=obj.modifiers.new("MaleHipTransitionRelaxation","SMOOTH"); hip_relax.factor=0.32; hip_relax.iterations=1; hip_relax.vertex_group=hip_group.name
     smooth=obj.modifiers.new("MaleTopologySubdivision","SUBSURF"); smooth.subdivision_type='CATMULL_CLARK'; smooth.levels=1; smooth.render_levels=1
     armature=make_armature("MaleBaseBody"); assign_smooth_weights(obj); mod=obj.modifiers.new("SharedHumanoidRig","ARMATURE"); mod.object=armature; obj.parent=armature; return obj,armature
 
