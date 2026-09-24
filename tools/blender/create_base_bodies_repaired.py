@@ -82,12 +82,12 @@ def assign_smooth_weights(mesh):
 
 def build_body(kind):
     male = kind == "male"
-    shoulder = 0.240 if male else 0.205
-    rib_x, rib_y = (0.250, 0.145) if male else (0.205, 0.130)
-    waist_x, waist_y = (0.190, 0.110) if male else (0.170, 0.100)
-    pelvis_x, pelvis_y = (0.210, 0.140) if male else (0.230, 0.150)
+    shoulder = 0.300 if male else 0.255
+    rib_x, rib_y = (0.310, 0.160) if male else (0.260, 0.145)
+    waist_x, waist_y = (0.230, 0.125) if male else (0.210, 0.115)
+    pelvis_x, pelvis_y = (0.250, 0.155) if male else (0.290, 0.170)
     arm = 0.070 if male else 0.058
-    thigh = 0.115 if male else 0.112
+    thigh = 0.140 if male else 0.135
     neck_radius = 0.092 if male else 0.073
     head_radius = 0.108 if male else 0.105
     # Deliberately separate anatomical masses: ribcage -> waist -> pelvis.
