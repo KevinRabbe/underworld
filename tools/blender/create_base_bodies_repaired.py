@@ -233,6 +233,14 @@ def build_male_topology():
             calf = math.exp(-(((abs(x) - 0.195) / 0.080) ** 2) - (((z - 0.285) / 0.145) ** 2))
             vertex.co.y += 0.009 * calf
             vertex.co.x += (1.0 if x >= 0.0 else -1.0) * 0.005 * calf
+        if 0.11 <= abs(x) <= 0.25 and 0.70 <= z <= 0.99:
+            hip = math.exp(-(((abs(x) - 0.185) / 0.100) ** 2) - (((z - 0.835) / 0.145) ** 2))
+            side = 1.0 if x >= 0.0 else -1.0
+            vertex.co.x += side * 0.008 * hip
+            if y < 0.04:
+                vertex.co.y -= 0.008 * hip
+            elif y > 0.10:
+                vertex.co.y += 0.012 * hip
         if 0.12 <= abs(x) <= 0.25 and 0.48 <= z <= 0.86:
             quad = math.exp(-(((abs(x) - 0.185) / 0.085) ** 2) - (((z - 0.675) / 0.190) ** 2))
             hamstring = math.exp(-(((abs(x) - 0.185) / 0.090) ** 2) - (((z - 0.665) / 0.180) ** 2))
