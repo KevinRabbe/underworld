@@ -21,6 +21,7 @@ static func run(tree: SceneTree) -> Array[String]:
 	_test_faceted_compiler_contract(failures)
 	_test_unarmored_character_creation_contract(failures)
 	_test_runtime_presentation(failures)
+	_test_production_body_skin_rebind(failures)
 	_test_player_default(tree, failures)
 	return failures
 
@@ -61,6 +62,10 @@ static func _test_definition_contract(failures: Array[String]) -> void:
 	_expect_true(failures, "anatomy variants preserve presentation height", is_equal_approx(slim_variant.faceted_body_profile.height, 1.8) and is_equal_approx(heavy_variant.faceted_body_profile.height, 1.8))
 	var male_variant = BaselineFactory.build_variant("male")
 	var female_variant = BaselineFactory.build_variant("female")
+	_expect_equal(failures, "male production body is Blender-authored and repository-integrated", male_variant.production_body_scene_path, "res://content/characters/base_meshes/underworld_male_base_body.glb")
+	_expect_equal(failures, "female production body is Blender-authored and repository-integrated", female_variant.production_body_scene_path, "res://content/characters/base_meshes/underworld_female_base_body.glb")
+	_expect_true(failures, "Blender male base mesh source and export exist", FileAccess.file_exists("res://content/characters/base_meshes/underworld_base_bodies.blend") and FileAccess.file_exists(male_variant.production_body_scene_path))
+	_expect_true(failures, "Blender female base mesh export exists", FileAccess.file_exists(female_variant.production_body_scene_path))
 	_expect_true(failures, "male and female body foundations validate", male_variant.validate_definition().is_empty() and female_variant.validate_definition().is_empty())
 	_expect_true(failures, "male and female bodies are visibly distinct presentation profiles", male_variant.canonical_fingerprint() != female_variant.canonical_fingerprint() and male_variant.faceted_body_profile.canonical_fingerprint() != female_variant.faceted_body_profile.canonical_fingerprint())
 	_expect_equal(failures, "male and female bodies share the humanoid rig contract", male_variant.rig_profile_id, female_variant.rig_profile_id)
@@ -371,6 +376,38 @@ static func _test_runtime_presentation(failures: Array[String]) -> void:
 	character.free()
 
 
+static func _test_production_body_skin_rebind(failures: Array[String]) -> void:
+	for variant_id in ["male", "female"]:
+		var definition = BaselineFactory.build_variant(variant_id)
+		var presentation := VoxelPresentation.new(definition)
+		presentation.build()
+		var body: MeshInstance3D = presentation.production_body_mesh
+		_expect_true(failures, "%s production body realizes from GLB at runtime" % variant_id, body != null)
+		var gltf_document := GLTFDocument.new()
+		var gltf_state := GLTFState.new()
+		var parse_error := gltf_document.append_from_file(str(definition.production_body_scene_path), gltf_state)
+		var imported_root: Node = gltf_document.generate_scene(gltf_state) if parse_error == OK else null
+		var imported_meshes: Array[Node] = []
+		if imported_root != null:
+			imported_meshes.assign(imported_root.find_children("*", "MeshInstance3D", true, false))
+		var imported_mesh: MeshInstance3D = imported_meshes[0] if not imported_meshes.is_empty() else null
+		var imported_skeletons: Array[Node] = []
+		if imported_root != null:
+			imported_skeletons.assign(imported_root.find_children("*", "Skeleton3D", true, false))
+		var imported_skeleton: Skeleton3D = imported_skeletons[0] if not imported_skeletons.is_empty() else null
+		var imported_skin: Skin = imported_mesh.skin if imported_mesh != null else null
+		_expect_true(failures, "%s GLB exposes an imported skin and skeleton" % variant_id, imported_skin != null and imported_skeleton != null)
+		if body != null and imported_skin != null and imported_skeleton != null:
+			_expect_equal(failures, "%s preserves every imported bind index" % variant_id, body.skin.get_bind_count(), imported_skin.get_bind_count())
+			for bind_index in range(imported_skin.get_bind_count()):
+				var imported_bone := imported_skeleton.get_bone_name(imported_skin.get_bind_bone(bind_index))
+				var expected_production_bone := presentation.skeleton.find_bone(imported_bone)
+				_expect_equal(failures, "%s remaps bind %d by bone name" % [variant_id, bind_index], body.skin.get_bind_bone(bind_index), expected_production_bone)
+		if imported_root != null:
+			imported_root.free()
+		presentation.free()
+
+
 static func _test_player_default(tree: SceneTree, failures: Array[String]) -> void:
 	if tree == null or tree.root == null:
 		failures.append("voxel player fixture requires SceneTree")
@@ -391,11 +428,11 @@ static func _test_player_default(tree: SceneTree, failures: Array[String]) -> vo
 	_expect_equal(failures, "Player owns exactly one character presentation", visual_root.get_child_count(), 1)
 	var visual_bounds: AABB = voxel_character.realized_visual_bounds()
 	_expect_true(failures, "voxel feet align with Player ground origin (got %.3f)" % visual_bounds.position.y, visual_bounds.position.y >= -0.15 and visual_bounds.position.y <= 0.05)
-	_expect_true(failures, "faceted survivor fills the gameplay capsule height (got %.3f)" % visual_bounds.end.y, visual_bounds.end.y >= 1.65 and visual_bounds.end.y <= 1.95)
+	_expect_true(failures, "production survivor fills the gameplay capsule height (got %.3f)" % visual_bounds.end.y, visual_bounds.end.y >= 1.65 and visual_bounds.end.y <= 2.0)
 	voxel_character.reset_pose()
 	var reset_bounds: AABB = voxel_character.realized_visual_bounds()
 	_expect_true(failures, "reset pose keeps voxel feet at ground origin (got %.3f)" % reset_bounds.position.y, reset_bounds.position.y >= -0.15 and reset_bounds.position.y <= 0.05)
-	_expect_true(failures, "reset pose keeps full faceted survivor height (got %.3f)" % reset_bounds.end.y, reset_bounds.end.y >= 1.65 and reset_bounds.end.y <= 1.95)
+	_expect_true(failures, "reset pose keeps full production survivor height (got %.3f)" % reset_bounds.end.y, reset_bounds.end.y >= 1.65 and reset_bounds.end.y <= 2.0)
 	var tool_root: Node3D = voxel_character.get_tool_visual_root()
 	_expect_true(failures, "equipped tool uses semantic hand socket", tool_root != null and tool_root.get_parent() == voxel_character.get_socket(&"hand_r"))
 	_expect_true(failures, "equipped axe realizes voxel modules", tool_root != null and tool_root.find_children("VoxelHeld*", "MeshInstance3D", true, false).size() == 2)

@@ -32,6 +32,7 @@ var animation_tree: AnimationTree
 var current_animation_state: StringName = &"idle"
 var death_pose_active: bool = false
 var faceted_body_mesh: MeshInstance3D
+var production_body_mesh: MeshInstance3D
 var locomotion_point_indices: Dictionary = {}
 
 
@@ -135,7 +136,9 @@ func _build_presentation_visuals() -> void:
 			for diagnostic in faceted_data.diagnostics:
 				push_error("Faceted survivor: %s" % diagnostic)
 		else:
-			_realize_faceted_body(faceted_data)
+			var production_realized := _try_realize_production_body()
+			if not production_realized:
+				_realize_faceted_body(faceted_data)
 			totals["parts"] += 1
 			totals["triangles"] += int(faceted_data.metrics.get("triangles", 0))
 			totals["vertices"] += int(faceted_data.metrics.get("vertices", 0))
@@ -200,6 +203,70 @@ func _realize_faceted_body(mesh_data) -> void:
 	for bone_index in range(skeleton.get_bone_count()):
 		skin.add_bind(bone_index, skeleton.get_bone_global_rest(bone_index).affine_inverse())
 	faceted_body_mesh.skin = skin
+
+
+func _try_realize_production_body() -> bool:
+	var scene_path := str(character_definition.production_body_scene_path)
+	if scene_path.is_empty() or not FileAccess.file_exists(scene_path):
+		return false
+	var gltf_document := GLTFDocument.new()
+	var gltf_state := GLTFState.new()
+	var parse_error := gltf_document.append_from_file(scene_path, gltf_state)
+	if parse_error != OK:
+		push_warning("Blender body asset could not be parsed: %s (%s)" % [scene_path, error_string(parse_error)])
+		return false
+	var imported_root := gltf_document.generate_scene(gltf_state)
+	if imported_root == null:
+		push_warning("Blender body asset produced no runtime scene: %s" % scene_path)
+		return false
+	var meshes := imported_root.find_children("*", "MeshInstance3D", true, false)
+	if meshes.is_empty():
+		imported_root.queue_free()
+		push_warning("Blender body asset has no MeshInstance3D: %s" % scene_path)
+		return false
+	var imported_mesh: MeshInstance3D = meshes[0]
+	var imported_skin: Skin = imported_mesh.skin
+	var imported_skeleton: Skeleton3D = null
+	if imported_skin != null:
+		var imported_skeleton_path := imported_mesh.skeleton
+		if not imported_skeleton_path.is_empty():
+			imported_skeleton = imported_mesh.get_node_or_null(imported_skeleton_path) as Skeleton3D
+		if imported_skeleton == null:
+			var imported_skeletons := imported_root.find_children("*", "Skeleton3D", true, false)
+			if not imported_skeletons.is_empty():
+				imported_skeleton = imported_skeletons[0] as Skeleton3D
+	if imported_skin == null or imported_skeleton == null:
+		imported_root.queue_free()
+		push_warning("Blender body asset has no importable skin/skeleton: %s" % scene_path)
+		return false
+	var production_skin := Skin.new()
+	for bind_index in range(imported_skin.get_bind_count()):
+		var imported_bone_index := imported_skin.get_bind_bone(bind_index)
+		if imported_bone_index < 0 or imported_bone_index >= imported_skeleton.get_bone_count():
+			imported_root.queue_free()
+			push_warning("Blender body asset has invalid imported bind %d: %s" % [bind_index, scene_path])
+			return false
+		var imported_bone_name := imported_skeleton.get_bone_name(imported_bone_index)
+		var production_bone_index := skeleton.find_bone(imported_bone_name)
+		if production_bone_index < 0:
+			imported_root.queue_free()
+			push_warning("Blender body asset bone %s is absent from the production rig: %s" % [imported_bone_name, scene_path])
+			return false
+		# Preserve the imported bind index. Vertex weights reference this index;
+		# only its target production bone changes.
+		production_skin.add_bind(production_bone_index, skeleton.get_bone_global_rest(production_bone_index).affine_inverse())
+	imported_mesh.get_parent().remove_child(imported_mesh)
+	imported_root.queue_free()
+	production_body_mesh = imported_mesh
+	production_body_mesh.name = "BlenderBaseBody"
+	add_child(production_body_mesh)
+	# Rebind by imported bind index -> imported bone name -> production bone.
+	# The production Skeleton3D remains authoritative for animation and sockets,
+	# while vertex weights retain the indices authored in the GLB.
+	production_body_mesh.skeleton = NodePath("../Skeleton3D")
+	production_body_mesh.skin = production_skin
+	production_body_mesh.scale = Vector3.ONE * character_definition.presentation_scale
+	return true
 
 
 func _build_presentation_face_details() -> void:

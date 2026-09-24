@@ -19,6 +19,10 @@ const REQUIRED_SLOTS: Array[StringName] = [
 @export var allow_unarmored_faceted_body: bool = false
 @export var faceted_hair_id: String = "hair.frontier.short"
 @export var use_faceted_body: bool = false
+## Blender-authored production body scene. It is bound to the existing shared
+## humanoid Skeleton3D at the presentation seam, with the procedural faceted
+## body retained as a deterministic fallback when unavailable.
+@export_file("*.glb") var production_body_scene_path: String = ""
 
 
 func validate_definition() -> Array[String]:
@@ -92,6 +96,7 @@ func canonical_fingerprint() -> String:
 		faceted_body_profile.canonical_fingerprint() if faceted_body_profile != null else "<no-faceted-body-profile>",
 		faceted_outfit_definition.canonical_fingerprint() if faceted_outfit_definition != null else "<no-faceted-outfit>",
 		faceted_hair_id,
+		production_body_scene_path,
 		"faceted=%s" % str(use_faceted_body),
 		"unarmored=%s" % str(allow_unarmored_faceted_body),
 		";".join(module_fingerprints),
