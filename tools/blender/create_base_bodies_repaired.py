@@ -99,21 +99,25 @@ def build_body(kind):
         add_uv("Waist", (0, 0.08, 1.135), (waist_x, waist_y, 0.110)),
         add_uv("Pelvis", (0, 0.08, 1.005), (pelvis_x, pelvis_y, 0.130)),
         add_uv("GlutealMass", (0, 0.145, 0.96), (pelvis_x * 0.88, 0.075 if male else 0.090, 0.115)),
-        add_uv("HeadCranium", (0, 0.085, 1.85), (head_radius, 0.098, 0.095)),
-        add_uv("HeadJaw", (0, 0.015, 1.775), (head_radius * 0.78, 0.078, 0.072)),
-        add_uv("FaceBlock", (0, -0.045, 1.815), (head_radius * 0.45, 0.040, 0.075)),
+        add_uv("HeadCranium", (0, 0.065, 1.85), (head_radius, 0.094, 0.098)),
+        add_uv("UpperFace", (0, -0.030, 1.815), (head_radius * 0.56, 0.040, 0.070)),
+        add_uv("Jaw", (0, -0.010, 1.755), (head_radius * (0.74 if male else 0.70), 0.054, 0.056)),
+        add_uv("Chin", (0, -0.045, 1.725), (head_radius * (0.40 if male else 0.36), 0.029, 0.025)),
         add_tapered("Neck", (0, 0.08, 1.57), (0, 0.08, 1.70), neck_radius, neck_radius * 0.83),
     ]
     for side in (-1,1):
         parts += [
+            add_uv("Trap", (side * (0.112 if male else 0.098), 0.095 if male else 0.088, 1.565), (0.112 if male else 0.098, 0.058 if male else 0.050, 0.062 if male else 0.052)),
+            add_uv("ClavicleBridge", (side * (0.125 if male else 0.11), 0.005, 1.525), (0.125 if male else 0.11, 0.040 if male else 0.035, 0.030 if male else 0.027)),
             add_uv("Deltoid", (side * shoulder, 0.08, 1.48), (0.070 if male else 0.055, 0.080 if male else 0.070, 0.075 if male else 0.065)),
             add_tapered("UpperArm", (side * shoulder, 0.08, 1.48), (side * 0.52, 0.08, 1.34), arm, arm * 0.78),
             add_uv("Elbow", (side * 0.535, 0.08, 1.325), (arm * 0.82, arm * 1.05, arm * 0.82)),
             add_tapered("Forearm", (side * 0.52, 0.08, 1.34), (side * 0.71, 0.08, 1.14), arm * 0.82, arm * 0.53),
             add_tapered("Wrist", (side * 0.71, 0.08, 1.14), (side * 0.755, 0.08, 1.085), arm * 0.55, arm * 0.42),
-            add_uv("Palm", (side * 0.795, 0.065, 1.065), ((0.045 if male else 0.041), 0.052 if male else 0.047, 0.042 if male else 0.039)),
-            add_uv("Thumb", (side * 0.815, -0.010, 1.075), (0.025 if male else 0.023, 0.028 if male else 0.025, 0.032 if male else 0.029)),
-            add_uv("FingerBlock", (side * 0.855, 0.065, 1.045), (0.052 if male else 0.047, 0.043 if male else 0.039, 0.030 if male else 0.027)),
+            add_uv("Palm", (side * 0.795, 0.065, 1.065), ((0.043 if male else 0.039), 0.048 if male else 0.044, 0.038 if male else 0.035)),
+            add_uv("Thumb", (side * 0.815, -0.010, 1.075), (0.023 if male else 0.021, 0.025 if male else 0.023, 0.028 if male else 0.026)),
+            add_uv("FingerBlock", (side * 0.858, 0.065, 1.045), (0.050 if male else 0.045, 0.038 if male else 0.034, 0.024 if male else 0.022)),
+            add_uv("ArmpitTransition", (side * (0.205 if male else 0.175), 0.075 if male else 0.070, 1.405), (0.055 if male else 0.045, 0.050 if male else 0.045, 0.075 if male else 0.065)),
             add_uv("ThighMass", (side * 0.150, 0.08, 0.72), (0.108 if male else 0.112, 0.112 if male else 0.108, 0.205)),
             add_tapered("Thigh", (side * 0.150, 0.08, 0.95), (side * 0.19, 0.08, 0.46), thigh * 0.92, thigh * 0.62),
             add_uv("Knee", (side * 0.19, 0.055, 0.445), (thigh * 0.50, 0.085, 0.065)),
@@ -121,7 +125,8 @@ def build_body(kind):
             add_uv("CalfDiamond", (side * 0.19, 0.13, 0.33), (thigh * 0.50, 0.070, 0.15)),
             add_uv("Ankle", (side * 0.19, 0.08, 0.105), (thigh * 0.285, 0.050, 0.058)),
             add_uv("Heel", (side * 0.19, 0.020, 0.055), (0.062 if male else 0.058, 0.070 if male else 0.068, 0.050 if male else 0.048)),
-            add_uv("ToeBlock", (side * 0.19, -0.105, 0.050), (0.078 if male else 0.073, 0.100 if male else 0.095, 0.043 if male else 0.041)),
+            add_uv("Instep", (side * 0.19, -0.040, 0.080), (0.058 if male else 0.054, 0.075 if male else 0.070, 0.045 if male else 0.042)),
+            add_uv("ToeBlock", (side * 0.19, -0.105, 0.050), (0.074 if male else 0.069, 0.100 if male else 0.095, 0.036 if male else 0.034)),
         ]
         if not male:
             parts += [add_uv("ChestVolume", (side * 0.078, -0.048, 1.41), (0.072, 0.033, 0.058))]
