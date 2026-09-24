@@ -156,6 +156,8 @@ def build_male_topology():
                 vertex.co.y -= 0.028 * abdomen
                 sternum = math.exp(-((x / 0.030) ** 2) - (((z - 1.405) / 0.165) ** 2))
                 vertex.co.y += 0.012 * sternum
+                oblique = math.exp(-(((abs(x) - 0.105) / 0.060) ** 2) - (((z - 1.205) / 0.120) ** 2))
+                vertex.co.y -= 0.012 * oblique
         elif y > 0.10 and 1.20 <= z <= 1.58:
             lat = math.exp(-(((abs(x) - 0.16) / 0.16) ** 2) - (((z - 1.40) / 0.22) ** 2))
             trap = math.exp(-(((abs(x) - 0.095) / 0.090) ** 2) - (((z - 1.56) / 0.095) ** 2))
