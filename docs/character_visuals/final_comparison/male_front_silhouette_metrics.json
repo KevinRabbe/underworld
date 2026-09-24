@@ -1,0 +1,67 @@
+[
+  {
+    "height": 0.1,
+    "reference_width": 67,
+    "result_width": null
+  },
+  {
+    "height": 0.18,
+    "reference_width": 375,
+    "result_width": null
+  },
+  {
+    "height": 0.25,
+    "reference_width": 375,
+    "result_width": null
+  },
+  {
+    "height": 0.35,
+    "reference_width": 374,
+    "result_width": 286
+  },
+  {
+    "height": 0.43,
+    "reference_width": 371,
+    "result_width": 725
+  },
+  {
+    "height": 0.5,
+    "reference_width": 368,
+    "result_width": 500
+  },
+  {
+    "height": 0.55,
+    "reference_width": 368,
+    "result_width": 517
+  },
+  {
+    "height": 0.62,
+    "reference_width": 311,
+    "result_width": 148
+  },
+  {
+    "height": 0.72,
+    "reference_width": 257,
+    "result_width": null
+  },
+  {
+    "height": 0.76,
+    "reference_width": null,
+    "result_width": null
+  },
+  {
+    "height": 0.83,
+    "reference_width": null,
+    "result_width": null
+  },
+  {
+    "height": 0.89,
+    "reference_width": null,
+    "result_width": null
+  },
+  {
+    "height": 0.95,
+    "reference_width": null,
+    "result_width": null
+  }
+]
