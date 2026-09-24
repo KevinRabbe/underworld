@@ -118,7 +118,7 @@ def build_male_topology():
         _segment_surface(verts,faces,[(s*.18,.08,1.54),(s*.29,.08,1.50),(s*.47,.08,1.39)],[.145,.112,.068],10,True,True)
         _segment_surface(verts,faces,[(s*.30,.08,1.50),(s*.47,.08,1.39),(s*.66,.08,1.18),(s*.75,.06,1.10),(s*.82,.045,1.065),(s*.87,.035,1.045),(s*.92,.030,1.040)],[.095,.068,.050,.034,.038,.022,.017],10,True,True)
         _segment_surface(verts,faces,[(s*.16,.08,.62),(s*.18,.08,.56),(s*.195,.08,.47),(s*.19,.08,.38),(s*.19,.08,.12)],[.160,.145,.100,.085,.050],10,True,True)
-        _segment_surface(verts,faces,[(s*.19,.08,.12),(s*.19,-.035,.07),(s*.19,-.105,.055)],[.055,.060,.052],8,True,True)
+        _segment_surface(verts,faces,[(s*.19,.08,.12),(s*.19,-.020,.07),(s*.19,-.080,.055)],[.055,.058,.050],8,True,True)
     mesh=bpy.data.meshes.new("MaleControlledTopology"); mesh.from_pydata(verts,[],faces); mesh.update(); obj=bpy.data.objects.new("MaleBaseBody",mesh); bpy.context.collection.objects.link(obj); obj.data.materials.append(skin_material())
     for poly in mesh.polygons: poly.use_smooth=True
     # Join the authored closed ring/segment volumes with exact Boolean unions.
