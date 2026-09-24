@@ -14,11 +14,12 @@ def run(g):
  for view,loc,rot in [('front',(0,-5.5,1.35),(math.radians(90),0,0)),('side',(5.5,0,1.35),(math.radians(90),0,math.radians(90)))]:
   bpy.ops.object.camera_add(location=loc,rotation=rot); c=bpy.context.object; c.data.type='ORTHO'; c.data.ortho_scale=2.15; bpy.context.scene.camera=c; bpy.context.view_layer.update(); s=bpy.context.scene; s.render.engine='BLENDER_WORKBENCH'; s.display.shading.light='STUDIO'; s.display.shading.color_type='SINGLE'; s.display.shading.single_color=(.82,.82,.82); s.render.resolution_x=s.render.resolution_y=1024; s.render.filepath=os.path.join(OUT,f'{g.lower()}_rest_diagnostic_{view}.png'); bpy.ops.render.render(write_still=True); bpy.data.objects.remove(c,do_unlink=True)
  for side,b in ((-1,'l'),(1,'r')):
-  bpy.ops.object.empty_add(type='PLAIN_AXES',location=(side*.43,-.02,.93)); target=bpy.context.object; target.name='EvidenceHandTarget_'+b
-  con=r.pose.bones['hand_'+b].constraints.new('IK'); con.name='EvidenceArmsDownIK'; con.target=target; con.chain_count=3
+  bpy.ops.object.empty_add(type='PLAIN_AXES',location=(side*.40,-.01,.98)); target=bpy.context.object; target.name='EvidenceWristTarget_'+b
+  bpy.ops.object.empty_add(type='PLAIN_AXES',location=(side*.62,.12,1.24)); pole=bpy.context.object; pole.name='EvidenceElbowPole_'+b
+  con=r.pose.bones['forearm_'+b].constraints.new('IK'); con.name='EvidenceArmsDownIK'; con.target=target; con.pole_target=pole; con.pole_angle=0.0; con.chain_count=2
  for view,loc,rot in [('front',(0,-5.5,1.35),(math.radians(90),0,0)),('side',(5.5,0,1.35),(math.radians(90),0,math.radians(90)))]:
   bpy.ops.object.camera_add(location=loc,rotation=rot); c=bpy.context.object; c.data.type='ORTHO'; c.data.ortho_scale=2.15; bpy.context.scene.camera=c; bpy.context.view_layer.update(); s=bpy.context.scene; s.render.engine='BLENDER_WORKBENCH'; s.display.shading.light='STUDIO'; s.display.shading.color_type='SINGLE'; s.display.shading.single_color=(.82,.82,.82); s.render.resolution_x=s.render.resolution_y=1024; s.render.filepath=os.path.join(OUT,f'{g.lower()}_armsdown_{view}.png'); bpy.ops.render.render(write_still=True); bpy.data.objects.remove(c,do_unlink=True)
  for o in list(bpy.data.objects):
-  if o.name.startswith('EvidenceHandTarget_'): bpy.data.objects.remove(o,do_unlink=True)
+  if o.name.startswith('EvidenceWristTarget_') or o.name.startswith('EvidenceElbowPole_'): bpy.data.objects.remove(o,do_unlink=True)
  bpy.data.objects.remove(m,do_unlink=True); bpy.data.objects.remove(r,do_unlink=True)
 run('Male'); run('Female')

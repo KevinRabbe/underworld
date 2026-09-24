@@ -6,6 +6,7 @@ modified by this utility.
 """
 from pathlib import Path
 from PIL import Image, ImageFilter
+import hashlib, re
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs/character_visuals/final_comparison"
@@ -17,6 +18,18 @@ BOXES = {
     ("male", "front"): (24, 12, 100, 140), ("male", "side"): (45, 140, 92, 278),
     ("female", "front"): (30, 12, 122, 142), ("female", "side"): (55, 143, 100, 282),
 }
+
+manifest = ROOT / "docs/character_visuals/reference_inputs/SHA256SUMS.txt"
+if not manifest.exists(): raise SystemExit("FAIL: missing SHA256SUMS.txt")
+expected = {}
+for line in manifest.read_text(encoding="utf-8").splitlines():
+    parts=line.split()
+    if len(parts)!=2 or not re.fullmatch(r"[0-9A-Fa-f]{64}",parts[0]): raise SystemExit(f"FAIL: malformed manifest line: {line!r}")
+    expected[parts[1]]=parts[0].lower()
+for name,path in (("male_source.png",SOURCES["male"]),("female_source.png",SOURCES["female"])):
+    if name not in expected or not path.is_file(): raise SystemExit(f"FAIL: missing manifest entry or source: {name}")
+    actual=hashlib.sha256(path.read_bytes()).hexdigest()
+    if actual != expected[name]: raise SystemExit(f"FAIL: SHA-256 mismatch for {name}")
 
 def components(mask):
     px, w, h = mask.load(), mask.width, mask.height; seen=set(); out=[]
