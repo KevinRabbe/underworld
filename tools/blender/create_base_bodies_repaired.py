@@ -285,9 +285,9 @@ def build_male_topology():
     relax=obj.modifiers.new("MaleSurfaceRelaxation","SMOOTH"); relax.factor=0.20; relax.iterations=2
     hip_group=obj.vertex_groups.new(name="MaleHipTransitionRelax")
     for v in obj.data.vertices:
-        if 0.55 <= v.co.z <= 1.02 and 0.09 <= abs(v.co.x) <= 0.28:
+        if 0.40 <= v.co.z <= 1.02 and 0.08 <= abs(v.co.x) <= 0.30:
             hip_group.add([v.index], 1.0, "REPLACE")
-    hip_relax=obj.modifiers.new("MaleHipTransitionRelaxation","SMOOTH"); hip_relax.factor=0.32; hip_relax.iterations=1; hip_relax.vertex_group=hip_group.name
+    hip_relax=obj.modifiers.new("MaleHipTransitionRelaxation","SMOOTH"); hip_relax.factor=0.42; hip_relax.iterations=1; hip_relax.vertex_group=hip_group.name
     shoulder_group=obj.vertex_groups.new(name="MaleShoulderTransitionRelax")
     for v in obj.data.vertices:
         if 1.28 <= v.co.z <= 1.60 and 0.18 <= abs(v.co.x) <= 0.58:
