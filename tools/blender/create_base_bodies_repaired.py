@@ -169,13 +169,14 @@ def build_male_topology():
             nose = math.exp(-((x / 0.042) ** 2) - (((z - 1.785) / 0.060) ** 2))
             brow = math.exp(-(((abs(x) - 0.040) / 0.050) ** 2) - (((z - 1.835) / 0.028) ** 2))
             chin = math.exp(-((x / 0.060) ** 2) - (((z - 1.710) / 0.032) ** 2))
-            vertex.co.y -= 0.045 * nose + 0.018 * brow + 0.022 * chin
+            vertex.co.y -= 0.068 * nose + 0.026 * brow + 0.034 * chin
         if 0.075 <= abs(x) <= 0.125 and 1.73 <= z <= 1.84:
             ear = math.exp(-(((abs(x) - 0.103) / 0.032) ** 2) - (((z - 1.785) / 0.060) ** 2))
             vertex.co.x += (1.0 if x >= 0.0 else -1.0) * 0.010 * ear
         if y < 0.02 and 1.70 <= z <= 1.82:
             jaw = math.exp(-(((abs(x) - 0.070) / 0.080) ** 2) - (((z - 1.745) / 0.075) ** 2))
-            vertex.co.y -= 0.008 * jaw
+            vertex.co.y -= 0.016 * jaw
+            vertex.co.x += (1.0 if x >= 0.0 else -1.0) * 0.006 * jaw
         if y < 0.02 and 1.77 <= z <= 1.88:
             eye_socket = math.exp(-(((abs(x) - 0.040) / 0.032) ** 2) - (((z - 1.820) / 0.022) ** 2))
             vertex.co.y += 0.010 * eye_socket
