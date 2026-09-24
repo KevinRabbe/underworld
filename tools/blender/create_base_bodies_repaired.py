@@ -109,17 +109,32 @@ def _segment_surface(verts, faces, points, radii, sides=10, cap_start=True, cap_
 def build_male_topology():
     verts=[]; faces=[]
     # Torso cage: broad chest, explicit abdomen and a real chest-to-waist taper.
-    _ring_surface(verts,faces,[(0.58,0,.08,.190,.115),(0.66,0,.08,.220,.130),(0.76,0,.08,.180,.115),(0.84,0,.08,.205,.130),(0.96,0,.08,.220,.140),(1.08,0,.08,.175,.105),(1.20,0,.08,.180,.108),(1.32,0,.08,.205,.120),(1.44,0,.08,.270,.145),(1.54,0,.08,.285,.140),(1.61,0,.08,.205,.105),(1.68,0,.08,.120,.090)],16,True,False)
-    _ring_surface(verts,faces,[(1.60,0,.08,.078,.068),(1.68,0,.08,.080,.070),(1.73,0,.06,.085,.075)],12,False,False)
-    _ring_surface(verts,faces,[(1.70,0,.055,.072,.064),(1.77,0,.035,.090,.078),(1.88,0,.045,.102,.086),(1.96,0,.055,.080,.070),(2.00,0,.055,.030,.030)],14,False,True)
+    _ring_surface(verts,faces,[(0.58,0,.08,.190,.115),(0.66,0,.08,.220,.130),(0.76,0,.08,.180,.115),(0.84,0,.08,.205,.130),(0.96,0,.08,.220,.140),(1.08,0,.08,.175,.105),(1.20,0,.08,.180,.108),(1.32,0,.08,.205,.120),(1.44,0,.08,.270,.145),(1.54,0,.08,.285,.140),(1.61,0,.08,.205,.105),(1.68,0,.08,.120,.090),(1.73,0,.08,.085,.075)],16,True,True)
+    _ring_surface(verts,faces,[(1.70,0,.08,.072,.064),(1.77,0,.08,.090,.078),(1.88,0,.08,.102,.086),(1.96,0,.08,.080,.070),(2.00,0,.08,.030,.030)],14,True,True)
     # Arms: shoulder, elbow and wrist landmarks are explicit rings, not tubes.
     for s in (-1,1):
-        _segment_surface(verts,faces,[(s*.19,.08,1.56),(s*.275,.08,1.52),(s*.47,.08,1.39)],[.105,.090,.060],10,False,False)
-        _segment_surface(verts,faces,[(s*.275,.08,1.52),(s*.47,.08,1.39),(s*.66,.08,1.18),(s*.75,.06,1.10)],[.075,.060,.043,.030],10,False,True)
-        _segment_surface(verts,faces,[(s*.16,.08,.68),(s*.18,.08,.60),(s*.19,.08,.46),(s*.19,.08,.12)],[.135,.120,.080,.050],10,True,False)
-        _segment_surface(verts,faces,[(s*.19,.08,.12),(s*.19,-.08,.07),(s*.19,-.21,.055)],[.055,.065,.060],8,False,True)
+        _segment_surface(verts,faces,[(s*.19,.08,1.56),(s*.275,.08,1.52),(s*.47,.08,1.39)],[.105,.090,.060],10,True,True)
+        _segment_surface(verts,faces,[(s*.275,.08,1.52),(s*.47,.08,1.39),(s*.66,.08,1.18),(s*.75,.06,1.10)],[.075,.060,.043,.030],10,True,True)
+        _segment_surface(verts,faces,[(s*.16,.08,.68),(s*.18,.08,.60),(s*.19,.08,.46),(s*.19,.08,.12)],[.135,.120,.080,.050],10,True,True)
+        _segment_surface(verts,faces,[(s*.19,.08,.12),(s*.19,-.08,.07),(s*.19,-.21,.055)],[.055,.065,.060],8,True,True)
     mesh=bpy.data.meshes.new("MaleControlledTopology"); mesh.from_pydata(verts,[],faces); mesh.update(); obj=bpy.data.objects.new("MaleBaseBody",mesh); bpy.context.collection.objects.link(obj); obj.data.materials.append(skin_material())
     for poly in mesh.polygons: poly.use_smooth=True
+    # Join the authored closed ring/segment volumes with exact Boolean unions.
+    # This preserves the explicit construction while producing one connected,
+    # manifold Male surface instead of overlapping loose shells.
+    bpy.context.view_layer.objects.active=obj; obj.select_set(True)
+    bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="SELECT"); bpy.ops.mesh.separate(type="LOOSE"); bpy.ops.object.mode_set(mode="OBJECT")
+    parts=[o for o in bpy.context.selected_objects if o.type=="MESH"]
+    base=max(parts,key=lambda o: len(o.data.vertices))
+    for part in list(parts):
+        if part==base: continue
+        bpy.context.view_layer.objects.active=base
+        mod=base.modifiers.new("AuthoredBridgeUnion","BOOLEAN"); mod.operation="UNION"; mod.solver="EXACT"; mod.object=part
+        try: bpy.ops.object.modifier_apply(modifier=mod.name)
+        except RuntimeError: pass
+        bpy.data.objects.remove(part, do_unlink=True)
+    obj=base; obj.name="MaleBaseBody"; obj.data.materials.clear(); obj.data.materials.append(skin_material())
+    for poly in obj.data.polygons: poly.use_smooth=True
     smooth=obj.modifiers.new("MaleTopologySubdivision","SUBSURF"); smooth.subdivision_type='CATMULL_CLARK'; smooth.levels=1; smooth.render_levels=1
     armature=make_armature("MaleBaseBody"); assign_smooth_weights(obj); mod=obj.modifiers.new("SharedHumanoidRig","ARMATURE"); mod.object=armature; obj.parent=armature; return obj,armature
 
