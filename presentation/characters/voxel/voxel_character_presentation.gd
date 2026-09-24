@@ -209,11 +209,16 @@ func _try_realize_production_body() -> bool:
 	var scene_path := str(character_definition.production_body_scene_path)
 	if scene_path.is_empty() or not FileAccess.file_exists(scene_path):
 		return false
-	var packed := load(scene_path) as PackedScene
-	if packed == null:
-		push_warning("Blender body asset could not be loaded: %s" % scene_path)
+	var gltf_document := GLTFDocument.new()
+	var gltf_state := GLTFState.new()
+	var parse_error := gltf_document.append_from_file(scene_path, gltf_state)
+	if parse_error != OK:
+		push_warning("Blender body asset could not be parsed: %s (%s)" % [scene_path, error_string(parse_error)])
 		return false
-	var imported_root := packed.instantiate()
+	var imported_root := gltf_document.generate_scene(gltf_state)
+	if imported_root == null:
+		push_warning("Blender body asset produced no runtime scene: %s" % scene_path)
+		return false
 	var meshes := imported_root.find_children("*", "MeshInstance3D", true, false)
 	if meshes.is_empty():
 		imported_root.queue_free()

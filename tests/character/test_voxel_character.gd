@@ -383,8 +383,10 @@ static func _test_production_body_skin_rebind(failures: Array[String]) -> void:
 		presentation.build()
 		var body: MeshInstance3D = presentation.production_body_mesh
 		_expect_true(failures, "%s production body realizes from GLB at runtime" % variant_id, body != null)
-		var packed := load(str(definition.production_body_scene_path)) as PackedScene
-		var imported_root: Node = packed.instantiate() if packed != null else null
+		var gltf_document := GLTFDocument.new()
+		var gltf_state := GLTFState.new()
+		var parse_error := gltf_document.append_from_file(str(definition.production_body_scene_path), gltf_state)
+		var imported_root: Node = gltf_document.generate_scene(gltf_state) if parse_error == OK else null
 		var imported_meshes: Array[Node] = []
 		if imported_root != null:
 			imported_meshes.assign(imported_root.find_children("*", "MeshInstance3D", true, false))
