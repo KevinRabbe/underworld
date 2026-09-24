@@ -31,7 +31,7 @@ jobs:
         run: godot --version
 
       - name: Import production character assets
-        run: godot --headless --editor --path . --quit
+        run: godot --headless --editor --path . --import --quit
 
       - name: Run character contracts
         run: |

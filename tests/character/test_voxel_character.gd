@@ -385,9 +385,13 @@ static func _test_production_body_skin_rebind(failures: Array[String]) -> void:
 		_expect_true(failures, "%s production body realizes from GLB at runtime" % variant_id, body != null)
 		var packed := load(str(definition.production_body_scene_path)) as PackedScene
 		var imported_root: Node = packed.instantiate() if packed != null else null
-		var imported_meshes := imported_root.find_children("*", "MeshInstance3D", true, false) if imported_root != null else []
+		var imported_meshes: Array[Node] = []
+		if imported_root != null:
+			imported_meshes.assign(imported_root.find_children("*", "MeshInstance3D", true, false))
 		var imported_mesh: MeshInstance3D = imported_meshes[0] if not imported_meshes.is_empty() else null
-		var imported_skeletons := imported_root.find_children("*", "Skeleton3D", true, false) if imported_root != null else []
+		var imported_skeletons: Array[Node] = []
+		if imported_root != null:
+			imported_skeletons.assign(imported_root.find_children("*", "Skeleton3D", true, false))
 		var imported_skeleton: Skeleton3D = imported_skeletons[0] if not imported_skeletons.is_empty() else null
 		var imported_skin: Skin = imported_mesh.skin if imported_mesh != null else null
 		_expect_true(failures, "%s GLB exposes an imported skin and skeleton" % variant_id, imported_skin != null and imported_skeleton != null)
