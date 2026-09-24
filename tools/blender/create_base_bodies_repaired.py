@@ -142,6 +142,22 @@ def build_male_topology():
     boundary_edges=[e for e in cleanup.edges if len(e.link_faces)==1]
     if boundary_edges: bmesh.ops.holes_fill(cleanup, edges=boundary_edges, sides=0)
     cleanup.to_mesh(obj.data); cleanup.free(); obj.data.update()
+    # Smooth anatomical shaping on the connected torso surface.  This is a
+    # vertex-space falloff, not an added shell: it preserves the single
+    # manifold body while giving the male chest and abdomen readable planes.
+    for vertex in obj.data.vertices:
+        x, y, z = vertex.co
+        if y < 0.02:
+            if 1.30 <= z <= 1.54:
+                pectoral = math.exp(-(((abs(x) - 0.090) / 0.095) ** 2) - (((z - 1.435) / 0.125) ** 2))
+                vertex.co.y -= 0.050 * pectoral
+            if 1.08 <= z <= 1.36:
+                abdomen = math.exp(-((x / 0.145) ** 2) - (((z - 1.225) / 0.145) ** 2))
+                vertex.co.y -= 0.018 * abdomen
+        elif y > 0.10 and 1.20 <= z <= 1.58:
+            lat = math.exp(-(((abs(x) - 0.16) / 0.16) ** 2) - (((z - 1.40) / 0.22) ** 2))
+            vertex.co.y += 0.010 * lat
+    obj.data.update()
     for poly in obj.data.polygons: poly.use_smooth=True
     smooth=obj.modifiers.new("MaleTopologySubdivision","SUBSURF"); smooth.subdivision_type='CATMULL_CLARK'; smooth.levels=1; smooth.render_levels=1
     armature=make_armature("MaleBaseBody"); assign_smooth_weights(obj); mod=obj.modifiers.new("SharedHumanoidRig","ARMATURE"); mod.object=armature; obj.parent=armature; return obj,armature
