@@ -86,10 +86,10 @@ def build_body(kind):
     rib_x, rib_y = (0.310, 0.160) if male else (0.260, 0.145)
     # First isolated geometry turn: tighten only the torso waist mass. Ribcage,
     # pelvis, glute/upper-thigh, height, shoulders, head/neck and rig stay fixed.
-    waist_x, waist_y = (0.215, 0.115) if male else (0.190, 0.105)
-    pelvis_x, pelvis_y = (0.250, 0.155) if male else (0.290, 0.170)
+    waist_x, waist_y = (0.205, 0.110) if male else (0.180, 0.100)
+    pelvis_x, pelvis_y = (0.240, 0.150) if male else (0.290, 0.170)
     arm = 0.070 if male else 0.058
-    thigh = 0.140 if male else 0.135
+    thigh = 0.135 if male else 0.130
     neck_radius = 0.092 if male else 0.073
     head_radius = 0.108 if male else 0.105
     # Deliberately separate anatomical masses: ribcage -> waist -> pelvis.
@@ -100,7 +100,7 @@ def build_body(kind):
         add_uv("Abdomen", (0, 0.08, 1.27), (0.220 if male else 0.190, 0.120 if male else 0.110, 0.155)),
         add_uv("Waist", (0, 0.08, 1.135), (waist_x, waist_y, 0.110)),
         add_uv("Pelvis", (0, 0.08, 1.005), (pelvis_x, pelvis_y, 0.130)),
-        add_uv("GlutealMass", (0, 0.145, 0.96), (pelvis_x * 0.88, 0.075 if male else 0.090, 0.115)),
+        add_uv("GlutealMass", (0, 0.145, 0.96), (pelvis_x * 0.84, 0.070 if male else 0.084, 0.115)),
         add_uv("HeadCranium", (0, 0.065, 1.85), (head_radius, 0.094, 0.098)),
         add_uv("UpperFace", (0, -0.030, 1.815), (head_radius * 0.56, 0.040, 0.070)),
         add_uv("Jaw", (0, -0.010, 1.755), (head_radius * (0.74 if male else 0.70), 0.054, 0.056)),
