@@ -174,6 +174,15 @@ def build_male_topology():
             vertex.co.x += side * 0.020 * palm
             if y < 0.02:
                 vertex.co.y -= 0.008 * palm
+        if 0.24 <= abs(x) <= 0.56 and 1.26 <= z <= 1.53:
+            upper_arm = math.exp(-(((abs(x) - 0.37) / 0.135) ** 2) - (((z - 1.405) / 0.145) ** 2))
+            if y < 0.12:
+                vertex.co.y -= 0.016 * upper_arm
+            vertex.co.x += (1.0 if x >= 0.0 else -1.0) * 0.008 * upper_arm
+        if 0.48 <= abs(x) <= 0.76 and 1.05 <= z <= 1.31:
+            forearm = math.exp(-(((abs(x) - 0.62) / 0.12) ** 2) - (((z - 1.20) / 0.15) ** 2))
+            if y < 0.12:
+                vertex.co.y -= 0.010 * forearm
     obj.data.update()
     for poly in obj.data.polygons: poly.use_smooth=True
     smooth=obj.modifiers.new("MaleTopologySubdivision","SUBSURF"); smooth.subdivision_type='CATMULL_CLARK'; smooth.levels=1; smooth.render_levels=1
