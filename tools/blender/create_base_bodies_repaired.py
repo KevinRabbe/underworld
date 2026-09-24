@@ -1,4 +1,4 @@
-import bpy
+import bpy, bmesh
 import os, math
 from mathutils import Vector
 
@@ -110,7 +110,7 @@ def build_male_topology():
     verts=[]; faces=[]
     # Torso cage: broad chest, explicit abdomen and a real chest-to-waist taper.
     _ring_surface(verts,faces,[(0.48,0,.08,.205,.120),(0.56,0,.08,.225,.135),(0.66,0,.08,.220,.130),(0.76,0,.08,.180,.115),(0.84,0,.08,.205,.130),(0.96,0,.08,.220,.140),(1.08,0,.08,.175,.105),(1.20,0,.08,.180,.108),(1.32,0,.08,.205,.120),(1.44,0,.08,.270,.145),(1.54,0,.08,.285,.140),(1.61,0,.08,.205,.105),(1.68,0,.08,.120,.090),(1.73,0,.08,.085,.075)],16,True,True)
-    _ring_surface(verts,faces,[(1.70,0,.08,.072,.064),(1.77,0,.08,.090,.078),(1.88,0,.08,.102,.086),(1.96,0,.08,.080,.070),(2.00,0,.08,.030,.030)],14,True,True)
+    _ring_surface(verts,faces,[(1.70,0,.08,.085,.068),(1.77,0,.08,.105,.080),(1.88,0,.08,.102,.086),(1.96,0,.08,.080,.070),(2.00,0,.08,.030,.030)],14,True,True)
     # Arms: shoulder, elbow and wrist landmarks are explicit rings, not tubes.
     for s in (-1,1):
         _segment_surface(verts,faces,[(s*.19,.08,1.56),(s*.275,.08,1.52),(s*.47,.08,1.39)],[.105,.090,.060],10,True,True)
@@ -134,6 +134,12 @@ def build_male_topology():
         except RuntimeError: pass
         bpy.data.objects.remove(part, do_unlink=True)
     obj=base; obj.name="MaleBaseBody"; obj.data.materials.clear(); obj.data.materials.append(skin_material())
+    cleanup=bmesh.new(); cleanup.from_mesh(obj.data); cleanup.verts.ensure_lookup_table(); bmesh.ops.remove_doubles(cleanup, verts=cleanup.verts, dist=1e-5); cleanup.faces.ensure_lookup_table()
+    degenerate=[f for f in cleanup.faces if f.calc_area() <= 1e-8]
+    if degenerate: bmesh.ops.delete(cleanup, geom=degenerate, context='FACES')
+    boundary_edges=[e for e in cleanup.edges if len(e.link_faces)==1]
+    if boundary_edges: bmesh.ops.holes_fill(cleanup, edges=boundary_edges, sides=0)
+    cleanup.to_mesh(obj.data); cleanup.free(); obj.data.update()
     for poly in obj.data.polygons: poly.use_smooth=True
     smooth=obj.modifiers.new("MaleTopologySubdivision","SUBSURF"); smooth.subdivision_type='CATMULL_CLARK'; smooth.levels=1; smooth.render_levels=1
     armature=make_armature("MaleBaseBody"); assign_smooth_weights(obj); mod=obj.modifiers.new("SharedHumanoidRig","ARMATURE"); mod.object=armature; obj.parent=armature; return obj,armature
