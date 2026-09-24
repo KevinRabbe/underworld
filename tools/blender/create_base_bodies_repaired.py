@@ -115,8 +115,8 @@ def build_male_topology():
     _ring_surface(verts,faces,[(1.70,0,.08,.085,.068,.012,.002),(1.77,0,.08,.105,.080,.026,.004),(1.88,0,.08,.102,.086,.016,.004),(1.96,0,.08,.080,.070,.004,.002),(2.00,0,.08,.030,.030)],14,True,True)
     # Arms: shoulder, elbow and wrist landmarks are explicit rings, not tubes.
     for s in (-1,1):
-        _segment_surface(verts,faces,[(s*.19,.08,1.56),(s*.275,.08,1.52),(s*.47,.08,1.39)],[.105,.090,.060],10,True,True)
-        _segment_surface(verts,faces,[(s*.275,.08,1.52),(s*.47,.08,1.39),(s*.66,.08,1.18),(s*.75,.06,1.10)],[.075,.060,.043,.030],10,True,True)
+        _segment_surface(verts,faces,[(s*.19,.08,1.56),(s*.275,.08,1.52),(s*.47,.08,1.39)],[.115,.100,.068],10,True,True)
+        _segment_surface(verts,faces,[(s*.275,.08,1.52),(s*.47,.08,1.39),(s*.66,.08,1.18),(s*.75,.06,1.10)],[.085,.068,.050,.034],10,True,True)
         _segment_surface(verts,faces,[(s*.16,.08,.62),(s*.18,.08,.56),(s*.19,.08,.46),(s*.19,.08,.12)],[.145,.125,.080,.050],10,True,True)
         _segment_surface(verts,faces,[(s*.19,.08,.12),(s*.19,-.045,.07),(s*.19,-.135,.055)],[.055,.065,.060],8,True,True)
     mesh=bpy.data.meshes.new("MaleControlledTopology"); mesh.from_pydata(verts,[],faces); mesh.update(); obj=bpy.data.objects.new("MaleBaseBody",mesh); bpy.context.collection.objects.link(obj); obj.data.materials.append(skin_material())
