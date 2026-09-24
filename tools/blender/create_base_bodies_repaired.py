@@ -156,6 +156,8 @@ def build_male_topology():
             if 1.30 <= z <= 1.54:
                 pectoral = math.exp(-(((abs(x) - 0.090) / 0.095) ** 2) - (((z - 1.435) / 0.125) ** 2))
                 vertex.co.y -= 0.135 * pectoral
+                pec_lower_edge = math.exp(-(((abs(x) - 0.090) / 0.105) ** 2) - (((z - 1.365) / 0.016) ** 2))
+                vertex.co.y += 0.012 * pec_lower_edge
             if 1.08 <= z <= 1.36:
                 abdomen = math.exp(-((x / 0.145) ** 2) - (((z - 1.225) / 0.145) ** 2))
                 vertex.co.y -= 0.052 * abdomen
