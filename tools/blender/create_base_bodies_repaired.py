@@ -1,5 +1,5 @@
 import bpy
-import os
+import os, math
 from mathutils import Vector
 
 OUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "content", "characters", "base_meshes"))
@@ -80,8 +80,53 @@ def assign_smooth_weights(mesh):
         inv = [1.0/max(d,0.012)**2 for d,_ in chosen]; total = sum(inv)
         for value, (_, bone_name) in zip(inv, chosen): mesh.vertex_groups[bone_name].add([vertex.index], value/total, "REPLACE")
 
+def _ring_surface(verts, faces, rings, sides=16, cap_start=True, cap_end=True):
+    """Append a deterministic quad-ring surface from (center, rx, ry) rings."""
+    start=len(verts)
+    for z,cx,cy,rx,ry in rings:
+        for i in range(sides):
+            a=2.0*math.pi*i/sides; verts.append((cx+rx*math.cos(a), cy+ry*math.sin(a), z))
+    for r in range(len(rings)-1):
+        for i in range(sides):
+            a=start+r*sides+i; b=start+r*sides+(i+1)%sides; c=start+(r+1)*sides+(i+1)%sides; d=start+(r+1)*sides+i; faces.append((a,b,c,d))
+    if cap_start: faces.append(tuple(start+i for i in range(sides-1,-1,-1)))
+    if cap_end:
+        top=start+(len(rings)-1)*sides; faces.append(tuple(top+i for i in range(sides)))
+
+def _segment_surface(verts, faces, points, radii, sides=10, cap_start=True, cap_end=True):
+    """Append a multi-landmark limb with circular quad rings and caps."""
+    start=len(verts); rings=[]
+    for j,p in enumerate(points):
+        p=Vector(p); tangent=(Vector(points[min(j+1,len(points)-1)])-Vector(points[max(0,j-1)])).normalized(); axis=Vector((0,0,1)) if abs(tangent.z)<0.9 else Vector((0,1,0)); u=tangent.cross(axis).normalized(); v=tangent.cross(u).normalized(); rings.append(len(verts))
+        for i in range(sides):
+            a=2.0*math.pi*i/sides; q=p+radii[j]*(math.cos(a)*u+math.sin(a)*v); verts.append(tuple(q))
+    for j in range(len(points)-1):
+        for i in range(sides):
+            a=rings[j]+i; b=rings[j]+(i+1)%sides; c=rings[j+1]+(i+1)%sides; d=rings[j+1]+i; faces.append((a,b,c,d))
+    if cap_start: faces.append(tuple(rings[0]+i for i in range(sides-1,-1,-1)))
+    if cap_end: faces.append(tuple(rings[-1]+i for i in range(sides)))
+
+def build_male_topology():
+    verts=[]; faces=[]
+    # Torso cage: broad chest, explicit abdomen and a real chest-to-waist taper.
+    _ring_surface(verts,faces,[(0.58,0,.08,.190,.115),(0.66,0,.08,.220,.130),(0.76,0,.08,.180,.115),(0.84,0,.08,.205,.130),(0.96,0,.08,.220,.140),(1.08,0,.08,.175,.105),(1.20,0,.08,.180,.108),(1.32,0,.08,.205,.120),(1.44,0,.08,.270,.145),(1.54,0,.08,.285,.140),(1.61,0,.08,.205,.105),(1.68,0,.08,.120,.090)],16,True,False)
+    _ring_surface(verts,faces,[(1.60,0,.08,.078,.068),(1.68,0,.08,.080,.070),(1.73,0,.06,.085,.075)],12,False,False)
+    _ring_surface(verts,faces,[(1.70,0,.055,.072,.064),(1.77,0,.035,.090,.078),(1.88,0,.045,.102,.086),(1.96,0,.055,.080,.070),(2.00,0,.055,.030,.030)],14,False,True)
+    # Arms: shoulder, elbow and wrist landmarks are explicit rings, not tubes.
+    for s in (-1,1):
+        _segment_surface(verts,faces,[(s*.19,.08,1.56),(s*.275,.08,1.52),(s*.47,.08,1.39)],[.105,.090,.060],10,False,False)
+        _segment_surface(verts,faces,[(s*.275,.08,1.52),(s*.47,.08,1.39),(s*.66,.08,1.18),(s*.75,.06,1.10)],[.075,.060,.043,.030],10,False,True)
+        _segment_surface(verts,faces,[(s*.16,.08,.68),(s*.18,.08,.60),(s*.19,.08,.46),(s*.19,.08,.12)],[.135,.120,.080,.050],10,True,False)
+        _segment_surface(verts,faces,[(s*.19,.08,.12),(s*.19,-.08,.07),(s*.19,-.21,.055)],[.055,.065,.060],8,False,True)
+    mesh=bpy.data.meshes.new("MaleControlledTopology"); mesh.from_pydata(verts,[],faces); mesh.update(); obj=bpy.data.objects.new("MaleBaseBody",mesh); bpy.context.collection.objects.link(obj); obj.data.materials.append(skin_material())
+    for poly in mesh.polygons: poly.use_smooth=True
+    smooth=obj.modifiers.new("MaleTopologySubdivision","SUBSURF"); smooth.subdivision_type='CATMULL_CLARK'; smooth.levels=1; smooth.render_levels=1
+    armature=make_armature("MaleBaseBody"); assign_smooth_weights(obj); mod=obj.modifiers.new("SharedHumanoidRig","ARMATURE"); mod.object=armature; obj.parent=armature; return obj,armature
+
 def build_body(kind):
     male = kind == "male"
+    if male:
+        return build_male_topology()
     shoulder = 0.275 if male else 0.255
     rib_x, rib_y = (0.285, 0.145) if male else (0.260, 0.145)
     # First isolated geometry turn: tighten only the torso waist mass. Ribcage,
