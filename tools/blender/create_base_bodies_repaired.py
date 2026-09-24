@@ -189,10 +189,10 @@ def build_male_topology():
             vertex.co.x += (1.0 if x >= 0.0 else -1.0) * 0.006 * jaw
         if y < 0.02 and 1.77 <= z <= 1.88:
             eye_socket = math.exp(-(((abs(x) - 0.040) / 0.032) ** 2) - (((z - 1.820) / 0.022) ** 2))
-            vertex.co.y += 0.010 * eye_socket
+            vertex.co.y += 0.017 * eye_socket
         if y < 0.02 and 1.735 <= z <= 1.765:
             mouth_plane = math.exp(-((x / 0.045) ** 2) - (((z - 1.750) / 0.014) ** 2))
-            vertex.co.y += 0.007 * mouth_plane
+            vertex.co.y += 0.012 * mouth_plane
         if y > 0.08 and 0.76 <= z <= 1.16:
             glute = math.exp(-((x / 0.215) ** 2) - (((z - 0.965) / 0.190) ** 2))
             vertex.co.y += 0.022 * glute
