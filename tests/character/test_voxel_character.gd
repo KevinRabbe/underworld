@@ -21,6 +21,7 @@ static func run(tree: SceneTree) -> Array[String]:
 	_test_faceted_compiler_contract(failures)
 	_test_unarmored_character_creation_contract(failures)
 	_test_runtime_presentation(failures)
+	_test_production_body_skin_rebind(failures)
 	_test_player_default(tree, failures)
 	return failures
 
@@ -373,6 +374,32 @@ static func _test_runtime_presentation(failures: Array[String]) -> void:
 	_expect_true(failures, "palette swap bypasses stale global mesh cache colors", not base_colors.is_empty() and not recolored_colors.is_empty() and base_colors[0] != recolored_colors[0])
 	recolored_character.free()
 	character.free()
+
+
+static func _test_production_body_skin_rebind(failures: Array[String]) -> void:
+	for variant_id in ["male", "female"]:
+		var definition = BaselineFactory.build_variant(variant_id)
+		var presentation := VoxelPresentation.new(definition)
+		presentation.build()
+		var body: MeshInstance3D = presentation.production_body_mesh
+		_expect_true(failures, "%s production body realizes from GLB at runtime" % variant_id, body != null)
+		var packed := load(str(definition.production_body_scene_path)) as PackedScene
+		var imported_root: Node = packed.instantiate() if packed != null else null
+		var imported_meshes := imported_root.find_children("*", "MeshInstance3D", true, false) if imported_root != null else []
+		var imported_mesh: MeshInstance3D = imported_meshes[0] if not imported_meshes.is_empty() else null
+		var imported_skeletons := imported_root.find_children("*", "Skeleton3D", true, false) if imported_root != null else []
+		var imported_skeleton: Skeleton3D = imported_skeletons[0] if not imported_skeletons.is_empty() else null
+		var imported_skin: Skin = imported_mesh.skin if imported_mesh != null else null
+		_expect_true(failures, "%s GLB exposes an imported skin and skeleton" % variant_id, imported_skin != null and imported_skeleton != null)
+		if body != null and imported_skin != null and imported_skeleton != null:
+			_expect_equal(failures, "%s preserves every imported bind index" % variant_id, body.skin.get_bind_count(), imported_skin.get_bind_count())
+			for bind_index in range(imported_skin.get_bind_count()):
+				var imported_bone := imported_skeleton.get_bone_name(imported_skin.get_bind_bone(bind_index))
+				var expected_production_bone := presentation.skeleton.find_bone(imported_bone)
+				_expect_equal(failures, "%s remaps bind %d by bone name" % [variant_id, bind_index], body.skin.get_bind_bone(bind_index), expected_production_bone)
+		if imported_root != null:
+			imported_root.free()
+		presentation.free()
 
 
 static func _test_player_default(tree: SceneTree, failures: Array[String]) -> void:

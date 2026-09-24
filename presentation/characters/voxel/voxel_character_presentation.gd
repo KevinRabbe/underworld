@@ -220,18 +220,45 @@ func _try_realize_production_body() -> bool:
 		push_warning("Blender body asset has no MeshInstance3D: %s" % scene_path)
 		return false
 	var imported_mesh: MeshInstance3D = meshes[0]
+	var imported_skin: Skin = imported_mesh.skin
+	var imported_skeleton: Skeleton3D = null
+	if imported_skin != null:
+		var imported_skeleton_path := imported_mesh.skeleton
+		if not imported_skeleton_path.is_empty():
+			imported_skeleton = imported_mesh.get_node_or_null(imported_skeleton_path) as Skeleton3D
+		if imported_skeleton == null:
+			var imported_skeletons := imported_root.find_children("*", "Skeleton3D", true, false)
+			if not imported_skeletons.is_empty():
+				imported_skeleton = imported_skeletons[0] as Skeleton3D
+	if imported_skin == null or imported_skeleton == null:
+		imported_root.queue_free()
+		push_warning("Blender body asset has no importable skin/skeleton: %s" % scene_path)
+		return false
+	var production_skin := Skin.new()
+	for bind_index in range(imported_skin.get_bind_count()):
+		var imported_bone_index := imported_skin.get_bind_bone(bind_index)
+		if imported_bone_index < 0 or imported_bone_index >= imported_skeleton.get_bone_count():
+			imported_root.queue_free()
+			push_warning("Blender body asset has invalid imported bind %d: %s" % [bind_index, scene_path])
+			return false
+		var imported_bone_name := imported_skeleton.get_bone_name(imported_bone_index)
+		var production_bone_index := skeleton.find_bone(imported_bone_name)
+		if production_bone_index < 0:
+			imported_root.queue_free()
+			push_warning("Blender body asset bone %s is absent from the production rig: %s" % [imported_bone_name, scene_path])
+			return false
+		# Preserve the imported bind index. Vertex weights reference this index;
+		# only its target production bone changes.
+		production_skin.add_bind(production_bone_index, skeleton.get_bone_global_rest(production_bone_index).affine_inverse())
 	imported_mesh.get_parent().remove_child(imported_mesh)
 	imported_root.queue_free()
 	production_body_mesh = imported_mesh
 	production_body_mesh.name = "BlenderBaseBody"
 	add_child(production_body_mesh)
-	# The Blender armature uses the same ordered prototype humanoid bone contract.
-	# Rebind the imported skin to the production Skeleton3D so the existing
-	# animation runtime, held-item sockets, and gameplay rig remain authoritative.
+	# Rebind by imported bind index -> imported bone name -> production bone.
+	# The production Skeleton3D remains authoritative for animation and sockets,
+	# while vertex weights retain the indices authored in the GLB.
 	production_body_mesh.skeleton = NodePath("../Skeleton3D")
-	var production_skin := Skin.new()
-	for bone_index in range(skeleton.get_bone_count()):
-		production_skin.add_bind(bone_index, skeleton.get_bone_global_rest(bone_index).affine_inverse())
 	production_body_mesh.skin = production_skin
 	production_body_mesh.scale = Vector3.ONE * character_definition.presentation_scale
 	return true
