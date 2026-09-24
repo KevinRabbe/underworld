@@ -109,14 +109,14 @@ def _segment_surface(verts, faces, points, radii, sides=10, cap_start=True, cap_
 def build_male_topology():
     verts=[]; faces=[]
     # Torso cage: broad chest, explicit abdomen and a real chest-to-waist taper.
-    _ring_surface(verts,faces,[(0.58,0,.08,.190,.115),(0.66,0,.08,.220,.130),(0.76,0,.08,.180,.115),(0.84,0,.08,.205,.130),(0.96,0,.08,.220,.140),(1.08,0,.08,.175,.105),(1.20,0,.08,.180,.108),(1.32,0,.08,.205,.120),(1.44,0,.08,.270,.145),(1.54,0,.08,.285,.140),(1.61,0,.08,.205,.105),(1.68,0,.08,.120,.090),(1.73,0,.08,.085,.075)],16,True,True)
+    _ring_surface(verts,faces,[(0.48,0,.08,.205,.120),(0.56,0,.08,.225,.135),(0.66,0,.08,.220,.130),(0.76,0,.08,.180,.115),(0.84,0,.08,.205,.130),(0.96,0,.08,.220,.140),(1.08,0,.08,.175,.105),(1.20,0,.08,.180,.108),(1.32,0,.08,.205,.120),(1.44,0,.08,.270,.145),(1.54,0,.08,.285,.140),(1.61,0,.08,.205,.105),(1.68,0,.08,.120,.090),(1.73,0,.08,.085,.075)],16,True,True)
     _ring_surface(verts,faces,[(1.70,0,.08,.072,.064),(1.77,0,.08,.090,.078),(1.88,0,.08,.102,.086),(1.96,0,.08,.080,.070),(2.00,0,.08,.030,.030)],14,True,True)
     # Arms: shoulder, elbow and wrist landmarks are explicit rings, not tubes.
     for s in (-1,1):
         _segment_surface(verts,faces,[(s*.19,.08,1.56),(s*.275,.08,1.52),(s*.47,.08,1.39)],[.105,.090,.060],10,True,True)
         _segment_surface(verts,faces,[(s*.275,.08,1.52),(s*.47,.08,1.39),(s*.66,.08,1.18),(s*.75,.06,1.10)],[.075,.060,.043,.030],10,True,True)
-        _segment_surface(verts,faces,[(s*.16,.08,.68),(s*.18,.08,.60),(s*.19,.08,.46),(s*.19,.08,.12)],[.135,.120,.080,.050],10,True,True)
-        _segment_surface(verts,faces,[(s*.19,.08,.12),(s*.19,-.08,.07),(s*.19,-.21,.055)],[.055,.065,.060],8,True,True)
+        _segment_surface(verts,faces,[(s*.16,.08,.62),(s*.18,.08,.56),(s*.19,.08,.46),(s*.19,.08,.12)],[.145,.125,.080,.050],10,True,True)
+        _segment_surface(verts,faces,[(s*.19,.08,.12),(s*.19,-.045,.07),(s*.19,-.135,.055)],[.055,.065,.060],8,True,True)
     mesh=bpy.data.meshes.new("MaleControlledTopology"); mesh.from_pydata(verts,[],faces); mesh.update(); obj=bpy.data.objects.new("MaleBaseBody",mesh); bpy.context.collection.objects.link(obj); obj.data.materials.append(skin_material())
     for poly in mesh.polygons: poly.use_smooth=True
     # Join the authored closed ring/segment volumes with exact Boolean unions.
