@@ -10,8 +10,8 @@ from PIL import Image, ImageFilter
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs/character_visuals/final_comparison"
 SOURCES = {
-    "male": Path(r"C:\Users\kevin\AppData\Local\Temp\codex-clipboard-65c21253-457e-4fba-a93d-496a5704511a.png"),
-    "female": Path(r"C:\Users\kevin\AppData\Local\Temp\codex-clipboard-ae690909-3dbd-4d6d-b893-71708be3aea3.png"),
+    "male": ROOT / "docs/character_visuals/reference_inputs/male_source.png",
+    "female": ROOT / "docs/character_visuals/reference_inputs/female_source.png",
 }
 BOXES = {
     ("male", "front"): (24, 12, 100, 140), ("male", "side"): (45, 140, 92, 278),
