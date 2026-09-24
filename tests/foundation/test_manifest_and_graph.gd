@@ -6,6 +6,8 @@ const GraphCanonicalizer := preload("res://worldgen/validation/graph_canonicaliz
 const GraphValidator := preload("res://worldgen/validation/graph_validator.gd")
 const SampleGraph := preload("res://tests/foundation/sample_graph_fixture.gd")
 
+const GATEWAY_AWARE_FOUNDATION_MANIFEST_ID: String = "gm-sha256:cb5674049cfdb0c0f6291c35fbc85382cddf4707bfbd2531d669f78b6e35471e"
+
 
 static func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -61,11 +63,31 @@ static func _test_manifest_vector(failures: Array[String]) -> void:
 	if not manifest_failures.is_empty():
 		failures.append_array(manifest_failures)
 		return
+	var stages: Dictionary = manifest.stage_revisions()
 	_expect_equal(
 		failures,
-		"foundation GeneratorManifest SHA-256 vector",
-		manifest.manifest_id(),
-		"gm-sha256:c3fb0a2e53be0593b588a6f9b375d087886ab55111b9ca1a78a5c09bf99a302f"
+		"foundation manifest captures gateway source stage",
+		int(stages.get("gateway.source_site", 0)),
+		1
+	)
+	_expect_equal(
+		failures,
+		"foundation manifest captures gateway destination stage",
+		int(stages.get("gateway.destination_site", 0)),
+		1
+	)
+	_expect_equal(
+		failures,
+		"foundation manifest captures gateway link stage",
+		int(stages.get("gateway.link", 0)),
+		1
+	)
+	var manifest_id: String = manifest.manifest_id()
+	_expect_equal(
+		failures,
+		"gateway-aware foundation GeneratorManifest identity is exact",
+		manifest_id,
+		GATEWAY_AWARE_FOUNDATION_MANIFEST_ID
 	)
 
 

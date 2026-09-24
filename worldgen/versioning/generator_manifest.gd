@@ -375,6 +375,9 @@ static func _current_stage_revisions() -> Dictionary:
 		"special_location_hooks": 1,
 		"region_finalization": 1,
 		"geometry_description": 1,
+		"gateway.source_site": 1,
+		"gateway.destination_site": 1,
+		"gateway.link": 1,
 	}
 
 
