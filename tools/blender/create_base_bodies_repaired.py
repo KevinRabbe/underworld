@@ -242,7 +242,7 @@ def build_male_topology():
             vertex.co.z += 0.006 * instep
     obj.data.update()
     for poly in obj.data.polygons: poly.use_smooth=True
-    relax=obj.modifiers.new("MaleSurfaceRelaxation","SMOOTH"); relax.factor=0.16; relax.iterations=2
+    relax=obj.modifiers.new("MaleSurfaceRelaxation","SMOOTH"); relax.factor=0.20; relax.iterations=2
     smooth=obj.modifiers.new("MaleTopologySubdivision","SUBSURF"); smooth.subdivision_type='CATMULL_CLARK'; smooth.levels=1; smooth.render_levels=1
     armature=make_armature("MaleBaseBody"); assign_smooth_weights(obj); mod=obj.modifiers.new("SharedHumanoidRig","ARMATURE"); mod.object=armature; obj.parent=armature; return obj,armature
 
