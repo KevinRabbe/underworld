@@ -190,6 +190,9 @@ def build_male_topology():
             vertex.co.x += side * 0.020 * palm
             if y < 0.02:
                 vertex.co.y -= 0.008 * palm
+                thumb = math.exp(-(((abs(x) - 0.835) / 0.060) ** 2) - (((z - 1.085) / 0.040) ** 2))
+                vertex.co.x -= side * 0.012 * thumb
+                vertex.co.y -= 0.012 * thumb
         if 0.24 <= abs(x) <= 0.56 and 1.26 <= z <= 1.53:
             upper_arm = math.exp(-(((abs(x) - 0.37) / 0.135) ** 2) - (((z - 1.405) / 0.145) ** 2))
             if y < 0.12:
