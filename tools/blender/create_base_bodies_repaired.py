@@ -43,6 +43,13 @@ def add_cylinder(name, a, b, radius):
     obj.rotation_quaternion = Vector((0,0,1)).rotation_difference(delta.normalized())
     return obj
 
+def add_tapered(name, a, b, radius_a, radius_b, vertices=20):
+    a, b = Vector(a), Vector(b); delta = b - a
+    bpy.ops.mesh.primitive_cone_add(vertices=vertices, radius1=radius_a, radius2=radius_b, depth=delta.length, location=(a+b)*0.5)
+    obj = bpy.context.object; obj.name = name; obj.rotation_mode = "QUATERNION"
+    obj.rotation_quaternion = Vector((0,0,1)).rotation_difference(delta.normalized())
+    return obj
+
 def make_armature(name):
     data = bpy.data.armatures.new(name + "_Rig"); arm = bpy.data.objects.new(name + "_Rig", data); bpy.context.collection.objects.link(arm)
     bpy.context.view_layer.objects.active = arm; arm.select_set(True); bpy.ops.object.mode_set(mode="EDIT")
@@ -74,10 +81,41 @@ def assign_smooth_weights(mesh):
         for value, (_, bone_name) in zip(inv, chosen): mesh.vertex_groups[bone_name].add([vertex.index], value/total, "REPLACE")
 
 def build_body(kind):
-    male = kind == "male"; shoulder = 0.31 if male else 0.255; chest = (0.29,0.18) if male else (0.245,0.16); waist = 0.205 if male else 0.18; pelvis = 0.235 if male else 0.255; arm = 0.085 if male else 0.073; thigh = 0.135 if male else 0.125
-    parts = [add_uv("Torso",(0,0.08,1.25),(chest[0],chest[1],0.40)), add_uv("Pelvis",(0,0.08,0.91),(pelvis,0.17,0.22)), add_uv("Waist",(0,0.08,1.02),(waist,0.155,0.18)), add_uv("Head",(0,0.08,1.80),(0.135 if male else 0.125,0.125,0.16)), add_cylinder("Neck",(0,0.08,1.54),(0,0.08,1.70),0.095 if male else 0.075)]
+    male = kind == "male"
+    shoulder = 0.32 if male else 0.265
+    rib_x, rib_y = (0.30, 0.16) if male else (0.255, 0.145)
+    waist_x, waist_y = (0.21, 0.13) if male else (0.18, 0.12)
+    pelvis_x, pelvis_y = (0.24, 0.16) if male else (0.27, 0.17)
+    arm = 0.082 if male else 0.070
+    thigh = 0.145 if male else 0.132
+    neck_radius = 0.092 if male else 0.073
+    head_radius = 0.108 if male else 0.105
+    # Deliberately separate anatomical masses: ribcage -> waist -> pelvis.
+    # The overlaps are structural and are fused by the deterministic remesh.
+    parts = [
+        add_uv("Ribcage", (0, 0.08, 1.38), (rib_x, rib_y, 0.255)),
+        add_uv("UpperBack", (0, 0.14, 1.42), (rib_x * 0.93, 0.10 if male else 0.09, 0.21)),
+        add_uv("Waist", (0, 0.08, 1.10), (waist_x, waist_y, 0.17)),
+        add_uv("Pelvis", (0, 0.08, 0.88), (pelvis_x, pelvis_y, 0.205)),
+        add_uv("GlutealMass", (0, 0.15, 0.83), (pelvis_x * 0.90, 0.10 if male else 0.105, 0.17)),
+        add_uv("Head", (0, 0.08, 1.815), (head_radius, 0.102, 0.118)),
+        add_tapered("Neck", (0, 0.08, 1.54), (0, 0.08, 1.70), neck_radius, neck_radius * 0.83),
+    ]
     for side in (-1,1):
-        parts += [add_cylinder("UpperArm",(side*shoulder,0.08,1.48),(side*0.52,0.08,1.34),arm), add_cylinder("Forearm",(side*0.52,0.08,1.34),(side*0.71,0.08,1.14),arm*0.88), add_uv("Hand",(side*0.76,0.08,1.07),(arm*0.72,0.08,arm*0.82)), add_cylinder("Thigh",(side*0.17,0.08,0.84),(side*0.19,0.08,0.46),thigh), add_cylinder("Calf",(side*0.19,0.08,0.46),(side*0.19,0.08,0.10),thigh*0.72), add_uv("Foot",(side*0.19,-0.05,0.07),(0.105,0.19,0.055))]
+        parts += [
+            add_uv("Deltoid", (side * shoulder, 0.08, 1.48), (0.12 if male else 0.105, 0.12, 0.115)),
+            add_tapered("UpperArm", (side * shoulder, 0.08, 1.48), (side * 0.52, 0.08, 1.34), arm, arm * 0.78),
+            add_uv("Elbow", (side * 0.535, 0.08, 1.325), (arm * 0.82, arm * 1.05, arm * 0.82)),
+            add_tapered("Forearm", (side * 0.52, 0.08, 1.34), (side * 0.71, 0.08, 1.14), arm * 0.82, arm * 0.53),
+            add_tapered("Wrist", (side * 0.71, 0.08, 1.14), (side * 0.755, 0.08, 1.085), arm * 0.55, arm * 0.42),
+            add_uv("Hand", (side * 0.79, 0.065, 1.065), (arm * 0.62, 0.085, arm * 0.68)),
+            add_uv("ThighMass", (side * 0.17, 0.08, 0.70), (thigh, 0.14 if male else 0.13, 0.24)),
+            add_tapered("Thigh", (side * 0.17, 0.08, 0.84), (side * 0.19, 0.08, 0.46), thigh, thigh * 0.66),
+            add_uv("Knee", (side * 0.19, 0.055, 0.445), (thigh * 0.70, 0.12, 0.095)),
+            add_tapered("Calf", (side * 0.19, 0.09, 0.46), (side * 0.19, 0.08, 0.10), thigh * 0.72, thigh * 0.40),
+            add_uv("Ankle", (side * 0.19, 0.08, 0.105), (thigh * 0.40, 0.075, 0.075)),
+            add_uv("Foot", (side * 0.19, -0.06, 0.065), (0.105, 0.20, 0.06)),
+        ]
     mat = skin_material(); bpy.ops.object.select_all(action="DESELECT")
     for obj in parts: obj.select_set(True); obj.data.materials.append(mat)
     bpy.context.view_layer.objects.active = parts[0]; bpy.ops.object.join(); mesh = bpy.context.object; mesh.name = ("Male" if male else "Female") + "BaseBody"
