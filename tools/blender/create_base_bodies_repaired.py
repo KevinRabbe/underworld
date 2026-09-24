@@ -215,10 +215,17 @@ def build_male_topology():
             if y < 0.12:
                 vertex.co.y -= 0.016 * upper_arm
             vertex.co.x += (1.0 if x >= 0.0 else -1.0) * 0.008 * upper_arm
+            biceps = math.exp(-(((abs(x) - 0.385) / 0.085) ** 2) - (((z - 1.430) / 0.105) ** 2))
+            triceps = math.exp(-(((abs(x) - 0.390) / 0.090) ** 2) - (((z - 1.385) / 0.110) ** 2))
+            if y < 0.02:
+                vertex.co.y -= 0.012 * biceps
+            elif y > 0.12:
+                vertex.co.y += 0.010 * triceps
         if 0.48 <= abs(x) <= 0.76 and 1.05 <= z <= 1.31:
             forearm = math.exp(-(((abs(x) - 0.62) / 0.12) ** 2) - (((z - 1.20) / 0.15) ** 2))
             if y < 0.12:
                 vertex.co.y -= 0.010 * forearm
+                vertex.co.x += (1.0 if x >= 0.0 else -1.0) * 0.004 * forearm
         if 0.40 <= abs(x) <= 0.56 and 1.28 <= z <= 1.49:
             elbow = math.exp(-(((abs(x) - 0.475) / 0.055) ** 2) - (((z - 1.385) / 0.070) ** 2))
             side = 1.0 if x >= 0.0 else -1.0
