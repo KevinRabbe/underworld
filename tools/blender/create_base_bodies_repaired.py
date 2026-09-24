@@ -147,6 +147,11 @@ def build_male_topology():
     # manifold body while giving the male chest and abdomen readable planes.
     for vertex in obj.data.vertices:
         x, y, z = vertex.co
+        if z >= 1.68:
+            vertex.co.x *= 0.94
+            vertex.co.y = 0.08 + (vertex.co.y - 0.08) * 0.94
+            vertex.co.z = 1.68 + (vertex.co.z - 1.68) * 0.90
+            x, y, z = vertex.co
         if y < 0.02:
             if 1.30 <= z <= 1.54:
                 pectoral = math.exp(-(((abs(x) - 0.090) / 0.095) ** 2) - (((z - 1.435) / 0.125) ** 2))
