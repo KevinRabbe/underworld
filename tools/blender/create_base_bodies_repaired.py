@@ -84,7 +84,9 @@ def build_body(kind):
     male = kind == "male"
     shoulder = 0.300 if male else 0.255
     rib_x, rib_y = (0.310, 0.160) if male else (0.260, 0.145)
-    waist_x, waist_y = (0.230, 0.125) if male else (0.210, 0.115)
+    # First isolated geometry turn: tighten only the torso waist mass. Ribcage,
+    # pelvis, glute/upper-thigh, height, shoulders, head/neck and rig stay fixed.
+    waist_x, waist_y = (0.215, 0.115) if male else (0.190, 0.105)
     pelvis_x, pelvis_y = (0.250, 0.155) if male else (0.290, 0.170)
     arm = 0.070 if male else 0.058
     thigh = 0.140 if male else 0.135
