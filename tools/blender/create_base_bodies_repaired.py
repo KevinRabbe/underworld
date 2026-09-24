@@ -176,6 +176,11 @@ def build_male_topology():
         if y > 0.08 and 0.76 <= z <= 1.16:
             glute = math.exp(-((x / 0.215) ** 2) - (((z - 0.965) / 0.190) ** 2))
             vertex.co.y += 0.022 * glute
+        if 0.05 <= abs(x) <= 0.24 and 1.50 <= z <= 1.70:
+            shoulder_trap = math.exp(-(((abs(x) - 0.125) / 0.120) ** 2) - (((z - 1.605) / 0.115) ** 2))
+            vertex.co.x += (1.0 if x >= 0.0 else -1.0) * 0.007 * shoulder_trap
+            if y < 0.12:
+                vertex.co.y -= 0.010 * shoulder_trap
         if abs(x) > 0.76 and 0.98 <= z <= 1.12:
             side = 1.0 if x >= 0.0 else -1.0
             palm = math.exp(-(((abs(x) - 0.84) / 0.095) ** 2) - (((z - 1.05) / 0.075) ** 2))
