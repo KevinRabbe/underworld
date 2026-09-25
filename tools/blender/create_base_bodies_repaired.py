@@ -173,10 +173,10 @@ def build_male_topology():
             lat = math.exp(-(((abs(x) - 0.16) / 0.16) ** 2) - (((z - 1.40) / 0.22) ** 2))
             trap = math.exp(-(((abs(x) - 0.095) / 0.090) ** 2) - (((z - 1.56) / 0.095) ** 2))
             spine = math.exp(-((x / 0.032) ** 2) - (((z - 1.39) / 0.230) ** 2))
-            vertex.co.y += 0.024 * lat + 0.012 * trap - 0.010 * spine
+            vertex.co.y += 0.034 * lat + 0.018 * trap - 0.012 * spine
         elif y > 0.10 and 0.88 <= z < 1.20:
             lower_back = math.exp(-((x / 0.075) ** 2) - (((z - 1.03) / 0.170) ** 2))
-            vertex.co.y -= 0.008 * lower_back
+            vertex.co.y -= 0.012 * lower_back
         if y < 0.02 and 1.68 <= z <= 1.90:
             nose = math.exp(-((x / 0.042) ** 2) - (((z - 1.785) / 0.060) ** 2))
             brow = math.exp(-(((abs(x) - 0.040) / 0.050) ** 2) - (((z - 1.835) / 0.028) ** 2))
