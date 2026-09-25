@@ -34,12 +34,13 @@ The side profile has a small forward facial projection and a wider jaw ring. It 
 - knee/calf planes strengthened;
 - jaw, brow, nose and chin projections refined;
 - hand terminal rings widened into a compact hand block.
+- upper-back/lat and lower-back falloffs strengthened.
 
 ## Next bounded iteration
 
 Change only torso/shoulder cross-sections:
 
-1. Add a broader upper-back/lat transition.
-2. Preserve the current waist and pelvis measurements.
+1. Refine only the shoulder/axilla cross-sections to reduce the remaining cap-like seam.
+2. Preserve the current waist, pelvis and upper-back measurements.
 3. Keep the arm chain and all bone names unchanged.
 4. Re-run structural and deformation validators before accepting the render.
