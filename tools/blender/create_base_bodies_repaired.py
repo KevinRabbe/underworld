@@ -113,6 +113,9 @@ def build_male_topology():
     # Torso cage: broad chest, explicit abdomen and a real chest-to-waist taper.
     _ring_surface(verts,faces,[(0.40,0,.105,.175,.120,0.0,.030),(0.48,0,.105,.195,.132,0.0,.035),(0.56,0,.105,.210,.142,0.0,.030),(0.66,0,.100,.215,.144,0.0,.025),(0.76,0,.095,.180,.125,0.0,.020),(0.84,0,.090,.205,.138,0.0,.018),(0.96,0,.085,.220,.145,0.0,.012),(1.08,0,.08,.190,.110),(1.20,0,.08,.195,.112),(1.32,0,.08,.205,.120,.016,.010),(1.44,0,.08,.270,.145,.040,.024),(1.54,0,.08,.285,.140,.032,.020),(1.61,0,.08,.205,.105,.014,.008),(1.65,0,.08,.160,.095,.010,.006),(1.68,0,.08,.120,.090),(1.73,0,.08,.085,.075)],24,True,True)
     _ring_surface(verts,faces,[(1.70,0,.08,.095,.065,.026,.004),(1.77,0,.08,.115,.078,.042,.006),(1.88,0,.08,.105,.085,.028,.004),(1.96,0,.08,.075,.068,.008,.002),(2.00,0,.08,.035,.032)],18,True,True)
+    # Small central pelvic transition volume: it overlaps the lower torso and
+    # inner-thigh ports to remove the hard lower-torso cap silhouette.
+    _segment_surface(verts,faces,[(0,.08,.42),(0,.08,.70)],[.16,.19],16,True,True)
     # Arms: shoulder, elbow and wrist landmarks are explicit rings, not tubes.
     for s in (-1,1):
         _segment_surface(verts,faces,[(s*.18,.08,1.54),(s*.29,.08,1.50),(s*.47,.08,1.39)],[.145,.112,.068],12,True,True)
