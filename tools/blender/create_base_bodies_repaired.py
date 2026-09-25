@@ -71,7 +71,10 @@ def assign_smooth_weights(mesh):
     segments = [(name, Vector(head), Vector(tail)) for name, (head, tail) in BONES.items()]
     for vertex in mesh.data.vertices:
         p = vertex.co; candidates = segments
-        if p.x < -0.16 and p.z > 1.02: candidates = [s for s in segments if s[0].endswith("_l") or s[0] in ("chest", "spine_02")]
+        if abs(p.x) > 0.70 and 0.92 < p.z < 1.22:
+            side = "_l" if p.x < 0 else "_r"
+            candidates = [s for s in segments if s[0] in ("hand" + side, "forearm" + side, "upperarm" + side)]
+        elif p.x < -0.16 and p.z > 1.02: candidates = [s for s in segments if s[0].endswith("_l") or s[0] in ("chest", "spine_02")]
         elif p.x > 0.16 and p.z > 1.02: candidates = [s for s in segments if s[0].endswith("_r") or s[0] in ("chest", "spine_02")]
         elif p.z < 0.88 and abs(p.x) > 0.08:
             side = "_l" if p.x < 0 else "_r"
@@ -301,10 +304,65 @@ def build_male_topology():
     smooth=obj.modifiers.new("MaleTopologySubdivision","SUBSURF"); smooth.subdivision_type='CATMULL_CLARK'; smooth.levels=1; smooth.render_levels=1
     armature=make_armature("MaleBaseBody"); assign_smooth_weights(obj); mod=obj.modifiers.new("SharedHumanoidRig","ARMATURE"); mod.object=armature; obj.parent=armature; return obj,armature
 
+def build_male_reference_body():
+    """Use the CC0 Blender human base mesh as the male production foundation.
+
+    This intentionally replaces the failed procedural ring/Boolean construction.
+    The imported mesh is one authored human surface; only scale, placement and
+    the existing shared-rig weights are added here.
+    """
+    source_path = os.path.join(OUT_DIR, "male_reference_source.blend")
+    with bpy.data.libraries.load(source_path, link=False) as (src, dst):
+        dst.objects = ["MaleReferenceSource"]
+    if not dst.objects or dst.objects[0] is None:
+        raise RuntimeError("Male reference source mesh missing")
+    obj = dst.objects[0]
+    bpy.context.collection.objects.link(obj)
+    obj.name = "MaleBaseBody"
+    obj.location = (0.0, 0.08, 0.006)
+    obj.scale = (1.35, 1.25, 1.15)
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    # Reference-fit pass on the imported human surface: preserve the authored
+    # topology while matching the target's head, waist and arms-down silhouette.
+    for vertex in obj.data.vertices:
+        x, y, z = vertex.co
+        if z >= 1.65:
+            vertex.co.x *= 0.62
+            vertex.co.y = 0.08 + (vertex.co.y - 0.08) * 0.92
+        elif 0.98 <= z <= 1.38 and abs(x) <= 0.50:
+            vertex.co.x *= 0.84
+        if 0.22 <= abs(x) <= 0.82 and 0.98 <= z <= 1.62:
+            side = 1.0 if x >= 0.0 else -1.0
+            shoulder = side * 0.27
+            vertex.co.x = shoulder + (vertex.co.x - shoulder) * 0.58
+            vertex.co.z -= 0.065 * max(0.0, min(1.0, (1.56 - z) / 0.50))
+    obj.data.update()
+    obj.data.materials.clear()
+    obj.data.materials.append(skin_material())
+    cleanup = bmesh.new()
+    cleanup.from_mesh(obj.data)
+    cleanup.faces.ensure_lookup_table()
+    degenerate = [face for face in cleanup.faces if face.calc_area() <= 1e-8]
+    if degenerate:
+        bmesh.ops.delete(cleanup, geom=degenerate, context="FACES")
+    cleanup.to_mesh(obj.data)
+    cleanup.free()
+    obj.data.update()
+    for poly in obj.data.polygons:
+        poly.use_smooth = True
+    armature = make_armature("MaleBaseBody")
+    assign_smooth_weights(obj)
+    rig_modifier = obj.modifiers.new("SharedHumanoidRig", "ARMATURE")
+    rig_modifier.object = armature
+    obj.parent = armature
+    return obj, armature
+
 def build_body(kind):
     male = kind == "male"
     if male:
-        return build_male_topology()
+        return build_male_reference_body()
     shoulder = 0.275 if male else 0.255
     rib_x, rib_y = (0.285, 0.145) if male else (0.260, 0.145)
     # First isolated geometry turn: tighten only the torso waist mass. Ribcage,
