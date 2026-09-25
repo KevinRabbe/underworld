@@ -111,7 +111,7 @@ def _segment_surface(verts, faces, points, radii, sides=10, cap_start=True, cap_
 def build_male_topology():
     verts=[]; faces=[]
     # Torso cage: broad chest, explicit abdomen and a real chest-to-waist taper.
-    _ring_surface(verts,faces,[(0.40,0,.105,.235,.155,0.0,.030),(0.48,0,.105,.245,.160,0.0,.035),(0.56,0,.105,.225,.150,0.0,.030),(0.66,0,.100,.220,.145,0.0,.025),(0.76,0,.095,.180,.125,0.0,.020),(0.84,0,.090,.205,.138,0.0,.018),(0.96,0,.085,.220,.145,0.0,.012),(1.08,0,.08,.190,.110),(1.20,0,.08,.195,.112),(1.32,0,.08,.205,.120,.016,.010),(1.44,0,.08,.270,.145,.040,.024),(1.54,0,.08,.285,.140,.032,.020),(1.61,0,.08,.205,.105,.014,.008),(1.65,0,.08,.160,.095,.010,.006),(1.68,0,.08,.120,.090),(1.73,0,.08,.085,.075)],24,True,True)
+    _ring_surface(verts,faces,[(0.40,0,.105,.175,.120,0.0,.030),(0.48,0,.105,.195,.132,0.0,.035),(0.56,0,.105,.210,.142,0.0,.030),(0.66,0,.100,.215,.144,0.0,.025),(0.76,0,.095,.180,.125,0.0,.020),(0.84,0,.090,.205,.138,0.0,.018),(0.96,0,.085,.220,.145,0.0,.012),(1.08,0,.08,.190,.110),(1.20,0,.08,.195,.112),(1.32,0,.08,.205,.120,.016,.010),(1.44,0,.08,.270,.145,.040,.024),(1.54,0,.08,.285,.140,.032,.020),(1.61,0,.08,.205,.105,.014,.008),(1.65,0,.08,.160,.095,.010,.006),(1.68,0,.08,.120,.090),(1.73,0,.08,.085,.075)],24,True,True)
     _ring_surface(verts,faces,[(1.70,0,.08,.095,.065,.026,.004),(1.77,0,.08,.115,.078,.042,.006),(1.88,0,.08,.105,.085,.028,.004),(1.96,0,.08,.075,.068,.008,.002),(2.00,0,.08,.035,.032)],18,True,True)
     # Arms: shoulder, elbow and wrist landmarks are explicit rings, not tubes.
     for s in (-1,1):
@@ -262,11 +262,11 @@ def build_male_topology():
         if 0.11 <= abs(x) <= 0.25 and 0.70 <= z <= 0.99:
             hip = math.exp(-(((abs(x) - 0.185) / 0.100) ** 2) - (((z - 0.835) / 0.145) ** 2))
             side = 1.0 if x >= 0.0 else -1.0
-            vertex.co.x += side * 0.008 * hip
+            vertex.co.x += side * 0.013 * hip
             if y < 0.04:
                 vertex.co.y -= 0.008 * hip
             elif y > 0.10:
-                vertex.co.y += 0.012 * hip
+                vertex.co.y += 0.018 * hip
         if 0.12 <= abs(x) <= 0.25 and 0.48 <= z <= 0.86:
             quad = math.exp(-(((abs(x) - 0.185) / 0.085) ** 2) - (((z - 0.675) / 0.190) ** 2))
             hamstring = math.exp(-(((abs(x) - 0.185) / 0.090) ** 2) - (((z - 0.665) / 0.180) ** 2))
@@ -287,13 +287,13 @@ def build_male_topology():
     for v in obj.data.vertices:
         if 0.40 <= v.co.z <= 1.02 and 0.08 <= abs(v.co.x) <= 0.30:
             hip_group.add([v.index], 1.0, "REPLACE")
-    hip_relax=obj.modifiers.new("MaleHipTransitionRelaxation","SMOOTH"); hip_relax.factor=0.42; hip_relax.iterations=1; hip_relax.vertex_group=hip_group.name
+    hip_relax=obj.modifiers.new("MaleHipTransitionRelaxation","SMOOTH"); hip_relax.factor=0.62; hip_relax.iterations=2; hip_relax.vertex_group=hip_group.name
     shoulder_group=obj.vertex_groups.new(name="MaleShoulderTransitionRelax")
     for v in obj.data.vertices:
         if 1.24 <= v.co.z <= 1.62 and 0.16 <= abs(v.co.x) <= 0.58:
             shoulder_group.add([v.index], 1.0, "REPLACE")
     shoulder_relax=obj.modifiers.new("MaleShoulderTransitionRelaxation","SMOOTH"); shoulder_relax.factor=0.38; shoulder_relax.iterations=1; shoulder_relax.vertex_group=shoulder_group.name
-    hip_laplacian=obj.modifiers.new("MaleHipPortLaplacian","LAPLACIANSMOOTH"); hip_laplacian.lambda_factor=0.12; hip_laplacian.iterations=1; hip_laplacian.vertex_group=hip_group.name
+    hip_laplacian=obj.modifiers.new("MaleHipPortLaplacian","LAPLACIANSMOOTH"); hip_laplacian.lambda_factor=0.24; hip_laplacian.iterations=2; hip_laplacian.vertex_group=hip_group.name
     shoulder_laplacian=obj.modifiers.new("MaleShoulderPortLaplacian","LAPLACIANSMOOTH"); shoulder_laplacian.lambda_factor=0.10; shoulder_laplacian.iterations=1; shoulder_laplacian.vertex_group=shoulder_group.name
     smooth=obj.modifiers.new("MaleTopologySubdivision","SUBSURF"); smooth.subdivision_type='CATMULL_CLARK'; smooth.levels=1; smooth.render_levels=1
     armature=make_armature("MaleBaseBody"); assign_smooth_weights(obj); mod=obj.modifiers.new("SharedHumanoidRig","ARMATURE"); mod.object=armature; obj.parent=armature; return obj,armature
