@@ -225,9 +225,9 @@ def build_male_topology():
         if 0.20 <= abs(x) <= 0.36 and 1.38 <= z <= 1.58:
             deltoid = math.exp(-(((abs(x) - 0.285) / 0.080) ** 2) - (((z - 1.485) / 0.105) ** 2))
             side = 1.0 if x >= 0.0 else -1.0
-            vertex.co.x += side * 0.010 * deltoid
+            vertex.co.x += side * 0.005 * deltoid
             if y < 0.12:
-                vertex.co.y -= 0.016 * deltoid
+                vertex.co.y -= 0.009 * deltoid
         if 0.24 <= abs(x) <= 0.56 and 1.26 <= z <= 1.53:
             upper_arm = math.exp(-(((abs(x) - 0.37) / 0.135) ** 2) - (((z - 1.405) / 0.145) ** 2))
             if y < 0.12:
