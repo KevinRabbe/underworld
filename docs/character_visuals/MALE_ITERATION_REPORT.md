@@ -1,6 +1,6 @@
 # Male character iteration report
 
-Baseline head: `eadc4fba40045e45731988ab29a132e15eb797d8`
+Current iteration head: `67da960c` (Male-only geometry branch)
 
 ## Current evidence
 
@@ -26,6 +26,14 @@ The pelvis now projects farther back and the feet are shorter. The remaining dif
 ### P2 — head
 
 The side profile has a small forward facial projection and a wider jaw ring. It remains intentionally low-detail; eyes, hair and clothing are out of scope for this base-body pass.
+
+## Completed bounded passes since baseline
+
+- chest/abdomen falloffs strengthened;
+- lower hip relaxation extended;
+- knee/calf planes strengthened;
+- jaw, brow, nose and chin projections refined;
+- hand terminal rings widened into a compact hand block.
 
 ## Next bounded iteration
 
