@@ -293,6 +293,8 @@ def build_male_topology():
         if 1.24 <= v.co.z <= 1.62 and 0.16 <= abs(v.co.x) <= 0.58:
             shoulder_group.add([v.index], 1.0, "REPLACE")
     shoulder_relax=obj.modifiers.new("MaleShoulderTransitionRelaxation","SMOOTH"); shoulder_relax.factor=0.38; shoulder_relax.iterations=1; shoulder_relax.vertex_group=shoulder_group.name
+    hip_laplacian=obj.modifiers.new("MaleHipPortLaplacian","LAPLACIANSMOOTH"); hip_laplacian.lambda_factor=0.12; hip_laplacian.iterations=1; hip_laplacian.vertex_group=hip_group.name
+    shoulder_laplacian=obj.modifiers.new("MaleShoulderPortLaplacian","LAPLACIANSMOOTH"); shoulder_laplacian.lambda_factor=0.10; shoulder_laplacian.iterations=1; shoulder_laplacian.vertex_group=shoulder_group.name
     smooth=obj.modifiers.new("MaleTopologySubdivision","SUBSURF"); smooth.subdivision_type='CATMULL_CLARK'; smooth.levels=1; smooth.render_levels=1
     armature=make_armature("MaleBaseBody"); assign_smooth_weights(obj); mod=obj.modifiers.new("SharedHumanoidRig","ARMATURE"); mod.object=armature; obj.parent=armature; return obj,armature
 
