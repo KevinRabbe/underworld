@@ -197,10 +197,10 @@ def build_male_topology():
             vertex.co.y += 0.012 * mouth_plane
         if y > 0.08 and 0.76 <= z <= 1.16:
             glute = math.exp(-((x / 0.215) ** 2) - (((z - 0.965) / 0.190) ** 2))
-            vertex.co.y += 0.022 * glute
+            vertex.co.y += 0.030 * glute
             glute_lobe = math.exp(-(((abs(x) - 0.105) / 0.085) ** 2) - (((z - 0.965) / 0.145) ** 2))
             cleft = math.exp(-((x / 0.028) ** 2) - (((z - 0.885) / 0.120) ** 2))
-            vertex.co.y += 0.010 * glute_lobe - 0.014 * cleft
+            vertex.co.y += 0.016 * glute_lobe - 0.018 * cleft
         if 0.05 <= abs(x) <= 0.24 and 1.50 <= z <= 1.70:
             shoulder_trap = math.exp(-(((abs(x) - 0.125) / 0.120) ** 2) - (((z - 1.605) / 0.115) ** 2))
             vertex.co.x += (1.0 if x >= 0.0 else -1.0) * 0.007 * shoulder_trap
