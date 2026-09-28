@@ -1,0 +1,40 @@
+name: Project Status Validation
+
+on:
+  pull_request:
+    paths:
+      - 'README.md'
+      - 'docs/00_project/PROJECT_STATUS.md'
+      - 'docs/00_project/project_status.json'
+      - 'tools/ci/validate_project_status.py'
+      - 'tools/ci/test_validate_project_status.py'
+      - '.github/workflows/project-status-validation.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'README.md'
+      - 'docs/00_project/PROJECT_STATUS.md'
+      - 'docs/00_project/project_status.json'
+      - 'tools/ci/validate_project_status.py'
+      - 'tools/ci/test_validate_project_status.py'
+      - '.github/workflows/project-status-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  project-status:
+    name: Project status contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate status snapshot
+        run: python3 tools/ci/validate_project_status.py
+
+      - name: Run status validator tests
+        run: python3 tools/ci/test_validate_project_status.py

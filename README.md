@@ -1,12 +1,36 @@
 # Underworld
 
-Procedural survival game prototype built with Godot 4.
+Procedural survival game built with Godot 4.
 
-## Prototype 0.02 — generated first biome
+<!-- PROJECT_STATUS_PLAYABLE_STATE: NOT_YET -->
+<!-- PROJECT_STATUS_ACCEPTED_MAIN: 1c258ab681023d296425a574f769a4f73841ebf9 -->
+<!-- PROJECT_STATUS_WORLD_MODEL: OVERWORLD+UNDERWORLD_CONTINUOUS_BIOMES -->
 
-Current goal: turn the proven v0.01 chunk-streaming foundation into a world that already has recognizable large-scale geography and deterministic environmental structure.
+## Project status
 
-Implemented:
+**Playable now? NOT YET — there is no accepted Core Playable build yet.**
+
+The project is currently in **Core Playable integration / two-domain topology rebaseline**. The current product world model is:
+
+```text
+OVERWORLD
+UNDERWORLD — one continuous generated world/root with multiple biomes/regions
+```
+
+The Underworld is not three independent layers/maps. Moving between Underworld biomes is ordinary movement and streaming inside the same world; only Overworld ↔ Underworld travel is a domain transition.
+
+Current scale direction is approximately **40% Overworld / 60% Underworld** by intended exploration allocation. This is not a radius/diameter rule; exact dimensions and budgets remain measured design work.
+
+Current hard gate at the last synchronization is **#539**, the protected independent gateway-definition review. The checked-in status is a snapshot, not a replacement for live GitHub governance.
+
+**Full current-state snapshot:** [`docs/00_project/PROJECT_STATUS.md`](docs/00_project/PROJECT_STATUS.md)  
+Machine-readable companion: [`docs/00_project/project_status.json`](docs/00_project/project_status.json)
+
+## Existing runnable prototype surface
+
+The repository also retains the earlier **Prototype 0.02 — generated first biome** playtest surface. That checklist is useful for testing its terrain/streaming behavior, but completing it does **not** mean the current Core Playable milestone has been achieved.
+
+Prototype 0.02 implemented:
 - Seeded procedural terrain using `FastNoiseLite`
 - 128 m terrain chunks with 65×65 vertices by default
 - Worker-thread terrain data generation with main-thread mesh/physics creation
@@ -26,7 +50,7 @@ Implemented:
 
 The tree cones and box rocks are intentionally placeholder geometry. Their job is to expose whether forest/clearing/rock-field distribution feels natural before real assets or gameplay interactions are added.
 
-## Controls
+## Prototype controls
 
 - `WASD` — move
 - `Shift` — sprint
@@ -37,7 +61,7 @@ The tree cones and box rocks are intentionally placeholder geometry. Their job i
 - Click — capture mouse again
 - `F3` — toggle world/debug HUD
 
-## v0.02 playtest checklist
+## Prototype 0.02 playtest checklist
 
 1. Confirm spawn is dry and reasonably walkable.
 2. Traverse several chunks and look for broad lowlands, hills, ridges, valleys, and shoreline changes.
@@ -48,10 +72,4 @@ The tree cones and box rocks are intentionally placeholder geometry. Their job i
 7. Record `Data (worker)` and `Build (main)` timings after the direct-mask optimization.
 8. Walk away and return; terrain and placeholder decorations should regenerate identically.
 
-## Next targets after this pass
-
-1. Tune macro terrain and environmental thresholds from screenshots/playtests.
-2. Replace placeholder distribution rules only if forests or rock fields look artificial.
-3. Add simple grass/ground cover after large vegetation placement is convincing.
-4. Integrate deterministic entrance descriptors into surface/cave geometry only after the entrance-definition gate is merged.
-5. Add actual gathering/combat interactions only after the generated environment is stable enough to play in.
+For current delivery priorities, blockers and milestone ownership, use the project status snapshot above rather than treating this historical prototype checklist as the active roadmap.
