@@ -16,6 +16,7 @@ const EquipmentService := preload("res://gameplay/items/equipment/equipment_serv
 const ItemContainerState := preload("res://gameplay/items/inventory/item_container_state.gd")
 const WorldDeltaStore := preload("res://worldgen/persistence/world_delta_store.gd")
 const RuntimeService := preload("res://gameplay/resources/runtime/underground_resource_runtime_service.gd")
+const ResourcePlacementRealizer := preload("res://presentation/world/resources/resource_placement_realizer.gd")
 
 const RESOURCE_PATH := "res://content/resources/iron_outcrop_definition.tres"
 const IRON_ITEM_PATH := "res://content/items/resources/iron_chunk_definition.tres"
@@ -93,14 +94,45 @@ static func _test_production_content_and_realization(failures: Array[String]) ->
 		failures.append("iron resource archetype validation evidence rejected runtime registry: %s" % [validation_evidence_failures])
 		return
 
+	var placement = _placement()
 	var service = RuntimeService.new()
-	var result: Dictionary = service.realize_placement(_placement(), fixture["registry"], validation, realizer)
+	var result: Dictionary = service.realize_placement(placement, fixture["registry"], validation, realizer)
 	_expect_true(failures, "iron placement realizes through semantic archetype", bool(result.get("success", false)))
 	var instance = result.get("instance", null)
 	if instance != null and instance is Node:
-		_expect_equal(failures, "realized node stores placement identity only as runtime metadata", str(instance.get_meta("placement_stable_id", "")), _placement().placement_stable_id)
+		_expect_equal(failures, "realized node stores placement identity only as runtime metadata", str(instance.get_meta("placement_stable_id", "")), placement.placement_stable_id)
 		_expect_equal(failures, "realized node stores resource semantic id", str(instance.get_meta("resource_content_id", "")), "resource.deposit.iron_outcrop")
 		instance.free()
+
+	var direct_result: Dictionary = ResourcePlacementRealizer.new().realize(
+		placement,
+		definition,
+		fixture["registry"],
+		validation,
+		realizer
+	)
+	_expect_true(failures, "presentation owner realizes resolved resource value inputs", bool(direct_result.get("success", false)))
+	_expect_equal(
+		failures,
+		"presentation owner preserves facade placement StableId",
+		str(direct_result.get("placement_stable_id", "")),
+		str(result.get("placement_stable_id", ""))
+	)
+	_expect_equal(
+		failures,
+		"presentation owner preserves facade resource ContentId",
+		str(direct_result.get("resource_content_id", "")),
+		str(result.get("resource_content_id", ""))
+	)
+	var direct_instance = direct_result.get("instance", null)
+	if direct_instance != null and direct_instance is Node:
+		_expect_equal(
+			failures,
+			"presentation owner binds placement fingerprint metadata",
+			str(direct_instance.get_meta("placement_fingerprint", "")),
+			placement.placement_fingerprint
+		)
+		direct_instance.free()
 
 	var registry_before: Array = fixture["registry"].canonical_manifest()
 	var compatibility_only_validation: Dictionary = {
@@ -109,7 +141,7 @@ static func _test_production_content_and_realization(failures: Array[String]) ->
 		"validated_definition_ids": [archetype.content_id],
 	}
 	var rejected: Dictionary = service.realize_placement(
-		_placement(),
+		placement,
 		fixture["registry"],
 		compatibility_only_validation,
 		realizer
@@ -121,6 +153,20 @@ static func _test_production_content_and_realization(failures: Array[String]) ->
 		"compatibility-only archetype validation reports missing CONTENT-006 evidence",
 		_result_has_fragment(rejected, "CONTENT-006 validation evidence: expected CONTENT-006 snapshot-bound validation evidence")
 	)
+	var direct_rejected: Dictionary = ResourcePlacementRealizer.new().realize(
+		placement,
+		definition,
+		fixture["registry"],
+		compatibility_only_validation,
+		realizer
+	)
+	_expect_equal(
+		failures,
+		"presentation owner preserves facade fail-closed diagnostics",
+		direct_rejected.get("diagnostics", []),
+		rejected.get("diagnostics", [])
+	)
+	_expect_true(failures, "presentation owner fail-closed path realizes no instance", direct_rejected.get("instance", null) == null)
 	_expect_equal(failures, "compatibility-only realization leaves content registry unchanged", fixture["registry"].canonical_manifest(), registry_before)
 
 
