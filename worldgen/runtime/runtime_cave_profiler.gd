@@ -200,7 +200,16 @@ static func _profile_pipeline(world_seed: int, region: Vector2i, entrance_id: St
 
 	for plan in partition.data.plans:
 		var mesh_started: int = Time.get_ticks_usec()
-		var voxel_request = VoxelRequest.new(plan, cell_config, provenance, 0.0, partition.data, context)
+		var voxel_request = VoxelRequest.new(
+			plan,
+			cell_config,
+			provenance,
+			0.0,
+			partition.data,
+			context,
+			geometry.data,
+			finalized.data
+		)
 		var mesh_stage = VoxelMesher.build(voxel_request)
 		var mesh_wall_ms: float = _elapsed_ms(mesh_started)
 		if not mesh_stage.success:
