@@ -8,6 +8,11 @@ const Request := preload("res://worldgen/geometry/cave_voxel_field_request.gd")
 const Mesher := preload("res://worldgen/geometry/cave_voxel_mesher.gd")
 const Context := preload("res://worldgen/pipeline/world_generation_context.gd")
 const PartitionResult := preload("res://worldgen/geometry/geometry_cell_partition_result.gd")
+const GeometryResult := preload("res://worldgen/underworld/cave_geometry_result.gd")
+const FinalizationResult := preload("res://worldgen/underworld/region_finalization_result.gd")
+const GraphBundle := preload("res://worldgen/graph/region_graph_bundle.gd")
+const RegionDefinition := preload("res://worldgen/graph/underground_region_definition.gd")
+const StableAddress := preload("res://worldgen/identity/stable_address.gd")
 
 
 static func run() -> Array[String]:
@@ -106,8 +111,23 @@ static func _entrance_plan(radius: float, config) -> Plan:
 
 
 static func _build(plan: Plan, config, context, provenance):
-	var partition := PartitionResult.new([plan], config.fingerprint, plan.source_geometry_fingerprint, plan.source_finalization_fingerprint, {}, [], provenance)
-	return Mesher.build(Request.new(plan, config, provenance, 0.0, partition, context))
+	var region_address = StableAddress.from_segments(["test-region", "map016"])
+	var region = RegionDefinition.new(region_address, Vector2i.ZERO, Vector3.ZERO, AABB(Vector3.ZERO, Vector3.ONE))
+	var bundle = GraphBundle.new(region)
+	var region_id: String = region.stable_id
+	var region_text: String = region.stable_address.canonical_text()
+	var geometry_provenance = context.make_provenance("geometry_description", region_id, region_text, ["map016-geometry-parent"])
+	var finalization_provenance = context.make_provenance("region_finalization", region_id, region_text, ["map016-finalization-parent"])
+	var geometry = GeometryResult.new(bundle, [], [], {}, plan.source_geometry_fingerprint, geometry_provenance)
+	var finalization = FinalizationResult.new(bundle, [], [], {}, plan.source_finalization_fingerprint, finalization_provenance)
+	var partition_provenance = context.make_provenance(
+		"geometry_cell_partition",
+		region_id,
+		region_text,
+		[geometry_provenance.fingerprint, finalization_provenance.fingerprint]
+	)
+	var partition := PartitionResult.new([plan], config.fingerprint, plan.source_geometry_fingerprint, plan.source_finalization_fingerprint, {}, [], partition_provenance)
+	return Mesher.build(Request.new(plan, config, partition_provenance, 0.0, partition, context, geometry, finalization))
 
 
 static func _face_vertices(vertices: PackedVector3Array, x: float) -> Array[String]:

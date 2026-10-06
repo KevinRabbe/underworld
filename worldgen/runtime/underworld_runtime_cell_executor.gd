@@ -164,7 +164,9 @@ func _execute_job(request, tier: String) -> bool:
 				definition["provenance"],
 				0.0,
 				definition["partition_result"],
-				definition_service.context
+				definition_service.context,
+				definition["source_geometry_result"],
+				definition["source_finalization_result"]
 			)
 			var mesh_stage = VoxelMesher.build(voxel_request)
 			if not mesh_stage.success:
