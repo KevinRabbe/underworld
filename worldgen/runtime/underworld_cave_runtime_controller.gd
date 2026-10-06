@@ -182,7 +182,9 @@ func bootstrap_generated_entrance(
 			definition["provenance"],
 			0.0,
 			definition["partition_result"],
-			_definition_service.context
+			_definition_service.context,
+			definition["source_geometry_result"],
+			definition["source_finalization_result"]
 		)
 		var mesh_stage = VoxelMesher.build(voxel_request)
 		if not mesh_stage.success:

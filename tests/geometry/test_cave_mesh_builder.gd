@@ -10,6 +10,11 @@ const Boundary := preload("res://worldgen/geometry/cave_mesh_realization_boundar
 const Context := preload("res://worldgen/pipeline/world_generation_context.gd")
 const MeshData := preload("res://worldgen/geometry/cave_mesh_data.gd")
 const PartitionResult := preload("res://worldgen/geometry/geometry_cell_partition_result.gd")
+const GeometryResult := preload("res://worldgen/underworld/cave_geometry_result.gd")
+const FinalizationResult := preload("res://worldgen/underworld/region_finalization_result.gd")
+const GraphBundle := preload("res://worldgen/graph/region_graph_bundle.gd")
+const RegionDefinition := preload("res://worldgen/graph/underground_region_definition.gd")
+const StableAddress := preload("res://worldgen/identity/stable_address.gd")
 const Map016AcceptanceTests := preload("res://tests/geometry/test_map016_acceptance_contract.gd")
 
 
@@ -17,9 +22,10 @@ static func run() -> Array[String]:
 	var failures: Array[String] = []
 	var plan := _plan(Vector3i(-1, 0, 2), ["chamber", "tunnel"])
 	var context := Context.new(7)
-	var provenance = context.make_provenance("geometry_cell_partition", "region", "address", ["plan-source"])
+	var authority := _source_authority(context, plan.source_geometry_fingerprint, plan.source_finalization_fingerprint)
+	var provenance = authority["provenance"]
 	var partition = _partition_result(plan, Config.new(), provenance)
-	var result = Mesher.build(Request.new(plan, Config.new(), provenance, 0.0, partition, context))
+	var result = _build(plan, Config.new(), provenance, partition, context, authority)
 	_expect(failures, "chamber and tunnel mesh build succeeds", result.success)
 	if result.success:
 		_expect(failures, "versioned marching-cubes table has 256 cases", Mesher.MARCHING_CUBES_TABLE.size() == 256)
@@ -38,7 +44,7 @@ static func run() -> Array[String]:
 		_expect(failures, "main-thread realization succeeds", realized.success)
 		_expect(failures, "realization preserves source fingerprint", realized.input_fingerprint == result.data.input_fingerprint)
 		_expect(failures, "stale realization is rejected", not Boundary.realize_main_thread(result.data, null, "stale").success)
-		var repeated = Mesher.build(Request.new(plan, Config.new(), provenance, 0.0, partition, context))
+		var repeated = _build(plan, Config.new(), provenance, partition, context, authority)
 		_expect(failures, "repeated extraction reproduces exact fingerprint", repeated.success and repeated.data.fingerprint == result.data.fingerprint)
 		var retimed_metrics: Dictionary = result.data.metrics.duplicate(true)
 		retimed_metrics["extraction_ms"] = 999999.0
@@ -51,46 +57,49 @@ static func run() -> Array[String]:
 		_expect(failures, "mesh output identity includes buffer contents", changed_data.output_fingerprint != result.data.output_fingerprint)
 	var reversed := _plan(Vector3i(-1, 0, 2), ["tunnel", "chamber"])
 	var reversed_partition = _partition_result(reversed, Config.new(), provenance)
-	var second = Mesher.build(Request.new(reversed, Config.new(), provenance, 0.0, reversed_partition, context))
+	var second = _build(reversed, Config.new(), provenance, reversed_partition, context, authority)
 	_expect(failures, "reordered fragments build", second.success)
 	if second.success:
 		_expect(failures, "reordered fragments reproduce buffers", second.data.fingerprint == result.data.fingerprint)
 	var malformed := _plan(Vector3i.ZERO, ["chamber"])
 	malformed.fragments.append(null)
-	var bad = Mesher.build(Request.new(malformed, Config.new(), provenance, 0.0, partition, context))
+	var bad = _build(malformed, Config.new(), provenance, partition, context, authority)
 	_expect(failures, "malformed fragment is rejected", not bad.success)
-	var missing_provenance = Mesher.build(Request.new(plan, Config.new(), null, 0.0, partition, context))
+	var missing_provenance = _build(plan, Config.new(), null, partition, context, authority)
 	_expect(failures, "missing mesh provenance is rejected", not missing_provenance.success)
+	var missing_parents = Mesher.build(Request.new(plan, Config.new(), provenance, 0.0, partition, context))
+	_expect(failures, "missing exact partition parents are rejected before extraction", not missing_parents.success)
 	var stale = context.make_provenance("geometry_cell_partition", "region", "address", ["plan-source"])
 	stale.stage_id = "other_stage"
-	var stale_request = Mesher.build(Request.new(plan, Config.new(), stale, 0.0, partition, context))
+	var stale_request = _build(plan, Config.new(), stale, partition, context, authority)
 	_expect(failures, "stale mutated mesh provenance is rejected", not stale_request.success)
 	var unrelated = context.make_provenance("geometry_cell_partition", "other-region", "other-address", ["plan-source"])
-	var unrelated_request = Mesher.build(Request.new(plan, Config.new(), unrelated, 0.0, partition, context))
+	var unrelated_request = _build(plan, Config.new(), unrelated, partition, context, authority)
 	_expect(failures, "unrelated partition provenance is rejected", not unrelated_request.success)
+	_test_coherent_provenance_rewraps(plan, Config.new(), context, authority, failures)
 	var empty_plan := _plan(Vector3i(3, -2, 1), [])
 	var empty_partition = _partition_result(empty_plan, Config.new(), provenance)
-	var empty = Mesher.build(Request.new(empty_plan, Config.new(), provenance, 0.0, empty_partition, context))
+	var empty = _build(empty_plan, Config.new(), provenance, empty_partition, context, authority)
 	_expect(failures, "empty cells remain valid mesh results", empty.success)
 	if empty.success:
 		_expect(failures, "empty cell emits no triangles", empty.data.indices.is_empty())
 		_expect(failures, "empty cell bounds derive from address", empty.data.world_bounds == AABB(Vector3(96, -64, 32), Vector3(32, 32, 32)))
 	var surface_plan := _surface_plan(Vector3i.ZERO, 0.5)
 	var surface_partition = _partition_result(surface_plan, Config.new(), provenance)
-	var surface_result = Mesher.build(Request.new(surface_plan, Config.new(), provenance, 0.0, surface_partition, context))
+	var surface_result = _build(surface_plan, Config.new(), provenance, surface_partition, context, authority)
 	_expect(failures, "analytic chamber surface builds", surface_result.success and surface_result.data.indices.size() > 0)
 	if surface_result.success:
 		_expect(failures, "marching-cubes vertices are canonically reused", _unique_positions(surface_result.data.vertices) == surface_result.data.vertices.size())
 		var altered_surface_plan := _surface_plan(Vector3i.ZERO, 1.0)
-		var altered_surface := Mesher.build(Request.new(altered_surface_plan, Config.new(), provenance, 0.0, _partition_result(altered_surface_plan, Config.new(), provenance), context))
+		var altered_surface = _build(altered_surface_plan, Config.new(), provenance, _partition_result(altered_surface_plan, Config.new(), provenance), context, authority)
 		_expect(failures, "chamber authored parameters affect mesh identity", altered_surface.success and altered_surface.data.fingerprint != surface_result.data.fingerprint)
 	var tunnel_plan := _tunnel_plan(Vector3i.ZERO)
 	var tunnel_partition = _partition_result(tunnel_plan, Config.new(), provenance)
-	var tunnel_result = Mesher.build(Request.new(tunnel_plan, Config.new(), provenance, 0.0, tunnel_partition, context))
+	var tunnel_result = _build(tunnel_plan, Config.new(), provenance, tunnel_partition, context, authority)
 	_expect(failures, "elliptical tunnel capsule builds", tunnel_result.success and tunnel_result.data.indices.size() > 0)
 	var entrance_plan := _entrance_plan(Vector3i.ZERO)
 	var entrance_partition = _partition_result(entrance_plan, Config.new(), provenance)
-	var entrance_result = Mesher.build(Request.new(entrance_plan, Config.new(), provenance, 0.0, entrance_partition, context))
+	var entrance_result = _build(entrance_plan, Config.new(), provenance, entrance_partition, context, authority)
 	_expect(failures, "oriented entrance descent volume builds", entrance_result.success and entrance_result.data.indices.size() > 0)
 	failures.append_array(Map016AcceptanceTests.run())
 	return failures
@@ -98,6 +107,97 @@ static func run() -> Array[String]:
 
 static func _partition_result(plan: Plan, configuration, provenance):
 	return PartitionResult.new([plan], configuration.fingerprint, plan.source_geometry_fingerprint, plan.source_finalization_fingerprint, {}, [], provenance)
+
+
+static func _build(plan: Plan, configuration, provenance, partition, context, authority):
+	return Mesher.build(Request.new(
+		plan,
+		configuration,
+		provenance,
+		0.0,
+		partition,
+		context,
+		authority["geometry"],
+		authority["finalization"]
+	))
+
+
+static func _source_authority(context, geometry_fingerprint: String, finalization_fingerprint: String, region_key: String = "map010") -> Dictionary:
+	var region_address = StableAddress.from_segments(["test-region", region_key])
+	var region = RegionDefinition.new(region_address, Vector2i.ZERO, Vector3.ZERO, AABB(Vector3.ZERO, Vector3.ONE))
+	var bundle = GraphBundle.new(region)
+	var region_id: String = region.stable_id
+	var region_text: String = region.stable_address.canonical_text()
+	var geometry_provenance = context.make_provenance("geometry_description", region_id, region_text, ["geometry-parent"])
+	var finalization_provenance = context.make_provenance("region_finalization", region_id, region_text, ["finalization-parent"])
+	var geometry = GeometryResult.new(bundle, [], [], {}, geometry_fingerprint, geometry_provenance)
+	var finalization = FinalizationResult.new(bundle, [], [], {}, finalization_fingerprint, finalization_provenance)
+	var provenance = context.make_provenance("geometry_cell_partition", region_id, region_text, [geometry_provenance.fingerprint, finalization_provenance.fingerprint])
+	return {"geometry": geometry, "finalization": finalization, "provenance": provenance}
+
+
+static func _test_coherent_provenance_rewraps(plan: Plan, configuration, context, authority: Dictionary, failures: Array[String]) -> void:
+	var geometry_provenance = authority["geometry"].provenance
+	var finalization_provenance = authority["finalization"].provenance
+	var canonical_sources: Array[String] = [geometry_provenance.fingerprint, finalization_provenance.fingerprint]
+	canonical_sources.sort()
+	var wrong_region = context.make_provenance("geometry_cell_partition", "region-B", "address-B", canonical_sources)
+	var wrong_region_result = _partition_result(plan, configuration, wrong_region)
+	var wrong_region_mesh = _build(plan, configuration, wrong_region, wrong_region_result, context, authority)
+	_expect(failures, "coherent wrong-region result/request provenance rewrap is rejected", not wrong_region_mesh.success)
+	var result_b_request_a = _build(plan, configuration, authority["provenance"], wrong_region_result, context, authority)
+	_expect(failures, "region-B result provenance with region-A request provenance is rejected", not result_b_request_a.success)
+	var result_a_request_b = _build(plan, configuration, wrong_region, _partition_result(plan, configuration, authority["provenance"]), context, authority)
+	_expect(failures, "region-A result provenance with region-B request provenance is rejected", not result_a_request_b.success)
+	var equivalent_valid = context.make_provenance(
+		"geometry_cell_partition",
+		wrong_region_id(authority),
+		wrong_region_address(authority),
+		canonical_sources
+	)
+	var equivalent_result = _partition_result(plan, configuration, equivalent_valid)
+	var equivalent_mesh = _build(plan, configuration, equivalent_valid, equivalent_result, context, authority)
+	_expect(failures, "fresh same-region canonical ancestry remains accepted", equivalent_mesh.success)
+
+	var foreign_authority = _source_authority(context, "foreign-geometry", "foreign-finalization", "map010-foreign")
+	var foreign_sources: Array[String] = [
+		foreign_authority["geometry"].provenance.fingerprint,
+		foreign_authority["finalization"].provenance.fingerprint,
+	]
+	var foreign_parent_provenance = context.make_provenance(
+		"geometry_cell_partition",
+		wrong_region_id(foreign_authority),
+		wrong_region_address(foreign_authority),
+		foreign_sources
+	)
+	var foreign_parent_result = _partition_result(plan, configuration, foreign_parent_provenance)
+	var foreign_parent_mesh = _build(plan, configuration, foreign_parent_provenance, foreign_parent_result, context, foreign_authority)
+	_expect(failures, "lawful foreign Geometry/Finalization parents cannot authorize this partition", not foreign_parent_mesh.success)
+
+	var wrong_ancestries: Array = [
+		["unrelated-a", "unrelated-b"],
+		[geometry_provenance.fingerprint],
+		[geometry_provenance.fingerprint, finalization_provenance.fingerprint, "extra-parent"],
+	]
+	for index in range(wrong_ancestries.size()):
+		var wrong_sources: Array = wrong_ancestries[index]
+		var wrong_provenance = context.make_provenance(
+			"geometry_cell_partition",
+			wrong_region_id(authority),
+			wrong_region_address(authority),
+			wrong_sources
+		)
+		var rewrapped_result = _partition_result(plan, configuration, wrong_provenance)
+		var rewrapped_mesh = _build(plan, configuration, wrong_provenance, rewrapped_result, context, authority)
+		_expect(failures, "coherent same-region wrong ancestry rewrap %d is rejected" % index, not rewrapped_mesh.success)
+
+
+static func wrong_region_id(authority: Dictionary) -> String:
+	return str(authority["geometry"].bundle.region_definition.stable_id)
+
+
+static func wrong_region_address(authority: Dictionary) -> String:
+	return authority["geometry"].bundle.region_definition.stable_address.canonical_text()
 
 
 static func _plan(coordinate: Vector3i, kinds: Array) -> Plan:

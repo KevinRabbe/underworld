@@ -225,6 +225,8 @@ func cell_definition(address):
 		"region": region,
 		"cell_plan": plan,
 		"partition_result": partition.data,
+		"source_geometry_result": region_data["geometry"],
+		"source_finalization_result": region_data["finalized"],
 		"provenance": partition.provenance,
 		"source_fingerprint": plan.fingerprint,
 		"provenance_fingerprint": partition.provenance.fingerprint,
