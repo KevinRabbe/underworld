@@ -1,4 +1,4 @@
-[gd_resource type="Theme" load_steps=9 format=3]
+[gd_resource type="Theme" load_steps=21 format=3]
 
 [ext_resource type="StyleBoxTexture" path="res://presentation/ui/theme/styles/panel_frame.tres" id="1_panel"]
 [ext_resource type="StyleBoxTexture" path="res://presentation/ui/theme/styles/button_normal.tres" id="2_normal"]
@@ -6,6 +6,13 @@
 [ext_resource type="StyleBoxTexture" path="res://presentation/ui/theme/styles/button_focus.tres" id="4_focus"]
 [ext_resource type="StyleBoxTexture" path="res://presentation/ui/theme/styles/button_pressed.tres" id="5_pressed"]
 [ext_resource type="StyleBoxTexture" path="res://presentation/ui/theme/styles/button_disabled.tres" id="6_disabled"]
+[ext_resource type="StyleBoxTexture" path="res://presentation/ui/theme/styles/item_slot_normal.tres" id="7_slot_normal"]
+[ext_resource type="StyleBoxTexture" path="res://presentation/ui/theme/styles/item_slot_disabled.tres" id="8_slot_disabled"]
+[ext_resource type="StyleBoxTexture" path="res://presentation/ui/theme/styles/item_slot_invalid.tres" id="9_slot_invalid"]
+[ext_resource type="StyleBoxTexture" path="res://presentation/ui/theme/styles/item_slot_selected_overlay.tres" id="10_slot_selected"]
+[ext_resource type="StyleBoxTexture" path="res://presentation/ui/theme/styles/item_slot_focus_overlay.tres" id="11_slot_focus"]
+[ext_resource type="StyleBoxTexture" path="res://presentation/ui/theme/styles/item_slot_hover_overlay.tres" id="12_slot_hover"]
+[ext_resource type="StyleBoxTexture" path="res://presentation/ui/theme/styles/keycap_frame.tres" id="13_keycap"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_screen_background"]
 bg_color = Color(0.012, 0.011, 0.012, 1)
@@ -14,6 +21,32 @@ bg_color = Color(0.012, 0.011, 0.012, 1)
 bg_color = Color(0.32, 0.27, 0.21, 0.8)
 content_margin_top = 1.0
 content_margin_bottom = 1.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_resource_background"]
+bg_color = Color(0.08, 0.07, 0.06, 0.92)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_health_fill"]
+bg_color = Color(0.48, 0.13, 0.11, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_stamina_fill"]
+bg_color = Color(0.60, 0.42, 0.16, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_overlay_shade"]
+bg_color = Color(0.01, 0.01, 0.01, 0.72)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_input_surface"]
 
 [resource]
 default_font_size = 20
@@ -29,10 +62,48 @@ Button/styles/focus = ExtResource("4_focus")
 Button/styles/pressed = ExtResource("5_pressed")
 Button/styles/disabled = ExtResource("6_disabled")
 Label/colors/font_color = Color(0.88, 0.84, 0.76, 1)
+BodyLabel/base_type = &"Label"
+BodyLabel/font_sizes/font_size = 18
+CompactLabel/base_type = &"Label"
+CompactLabel/font_sizes/font_size = 14
 ContentPanel/base_type = &"PanelContainer"
 ContentPanel/styles/panel = ExtResource("1_panel")
 DialogPanel/base_type = &"PanelContainer"
 DialogPanel/styles/panel = ExtResource("1_panel")
+HealthResourceBar/base_type = &"ProgressBar"
+HealthResourceBar/styles/background = SubResource("StyleBoxFlat_resource_background")
+HealthResourceBar/styles/fill = SubResource("StyleBoxFlat_health_fill")
+HudSafeMargin/base_type = &"MarginContainer"
+HudSafeMargin/constants/margin_left = 24
+HudSafeMargin/constants/margin_top = 24
+HudSafeMargin/constants/margin_right = 24
+HudSafeMargin/constants/margin_bottom = 24
+ItemIndexLabel/base_type = &"Label"
+ItemIndexLabel/font_sizes/font_size = 12
+ItemQuantityLabel/base_type = &"Label"
+ItemQuantityLabel/font_sizes/font_size = 14
+ItemSlot/base_type = &"Panel"
+ItemSlot/styles/panel = ExtResource("7_slot_normal")
+ItemSlotDisabled/base_type = &"Panel"
+ItemSlotDisabled/styles/panel = ExtResource("8_slot_disabled")
+ItemSlotFocusOverlay/base_type = &"Panel"
+ItemSlotFocusOverlay/styles/panel = ExtResource("11_slot_focus")
+ItemSlotHoverOverlay/base_type = &"Panel"
+ItemSlotHoverOverlay/styles/panel = ExtResource("12_slot_hover")
+ItemSlotInputSurface/base_type = &"Button"
+ItemSlotInputSurface/styles/normal = SubResource("StyleBoxEmpty_input_surface")
+ItemSlotInputSurface/styles/hover = SubResource("StyleBoxEmpty_input_surface")
+ItemSlotInputSurface/styles/focus = SubResource("StyleBoxEmpty_input_surface")
+ItemSlotInputSurface/styles/pressed = SubResource("StyleBoxEmpty_input_surface")
+ItemSlotInputSurface/styles/disabled = SubResource("StyleBoxEmpty_input_surface")
+ItemSlotInvalid/base_type = &"Panel"
+ItemSlotInvalid/styles/panel = ExtResource("9_slot_invalid")
+ItemSlotSelectedOverlay/base_type = &"Panel"
+ItemSlotSelectedOverlay/styles/panel = ExtResource("10_slot_selected")
+KeycapPanel/base_type = &"PanelContainer"
+KeycapPanel/styles/panel = ExtResource("13_keycap")
+KeycapLabel/base_type = &"Label"
+KeycapLabel/font_sizes/font_size = 14
 MenuPanel/base_type = &"PanelContainer"
 MenuPanel/styles/panel = ExtResource("1_panel")
 MenuSafeMargin/base_type = &"MarginContainer"
@@ -42,6 +113,17 @@ MenuSafeMargin/constants/margin_right = 64
 MenuSafeMargin/constants/margin_bottom = 48
 MenuStack/base_type = &"VBoxContainer"
 MenuStack/constants/separation = 14
+OverlayPanel/base_type = &"PanelContainer"
+OverlayPanel/styles/panel = ExtResource("1_panel")
+OverlaySafeMargin/base_type = &"MarginContainer"
+OverlaySafeMargin/constants/margin_left = 48
+OverlaySafeMargin/constants/margin_top = 48
+OverlaySafeMargin/constants/margin_right = 48
+OverlaySafeMargin/constants/margin_bottom = 48
+OverlayShade/base_type = &"Panel"
+OverlayShade/styles/panel = SubResource("StyleBoxFlat_overlay_shade")
+OverlayStack/base_type = &"VBoxContainer"
+OverlayStack/constants/separation = 16
 ScreenBackground/base_type = &"Panel"
 ScreenBackground/styles/panel = SubResource("StyleBoxFlat_screen_background")
 SectionDivider/base_type = &"HSeparator"
@@ -49,6 +131,9 @@ SectionDivider/styles/separator = SubResource("StyleBoxFlat_divider")
 SectionHeaderLabel/base_type = &"Label"
 SectionHeaderLabel/colors/font_color = Color(0.86, 0.71, 0.47, 1)
 SectionHeaderLabel/font_sizes/font_size = 18
+StaminaResourceBar/base_type = &"ProgressBar"
+StaminaResourceBar/styles/background = SubResource("StyleBoxFlat_resource_background")
+StaminaResourceBar/styles/fill = SubResource("StyleBoxFlat_stamina_fill")
 StatusLabel/base_type = &"Label"
 StatusLabel/colors/font_color = Color(0.34, 0.32, 0.30, 1)
 StatusLabel/font_sizes/font_size = 12
